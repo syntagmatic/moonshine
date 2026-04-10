@@ -46,25 +46,25 @@ Each direction is a moonshine interactive explanation exploring where d3-power-t
 |---|-----------|--------|------|
 | 1 | Collaborative Visualization | done | 01-collaborative-visualization.html |
 | 2 | Narrative Grammars | done | 02-narrative-grammars.html |
-| 3 | Explanation Templates | pending | |
-| 4 | Version-Controlled Visualization | pending | |
-| 5 | Streaming Visualization | pending | |
-| 6 | SQL in the Browser | pending | |
-| 7 | Observable Plot Bridge | pending | |
-| 8 | Serverless Rendering | pending | |
-| 9 | AI-Assisted Annotation | pending | |
-| 10 | Adaptive Complexity | pending | |
-| 11 | Natural Language Queries | pending | |
-| 12 | Skill Composition Engine | pending | |
-| 13 | Sonification | pending | |
-| 14 | Multilingual Explanations | pending | |
-| 15 | Tactile Visualization | pending | |
-| 16 | Cognitive Accessibility | pending | |
-| 17 | Portable Components | pending | |
-| 18 | Notebook Integration | pending | |
-| 19 | Print & Static Export | pending | |
-| 20 | Embeddable Microexplanations | pending | |
-| 21 | Perceptual Testing | pending | |
-| 22 | Explanation Effectiveness | pending | |
-| 23 | Cross-Model Benchmarks | pending | |
-| 24 | Skill Ecology | pending | |
+| 3 | Explanation Templates | done | 03-explanation-templates.html |
+| 4 | Version-Controlled Visualization | done | 04-version-controlled-visualization.html |
+| 5 | Streaming Visualization | done | 05-streaming-visualization.html |
+| 6 | SQL in the Browser | done | 06-sql-in-the-browser.html |
+| 7 | Observable Plot Bridge | done | 07-observable-plot-bridge.html |
+| 8 | Serverless Rendering | done | 08-serverless-rendering.html |
+| 9 | AI-Assisted Annotation | done | 09-ai-assisted-annotation.html |
+| 10 | Adaptive Complexity | done | 10-adaptive-complexity.html |
+| 11 | Natural Language Queries | done | 11-natural-language-queries.html |
+| 12 | Skill Composition Engine | done | 12-skill-composition-engine.html |
+| 13 | Sonification | done | 13-sonification.html |
+| 14 | Multilingual Explanations | done | 14-multilingual-explanations.html |
+| 15 | Tactile Visualization | done | 15-tactile-visualization.html |
+| 16 | Cognitive Accessibility | done | 16-cognitive-accessibility.html |
+| 17 | Portable Components | done | 17-portable-components.html |
+| 18 | Notebook Integration | done | 18-notebook-integration.html |
+| 19 | Print & Static Export | done | 19-print-and-static-export.html |
+| 20 | Embeddable Microexplanations | done | 20-embeddable-microexplanations.html |
+| 21 | Perceptual Testing | done | 21-perceptual-testing.html |
+| 22 | Explanation Effectiveness | done | 22-explanation-effectiveness.html |
+| 23 | Cross-Model Benchmarks | done | 23-cross-model-benchmarks.html |
+| 24 | Skill Ecology | done | 24-skill-ecology.html |
