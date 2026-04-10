@@ -1,0 +1,1428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Principal Component Analysis - Moonshine</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --article-width: 740px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem;
+  --line-height: 1.6;
+  --text: #1a1a2e;
+  --text-2: #4a4a6a;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --bg: #fafafa;
+  --fig-bg: #ffffff;
+  --border: #e2e2e8;
+}
+
+body {
+  font-family: var(--body-font);
+  font-size: var(--body-size);
+  line-height: var(--line-height);
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+.article {
+  max-width: var(--article-width);
+  margin: 0 auto;
+  padding: 2rem 1.25rem 6rem;
+}
+
+h1, h2, h3 {
+  font-family: var(--heading-font);
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+h3 { font-size: 1.15rem; margin: 2rem 0 0.75rem; }
+
+p { margin: 0 0 1rem; }
+a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+a:hover { color: #1d4ed8; }
+
+code {
+  font-family: var(--mono-font);
+  font-size: 0.9em;
+  background: #f1f1f5;
+  padding: 0.15em 0.4em;
+  border-radius: 3px;
+}
+
+.header {
+  padding: 4rem 0 2rem;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 2.5rem;
+}
+.header .back {
+  font-family: var(--heading-font);
+  font-size: 0.85rem;
+  display: inline-block;
+  margin-bottom: 1.5rem;
+}
+.header .subtitle {
+  font-family: var(--heading-font);
+  font-size: 1.15rem;
+  color: var(--text-2);
+  margin-bottom: 0;
+  max-width: 580px;
+}
+
+/* Figures */
+.figure {
+  margin: 2rem 0;
+  padding: 1.5rem;
+  background: var(--fig-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.figure-wide {
+  margin-left: -2rem;
+  margin-right: -2rem;
+}
+.figure-caption {
+  font-family: var(--heading-font);
+  font-size: 0.85rem;
+  color: var(--text-2);
+  margin-top: 0.75rem;
+  line-height: 1.4;
+}
+.figure-label { font-weight: 600; color: var(--text); }
+
+/* Insight box */
+.insight {
+  background: var(--accent-light);
+  border-left: 3px solid var(--accent);
+  padding: 1rem 1.25rem;
+  margin: 1.5rem 0;
+  border-radius: 0 4px 4px 0;
+}
+.insight p { margin: 0; }
+
+/* Controls */
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  font-family: var(--heading-font);
+  font-size: 0.85rem;
+  color: var(--text-2);
+  margin-top: 1rem;
+}
+
+.control-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.control-group label {
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.control-group input[type="range"] {
+  width: 120px;
+  accent-color: var(--accent);
+}
+
+.control-group .val {
+  font-family: var(--mono-font);
+  font-variant-numeric: tabular-nums;
+  min-width: 3.5em;
+  text-align: right;
+}
+
+.btn {
+  font-family: var(--heading-font);
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.45rem 1.1rem;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  background: var(--fig-bg);
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  user-select: none;
+}
+.btn:hover { border-color: var(--accent); background: var(--accent-light); }
+.btn.active { border-color: var(--accent); background: var(--accent); color: #fff; }
+
+.toggle-group {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.stat-readout {
+  font-family: var(--mono-font);
+  font-size: 0.85rem;
+  color: var(--accent);
+  font-weight: 500;
+  margin-top: 0.5rem;
+}
+
+/* SVG defaults */
+svg text { font-family: var(--heading-font); }
+
+/* Footer */
+.footer {
+  margin-top: 4rem;
+  padding-top: 2rem;
+  border-top: 1px solid var(--border);
+  font-family: var(--heading-font);
+  font-size: 0.85rem;
+  color: var(--text-2);
+}
+.footer a { color: var(--text-2); }
+
+@media (max-width: 640px) {
+  .figure-wide { margin-left: 0; margin-right: 0; }
+  h1 { font-size: 1.75rem; }
+  .control-group input[type="range"] { width: 80px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0s !important;
+    transition-duration: 0s !important;
+  }
+}
+</style>
+</head>
+<body>
+
+<div class="article">
+
+  <header class="header">
+    <a class="back" href="index.html">&larr; Back</a>
+    <h1>Principal Component Analysis</h1>
+    <p class="subtitle">Finding the directions of maximum variance in data, and projecting down to fewer dimensions.</p>
+  </header>
+
+  <p>If you had to flatten 100 dimensions to 2, which 2 directions would you choose?</p>
+
+  <p>Not the original axes. Those are arbitrary. If your data lives in a 100-dimensional space but really only varies along a handful of directions, most of those axes are carrying noise. The signal lives in the directions where the data spreads out the most. Principal component analysis finds those directions.</p>
+
+  <p>The idea is geometric. Think of a cloud of points in space. That cloud has a shape. It might be stretched long in one direction and flat in another, like a cigar or a pancake. PCA finds the axes of that shape. The longest axis is the first principal component. The next longest, perpendicular to the first, is the second. And so on. Each axis captures a share of the total variance in the data, and by keeping only the axes that carry the most, you can collapse dimensions without losing much.</p>
+
+  <h2>Variance Has Direction</h2>
+
+  <p>Variance is usually taught as a single number: how spread out the data is. But when your data has more than one dimension, variance depends on which direction you measure it in. Project the data onto one axis and measure the spread. Rotate the axis, and the spread changes.</p>
+
+  <p>Try it. The scatter plot below shows 50 correlated data points in an elliptical cloud. Drag the projection axis to rotate it through the data. Watch the projected points collapse onto the line, and the histogram of projected values update alongside. The variance readout tells you how much spread the current axis captures.</p>
+
+  <div class="figure figure-wide" id="fig1">
+    <div id="fig1-container"></div>
+    <div class="stat-readout" id="fig1-readout">Variance captured: 0%</div>
+    <p class="figure-caption"><span class="figure-label">Figure 1.</span> Drag the projection axis to rotate it through the data cloud. The projected points (on the line) and their histogram update in real time. When the axis aligns with the major axis of the ellipse, variance is maximized. Perpendicular to it, variance is minimized. The direction of maximum variance is the first principal component.</p>
+  </div>
+
+  <p>When the axis aligns with the long direction of the ellipse, the histogram spreads wide and the variance percentage peaks. When the axis is perpendicular, the histogram compresses and variance bottoms out. The direction of maximum variance is the first principal component. You just found it by hand.</p>
+
+  <div class="insight">
+    <p>Variance is information. If you project onto a direction where all points land on top of each other, you have learned nothing about the differences between them. A direction with high variance separates the data. A direction with low variance collapses it.</p>
+  </div>
+
+  <h2>Finding the Components</h2>
+
+  <p>PCA automates what you just did by dragging. The algorithm proceeds in a few clean steps: center the data, then find the directions where it stretches most. These directions come from the eigendecomposition of the covariance matrix. That sounds heavier than it is. The covariance matrix measures how much each pair of variables moves together. Its eigenvectors point in the directions of maximum and minimum variance. Its eigenvalues tell you how much variance each direction captures.</p>
+
+  <p>Watch the algorithm run on the same data. It centers the cloud, finds the first principal component (the direction of maximum spread), then finds the second (perpendicular to the first). The coordinate system rotates to align with the new axes.</p>
+
+  <div class="figure figure-wide" id="fig2">
+    <div id="fig2-container"></div>
+    <div class="controls">
+      <button class="btn" id="fig2-play">Play</button>
+      <button class="btn" id="fig2-reset">Reset</button>
+    </div>
+    <p class="figure-caption"><span class="figure-label">Figure 2.</span> The PCA algorithm animated. First the mean is computed, then the data is centered. PC1 grows as the direction of maximum variance, PC2 perpendicular to it. The bar chart on the right shows the eigenvalues, the amount of variance each component captures.</p>
+  </div>
+
+  <p>What the algorithm is doing, geometrically, is rotating the coordinate system to align with the data's natural axes of variation. The original x and y axes were arbitrary. The principal components are the axes the data wants. After this rotation, each new axis is uncorrelated with the others. The first few carry most of the information, and the rest are noise you can drop.</p>
+
+  <h2>Projection and Reconstruction</h2>
+
+  <p>Once you have the principal components, projection is straightforward. To go from the original high-dimensional space to a lower one, you keep only the first few PCs and drop the rest. Each dropped component loses some variance, some information about the original data. The question is: how much do you lose?</p>
+
+  <p>The figure below shows a three-dimensional dataset shaped like a flattened ellipsoid. Toggle the principal components on and off to see the effect. With all three components, you see the full 3D data. Remove PC3 (the thinnest direction) and the data collapses to a plane. The lost variance is small because the data was already nearly flat in that direction. Remove PC2 and it collapses further to a line. Now the reconstruction error is substantial.</p>
+
+  <div class="figure figure-wide" id="fig3">
+    <div id="fig3-container"></div>
+    <div class="controls">
+      <div class="toggle-group">
+        <button class="btn active" id="fig3-pc1">PC1</button>
+        <button class="btn active" id="fig3-pc2">PC2</button>
+        <button class="btn active" id="fig3-pc3">PC3</button>
+      </div>
+      <span class="control-group">
+        <label>Error:</label>
+        <span class="val" id="fig3-error">0.0</span>
+      </span>
+    </div>
+    <p class="figure-caption"><span class="figure-label">Figure 3.</span> A 3D point cloud rendered in isometric projection. Toggle principal components off to project the data into lower dimensions. The reconstruction error (sum of squared distances from original to projected positions) grows as you remove components that carry variance.</p>
+  </div>
+
+  <p>Reconstruction error is the sum of squared distances between the original points and their projections. It is exactly equal to the total variance of the dropped components. This is the fundamental tradeoff of PCA: fewer dimensions means simpler data but higher reconstruction error. The art is in choosing how many to keep.</p>
+
+  <h2>The Scree Plot</h2>
+
+  <p>When your data has many dimensions, the scree plot answers the question: how many principal components do you actually need? It shows the variance explained by each component in order. The first component captures the most, the second the next most, and so on. The cumulative line shows the running total.</p>
+
+  <p>The characteristic shape is a steep drop followed by a leveling off. The "elbow" where the curve bends is the point of diminishing returns. Components before the elbow carry structure. Components after it carry noise. Choose the number of components at the elbow and you keep the signal while discarding the noise.</p>
+
+  <div class="figure figure-wide" id="fig4">
+    <div id="fig4-container"></div>
+    <div class="controls">
+      <div class="control-group">
+        <label>Components to keep</label>
+        <input type="range" id="fig4-slider" min="1" max="8" value="2" step="1">
+        <span class="val" id="fig4-val">2</span>
+      </div>
+      <span class="control-group">
+        <label>Variance explained:</label>
+        <span class="val" id="fig4-var">0%</span>
+      </span>
+    </div>
+    <p class="figure-caption"><span class="figure-label">Figure 4.</span> A scree plot of 8 principal components. Bars show individual variance, the line shows cumulative variance explained. Use the slider to choose how many components to keep. Below, the data is projected into the chosen dimensionality. At the elbow (around 2 to 3 components), you capture most of the variance with far fewer dimensions.</p>
+  </div>
+
+  <p>In practice, the elbow is not always sharp. Noisy data has a gradual slope. Data with clear low-dimensional structure has a sharp drop. Some practitioners use a threshold instead: keep enough components to explain 90% or 95% of the variance. Others use cross-validation, holding out data to see whether additional components improve predictions. The scree plot is a starting point for that judgment, not a mechanical rule.</p>
+
+  <div class="insight">
+    <p>PCA does not find clusters, categories, or nonlinear patterns. It finds directions. The first principal component of a ring of data points passes straight through the center, missing the ring entirely. PCA works when the important structure in your data aligns with the directions of maximum variance. When it does not, you need a different tool.</p>
+  </div>
+
+  <h2>What PCA Gives You</h2>
+
+  <p>PCA is a rotation followed by a truncation. You rotate the coordinate system to align with the data's own axes of variation, then you throw away the axes that carry the least. What remains is a lower-dimensional representation that preserves as much of the original variance as possible.</p>
+
+  <p>This is useful whenever you need to compress, visualize, or denoise high-dimensional data. Gene expression datasets with 20,000 dimensions collapse to a handful of components that separate cell types. Image datasets with millions of pixels have principal components that look like eigenfaces. Financial returns across hundreds of stocks compress to a few market factors.</p>
+
+  <p>But PCA does not find structure. It finds directions. The structure is what is left after you project. If the important patterns in your data happen to align with the directions of greatest spread, PCA will find them. If they live in directions with small variance, PCA will throw them away. That is not a flaw. It is a definition. PCA keeps what varies most, and it is your job to decide whether what varies most is what matters.</p>
+
+  <footer class="footer">
+    <p>Part of <a href="https://github.com/enjalot/moonshine">Moonshine</a>, a project for interactive technical explanations.</p>
+  </footer>
+
+</div>
+
+<script>
+(function() {
+
+// ============================================================
+// Shared utilities
+// ============================================================
+
+// Seeded PRNG for reproducibility
+function mulberry32(seed) {
+  return function() {
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+// Box-Muller normal
+function normalRandom(rng) {
+  let u, v;
+  do { u = rng(); } while (u === 0);
+  v = rng();
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+
+// Generate correlated 2D data
+function generate2DData(n, rng) {
+  const data = [];
+  for (let i = 0; i < n; i++) {
+    const z1 = normalRandom(rng);
+    const z2 = normalRandom(rng);
+    // Stretch along a diagonal: major axis ~45 deg, 3:1 ratio
+    const x = 3 * z1 + 0.5 * z2;
+    const y = 2 * z1 - 0.8 * z2;
+    data.push([x, y]);
+  }
+  return data;
+}
+
+// 2x2 eigendecomposition (symmetric matrix)
+function eigen2x2(a, b, d) {
+  // For symmetric [[a, b], [b, d]]
+  const trace = a + d;
+  const det = a * d - b * b;
+  const disc = Math.sqrt(Math.max(0, trace * trace / 4 - det));
+  const l1 = trace / 2 + disc;
+  const l2 = trace / 2 - disc;
+  let v1, v2;
+  if (Math.abs(b) > 1e-10) {
+    v1 = [l1 - d, b];
+    v2 = [l2 - d, b];
+  } else {
+    v1 = a >= d ? [1, 0] : [0, 1];
+    v2 = a >= d ? [0, 1] : [1, 0];
+  }
+  // Normalize
+  const n1 = Math.sqrt(v1[0] * v1[0] + v1[1] * v1[1]);
+  const n2 = Math.sqrt(v2[0] * v2[0] + v2[1] * v2[1]);
+  v1 = [v1[0] / n1, v1[1] / n1];
+  v2 = [v2[0] / n2, v2[1] / n2];
+  return { values: [l1, l2], vectors: [v1, v2] };
+}
+
+// Compute mean of data columns
+function mean(data, dim) {
+  const n = data.length;
+  const mu = new Array(dim).fill(0);
+  for (const row of data) {
+    for (let j = 0; j < dim; j++) mu[j] += row[j];
+  }
+  for (let j = 0; j < dim; j++) mu[j] /= n;
+  return mu;
+}
+
+// Check reduced motion preference
+const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+function dur(ms) { return prefersReducedMotion ? 0 : ms; }
+
+
+// ============================================================
+// Figure 1: Variance Has Direction
+// ============================================================
+
+(function figure1() {
+  const container = document.getElementById('fig1-container');
+  const readout = document.getElementById('fig1-readout');
+  const rng = mulberry32(12345);
+  const raw = generate2DData(50, rng);
+
+  // Compute PCA stats for normalization
+  const mu = mean(raw, 2);
+  const centered = raw.map(d => [d[0] - mu[0], d[1] - mu[1]]);
+
+  let cov_xx = 0, cov_xy = 0, cov_yy = 0;
+  for (const p of centered) {
+    cov_xx += p[0] * p[0];
+    cov_xy += p[0] * p[1];
+    cov_yy += p[1] * p[1];
+  }
+  const n = centered.length;
+  cov_xx /= n; cov_xy /= n; cov_yy /= n;
+  const totalVar = cov_xx + cov_yy;
+  const eig = eigen2x2(cov_xx, cov_xy, cov_yy);
+
+  // Layout
+  const margin = { top: 20, right: 140, bottom: 30, left: 40 };
+  let width, height, scatterW, histW;
+
+  const svg = d3.select(container).append('svg');
+  const gMain = svg.append('g');
+  const gScatter = gMain.append('g');
+  const gLine = gMain.append('g');
+  const gDropLines = gMain.append('g').attr('class', 'drop-lines');
+  const gProjected = gMain.append('g');
+  const gHist = gMain.append('g');
+  const gHandle = gMain.append('g').style('cursor', 'grab');
+
+  // State
+  let angle = Math.PI / 4; // initial angle
+
+  function layout() {
+    const rect = container.getBoundingClientRect();
+    width = rect.width;
+    height = Math.min(400, width * 0.6);
+    scatterW = width - margin.left - margin.right;
+    histW = 100;
+
+    svg.attr('width', width).attr('height', height);
+    gMain.attr('transform', `translate(${margin.left},${margin.top})`);
+  }
+
+  function render() {
+    const plotW = scatterW - histW - 20;
+    const plotH = height - margin.top - margin.bottom;
+    const cx = plotW / 2;
+    const cy = plotH / 2;
+
+    // Scales for scatter
+    const ext = 6;
+    const xScale = d3.scaleLinear().domain([-ext, ext]).range([0, plotW]);
+    const yScale = d3.scaleLinear().domain([-ext, ext]).range([plotH, 0]);
+
+    // Draw data points
+    const dots = gScatter.selectAll('circle').data(centered);
+    dots.enter().append('circle')
+      .attr('r', 3.5)
+      .attr('fill', '#2563eb')
+      .attr('fill-opacity', 0.5)
+      .attr('stroke', '#2563eb')
+      .attr('stroke-opacity', 0.3)
+    .merge(dots)
+      .attr('cx', d => xScale(d[0]))
+      .attr('cy', d => yScale(d[1]));
+    dots.exit().remove();
+
+    // Direction vector
+    const dx = Math.cos(angle);
+    const dy = Math.sin(angle);
+
+    // Draw projection axis line
+    const lineLen = ext * 1.3;
+    const lineData = [
+      [xScale(-dx * lineLen), yScale(-dy * lineLen)],
+      [xScale(dx * lineLen), yScale(dy * lineLen)]
+    ];
+    gLine.selectAll('line.axis-line').data([0])
+      .join('line')
+      .attr('class', 'axis-line')
+      .attr('x1', lineData[0][0]).attr('y1', lineData[0][1])
+      .attr('x2', lineData[1][0]).attr('y2', lineData[1][1])
+      .attr('stroke', '#e11d48')
+      .attr('stroke-width', 2)
+      .attr('stroke-dasharray', '6,4');
+
+    // Project each point onto the axis
+    const projections = centered.map(p => {
+      const dot = p[0] * dx + p[1] * dy;
+      return { orig: p, proj: dot, px: dx * dot, py: dy * dot };
+    });
+
+    // Drop lines
+    const drops = gDropLines.selectAll('line.drop').data(projections);
+    drops.enter().append('line').attr('class', 'drop')
+      .attr('stroke', '#94a3b8')
+      .attr('stroke-width', 0.7)
+      .attr('stroke-opacity', 0.5)
+    .merge(drops)
+      .attr('x1', d => xScale(d.orig[0]))
+      .attr('y1', d => yScale(d.orig[1]))
+      .attr('x2', d => xScale(d.px))
+      .attr('y2', d => yScale(d.py));
+    drops.exit().remove();
+
+    // Projected points on the line
+    const projDots = gProjected.selectAll('circle.proj').data(projections);
+    projDots.enter().append('circle').attr('class', 'proj')
+      .attr('r', 3)
+      .attr('fill', '#e11d48')
+      .attr('fill-opacity', 0.7)
+    .merge(projDots)
+      .attr('cx', d => xScale(d.px))
+      .attr('cy', d => yScale(d.py));
+    projDots.exit().remove();
+
+    // Histogram of projected values
+    const projVals = projections.map(d => d.proj);
+    const histX = plotW + 20;
+    const histH = plotH;
+    const histBins = d3.bin().domain([-ext, ext]).thresholds(15)(projVals);
+    const histYScale = d3.scaleLinear()
+      .domain([0, d3.max(histBins, b => b.length)])
+      .range([0, histW - 10]);
+    const histBandH = histH / histBins.length;
+
+    const bars = gHist.selectAll('rect.hbar').data(histBins);
+    bars.enter().append('rect').attr('class', 'hbar')
+      .attr('fill', '#e11d48')
+      .attr('fill-opacity', 0.4)
+      .attr('rx', 1)
+    .merge(bars)
+      .attr('x', histX)
+      .attr('y', (d, i) => i * histBandH + 1)
+      .attr('width', d => histYScale(d.length))
+      .attr('height', Math.max(1, histBandH - 2));
+    bars.exit().remove();
+
+    // Histogram label
+    gHist.selectAll('text.hist-label').data([0])
+      .join('text')
+      .attr('class', 'hist-label')
+      .attr('x', histX + histW / 2)
+      .attr('y', -4)
+      .attr('text-anchor', 'middle')
+      .attr('fill', 'var(--text-2)')
+      .attr('font-size', '0.7rem')
+      .text('Projected distribution');
+
+    // Compute variance along this direction
+    const projMean = d3.mean(projVals);
+    const projVar = d3.mean(projVals.map(v => (v - projMean) ** 2));
+    const pct = Math.round(projVar / totalVar * 100);
+    readout.textContent = `Variance captured: ${pct}%`;
+
+    // Drag handle (arrowhead at end of line)
+    const handleX = xScale(dx * lineLen * 0.85);
+    const handleY = yScale(dy * lineLen * 0.85);
+    gHandle.selectAll('circle.handle').data([0])
+      .join('circle')
+      .attr('class', 'handle')
+      .attr('cx', handleX)
+      .attr('cy', handleY)
+      .attr('r', 10)
+      .attr('fill', '#e11d48')
+      .attr('fill-opacity', 0.3)
+      .attr('stroke', '#e11d48')
+      .attr('stroke-width', 2);
+
+    gHandle.selectAll('text.drag-hint').data([0])
+      .join('text')
+      .attr('class', 'drag-hint')
+      .attr('x', handleX + 14)
+      .attr('y', handleY + 4)
+      .attr('fill', '#e11d48')
+      .attr('font-size', '0.7rem')
+      .attr('font-weight', 600)
+      .text('drag');
+  }
+
+  // Drag behavior: attach to the handle circle, compute angle from center of scatter
+  function setupDrag() {
+    const plotW = scatterW - histW - 20;
+    const plotH = height - margin.top - margin.bottom;
+    const cx = plotW / 2;
+    const cy = plotH / 2;
+
+    const drag = d3.drag()
+      .on('start', () => gHandle.style('cursor', 'grabbing'))
+      .on('drag', function(event) {
+        // event.x/y are in gMain coordinate space
+        const mx = event.x - cx;
+        const my = -(event.y - cy); // flip SVG y to data y
+        angle = Math.atan2(my, mx);
+        render();
+      })
+      .on('end', () => gHandle.style('cursor', 'grab'));
+
+    gHandle.call(drag);
+  }
+
+  layout();
+  render();
+  setupDrag();
+
+  const ro1 = new ResizeObserver(() => { layout(); render(); setupDrag(); });
+  ro1.observe(container);
+})();
+
+
+// ============================================================
+// Figure 2: Finding the Components (animated)
+// ============================================================
+
+(function figure2() {
+  const container = document.getElementById('fig2-container');
+  const btnPlay = document.getElementById('fig2-play');
+  const btnReset = document.getElementById('fig2-reset');
+
+  const rng = mulberry32(12345);
+  const raw = generate2DData(50, rng);
+  const mu2d = mean(raw, 2);
+  const centered = raw.map(d => [d[0] - mu2d[0], d[1] - mu2d[1]]);
+
+  // Covariance and eigen
+  let cxx = 0, cxy = 0, cyy = 0;
+  for (const p of centered) { cxx += p[0]*p[0]; cxy += p[0]*p[1]; cyy += p[1]*p[1]; }
+  const nn = centered.length;
+  cxx /= nn; cxy /= nn; cyy /= nn;
+  const eig = eigen2x2(cxx, cxy, cyy);
+  const totalVar = eig.values[0] + eig.values[1];
+
+  const margin = { top: 20, right: 120, bottom: 30, left: 40 };
+  let width, height;
+
+  const svg = d3.select(container).append('svg');
+  const gMain = svg.append('g');
+  const gDots = gMain.append('g');
+  const gMean = gMain.append('g');
+  const gArrows = gMain.append('g');
+  const gBarChart = gMain.append('g');
+  const gLabels = gMain.append('g');
+
+  let stage = 0; // 0=initial, 1=show mean, 2=centered, 3=PC1, 4=PC2, 5=rotated+bars
+
+  function layout() {
+    const rect = container.getBoundingClientRect();
+    width = rect.width;
+    height = Math.min(400, width * 0.6);
+    svg.attr('width', width).attr('height', height);
+    gMain.attr('transform', `translate(${margin.left},${margin.top})`);
+  }
+
+  function render(animate) {
+    const plotW = width - margin.left - margin.right - 100;
+    const plotH = height - margin.top - margin.bottom;
+    const ext = 7;
+    const xS = d3.scaleLinear().domain([-ext, ext]).range([0, plotW]);
+    const yS = d3.scaleLinear().domain([-ext, ext]).range([plotH, 0]);
+
+    const useData = stage >= 2 ? centered : raw;
+    const showMu = stage >= 1 ? mu2d : null;
+    const showCenter = stage >= 2;
+    const meanShift = showCenter ? [0, 0] : mu2d;
+
+    // Dots
+    const t = animate ? d3.transition().duration(dur(600)).ease(d3.easeCubicOut) : d3.transition().duration(0);
+
+    const dots = gDots.selectAll('circle.pt').data(useData);
+    dots.enter().append('circle').attr('class', 'pt')
+      .attr('r', 3.5)
+      .attr('fill', '#2563eb')
+      .attr('fill-opacity', 0.5)
+      .attr('stroke', '#2563eb')
+      .attr('stroke-opacity', 0.3)
+      .attr('cx', d => xS(d[0]))
+      .attr('cy', d => yS(d[1]))
+    .merge(dots)
+      .transition(t)
+      .attr('cx', d => xS(d[0]))
+      .attr('cy', d => yS(d[1]));
+
+    // Mean crosshair
+    if (stage >= 1 && stage < 2) {
+      gMean.selectAll('line.crossh').data([0,1])
+        .join('line')
+        .attr('class', 'crossh')
+        .attr('stroke', '#e11d48')
+        .attr('stroke-width', 1.5)
+        .attr('stroke-dasharray', '4,3')
+        .each(function(d) {
+          const s = d3.select(this);
+          if (d === 0) {
+            s.attr('x1', xS(mu2d[0]) - 12).attr('x2', xS(mu2d[0]) + 12)
+             .attr('y1', yS(mu2d[1])).attr('y2', yS(mu2d[1]));
+          } else {
+            s.attr('x1', xS(mu2d[0])).attr('x2', xS(mu2d[0]))
+             .attr('y1', yS(mu2d[1]) - 12).attr('y2', yS(mu2d[1]) + 12);
+          }
+        });
+      gMean.selectAll('text.mu-label').data([0])
+        .join('text')
+        .attr('class', 'mu-label')
+        .attr('x', xS(mu2d[0]) + 16)
+        .attr('y', yS(mu2d[1]) - 8)
+        .attr('fill', '#e11d48')
+        .attr('font-size', '0.75rem')
+        .attr('font-weight', 600)
+        .text('mean');
+    } else if (stage >= 2) {
+      // Origin crosshair
+      gMean.selectAll('line.crossh').data([0,1])
+        .join('line')
+        .attr('class', 'crossh')
+        .attr('stroke', '#94a3b8')
+        .attr('stroke-width', 1)
+        .attr('stroke-dasharray', '4,3')
+        .each(function(d) {
+          const s = d3.select(this);
+          if (d === 0) {
+            s.attr('x1', xS(-ext)).attr('x2', xS(ext))
+             .attr('y1', yS(0)).attr('y2', yS(0));
+          } else {
+            s.attr('x1', xS(0)).attr('x2', xS(0))
+             .attr('y1', yS(-ext)).attr('y2', yS(ext));
+          }
+        });
+      gMean.selectAll('text.mu-label').remove();
+    } else {
+      gMean.selectAll('*').remove();
+    }
+
+    // PC arrows
+    gArrows.selectAll('*').remove();
+    if (stage >= 3) {
+      const arrowLen = 4;
+      const pc1 = eig.vectors[0];
+      const pc1end = [pc1[0] * arrowLen, pc1[1] * arrowLen];
+
+      // PC1 arrow
+      const arrowT = animate ? d3.transition().duration(dur(800)).ease(d3.easeCubicOut) : d3.transition().duration(0);
+
+      gArrows.append('line')
+        .attr('x1', xS(0)).attr('y1', yS(0))
+        .attr('x2', xS(0)).attr('y2', yS(0))
+        .attr('stroke', '#e11d48').attr('stroke-width', 2.5)
+        .attr('marker-end', 'url(#arrowhead-pc1)')
+        .transition(arrowT)
+        .attr('x2', xS(pc1end[0])).attr('y2', yS(pc1end[1]));
+
+      gArrows.append('text')
+        .attr('x', xS(pc1end[0] * 1.12))
+        .attr('y', yS(pc1end[1] * 1.12))
+        .attr('fill', '#e11d48')
+        .attr('font-size', '0.8rem')
+        .attr('font-weight', 700)
+        .attr('text-anchor', 'middle')
+        .attr('opacity', 0)
+        .text('PC1')
+        .transition(arrowT)
+        .attr('opacity', 1);
+
+      if (stage >= 4) {
+        const pc2 = eig.vectors[1];
+        const pc2end = [pc2[0] * arrowLen * 0.6, pc2[1] * arrowLen * 0.6];
+
+        gArrows.append('line')
+          .attr('x1', xS(0)).attr('y1', yS(0))
+          .attr('x2', xS(0)).attr('y2', yS(0))
+          .attr('stroke', '#16a34a').attr('stroke-width', 2.5)
+          .attr('marker-end', 'url(#arrowhead-pc2)')
+          .transition(arrowT)
+          .attr('x2', xS(pc2end[0])).attr('y2', yS(pc2end[1]));
+
+        gArrows.append('text')
+          .attr('x', xS(pc2end[0] * 1.25))
+          .attr('y', yS(pc2end[1] * 1.25))
+          .attr('fill', '#16a34a')
+          .attr('font-size', '0.8rem')
+          .attr('font-weight', 700)
+          .attr('text-anchor', 'middle')
+          .attr('opacity', 0)
+          .text('PC2')
+          .transition(arrowT)
+          .attr('opacity', 1);
+      }
+    }
+
+    // Eigenvalue bar chart (stages 5+)
+    gBarChart.selectAll('*').remove();
+    if (stage >= 5) {
+      const barX = plotW + 20;
+      const barW = 80;
+      const barH = plotH * 0.5;
+      const barY = plotH * 0.25;
+
+      const bars = [
+        { label: 'PC1', val: eig.values[0], color: '#e11d48' },
+        { label: 'PC2', val: eig.values[1], color: '#16a34a' }
+      ];
+      const bScale = d3.scaleLinear().domain([0, totalVar]).range([0, barH]);
+      const bandW = 28;
+      const gap = 12;
+
+      gBarChart.append('text')
+        .attr('x', barX + barW / 2)
+        .attr('y', barY - 12)
+        .attr('text-anchor', 'middle')
+        .attr('fill', 'var(--text-2)')
+        .attr('font-size', '0.7rem')
+        .attr('font-weight', 600)
+        .text('Variance');
+
+      bars.forEach((b, i) => {
+        const bx = barX + i * (bandW + gap) + (barW - 2 * bandW - gap) / 2;
+        const bh = bScale(b.val);
+        gBarChart.append('rect')
+          .attr('x', bx)
+          .attr('y', barY + barH)
+          .attr('width', bandW)
+          .attr('height', 0)
+          .attr('fill', b.color)
+          .attr('fill-opacity', 0.7)
+          .attr('rx', 2)
+          .transition().duration(dur(600)).ease(d3.easeCubicOut)
+          .attr('y', barY + barH - bh)
+          .attr('height', bh);
+
+        gBarChart.append('text')
+          .attr('x', bx + bandW / 2)
+          .attr('y', barY + barH + 14)
+          .attr('text-anchor', 'middle')
+          .attr('fill', b.color)
+          .attr('font-size', '0.7rem')
+          .attr('font-weight', 600)
+          .text(b.label);
+
+        gBarChart.append('text')
+          .attr('x', bx + bandW / 2)
+          .attr('y', barY + barH - bh - 6)
+          .attr('text-anchor', 'middle')
+          .attr('fill', b.color)
+          .attr('font-size', '0.65rem')
+          .attr('opacity', 0)
+          .text(Math.round(b.val / totalVar * 100) + '%')
+          .transition().duration(dur(600))
+          .attr('opacity', 1);
+      });
+    }
+  }
+
+  // Arrowhead markers
+  function addDefs() {
+    const defs = svg.append('defs');
+    [['arrowhead-pc1', '#e11d48'], ['arrowhead-pc2', '#16a34a']].forEach(([id, color]) => {
+      defs.append('marker')
+        .attr('id', id)
+        .attr('viewBox', '0 0 10 10')
+        .attr('refX', 9).attr('refY', 5)
+        .attr('markerWidth', 8).attr('markerHeight', 8)
+        .attr('orient', 'auto')
+        .append('path')
+        .attr('d', 'M0,0 L10,5 L0,10 Z')
+        .attr('fill', color);
+    });
+  }
+
+  const stages = [
+    () => { stage = 1; render(true); },  // show mean
+    () => { stage = 2; render(true); },  // center data
+    () => { stage = 3; render(true); },  // PC1
+    () => { stage = 4; render(true); },  // PC2
+    () => { stage = 5; render(true); },  // bar chart
+  ];
+
+  let playing = false;
+  let stageIdx = 0;
+
+  btnPlay.addEventListener('click', () => {
+    if (playing) return;
+    if (stageIdx >= stages.length) return;
+    playing = true;
+    function nextStage() {
+      if (stageIdx < stages.length) {
+        stages[stageIdx]();
+        stageIdx++;
+        if (stageIdx < stages.length) {
+          setTimeout(nextStage, prefersReducedMotion ? 100 : 900);
+        } else {
+          playing = false;
+        }
+      }
+    }
+    nextStage();
+  });
+
+  btnReset.addEventListener('click', () => {
+    playing = false;
+    stageIdx = 0;
+    stage = 0;
+    gMean.selectAll('*').remove();
+    gArrows.selectAll('*').remove();
+    gBarChart.selectAll('*').remove();
+    render(false);
+  });
+
+  layout();
+  addDefs();
+  render(false);
+
+  const ro2 = new ResizeObserver(() => { layout(); render(false); });
+  ro2.observe(container);
+})();
+
+
+// ============================================================
+// Figure 3: Projection and Reconstruction (3D isometric)
+// ============================================================
+
+(function figure3() {
+  const container = document.getElementById('fig3-container');
+  const btnPC1 = document.getElementById('fig3-pc1');
+  const btnPC2 = document.getElementById('fig3-pc2');
+  const btnPC3 = document.getElementById('fig3-pc3');
+  const errorEl = document.getElementById('fig3-error');
+
+  const rng = mulberry32(99999);
+  const N = 100;
+
+  // Generate 3D ellipsoid: stretched along one axis, medium along second, thin along third
+  const rawData = [];
+  for (let i = 0; i < N; i++) {
+    const z1 = normalRandom(rng);
+    const z2 = normalRandom(rng);
+    const z3 = normalRandom(rng);
+    // Eigenvalues roughly 5, 2, 0.3
+    // Rotate into a tilted orientation
+    rawData.push([
+      2.2 * z1 + 0.5 * z2 + 0.1 * z3,
+      0.8 * z1 + 1.3 * z2 - 0.2 * z3,
+      0.3 * z1 - 0.4 * z2 + 0.5 * z3
+    ]);
+  }
+
+  // Center
+  const mu3 = mean(rawData, 3);
+  const data3 = rawData.map(d => [d[0] - mu3[0], d[1] - mu3[1], d[2] - mu3[2]]);
+
+  // 3x3 PCA via power iteration (good enough for 3 dims)
+  function covMatrix(pts) {
+    const n = pts.length;
+    const C = [[0,0,0],[0,0,0],[0,0,0]];
+    for (const p of pts) {
+      for (let i = 0; i < 3; i++)
+        for (let j = 0; j < 3; j++)
+          C[i][j] += p[i] * p[j];
+    }
+    for (let i = 0; i < 3; i++)
+      for (let j = 0; j < 3; j++)
+        C[i][j] /= n;
+    return C;
+  }
+
+  function matVec(M, v) {
+    return M.map(row => row[0]*v[0] + row[1]*v[1] + row[2]*v[2]);
+  }
+
+  function vecNorm(v) {
+    return Math.sqrt(v[0]*v[0] + v[1]*v[1] + v[2]*v[2]);
+  }
+
+  function normalize(v) {
+    const n = vecNorm(v);
+    return n > 0 ? v.map(x => x/n) : v;
+  }
+
+  function dot3(a, b) { return a[0]*b[0] + a[1]*b[1] + a[2]*b[2]; }
+
+  function deflate(M, eigvec, eigval) {
+    const R = M.map(row => [...row]);
+    for (let i = 0; i < 3; i++)
+      for (let j = 0; j < 3; j++)
+        R[i][j] -= eigval * eigvec[i] * eigvec[j];
+    return R;
+  }
+
+  function powerIteration(M, iters) {
+    let v = normalize([1, 0.5, 0.3]);
+    for (let i = 0; i < iters; i++) {
+      v = normalize(matVec(M, v));
+    }
+    const Mv = matVec(M, v);
+    const eigenvalue = dot3(v, Mv);
+    return { vector: v, value: eigenvalue };
+  }
+
+  const C = covMatrix(data3);
+  const pc1r = powerIteration(C, 100);
+  const C2 = deflate(C, pc1r.vector, pc1r.value);
+  const pc2r = powerIteration(C2, 100);
+  const C3 = deflate(C2, pc2r.vector, pc2r.value);
+  const pc3r = powerIteration(C3, 100);
+
+  const pcs = [pc1r, pc2r, pc3r];
+  const totalVar3 = pcs.reduce((s, p) => s + p.value, 0);
+
+  // State: which PCs are active
+  let active = [true, true, true];
+
+  // Isometric projection to 2D
+  const isoAngle = Math.PI / 6;
+  function project3Dto2D(x, y, z) {
+    // Simple isometric: x goes right-down, y goes right-up, z goes up
+    const px = (x - y) * Math.cos(isoAngle);
+    const py = -(x + y) * Math.sin(isoAngle) - z;
+    return [px, py];
+  }
+
+  // Project data keeping only active PCs
+  function projectData() {
+    return data3.map(pt => {
+      let proj = [0, 0, 0];
+      for (let k = 0; k < 3; k++) {
+        if (active[k]) {
+          const coeff = dot3(pt, pcs[k].vector);
+          for (let j = 0; j < 3; j++) proj[j] += coeff * pcs[k].vector[j];
+        }
+      }
+      return { orig: pt, proj: proj };
+    });
+  }
+
+  const margin = { top: 20, right: 20, bottom: 20, left: 20 };
+  let width, height;
+  const svg = d3.select(container).append('svg');
+  const gMain = svg.append('g');
+  const gLines = gMain.append('g');
+  const gOrigDots = gMain.append('g');
+  const gProjDots = gMain.append('g');
+
+  function layout() {
+    const rect = container.getBoundingClientRect();
+    width = rect.width;
+    height = Math.min(420, width * 0.65);
+    svg.attr('width', width).attr('height', height);
+    gMain.attr('transform', `translate(${width/2},${height/2})`);
+  }
+
+  function render(animate) {
+    const scale = Math.min(width, height) / 8;
+    const projected = projectData();
+
+    // Error
+    let err = 0;
+    for (const d of projected) {
+      for (let j = 0; j < 3; j++) err += (d.orig[j] - d.proj[j]) ** 2;
+    }
+    errorEl.textContent = err.toFixed(1);
+
+    // Iso-project original and projected points
+    const origPts = projected.map(d => {
+      const [ox, oy] = project3Dto2D(d.orig[0], d.orig[1], d.orig[2]);
+      const [px, py] = project3Dto2D(d.proj[0], d.proj[1], d.proj[2]);
+      return { ox: ox * scale, oy: oy * scale, px: px * scale, py: py * scale };
+    });
+
+    const t = animate ? d3.transition().duration(dur(500)).ease(d3.easeCubicOut) : d3.transition().duration(0);
+
+    // Error lines
+    const allActive = active.every(Boolean);
+    const lines = gLines.selectAll('line.err').data(origPts);
+    lines.enter().append('line').attr('class', 'err')
+      .attr('stroke', '#e11d48')
+      .attr('stroke-width', 0.7)
+      .attr('stroke-opacity', 0.3)
+    .merge(lines)
+      .transition(t)
+      .attr('x1', d => d.ox).attr('y1', d => d.oy)
+      .attr('x2', d => d.px).attr('y2', d => d.py)
+      .attr('stroke-opacity', allActive ? 0 : 0.3);
+    lines.exit().remove();
+
+    // Original (ghost)
+    const orig = gOrigDots.selectAll('circle.orig').data(origPts);
+    orig.enter().append('circle').attr('class', 'orig')
+      .attr('r', 2.5)
+      .attr('fill', '#94a3b8')
+      .attr('fill-opacity', 0.3)
+    .merge(orig)
+      .attr('cx', d => d.ox).attr('cy', d => d.oy)
+      .attr('fill-opacity', allActive ? 0 : 0.3);
+    orig.exit().remove();
+
+    // Projected (solid)
+    const proj = gProjDots.selectAll('circle.proj').data(origPts);
+    proj.enter().append('circle').attr('class', 'proj')
+      .attr('r', 3)
+      .attr('fill', '#2563eb')
+      .attr('fill-opacity', 0.6)
+      .attr('stroke', '#2563eb')
+      .attr('stroke-opacity', 0.3)
+    .merge(proj)
+      .transition(t)
+      .attr('cx', d => d.px).attr('cy', d => d.py);
+    proj.exit().remove();
+  }
+
+  function togglePC(idx, btn) {
+    active[idx] = !active[idx];
+    // Cannot turn off all PCs: keep at least PC1
+    if (!active.some(Boolean)) { active[idx] = true; return; }
+    btn.classList.toggle('active', active[idx]);
+    render(true);
+  }
+
+  btnPC1.addEventListener('click', () => togglePC(0, btnPC1));
+  btnPC2.addEventListener('click', () => togglePC(1, btnPC2));
+  btnPC3.addEventListener('click', () => togglePC(2, btnPC3));
+
+  layout();
+  render(false);
+
+  const ro3 = new ResizeObserver(() => { layout(); render(false); });
+  ro3.observe(container);
+})();
+
+
+// ============================================================
+// Figure 4: The Scree Plot
+// ============================================================
+
+(function figure4() {
+  const container = document.getElementById('fig4-container');
+  const slider = document.getElementById('fig4-slider');
+  const valEl = document.getElementById('fig4-val');
+  const varEl = document.getElementById('fig4-var');
+
+  // Generate 8D data with clear scree shape
+  const rng = mulberry32(77777);
+  const N = 120;
+  const dims = 8;
+  // Eigenvalues: sharp drop after 2
+  const trueEigenvalues = [5.0, 3.0, 0.7, 0.4, 0.25, 0.15, 0.1, 0.05];
+  const totalVar = trueEigenvalues.reduce((a, b) => a + b, 0);
+
+  // Generate random orthogonal basis (Gram-Schmidt on random vectors)
+  function randomBasis(d) {
+    const basis = [];
+    for (let i = 0; i < d; i++) {
+      let v = Array.from({length: d}, () => normalRandom(rng));
+      // Subtract projections onto previous basis vectors
+      for (const b of basis) {
+        const dp = v.reduce((s, x, j) => s + x * b[j], 0);
+        v = v.map((x, j) => x - dp * b[j]);
+      }
+      const n = Math.sqrt(v.reduce((s, x) => s + x * x, 0));
+      basis.push(v.map(x => x / n));
+    }
+    return basis;
+  }
+
+  const basis = randomBasis(dims);
+
+  // Generate data: sum of scaled basis vectors * random coefficient
+  const data8 = [];
+  for (let i = 0; i < N; i++) {
+    const pt = new Array(dims).fill(0);
+    for (let k = 0; k < dims; k++) {
+      const coeff = normalRandom(rng) * Math.sqrt(trueEigenvalues[k]);
+      for (let j = 0; j < dims; j++) pt[j] += coeff * basis[k][j];
+    }
+    data8.push(pt);
+  }
+
+  // Center
+  const mu8 = new Array(dims).fill(0);
+  for (const pt of data8) for (let j = 0; j < dims; j++) mu8[j] += pt[j];
+  for (let j = 0; j < dims; j++) mu8[j] /= N;
+  const centered8 = data8.map(pt => pt.map((v, j) => v - mu8[j]));
+
+  // Project onto first k PCs (basis vectors are the PCs by construction)
+  function projectToK(k) {
+    return centered8.map(pt => {
+      const coeffs = [];
+      for (let c = 0; c < k; c++) {
+        coeffs.push(pt.reduce((s, v, j) => s + v * basis[c][j], 0));
+      }
+      return coeffs;
+    });
+  }
+
+  // Layout
+  const margin = { top: 20, right: 70, bottom: 30, left: 40 };
+  let width, height;
+
+  const svg = d3.select(container).append('svg');
+  const gScree = svg.append('g');
+  const gProj = svg.append('g');
+
+  function layout() {
+    const rect = container.getBoundingClientRect();
+    width = rect.width;
+    height = Math.min(520, width * 0.85);
+    svg.attr('width', width).attr('height', height);
+  }
+
+  function render(animate) {
+    const k = +slider.value;
+    valEl.textContent = k;
+    const cumVar = trueEigenvalues.slice(0, k).reduce((a, b) => a + b, 0);
+    varEl.textContent = Math.round(cumVar / totalVar * 100) + '%';
+
+    const screeH = height * 0.35;
+    const gapH = 30;
+    const projH = height - margin.top - margin.bottom - screeH - gapH;
+    const projTop = screeH + gapH;
+
+    const plotW = width - margin.left - margin.right;
+
+    // ---- Scree plot ----
+    gScree.selectAll('*').remove();
+    gScree.attr('transform', `translate(${margin.left},${margin.top})`);
+
+    const xBand = d3.scaleBand()
+      .domain(d3.range(dims).map(i => 'PC' + (i + 1)))
+      .range([0, plotW])
+      .padding(0.3);
+
+    const yBar = d3.scaleLinear()
+      .domain([0, d3.max(trueEigenvalues) * 1.15])
+      .range([screeH, 0]);
+
+    // Bars
+    trueEigenvalues.forEach((v, i) => {
+      const isKept = i < k;
+      gScree.append('rect')
+        .attr('x', xBand('PC' + (i + 1)))
+        .attr('y', yBar(v))
+        .attr('width', xBand.bandwidth())
+        .attr('height', screeH - yBar(v))
+        .attr('fill', isKept ? '#2563eb' : '#cbd5e1')
+        .attr('fill-opacity', isKept ? 0.7 : 0.4)
+        .attr('rx', 2);
+
+      gScree.append('text')
+        .attr('x', xBand('PC' + (i + 1)) + xBand.bandwidth() / 2)
+        .attr('y', yBar(v) - 6)
+        .attr('text-anchor', 'middle')
+        .attr('fill', isKept ? '#2563eb' : '#94a3b8')
+        .attr('font-size', '0.65rem')
+        .text(Math.round(v / totalVar * 100) + '%');
+    });
+
+    // X axis
+    const xAxisG = gScree.append('g')
+      .attr('transform', `translate(0,${screeH})`)
+      .call(d3.axisBottom(xBand).tickSize(0));
+    xAxisG.select('.domain').remove();
+    xAxisG.selectAll('.tick text')
+      .attr('fill', 'var(--text-2)')
+      .attr('font-size', '0.7rem');
+
+    // Cumulative line
+    const cumVals = [];
+    let running = 0;
+    for (const v of trueEigenvalues) {
+      running += v;
+      cumVals.push(running / totalVar * 100);
+    }
+
+    const yCum = d3.scaleLinear().domain([0, 105]).range([screeH, 0]);
+
+    const lineGen = d3.line()
+      .x((d, i) => xBand('PC' + (i + 1)) + xBand.bandwidth() / 2)
+      .y(d => yCum(d));
+
+    gScree.append('path')
+      .datum(cumVals)
+      .attr('d', lineGen)
+      .attr('fill', 'none')
+      .attr('stroke', '#e11d48')
+      .attr('stroke-width', 2);
+
+    cumVals.forEach((v, i) => {
+      gScree.append('circle')
+        .attr('cx', xBand('PC' + (i + 1)) + xBand.bandwidth() / 2)
+        .attr('cy', yCum(v))
+        .attr('r', 3)
+        .attr('fill', i < k ? '#e11d48' : '#fca5a5');
+    });
+
+    // Cumulative label
+    gScree.append('text')
+      .attr('x', plotW + 4)
+      .attr('y', yCum(cumVals[cumVals.length - 1]) + 4)
+      .attr('fill', '#e11d48')
+      .attr('font-size', '0.65rem')
+      .attr('font-weight', 600)
+      .text('cumulative');
+
+    // Y axis for cumulative
+    const cumAxisG = gScree.append('g')
+      .attr('transform', `translate(${plotW + 2},0)`)
+      .call(d3.axisRight(yCum).ticks(4).tickFormat(d => d + '%').tickSize(0));
+    cumAxisG.select('.domain').remove();
+    cumAxisG.selectAll('.tick text')
+      .attr('fill', 'var(--text-2)')
+      .attr('font-size', '0.65rem');
+
+    // ---- Projection view ----
+    gProj.selectAll('*').remove();
+    gProj.attr('transform', `translate(${margin.left},${margin.top + projTop})`);
+
+    const projected = projectToK(k);
+
+    gProj.append('text')
+      .attr('x', 0).attr('y', -8)
+      .attr('fill', 'var(--text-2)')
+      .attr('font-size', '0.75rem')
+      .attr('font-weight', 600)
+      .text(k === 1 ? 'Projected onto 1 component' : `Projected onto ${k} components`);
+
+    if (k === 1) {
+      // 1D: strip plot with jitter
+      const vals = projected.map(d => d[0]);
+      const jitterRng = mulberry32(42);
+      const jittered = vals.map(v => ({ v, jy: normalRandom(jitterRng) * 10 }));
+      const xS = d3.scaleLinear().domain(d3.extent(vals).map((v,i) => v + (i === 0 ? -0.5 : 0.5))).range([20, plotW - 20]);
+      const stripY = projH / 2;
+
+      gProj.append('line')
+        .attr('x1', 20).attr('x2', plotW - 20)
+        .attr('y1', stripY).attr('y2', stripY)
+        .attr('stroke', '#e2e2e8').attr('stroke-width', 1);
+
+      gProj.selectAll('circle.sp').data(jittered)
+        .join('circle')
+        .attr('class', 'sp')
+        .attr('cx', d => xS(d.v))
+        .attr('cy', d => stripY + d.jy)
+        .attr('r', 3)
+        .attr('fill', '#2563eb')
+        .attr('fill-opacity', 0.5);
+
+    } else if (k === 2) {
+      // 2D scatter
+      const xS = d3.scaleLinear().domain(d3.extent(projected, d => d[0]).map((v,i) => v + (i === 0 ? -0.5 : 0.5))).range([20, plotW - 20]);
+      const yS = d3.scaleLinear().domain(d3.extent(projected, d => d[1]).map((v,i) => v + (i === 0 ? -0.5 : 0.5))).range([projH - 10, 10]);
+
+      gProj.selectAll('circle.sp').data(projected)
+        .join('circle')
+        .attr('class', 'sp')
+        .attr('cx', d => xS(d[0]))
+        .attr('cy', d => yS(d[1]))
+        .attr('r', 3)
+        .attr('fill', '#2563eb')
+        .attr('fill-opacity', 0.5);
+
+      // Axis labels
+      gProj.append('text').attr('x', plotW / 2).attr('y', projH + 2)
+        .attr('text-anchor', 'middle').attr('fill', 'var(--text-2)').attr('font-size', '0.65rem').text('PC1');
+      gProj.append('text').attr('x', -4).attr('y', projH / 2)
+        .attr('text-anchor', 'end').attr('fill', 'var(--text-2)').attr('font-size', '0.65rem')
+        .attr('transform', `rotate(-90, -4, ${projH/2})`).text('PC2');
+
+    } else {
+      // 3D+ pseudo-3D: use first 3 dims with isometric-like projection
+      const isoAngle = Math.PI / 6;
+      function iso(pt) {
+        const x = pt[0] || 0, y = pt[1] || 0, z = pt[2] || 0;
+        return [
+          (x - y) * Math.cos(isoAngle),
+          -(x + y) * Math.sin(isoAngle) - z
+        ];
+      }
+
+      const isoPts = projected.map(d => iso(d));
+      const xExt = d3.extent(isoPts, d => d[0]);
+      const yExt = d3.extent(isoPts, d => d[1]);
+      const xS = d3.scaleLinear().domain([xExt[0] - 0.5, xExt[1] + 0.5]).range([20, plotW - 20]);
+      const yS = d3.scaleLinear().domain([yExt[0] - 0.5, yExt[1] + 0.5]).range([projH - 10, 10]);
+
+      gProj.selectAll('circle.sp').data(isoPts)
+        .join('circle')
+        .attr('class', 'sp')
+        .attr('cx', d => xS(d[0]))
+        .attr('cy', d => yS(d[1]))
+        .attr('r', 3)
+        .attr('fill', '#2563eb')
+        .attr('fill-opacity', 0.5);
+
+      // Labels
+      if (k >= 3) {
+        gProj.append('text').attr('x', plotW / 2).attr('y', projH + 2)
+          .attr('text-anchor', 'middle').attr('fill', 'var(--text-2)').attr('font-size', '0.65rem')
+          .text(k + 'D isometric view');
+      }
+    }
+  }
+
+  slider.addEventListener('input', () => render(false));
+
+  layout();
+  render(false);
+
+  const ro4 = new ResizeObserver(() => { layout(); render(false); });
+  ro4.observe(container);
+})();
+
+})();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,1506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>How Gradient Descent Finds Minima</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --article-width: 740px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem;
+  --line-height: 1.6;
+  --text: #1a1a2e;
+  --text-2: #4a4a6a;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --bg: #fafafa;
+  --fig-bg: #ffffff;
+  --border: #e2e2e8;
+}
+
+body {
+  font-family: var(--body-font);
+  font-size: var(--body-size);
+  line-height: var(--line-height);
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+.article {
+  max-width: var(--article-width);
+  margin: 0 auto;
+  padding: 2rem 1.25rem 6rem;
+}
+
+h1, h2, h3 {
+  font-family: var(--heading-font);
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+h3 { font-size: 1.15rem; margin: 2rem 0 0.75rem; }
+
+p { margin: 0 0 1rem; }
+a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+a:hover { color: #1d4ed8; }
+
+code {
+  font-family: var(--mono-font);
+  font-size: 0.9em;
+  background: #f1f1f5;
+  padding: 0.15em 0.4em;
+  border-radius: 3px;
+}
+
+.header {
+  padding: 4rem 0 2rem;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 2.5rem;
+}
+.header .back {
+  font-family: var(--heading-font);
+  font-size: 0.85rem;
+  display: inline-block;
+  margin-bottom: 1.5rem;
+}
+.header .subtitle {
+  font-family: var(--heading-font);
+  font-size: 1.15rem;
+  color: var(--text-2);
+  margin-bottom: 0;
+  max-width: 580px;
+}
+
+/* Figures */
+.figure {
+  margin: 2rem 0;
+  padding: 1.5rem;
+  background: var(--fig-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.figure-wide {
+  margin-left: -2rem;
+  margin-right: -2rem;
+}
+.figure-caption {
+  font-family: var(--heading-font);
+  font-size: 0.85rem;
+  color: var(--text-2);
+  margin-top: 0.75rem;
+  line-height: 1.4;
+}
+.figure-label { font-weight: 600; color: var(--text); }
+
+/* Insight box */
+.insight {
+  background: var(--accent-light);
+  border-left: 3px solid var(--accent);
+  padding: 1rem 1.25rem;
+  margin: 1.5rem 0;
+  border-radius: 0 4px 4px 0;
+}
+.insight p { margin: 0; }
+
+/* Controls */
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  font-family: var(--heading-font);
+  font-size: 0.85rem;
+  color: var(--text-2);
+  margin-top: 1rem;
+}
+
+.control-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.control-group label {
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.control-group input[type="range"] {
+  width: 120px;
+  accent-color: var(--accent);
+}
+
+.control-group .val {
+  font-family: var(--mono-font);
+  font-variant-numeric: tabular-nums;
+  min-width: 3.5em;
+  text-align: right;
+}
+
+.btn {
+  font-family: var(--heading-font);
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.45rem 1.1rem;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  background: var(--fig-bg);
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  user-select: none;
+}
+.btn:hover { border-color: var(--accent); background: var(--accent-light); }
+.btn.active { border-color: var(--accent); background: var(--accent); color: white; }
+
+/* Toggle group */
+.toggle-group {
+  display: flex;
+  gap: 0;
+}
+.toggle-group .btn {
+  border-radius: 0;
+}
+.toggle-group .btn:first-child {
+  border-radius: 5px 0 0 5px;
+}
+.toggle-group .btn:last-child {
+  border-radius: 0 5px 5px 0;
+}
+.toggle-group .btn + .btn {
+  border-left: none;
+}
+
+/* SVG styles */
+svg text {
+  font-family: var(--heading-font);
+}
+#landscape-viz svg,
+#opt-viz svg {
+  cursor: crosshair;
+}
+
+/* Click hint */
+.click-hint {
+  font-family: var(--heading-font);
+  font-size: 0.8rem;
+  color: var(--text-2);
+  text-align: center;
+  margin-top: 0.5rem;
+  font-style: italic;
+}
+
+/* Panel labels */
+.panel-labels {
+  display: flex;
+  justify-content: space-around;
+  font-family: var(--heading-font);
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-2);
+  margin-bottom: 0.25rem;
+}
+
+/* Optimizer legend */
+.optimizer-legend {
+  display: flex;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+  font-family: var(--heading-font);
+  font-size: 0.82rem;
+  margin-top: 0.75rem;
+}
+.optimizer-legend .swatch {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.optimizer-legend .swatch-color {
+  width: 14px;
+  height: 3px;
+  border-radius: 1.5px;
+}
+
+/* Batch arrow legend */
+.arrow-legend {
+  display: flex;
+  gap: 1.5rem;
+  font-family: var(--heading-font);
+  font-size: 0.82rem;
+  margin-top: 0.75rem;
+  align-items: center;
+}
+.arrow-legend .swatch {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+</style>
+</head>
+<body>
+<div class="article">
+
+<div class="header">
+  <a class="back" href="index.html">&larr; Prose Visuals</a>
+  <h1>How Gradient Descent Finds Minima</h1>
+  <p class="subtitle">Finding the bottom of a bowl you cannot see.</p>
+</div>
+
+<p>
+Imagine you are blindfolded, standing somewhere on hilly terrain, and your only goal is to
+reach the lowest point. You cannot see the landscape. But you can feel the slope under your
+feet: which direction goes downhill, and how steep it is. So you take a step downhill.
+Then another. Then another. That is gradient descent.
+</p>
+
+<p>
+In machine learning, the "terrain" is a <em>loss surface</em>: a function that measures how
+wrong your model is. The horizontal axes are the model's parameters. The vertical axis (or
+color, in a map view) is the loss. Training a model means finding parameters that make the
+loss as small as possible. Gradient descent is the algorithm that does the walking.
+</p>
+
+<h2>The Loss Landscape</h2>
+
+<p>
+A loss surface with two parameters looks like a topographic map. Dark regions are valleys
+(low loss, good). Bright regions are ridges and plateaus (high loss, bad). The contour
+lines connect points of equal loss, like elevation lines on a hiking map.
+</p>
+
+<p>
+Click anywhere on the map below to drop a walker. It will follow the gradient downhill from
+wherever you place it. Drop several walkers and watch: starting position determines
+everything. Some walkers find the global minimum. Others get trapped in local minima,
+unable to sense the deeper valley on the other side of the ridge.
+</p>
+
+<div class="figure figure-wide" id="fig-landscape">
+  <div id="landscape-viz"></div>
+  <div class="controls">
+    <button class="btn" id="landscape-clear">Clear walkers</button>
+    <span style="flex:1"></span>
+    <span class="control-group">
+      <span class="val" id="walker-count">0 walkers</span>
+    </span>
+  </div>
+  <div class="click-hint">Click on the contour map to drop walkers</div>
+  <div class="figure-caption"><span class="figure-label">Figure 1.</span> A 2D loss surface with multiple minima. Each walker follows the negative gradient from its starting point. Color encodes loss (viridis: dark = low, bright = high).</div>
+</div>
+
+<div class="insight">
+  <p>
+  The gradient is a vector that points in the direction of steepest <em>ascent</em>.
+  Gradient descent goes the opposite way, stepping in the direction of steepest descent.
+  At any point, the gradient tells you which way is downhill and how steep the slope is.
+  </p>
+</div>
+
+<h2>Learning Rate: Step Size Matters</h2>
+
+<p>
+The gradient tells you which direction to step, but not how far. That distance is the
+<em>learning rate</em>. Too small, and you inch toward the minimum over thousands of steps,
+wasting computation. Too large, and you overshoot the valley, bouncing back and forth
+across it or flying off entirely.
+</p>
+
+<p>
+The three panels below show the same 1D loss curve with three different learning rates.
+Watch how the step size changes the trajectory. Use the slider to experiment: somewhere
+in the middle, convergence is fast and stable.
+</p>
+
+<div class="figure figure-wide" id="fig-lr">
+  <div class="panel-labels">
+    <span>Too small</span>
+    <span>Just right</span>
+    <span>Too large</span>
+  </div>
+  <div id="lr-viz"></div>
+  <div class="controls">
+    <div class="control-group">
+      <label>Learning rates:</label>
+    </div>
+    <div class="control-group">
+      <label>Small</label>
+      <input type="range" id="lr-small" min="0.001" max="0.5" step="0.001" value="0.02">
+      <span class="val" id="lr-small-val">0.020</span>
+    </div>
+    <div class="control-group">
+      <label>Medium</label>
+      <input type="range" id="lr-med" min="0.01" max="1.0" step="0.01" value="0.15">
+      <span class="val" id="lr-med-val">0.150</span>
+    </div>
+    <div class="control-group">
+      <label>Large</label>
+      <input type="range" id="lr-large" min="0.1" max="2.0" step="0.01" value="0.95">
+      <span class="val" id="lr-large-val">0.950</span>
+    </div>
+  </div>
+  <div class="controls">
+    <button class="btn" id="lr-restart">Restart</button>
+  </div>
+  <div class="figure-caption"><span class="figure-label">Figure 2.</span> A 1D loss curve with three simultaneous gradient descent runs. Each panel uses a different learning rate. The dot takes discrete steps along the curve, with step size proportional to the gradient times the learning rate.</div>
+</div>
+
+<p>
+There is a sweet spot. The optimal learning rate depends on the shape of the loss surface,
+which changes as you move through it. This is why modern optimizers adapt the learning
+rate during training.
+</p>
+
+<h2>Beyond Vanilla: Momentum and Adaptive Methods</h2>
+
+<p>
+Plain gradient descent (often called vanilla SGD) has a problem with elongated valleys.
+The gradient points along the steep walls of the valley rather than toward the bottom,
+so the optimizer zigzags back and forth, making slow progress along the valley floor.
+</p>
+
+<p>
+Three ideas fix this. <strong>Momentum</strong> adds a velocity term: the optimizer
+accumulates speed in consistent directions and dampens oscillations.
+<strong>Adam</strong> goes further, tracking both the first moment (mean) and second
+moment (variance) of gradients per parameter, adapting the effective learning rate for
+each dimension independently.
+</p>
+
+<div class="figure figure-wide" id="fig-optimizers">
+  <div id="opt-viz"></div>
+  <div class="controls">
+    <div class="toggle-group">
+      <button class="btn active" data-opt="sgd">SGD</button>
+      <button class="btn" data-opt="momentum">Momentum</button>
+      <button class="btn" data-opt="adam">Adam</button>
+    </div>
+    <button class="btn" id="opt-race">Race all three</button>
+    <button class="btn" id="opt-reset">Reset</button>
+  </div>
+  <div class="optimizer-legend" id="opt-legend">
+    <div class="swatch"><div class="swatch-color" style="background:#ef4444"></div> SGD</div>
+    <div class="swatch"><div class="swatch-color" style="background:#f59e0b"></div> Momentum</div>
+    <div class="swatch"><div class="swatch-color" style="background:#10b981"></div> Adam</div>
+  </div>
+  <div class="click-hint">Click on the map to set the starting point, or use Race to compare all three</div>
+  <div class="figure-caption"><span class="figure-label">Figure 3.</span> Three optimizers navigating the same loss landscape. SGD zigzags on elongated valleys. Momentum smooths the path. Adam adapts per-parameter and converges efficiently.</div>
+</div>
+
+<div class="insight">
+  <p>
+  Adam is not always better. On some problems, well-tuned SGD with momentum generalizes
+  better than Adam. The choice of optimizer is an empirical question, not a settled one.
+  </p>
+</div>
+
+<h2>Stochastic: Learning from Samples</h2>
+
+<p>
+Everything above assumes you compute the gradient using your entire dataset. In practice,
+datasets are enormous, and computing the full gradient is expensive. Instead, you estimate
+the gradient from a small random subset: a <em>mini-batch</em>.
+</p>
+
+<p>
+The estimate is noisy. A single sample gives a gradient that points in roughly the right
+direction but wanders. A larger batch gives a cleaner estimate but costs more. The slider
+below controls batch size. Watch how the gradient arrows become more aligned as the batch
+grows.
+</p>
+
+<div class="figure figure-wide" id="fig-batch">
+  <div id="batch-viz"></div>
+  <div class="controls">
+    <div class="control-group">
+      <label>Batch size</label>
+      <input type="range" id="batch-slider" min="1" max="64" step="1" value="1">
+      <span class="val" id="batch-val">1 / 64</span>
+    </div>
+    <button class="btn" id="batch-resample">Resample</button>
+  </div>
+  <div class="arrow-legend">
+    <div class="swatch"><div class="swatch-color" style="background:var(--accent); height:3px;"></div> True gradient (full batch)</div>
+    <div class="swatch"><div class="swatch-color" style="background:#ef4444; height:2px;"></div> Mini-batch gradients</div>
+  </div>
+  <div class="figure-caption"><span class="figure-label">Figure 4.</span> Each point is a data sample. The thick blue arrow is the true gradient (computed over all data). Thin red arrows are mini-batch gradient estimates. As batch size increases, the estimates converge toward the true gradient.</div>
+</div>
+
+<p>
+This noise is not purely a nuisance. Stochastic gradients help the optimizer escape shallow
+local minima: the noise can bounce it out of a bad valley and into a better one. It also
+acts as a form of implicit regularization, biasing the model toward flatter minima that
+tend to generalize better.
+</p>
+
+<div class="insight">
+  <p>
+  Gradient descent is a conversation between the model and the data, one step at a time.
+  The gradient says "you are wrong in this direction." The learning rate says "how much to
+  adjust." The batch says "according to these examples." And the optimizer says "given
+  everything I have seen so far, here is where to step next."
+  </p>
+</div>
+
+</div><!-- .article -->
+
+<script>
+// ---------- shared utilities ----------
+const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const dur = reducedMotion ? 0 : 400;
+
+// Seeded PRNG (mulberry32)
+function mulberry32(a) {
+  return function() {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    var t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+const rng = mulberry32(42);
+
+// =============================================
+// FIGURE 1: Loss Landscape Contour Plot
+// =============================================
+(function() {
+  const container = d3.select('#landscape-viz');
+  const margin = {top: 10, right: 20, bottom: 40, left: 50};
+  let W, H, width, height;
+
+  // Loss function: two local minima + one global minimum
+  // f(x,y) = sum of inverted gaussians + base quadratic
+  const peaks = [
+    {cx: -1.5, cy: -1.0, A: 3.5, sx: 0.8, sy: 0.6},  // global min (deepest)
+    {cx:  1.2, cy:  1.5, A: 2.2, sx: 0.7, sy: 0.9},  // local min
+    {cx:  1.8, cy: -1.2, A: 1.8, sx: 0.6, sy: 0.5},  // local min
+    {cx: -1.0, cy:  1.8, A: 1.5, sx: 0.5, sy: 0.7},  // shallow local min
+  ];
+
+  function lossFn(x, y) {
+    let v = 0.15 * (x * x + y * y) + 4; // base bowl
+    for (const p of peaks) {
+      const dx = (x - p.cx) / p.sx;
+      const dy = (y - p.cy) / p.sy;
+      v -= p.A * Math.exp(-0.5 * (dx * dx + dy * dy));
+    }
+    return v;
+  }
+
+  // Numerical gradient
+  function gradient(x, y) {
+    const h = 0.001;
+    const dfdx = (lossFn(x + h, y) - lossFn(x - h, y)) / (2 * h);
+    const dfdy = (lossFn(x, y + h) - lossFn(x, y - h)) / (2 * h);
+    return [dfdx, dfdy];
+  }
+
+  // Domain
+  const xDomain = [-3, 3];
+  const yDomain = [-3, 3];
+
+  // Generate contour data
+  const n = 200;
+  const values = new Float64Array(n * n);
+  const xStep = (xDomain[1] - xDomain[0]) / (n - 1);
+  const yStep = (yDomain[1] - yDomain[0]) / (n - 1);
+  let vMin = Infinity, vMax = -Infinity;
+  for (let j = 0; j < n; j++) {
+    for (let i = 0; i < n; i++) {
+      const x = xDomain[0] + i * xStep;
+      const y = yDomain[0] + j * yStep;
+      const v = lossFn(x, y);
+      values[j * n + i] = v;
+      if (v < vMin) vMin = v;
+      if (v > vMax) vMax = v;
+    }
+  }
+
+  // Thresholds for contours
+  const nLevels = 25;
+  const thresholds = d3.range(nLevels).map(i => vMin + (i / (nLevels - 1)) * (vMax - vMin));
+
+  const contours = d3.contours()
+    .size([n, n])
+    .thresholds(thresholds);
+
+  const contourData = contours(values);
+
+  // Color scale
+  const colorScale = d3.scaleSequential(d3.interpolateViridis)
+    .domain([vMax, vMin]); // inverted: dark = low
+
+  const svg = container.append('svg')
+    .attr('aria-label', 'Contour plot of a 2D loss surface. Click to drop walkers that follow the gradient downhill.');
+
+  const gMain = svg.append('g');
+  const gContours = gMain.append('g');
+  const gIsolines = gMain.append('g');
+  const gWalkers = gMain.append('g');
+
+  let xScale, yScale;
+  let walkers = [];
+
+  function render() {
+    const rect = container.node().getBoundingClientRect();
+    W = rect.width;
+    H = Math.min(W * 0.7, 500);
+    width = W - margin.left - margin.right;
+    height = H - margin.top - margin.bottom;
+
+    svg.attr('width', W).attr('height', H);
+    gMain.attr('transform', `translate(${margin.left},${margin.top})`);
+
+    xScale = d3.scaleLinear().domain(xDomain).range([0, width]);
+    yScale = d3.scaleLinear().domain(yDomain).range([height, 0]);
+
+    // Project contours from grid coords to pixel coords
+    // gMain already applies margin translate, so contour paths use local coordinates
+    const geoTransform = d3.geoTransform({
+      point: function(px, py) {
+        this.stream.point(
+          (px / (n - 1)) * width,
+          (1 - py / (n - 1)) * height
+        );
+      }
+    });
+    const path = d3.geoPath(geoTransform);
+
+    // Filled contours
+    gContours.selectAll('*').remove();
+    contourData.forEach(c => {
+      gContours.append('path')
+        .attr('d', path(c))
+        .attr('fill', colorScale(c.value))
+        .attr('stroke', 'none');
+    });
+
+    // Contour lines (every other level for subtlety)
+    gIsolines.selectAll('*').remove();
+    contourData.filter((_, i) => i % 2 === 0).forEach(c => {
+      gIsolines.append('path')
+        .attr('d', path(c))
+        .attr('fill', 'none')
+        .attr('stroke', 'rgba(255,255,255,0.25)')
+        .attr('stroke-width', 0.5);
+    });
+
+    // Axes
+    gMain.selectAll('.axis').remove();
+    gMain.append('g').attr('class', 'axis')
+      .attr('transform', `translate(0,${height})`)
+      .call(d3.axisBottom(xScale).ticks(Math.max(3, width / 80)))
+      .call(g => g.select('.domain').attr('stroke', '#999'))
+      .call(g => g.selectAll('.tick line').attr('stroke', '#bbb'))
+      .call(g => g.selectAll('.tick text').attr('fill', 'var(--text-2)').style('font-size', '0.75rem'));
+    gMain.append('g').attr('class', 'axis')
+      .call(d3.axisLeft(yScale).ticks(Math.max(3, height / 80)))
+      .call(g => g.select('.domain').attr('stroke', '#999'))
+      .call(g => g.selectAll('.tick line').attr('stroke', '#bbb'))
+      .call(g => g.selectAll('.tick text').attr('fill', 'var(--text-2)').style('font-size', '0.75rem'));
+
+    // Axis labels
+    gMain.selectAll('.axis-label').remove();
+    gMain.append('text').attr('class', 'axis-label')
+      .attr('x', width / 2).attr('y', height + 34)
+      .attr('text-anchor', 'middle')
+      .attr('fill', 'var(--text-2)').style('font-size', '0.8rem')
+      .text('w\u2081');
+    gMain.append('text').attr('class', 'axis-label')
+      .attr('transform', `rotate(-90)`)
+      .attr('x', -height / 2).attr('y', -36)
+      .attr('text-anchor', 'middle')
+      .attr('fill', 'var(--text-2)').style('font-size', '0.8rem')
+      .text('w\u2082');
+
+    // Re-draw walker paths
+    drawWalkers();
+  }
+
+  function drawWalkers() {
+    // Paths
+    const pathSel = gWalkers.selectAll('path.walker-path')
+      .data(walkers, (_, i) => i);
+    pathSel.enter().append('path').attr('class', 'walker-path')
+      .attr('fill', 'none')
+      .attr('stroke', 'white')
+      .attr('stroke-width', 2)
+      .attr('stroke-opacity', 0.85)
+      .attr('stroke-linecap', 'round')
+      .merge(pathSel)
+      .attr('d', w => {
+        if (w.path.length < 2) return '';
+        const line = d3.line()
+          .x(d => xScale(d[0]))
+          .y(d => yScale(d[1]))
+          .curve(d3.curveCatmullRom.alpha(0.5));
+        return line(w.path);
+      });
+
+    // Current position dots
+    const dots = gWalkers.selectAll('circle.walker-dot')
+      .data(walkers, (_, i) => i);
+    dots.enter().append('circle').attr('class', 'walker-dot')
+      .attr('r', 5)
+      .attr('fill', 'white')
+      .attr('stroke', 'var(--text)')
+      .attr('stroke-width', 1.5)
+      .merge(dots)
+      .attr('cx', w => xScale(w.path[w.path.length - 1][0]))
+      .attr('cy', w => yScale(w.path[w.path.length - 1][1]));
+
+    // Start markers
+    const starts = gWalkers.selectAll('circle.walker-start')
+      .data(walkers, (_, i) => i);
+    starts.enter().append('circle').attr('class', 'walker-start')
+      .attr('r', 3)
+      .attr('fill', '#ef4444')
+      .attr('stroke', 'white')
+      .attr('stroke-width', 1)
+      .merge(starts)
+      .attr('cx', w => xScale(w.path[0][0]))
+      .attr('cy', w => yScale(w.path[0][1]));
+
+    d3.select('#walker-count').text(walkers.length + (walkers.length === 1 ? ' walker' : ' walkers'));
+  }
+
+  // Click to add walker
+  svg.on('pointerdown', function(event) {
+    const [px, py] = d3.pointer(event, gMain.node());
+    const x0 = xScale.invert(px);
+    const y0 = yScale.invert(py);
+    if (x0 < xDomain[0] || x0 > xDomain[1] || y0 < yDomain[0] || y0 > yDomain[1]) return;
+
+    const walker = { path: [[x0, y0]], done: false };
+    walkers.push(walker);
+    animateWalker(walker);
+  });
+
+  function animateWalker(walker) {
+    const lr = 0.05;
+    const maxSteps = 300;
+    let step = 0;
+
+    function tick() {
+      if (walker.done || step >= maxSteps) { walker.done = true; return; }
+      const pos = walker.path[walker.path.length - 1];
+      const [gx, gy] = gradient(pos[0], pos[1]);
+      const mag = Math.sqrt(gx * gx + gy * gy);
+      if (mag < 0.005) { walker.done = true; drawWalkers(); return; }
+      const nx = pos[0] - lr * gx;
+      const ny = pos[1] - lr * gy;
+      walker.path.push([
+        Math.max(xDomain[0], Math.min(xDomain[1], nx)),
+        Math.max(yDomain[0], Math.min(yDomain[1], ny))
+      ]);
+      step++;
+      drawWalkers();
+      if (!reducedMotion) {
+        requestAnimationFrame(tick);
+      } else {
+        // instant: run all steps
+        while (!walker.done && step < maxSteps) {
+          const p = walker.path[walker.path.length - 1];
+          const [gx2, gy2] = gradient(p[0], p[1]);
+          const m2 = Math.sqrt(gx2 * gx2 + gy2 * gy2);
+          if (m2 < 0.005) { walker.done = true; break; }
+          walker.path.push([
+            Math.max(xDomain[0], Math.min(xDomain[1], p[0] - lr * gx2)),
+            Math.max(yDomain[0], Math.min(yDomain[1], p[1] - lr * gy2))
+          ]);
+          step++;
+        }
+        drawWalkers();
+      }
+    }
+    requestAnimationFrame(tick);
+  }
+
+  d3.select('#landscape-clear').on('click', () => {
+    walkers.forEach(w => w.done = true);
+    walkers = [];
+    gWalkers.selectAll('*').remove();
+    d3.select('#walker-count').text('0 walkers');
+  });
+
+  render();
+  new ResizeObserver(() => render()).observe(container.node());
+})();
+
+
+// =============================================
+// FIGURE 2: Learning Rate Explorer (3 panels)
+// =============================================
+(function() {
+  const container = d3.select('#lr-viz');
+  const margin = {top: 10, right: 8, bottom: 30, left: 8};
+  const gap = 16;
+
+  // 1D loss function: a nice curve with a clear minimum
+  function lossFn(x) {
+    return 0.5 * (x - 0.3) * (x - 0.3) + 0.3 * Math.sin(3 * x) + 2;
+  }
+  function lossGrad(x) {
+    return (x - 0.3) + 0.9 * Math.cos(3 * x);
+  }
+
+  const xDomain = [-3, 4];
+  const startX = 3.2;
+
+  const svg = container.append('svg')
+    .attr('aria-label', 'Three panels showing gradient descent with small, medium, and large learning rates.');
+
+  let animFrameId = null;
+  let panels = [];
+
+  function getLRs() {
+    return [
+      parseFloat(d3.select('#lr-small').property('value')),
+      parseFloat(d3.select('#lr-med').property('value')),
+      parseFloat(d3.select('#lr-large').property('value')),
+    ];
+  }
+
+  function render() {
+    const rect = container.node().getBoundingClientRect();
+    const W = rect.width;
+    const panelW = (W - gap * 2) / 3;
+    const H = Math.min(panelW * 0.85, 260);
+
+    svg.attr('width', W).attr('height', H);
+
+    const lrs = getLRs();
+    panels = lrs.map((lr, i) => {
+      const x0 = i * (panelW + gap);
+      const pw = panelW - margin.left - margin.right;
+      const ph = H - margin.top - margin.bottom;
+      return { lr, x0, pw, ph, idx: i };
+    });
+
+    svg.selectAll('g.panel').remove();
+
+    panels.forEach(panel => {
+      const g = svg.append('g')
+        .attr('class', 'panel')
+        .attr('transform', `translate(${panel.x0 + margin.left},${margin.top})`);
+
+      const xSc = d3.scaleLinear().domain(xDomain).range([0, panel.pw]);
+      const ySc = d3.scaleLinear().domain([0.5, 5]).range([panel.ph, 0]);
+      panel.xSc = xSc;
+      panel.ySc = ySc;
+      panel.g = g;
+
+      // Loss curve
+      const pts = d3.range(xDomain[0], xDomain[1], 0.02).map(x => [x, lossFn(x)]);
+      const line = d3.line().x(d => xSc(d[0])).y(d => ySc(d[1])).curve(d3.curveBasis);
+
+      // Fill under curve
+      g.append('path')
+        .attr('d', line(pts) + `L${xSc(pts[pts.length-1][0])},${panel.ph}L${xSc(pts[0][0])},${panel.ph}Z`)
+        .attr('fill', 'var(--accent-light)')
+        .attr('opacity', 0.3);
+
+      g.append('path')
+        .attr('d', line(pts))
+        .attr('fill', 'none')
+        .attr('stroke', 'var(--accent)')
+        .attr('stroke-width', 2);
+
+      // X axis
+      g.append('line')
+        .attr('x1', 0).attr('x2', panel.pw)
+        .attr('y1', panel.ph).attr('y2', panel.ph)
+        .attr('stroke', '#ccc');
+
+      // Gradient descent dot
+      g.append('circle')
+        .attr('class', 'gd-dot')
+        .attr('r', 6)
+        .attr('fill', '#ef4444')
+        .attr('stroke', 'white')
+        .attr('stroke-width', 2)
+        .attr('cx', xSc(startX))
+        .attr('cy', ySc(lossFn(startX)));
+
+      // Step lines
+      g.append('g').attr('class', 'gd-steps');
+
+      // LR label
+      g.append('text')
+        .attr('class', 'lr-label')
+        .attr('x', panel.pw / 2)
+        .attr('y', panel.ph + 22)
+        .attr('text-anchor', 'middle')
+        .attr('fill', 'var(--text-2)')
+        .style('font-size', '0.72rem')
+        .style('font-family', 'var(--mono-font)')
+        .text('lr = ' + panel.lr.toFixed(3));
+    });
+
+    startAnimation();
+  }
+
+  function startAnimation() {
+    if (animFrameId) cancelAnimationFrame(animFrameId);
+
+    const lrs = getLRs();
+    const states = lrs.map(() => ({ x: startX, history: [startX], step: 0, diverged: false }));
+    const maxSteps = 80;
+    const stepInterval = reducedMotion ? 0 : 120; // ms between steps
+    let lastTime = 0;
+
+    function animate(time) {
+      if (!lastTime) lastTime = time;
+      const elapsed = time - lastTime;
+
+      let allDone = true;
+      states.forEach((st, i) => {
+        if (st.step >= maxSteps || st.diverged) return;
+        allDone = false;
+
+        if (reducedMotion || elapsed > st.step * stepInterval) {
+          const g = lossGrad(st.x);
+          const nx = st.x - lrs[i] * g;
+          st.x = nx;
+          st.history.push(nx);
+          st.step++;
+
+          if (Math.abs(nx) > 20 || !isFinite(nx)) {
+            st.diverged = true;
+          }
+
+          // Draw
+          const panel = panels[i];
+          if (!panel) return;
+          const dot = panel.g.select('.gd-dot');
+          const clampX = Math.max(xDomain[0], Math.min(xDomain[1], nx));
+          const clampY = Math.max(0.5, Math.min(5, lossFn(nx)));
+          dot.attr('cx', panel.xSc(clampX)).attr('cy', panel.ySc(clampY));
+
+          if (st.diverged) {
+            dot.attr('opacity', 0.3);
+          }
+
+          // Draw step markers
+          const stepsG = panel.g.select('.gd-steps');
+          if (st.history.length >= 2) {
+            const prev = st.history[st.history.length - 2];
+            const curr = st.history[st.history.length - 1];
+            const cpx = Math.max(xDomain[0], Math.min(xDomain[1], prev));
+            const ccx = Math.max(xDomain[0], Math.min(xDomain[1], curr));
+            stepsG.append('line')
+              .attr('x1', panel.xSc(cpx))
+              .attr('y1', panel.ySc(Math.max(0.5, Math.min(5, lossFn(prev)))))
+              .attr('x2', panel.xSc(ccx))
+              .attr('y2', panel.ySc(Math.max(0.5, Math.min(5, lossFn(curr)))))
+              .attr('stroke', '#ef4444')
+              .attr('stroke-width', 1)
+              .attr('stroke-opacity', 0.4);
+          }
+
+          if (reducedMotion) {
+            // run all steps instantly
+            while (st.step < maxSteps && !st.diverged) {
+              const g2 = lossGrad(st.x);
+              st.x -= lrs[i] * g2;
+              st.history.push(st.x);
+              st.step++;
+              if (Math.abs(st.x) > 20 || !isFinite(st.x)) st.diverged = true;
+            }
+          }
+        }
+      });
+
+      if (!allDone && !reducedMotion) {
+        animFrameId = requestAnimationFrame(animate);
+      }
+    }
+
+    if (reducedMotion) {
+      animate(0);
+      // Final draw
+      states.forEach((st, i) => {
+        const panel = panels[i];
+        if (!panel) return;
+        const last = st.history[st.history.length - 1];
+        const clampX = Math.max(xDomain[0], Math.min(xDomain[1], last));
+        panel.g.select('.gd-dot')
+          .attr('cx', panel.xSc(clampX))
+          .attr('cy', panel.ySc(Math.max(0.5, Math.min(5, lossFn(last)))));
+      });
+    } else {
+      animFrameId = requestAnimationFrame(animate);
+    }
+  }
+
+  // Slider events
+  d3.select('#lr-small').on('input', function() {
+    d3.select('#lr-small-val').text(parseFloat(this.value).toFixed(3));
+    render();
+  });
+  d3.select('#lr-med').on('input', function() {
+    d3.select('#lr-med-val').text(parseFloat(this.value).toFixed(3));
+    render();
+  });
+  d3.select('#lr-large').on('input', function() {
+    d3.select('#lr-large-val').text(parseFloat(this.value).toFixed(3));
+    render();
+  });
+  d3.select('#lr-restart').on('click', () => render());
+
+  render();
+  new ResizeObserver(() => render()).observe(container.node());
+})();
+
+
+// =============================================
+// FIGURE 3: Optimizer Comparison
+// =============================================
+(function() {
+  const container = d3.select('#opt-viz');
+  const margin = {top: 10, right: 20, bottom: 40, left: 50};
+  let W, H, width, height;
+
+  // Elongated valley loss function (Rosenbrock-like, softened)
+  function lossFn(x, y) {
+    const a = 1, b = 8;
+    return (a - x) * (a - x) + b * (y - x * x) * (y - x * x)
+         + 0.8 * Math.exp(-((x + 1.5) * (x + 1.5) + (y - 1) * (y - 1)) / 0.5);
+  }
+
+  function gradient(x, y) {
+    const h = 0.0005;
+    return [
+      (lossFn(x + h, y) - lossFn(x - h, y)) / (2 * h),
+      (lossFn(x, y + h) - lossFn(x, y - h)) / (2 * h)
+    ];
+  }
+
+  const xDomain = [-2, 3];
+  const yDomain = [-1, 4];
+
+  // Generate contour data
+  const n = 180;
+  const values = new Float64Array(n * n);
+  let vMin = Infinity, vMax = -Infinity;
+  for (let j = 0; j < n; j++) {
+    for (let i = 0; i < n; i++) {
+      const x = xDomain[0] + i * (xDomain[1] - xDomain[0]) / (n - 1);
+      const y = yDomain[0] + j * (yDomain[1] - yDomain[0]) / (n - 1);
+      const v = lossFn(x, y);
+      values[j * n + i] = v;
+      if (v < vMin) vMin = v;
+      if (v > vMax) vMax = v;
+    }
+  }
+
+  // Clamp max for color to avoid extreme outlier washing out the palette
+  const vClamp = Math.min(vMax, 30);
+
+  const thresholds = d3.range(30).map(i => vMin + (i / 29) * (vClamp - vMin));
+  const contours = d3.contours().size([n, n]).thresholds(thresholds);
+  const contourData = contours(values);
+
+  const colorScale = d3.scaleSequential(d3.interpolateViridis).domain([vClamp, vMin]);
+
+  const svg = container.append('svg')
+    .attr('aria-label', 'Contour plot comparing SGD, Momentum, and Adam optimizers.');
+  const gMain = svg.append('g');
+  const gContours = gMain.append('g');
+  const gPaths = gMain.append('g');
+
+  let xScale, yScale;
+
+  const optColors = { sgd: '#ef4444', momentum: '#f59e0b', adam: '#10b981' };
+  let activeOpt = 'sgd';
+  let startPos = [2.5, 3.5]; // default start
+  let optPaths = { sgd: [], momentum: [], adam: [] };
+  let racing = false;
+  let animId = null;
+
+  // Optimizer implementations
+  function runSGD(x0, y0, steps, lr) {
+    const path = [[x0, y0]];
+    let x = x0, y = y0;
+    for (let i = 0; i < steps; i++) {
+      const [gx, gy] = gradient(x, y);
+      x -= lr * gx;
+      y -= lr * gy;
+      path.push([x, y]);
+    }
+    return path;
+  }
+
+  function runMomentum(x0, y0, steps, lr, beta) {
+    const path = [[x0, y0]];
+    let x = x0, y = y0, vx = 0, vy = 0;
+    for (let i = 0; i < steps; i++) {
+      const [gx, gy] = gradient(x, y);
+      vx = beta * vx + gx;
+      vy = beta * vy + gy;
+      x -= lr * vx;
+      y -= lr * vy;
+      path.push([x, y]);
+    }
+    return path;
+  }
+
+  function runAdam(x0, y0, steps, lr, beta1, beta2, eps) {
+    const path = [[x0, y0]];
+    let x = x0, y = y0;
+    let mx = 0, my = 0, vx = 0, vy = 0;
+    for (let t = 1; t <= steps; t++) {
+      const [gx, gy] = gradient(x, y);
+      mx = beta1 * mx + (1 - beta1) * gx;
+      my = beta1 * my + (1 - beta1) * gy;
+      vx = beta2 * vx + (1 - beta2) * gx * gx;
+      vy = beta2 * vy + (1 - beta2) * gy * gy;
+      const mxh = mx / (1 - Math.pow(beta1, t));
+      const myh = my / (1 - Math.pow(beta1, t));
+      const vxh = vx / (1 - Math.pow(beta2, t));
+      const vyh = vy / (1 - Math.pow(beta2, t));
+      x -= lr * mxh / (Math.sqrt(vxh) + eps);
+      y -= lr * myh / (Math.sqrt(vyh) + eps);
+      path.push([x, y]);
+    }
+    return path;
+  }
+
+  function computePaths() {
+    const steps = 200;
+    optPaths.sgd = runSGD(startPos[0], startPos[1], steps, 0.004);
+    optPaths.momentum = runMomentum(startPos[0], startPos[1], steps, 0.004, 0.9);
+    optPaths.adam = runAdam(startPos[0], startPos[1], steps, 0.08, 0.9, 0.999, 1e-8);
+  }
+
+  function render() {
+    const rect = container.node().getBoundingClientRect();
+    W = rect.width;
+    H = Math.min(W * 0.7, 500);
+    width = W - margin.left - margin.right;
+    height = H - margin.top - margin.bottom;
+
+    svg.attr('width', W).attr('height', H);
+    gMain.attr('transform', `translate(${margin.left},${margin.top})`);
+
+    xScale = d3.scaleLinear().domain(xDomain).range([0, width]);
+    yScale = d3.scaleLinear().domain(yDomain).range([height, 0]);
+
+    // gMain already applies margin translate, so use local coordinates
+    const geoTransform = d3.geoTransform({
+      point: function(px, py) {
+        this.stream.point(
+          (px / (n - 1)) * width,
+          (1 - py / (n - 1)) * height
+        );
+      }
+    });
+    const path = d3.geoPath(geoTransform);
+
+    gContours.selectAll('*').remove();
+    contourData.forEach(c => {
+      gContours.append('path')
+        .attr('d', path(c))
+        .attr('fill', colorScale(Math.min(c.value, vClamp)))
+        .attr('stroke', 'none');
+    });
+
+    // Subtle contour lines
+    contourData.filter((_, i) => i % 3 === 0).forEach(c => {
+      gContours.append('path')
+        .attr('d', path(c))
+        .attr('fill', 'none')
+        .attr('stroke', 'rgba(255,255,255,0.2)')
+        .attr('stroke-width', 0.5);
+    });
+
+    // Axes
+    gMain.selectAll('.axis').remove();
+    gMain.append('g').attr('class', 'axis')
+      .attr('transform', `translate(0,${height})`)
+      .call(d3.axisBottom(xScale).ticks(Math.max(3, width / 80)))
+      .call(g => g.select('.domain').attr('stroke', '#999'))
+      .call(g => g.selectAll('.tick line').attr('stroke', '#bbb'))
+      .call(g => g.selectAll('.tick text').attr('fill', 'var(--text-2)').style('font-size', '0.75rem'));
+    gMain.append('g').attr('class', 'axis')
+      .call(d3.axisLeft(yScale).ticks(Math.max(3, height / 80)))
+      .call(g => g.select('.domain').attr('stroke', '#999'))
+      .call(g => g.selectAll('.tick line').attr('stroke', '#bbb'))
+      .call(g => g.selectAll('.tick text').attr('fill', 'var(--text-2)').style('font-size', '0.75rem'));
+
+    gMain.selectAll('.axis-label').remove();
+    gMain.append('text').attr('class', 'axis-label')
+      .attr('x', width / 2).attr('y', height + 34)
+      .attr('text-anchor', 'middle')
+      .attr('fill', 'var(--text-2)').style('font-size', '0.8rem').text('w\u2081');
+    gMain.append('text').attr('class', 'axis-label')
+      .attr('transform', `rotate(-90)`)
+      .attr('x', -height / 2).attr('y', -36)
+      .attr('text-anchor', 'middle')
+      .attr('fill', 'var(--text-2)').style('font-size', '0.8rem').text('w\u2082');
+
+    drawOptPaths();
+  }
+
+  function drawOptPaths() {
+    gPaths.selectAll('*').remove();
+
+    const line = d3.line()
+      .x(d => xScale(d[0]))
+      .y(d => yScale(d[1]))
+      .curve(d3.curveCatmullRom.alpha(0.5));
+
+    const toDraw = racing ? ['sgd', 'momentum', 'adam'] : [activeOpt];
+
+    toDraw.forEach(key => {
+      const p = optPaths[key];
+      if (!p || p.length < 2) return;
+
+      gPaths.append('path')
+        .attr('d', line(p))
+        .attr('fill', 'none')
+        .attr('stroke', optColors[key])
+        .attr('stroke-width', 2.5)
+        .attr('stroke-opacity', 0.85)
+        .attr('stroke-linecap', 'round');
+
+      // End dot
+      const last = p[p.length - 1];
+      gPaths.append('circle')
+        .attr('cx', xScale(last[0]))
+        .attr('cy', yScale(last[1]))
+        .attr('r', 5)
+        .attr('fill', optColors[key])
+        .attr('stroke', 'white')
+        .attr('stroke-width', 2);
+
+      // Start dot
+      gPaths.append('circle')
+        .attr('cx', xScale(p[0][0]))
+        .attr('cy', yScale(p[0][1]))
+        .attr('r', 4)
+        .attr('fill', 'white')
+        .attr('stroke', optColors[key])
+        .attr('stroke-width', 2);
+    });
+  }
+
+  // Animated drawing
+  function animateOptPaths() {
+    if (animId) cancelAnimationFrame(animId);
+    gPaths.selectAll('*').remove();
+
+    const toDraw = racing ? ['sgd', 'momentum', 'adam'] : [activeOpt];
+    const maxLen = Math.max(...toDraw.map(k => optPaths[k].length));
+    let frame = 2;
+
+    const line = d3.line()
+      .x(d => xScale(d[0]))
+      .y(d => yScale(d[1]))
+      .curve(d3.curveCatmullRom.alpha(0.5));
+
+    function tick() {
+      gPaths.selectAll('*').remove();
+
+      toDraw.forEach(key => {
+        const p = optPaths[key].slice(0, frame);
+        if (p.length < 2) return;
+
+        gPaths.append('path')
+          .attr('d', line(p))
+          .attr('fill', 'none')
+          .attr('stroke', optColors[key])
+          .attr('stroke-width', 2.5)
+          .attr('stroke-opacity', 0.85)
+          .attr('stroke-linecap', 'round');
+
+        const last = p[p.length - 1];
+        gPaths.append('circle')
+          .attr('cx', xScale(last[0]))
+          .attr('cy', yScale(last[1]))
+          .attr('r', 5)
+          .attr('fill', optColors[key])
+          .attr('stroke', 'white')
+          .attr('stroke-width', 2);
+
+        gPaths.append('circle')
+          .attr('cx', xScale(p[0][0]))
+          .attr('cy', yScale(p[0][1]))
+          .attr('r', 4)
+          .attr('fill', 'white')
+          .attr('stroke', optColors[key])
+          .attr('stroke-width', 2);
+      });
+
+      frame += 2;
+      if (frame <= maxLen && !reducedMotion) {
+        animId = requestAnimationFrame(tick);
+      }
+    }
+
+    if (reducedMotion) {
+      frame = maxLen;
+      tick();
+    } else {
+      tick();
+    }
+  }
+
+  // Click to set start point
+  svg.on('pointerdown', function(event) {
+    const [px, py] = d3.pointer(event, gMain.node());
+    const x0 = xScale.invert(px);
+    const y0 = yScale.invert(py);
+    if (x0 < xDomain[0] || x0 > xDomain[1] || y0 < yDomain[0] || y0 > yDomain[1]) return;
+    startPos = [x0, y0];
+    computePaths();
+    animateOptPaths();
+  });
+
+  // Toggle buttons
+  d3.selectAll('#fig-optimizers .toggle-group .btn').on('click', function() {
+    racing = false;
+    d3.selectAll('#fig-optimizers .toggle-group .btn').classed('active', false);
+    d3.select(this).classed('active', true);
+    activeOpt = this.dataset.opt;
+    animateOptPaths();
+  });
+
+  d3.select('#opt-race').on('click', () => {
+    racing = true;
+    d3.selectAll('#fig-optimizers .toggle-group .btn').classed('active', true);
+    computePaths();
+    animateOptPaths();
+  });
+
+  d3.select('#opt-reset').on('click', () => {
+    startPos = [2.5, 3.5];
+    racing = false;
+    d3.selectAll('#fig-optimizers .toggle-group .btn').classed('active', false);
+    d3.select('#fig-optimizers .toggle-group .btn[data-opt="sgd"]').classed('active', true);
+    activeOpt = 'sgd';
+    computePaths();
+    animateOptPaths();
+  });
+
+  computePaths();
+  render();
+  new ResizeObserver(() => render()).observe(container.node());
+})();
+
+
+// =============================================
+// FIGURE 4: Stochastic vs Batch
+// =============================================
+(function() {
+  const container = d3.select('#batch-viz');
+  const margin = {top: 20, right: 20, bottom: 40, left: 50};
+  let W, H, width, height;
+
+  // Generate synthetic data: 2D points with a linear relationship + noise
+  const N = 64;
+  const data = [];
+  for (let i = 0; i < N; i++) {
+    const x = rng() * 8 - 4;
+    const y = 0.7 * x + 1.2 + (rng() - 0.5) * 3;
+    data.push({x, y, idx: i});
+  }
+
+  // True gradient direction (full batch): compute average gradient of MSE w.r.t. (w, b)
+  // Model: y_hat = w*x + b, loss = mean((y - y_hat)^2)
+  // For visualization, we show the gradient as a 2D arrow in data space
+  // We'll compute the gradient of loss w.r.t. predictions, projected back to x,y
+  const trueW = 0.7, trueB = 1.2;
+
+  // True gradient in data space: direction of steepest descent for the mean
+  function computeTrueGradient(points) {
+    let gx = 0, gy = 0;
+    for (const p of points) {
+      // Gradient of squared loss landscape: which direction to move predictions
+      gx += -2 * (p.y - (trueW * p.x + trueB)) * trueW;
+      gy += -2 * (p.y - (trueW * p.x + trueB));
+    }
+    return [gx / points.length, gy / points.length];
+  }
+
+  // For mini-batch: sample random subset and compute gradient
+  function sampleBatch(batchSize) {
+    // Fisher-Yates shuffle with seeded RNG
+    const indices = d3.range(N);
+    for (let i = N - 1; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1));
+      [indices[i], indices[j]] = [indices[j], indices[i]];
+    }
+    return indices.slice(0, batchSize).map(i => data[i]);
+  }
+
+  function computeMiniBatchGradients(batchSize, numBatches) {
+    const grads = [];
+    for (let b = 0; b < numBatches; b++) {
+      const batch = sampleBatch(batchSize);
+      grads.push(computeTrueGradient(batch));
+    }
+    return grads;
+  }
+
+  const svg = container.append('svg')
+    .attr('aria-label', 'Scatter plot showing data points with true gradient arrow and mini-batch gradient arrows.');
+  const gMain = svg.append('g');
+
+  let xScale, yScale;
+  let currentBatchSize = 1;
+  let miniGrads = [];
+
+  function recompute() {
+    currentBatchSize = parseInt(d3.select('#batch-slider').property('value'));
+    const numArrows = currentBatchSize === N ? 1 : Math.min(12, Math.max(6, Math.floor(30 / Math.sqrt(currentBatchSize))));
+    miniGrads = currentBatchSize === N ? [] : computeMiniBatchGradients(currentBatchSize, numArrows);
+    d3.select('#batch-val').text(`${currentBatchSize} / ${N}`);
+  }
+
+  function render() {
+    const rect = container.node().getBoundingClientRect();
+    W = rect.width;
+    H = Math.min(W * 0.65, 400);
+    width = W - margin.left - margin.right;
+    height = H - margin.top - margin.bottom;
+
+    svg.attr('width', W).attr('height', H);
+    gMain.attr('transform', `translate(${margin.left},${margin.top})`);
+
+    xScale = d3.scaleLinear().domain([-5, 5]).range([0, width]);
+    yScale = d3.scaleLinear().domain([-4, 6]).range([height, 0]);
+
+    gMain.selectAll('*').remove();
+
+    // Grid
+    gMain.append('g')
+      .call(d3.axisBottom(xScale).ticks(Math.max(3, width / 80)))
+      .attr('transform', `translate(0,${height})`)
+      .call(g => g.select('.domain').attr('stroke', '#999'))
+      .call(g => g.selectAll('.tick line').attr('stroke', '#eee').attr('y1', -height))
+      .call(g => g.selectAll('.tick text').attr('fill', 'var(--text-2)').style('font-size', '0.75rem'));
+    gMain.append('g')
+      .call(d3.axisLeft(yScale).ticks(Math.max(3, height / 80)))
+      .call(g => g.select('.domain').attr('stroke', '#999'))
+      .call(g => g.selectAll('.tick line').attr('stroke', '#eee').attr('x2', width))
+      .call(g => g.selectAll('.tick text').attr('fill', 'var(--text-2)').style('font-size', '0.75rem'));
+
+    // Data points
+    gMain.selectAll('circle.data-pt')
+      .data(data)
+      .enter().append('circle')
+      .attr('class', 'data-pt')
+      .attr('cx', d => xScale(d.x))
+      .attr('cy', d => yScale(d.y))
+      .attr('r', 4)
+      .attr('fill', 'var(--accent)')
+      .attr('fill-opacity', 0.35)
+      .attr('stroke', 'var(--accent)')
+      .attr('stroke-opacity', 0.6)
+      .attr('stroke-width', 1);
+
+    // Arrow helpers
+    const arrowOrigin = [0, 1.2]; // center of data cloud
+
+    // Arrowhead marker
+    svg.selectAll('defs').remove();
+    const defs = svg.append('defs');
+
+    defs.append('marker')
+      .attr('id', 'arrow-true')
+      .attr('viewBox', '0 0 10 6')
+      .attr('refX', 10).attr('refY', 3)
+      .attr('markerWidth', 8).attr('markerHeight', 5)
+      .attr('orient', 'auto')
+      .append('path').attr('d', 'M0,0 L10,3 L0,6 Z').attr('fill', 'var(--accent)');
+
+    defs.append('marker')
+      .attr('id', 'arrow-mini')
+      .attr('viewBox', '0 0 10 6')
+      .attr('refX', 10).attr('refY', 3)
+      .attr('markerWidth', 7).attr('markerHeight', 4)
+      .attr('orient', 'auto')
+      .append('path').attr('d', 'M0,0 L10,3 L0,6 Z').attr('fill', '#ef4444');
+
+    // True gradient arrow
+    const tg = computeTrueGradient(data);
+    const tgMag = Math.sqrt(tg[0] * tg[0] + tg[1] * tg[1]);
+    const tgNorm = tgMag > 0 ? [tg[0] / tgMag, tg[1] / tgMag] : [0, 0];
+
+    const arrowLen = 80;
+    gMain.append('line')
+      .attr('class', 'true-grad')
+      .attr('x1', xScale(arrowOrigin[0]))
+      .attr('y1', yScale(arrowOrigin[1]))
+      .attr('x2', xScale(arrowOrigin[0]) + tgNorm[0] * arrowLen)
+      .attr('y2', yScale(arrowOrigin[1]) - tgNorm[1] * arrowLen)
+      .attr('stroke', 'var(--accent)')
+      .attr('stroke-width', 3.5)
+      .attr('stroke-linecap', 'round')
+      .attr('marker-end', 'url(#arrow-true)');
+
+    // Mini-batch gradient arrows
+    if (currentBatchSize < N) {
+      miniGrads.forEach(mg => {
+        const mgMag = Math.sqrt(mg[0] * mg[0] + mg[1] * mg[1]);
+        const mgNorm = mgMag > 0 ? [mg[0] / mgMag, mg[1] / mgMag] : [0, 0];
+        const len = 55;
+
+        gMain.append('line')
+          .attr('class', 'mini-grad')
+          .attr('x1', xScale(arrowOrigin[0]))
+          .attr('y1', yScale(arrowOrigin[1]))
+          .attr('x2', xScale(arrowOrigin[0]) + mgNorm[0] * len)
+          .attr('y2', yScale(arrowOrigin[1]) - mgNorm[1] * len)
+          .attr('stroke', '#ef4444')
+          .attr('stroke-width', 1.5)
+          .attr('stroke-opacity', 0.5)
+          .attr('stroke-linecap', 'round')
+          .attr('marker-end', 'url(#arrow-mini)');
+      });
+    }
+
+    // Axis labels
+    gMain.append('text')
+      .attr('x', width / 2).attr('y', height + 34)
+      .attr('text-anchor', 'middle')
+      .attr('fill', 'var(--text-2)').style('font-size', '0.8rem')
+      .text('x');
+    gMain.append('text')
+      .attr('transform', `rotate(-90)`)
+      .attr('x', -height / 2).attr('y', -36)
+      .attr('text-anchor', 'middle')
+      .attr('fill', 'var(--text-2)').style('font-size', '0.8rem')
+      .text('y');
+  }
+
+  d3.select('#batch-slider').on('input', function() {
+    recompute();
+    render();
+  });
+
+  d3.select('#batch-resample').on('click', () => {
+    recompute();
+    render();
+  });
+
+  recompute();
+  render();
+  new ResizeObserver(() => { render(); }).observe(container.node());
+})();
+</script>
+</body>
+</html>
