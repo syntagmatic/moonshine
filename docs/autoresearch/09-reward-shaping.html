@@ -1,0 +1,985 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reward Shaping - Autoresearch</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;500&family=Source+Sans+3:wght@400;600;700&family=Source+Serif+4:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+  :root {
+    --text: #1a1a2e;
+    --text-2: #4a4a6a;
+    --accent: #2563eb;
+    --bg: #fafafa;
+    --fig-bg: #ffffff;
+    --border: #e2e2e8;
+    --keep: #22863a;
+    --discard: #cb2431;
+    --pareto: #7c3aed;
+    --adaptive: #d97706;
+    --composite: #2563eb;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Source Serif 4', Georgia, serif;
+    font-size: 18px;
+    line-height: 1.6;
+    color: var(--text);
+    background: var(--bg);
+    max-width: 740px;
+    margin: 0 auto;
+    padding: 2rem 1.25rem 4rem;
+  }
+
+  h1, h2, h3 {
+    font-family: 'Source Sans 3', sans-serif;
+    line-height: 1.25;
+  }
+
+  h1 { font-size: 2rem; font-weight: 700; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.35rem; font-weight: 600; margin-top: 2.5rem; margin-bottom: 0.75rem; }
+  h3 { font-size: 1.1rem; font-weight: 600; margin-top: 1.5rem; margin-bottom: 0.5rem; }
+
+  p { margin-bottom: 1rem; }
+
+  .subtitle {
+    font-family: 'Source Sans 3', sans-serif;
+    color: var(--text-2);
+    font-size: 1.05rem;
+    margin-bottom: 2.5rem;
+  }
+
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  .back-link {
+    font-family: 'Source Sans 3', sans-serif;
+    font-size: 0.9rem;
+    display: inline-block;
+    margin-bottom: 1.5rem;
+  }
+
+  code {
+    font-family: 'Source Code Pro', monospace;
+    font-size: 0.88em;
+    background: #f0f0f5;
+    padding: 0.15em 0.4em;
+    border-radius: 3px;
+  }
+
+  pre {
+    font-family: 'Source Code Pro', monospace;
+    font-size: 0.82rem;
+    line-height: 1.55;
+    background: #f4f4f8;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1.25rem;
+    overflow-x: auto;
+  }
+
+  figure {
+    background: var(--fig-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1.25rem 1.25rem 0.75rem;
+    margin: 1.5rem 0;
+  }
+
+  figcaption {
+    font-family: 'Source Sans 3', sans-serif;
+    font-size: 0.85rem;
+    color: var(--text-2);
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--border);
+    margin-top: 0.75rem;
+  }
+
+  .insight {
+    border-left: 4px solid var(--accent);
+    background: #eef3ff;
+    padding: 1rem 1.25rem;
+    margin: 1.5rem 0;
+    border-radius: 0 6px 6px 0;
+  }
+
+  .insight p:last-child { margin-bottom: 0; }
+
+  .warning {
+    border-left: 4px solid var(--adaptive);
+    background: #fffbeb;
+    padding: 1rem 1.25rem;
+    margin: 1.5rem 0;
+    border-radius: 0 6px 6px 0;
+  }
+
+  .warning p:last-child { margin-bottom: 0; }
+
+  .mode-toggles {
+    font-family: 'Source Sans 3', sans-serif;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .mode-btn {
+    font-family: 'Source Sans 3', sans-serif;
+    font-size: 0.85rem;
+    font-weight: 600;
+    border: 2px solid var(--border);
+    background: var(--fig-bg);
+    color: var(--text-2);
+    padding: 0.35rem 0.85rem;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .mode-btn:hover {
+    border-color: var(--text-2);
+  }
+
+  .mode-btn.active-composite {
+    border-color: var(--composite);
+    background: #eef3ff;
+    color: var(--composite);
+  }
+
+  .mode-btn.active-pareto {
+    border-color: var(--pareto);
+    background: #f3f0ff;
+    color: var(--pareto);
+  }
+
+  .mode-btn.active-adaptive {
+    border-color: var(--adaptive);
+    background: #fffbeb;
+    color: var(--adaptive);
+  }
+
+  .live-stats {
+    font-family: 'Source Sans 3', sans-serif;
+    font-size: 0.95rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.5rem;
+    margin-top: 0.75rem;
+  }
+
+  .live-stats .stat {
+    display: flex;
+    align-items: baseline;
+    gap: 0.35rem;
+  }
+
+  .live-stats .stat-value {
+    font-weight: 700;
+    font-size: 1.1rem;
+  }
+
+  .live-stats .stat-label {
+    color: var(--text-2);
+  }
+
+  .legend {
+    font-family: 'Source Sans 3', sans-serif;
+    font-size: 0.8rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 1rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    color: var(--text-2);
+  }
+
+  .legend-swatch {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .legend-line {
+    width: 18px;
+    height: 2px;
+    flex-shrink: 0;
+  }
+
+  .axis text {
+    font-family: 'Source Sans 3', sans-serif;
+    font-size: 0.75rem;
+    fill: var(--text-2);
+  }
+
+  .axis-label {
+    font-family: 'Source Sans 3', sans-serif;
+    font-size: 0.8rem;
+    fill: var(--text-2);
+  }
+
+  .axis line, .axis path {
+    stroke: var(--border);
+  }
+
+  .tooltip {
+    position: absolute;
+    font-family: 'Source Sans 3', sans-serif;
+    font-size: 0.78rem;
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.4rem 0.6rem;
+    pointer-events: none;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+    line-height: 1.4;
+    z-index: 10;
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+
+  .mode-desc {
+    font-family: 'Source Sans 3', sans-serif;
+    font-size: 0.88rem;
+    color: var(--text-2);
+    min-height: 2.6rem;
+    margin-top: 0.5rem;
+  }
+
+  .trajectory-label {
+    font-family: 'Source Sans 3', sans-serif;
+    font-size: 0.7rem;
+    fill: var(--text-2);
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+
+<a href="index.html" class="back-link">&larr; All explanations</a>
+
+<h1>Reward Shaping</h1>
+<p class="subtitle">Designing objective functions for the autoresearch iterate loop</p>
+
+<p>
+  The composite score is a lie you tell yourself to make a scalar out of a vector.
+</p>
+
+<p>
+  Four dimensions go in: visual_critic at 0.30, encoding_integrity at 0.25, cognitive_load at 0.25, stress_test at 0.20. One number comes out. The system compares this number to the previous number, checks whether the delta exceeds -0.3, and decides: keep or discard. Simple. Legible. And fundamentally lossy.
+</p>
+
+<p>
+  Consider what the composite hides. A change that raises visual_critic from 6 to 8 while dropping stress_test from 8 to 5 will produce a composite delta near zero. The composite says "nothing changed." The reality is that something changed quite a lot, in two opposite directions, and the weighted sum happened to cancel them out. The system kept the experiment. A human reviewer would have questions.
+</p>
+
+<h2>The problem with a single number</h2>
+
+<p>
+  Fixed weights encode a permanent opinion about which dimensions matter most. But "which dimension matters most" depends entirely on where the block currently stands. A block scoring 4 on visual_critic and 9 on stress_test has a clear weakness. Improving visual quality by 2 points is far more valuable than improving stress_test by 2 points. The fixed-weight composite treats them as nearly equal (0.30 vs 0.20 weight).
+</p>
+
+<p>
+  Worse, the composite invites <em>dimension collapse</em>: the optimizer learns to pump one high-weighted dimension at the expense of others. If visual_critic carries 30% of the score, an experiment that gains 1 point on visual quality but loses 0.5 on encoding integrity will show a positive composite delta. Over many rounds, the block drifts toward a local optimum that looks good on one axis and progressively worse on the rest.
+</p>
+
+<pre>current weights:
+  0.30 x visual_critic       # highest weight, most pumpable
+  0.25 x encoding_integrity
+  0.25 x cognitive_load
+  0.20 x stress_test         # lowest weight, most neglectable</pre>
+
+<h2>Three alternatives</h2>
+
+<p>
+  There are at least three ways to build a better objective function. Each solves a different failure mode, and each introduces its own costs.
+</p>
+
+<h3>1. Pareto dominance</h3>
+
+<p>
+  Instead of reducing the four dimensions to a scalar, treat the score as a vector. An experiment is <em>Pareto-dominant</em> if it improves at least one dimension without worsening any. If it improves visual quality but degrades stress test robustness, it is not strictly better. It sits on a different point of the Pareto frontier: the set of all configurations where you cannot improve one dimension without hurting another.
+</p>
+
+<p>
+  Under Pareto selection, the system would keep an experiment only if it dominates the current state: every dimension at least as good, at least one strictly better. This prevents silent tradeoffs. The human sees the frontier and decides which tradeoff to accept.
+</p>
+
+<h3>2. Adaptive weighting</h3>
+
+<p>
+  Keep the composite, but let the weights shift. The intuition: weight each dimension inversely to its current score. A dimension scoring 4/10 gets more weight than one scoring 9/10. The system automatically focuses on the weakest link.
+</p>
+
+<pre>adaptive_weight(dim) = base_weight(dim) * (10 - score(dim)) / normalizer</pre>
+
+<p>
+  When visual_critic is at 4 and stress_test is at 9, the adaptive weights might be 0.42 for visual and 0.08 for stress. The optimization pressure concentrates where the block needs it most. As visual quality climbs, its weight drops, and the next-weakest dimension takes priority. This is a soft version of curriculum learning.
+</p>
+
+<h3>3. Threshold constraints</h3>
+
+<p>
+  Set hard floors. Stress_test must stay at 6 or above. Encoding_integrity must stay at 5 or above. Any experiment that drops a dimension below its floor is discarded, regardless of gains elsewhere. Above the floors, optimize freely using whatever objective you like.
+</p>
+
+<p>
+  This separates "acceptable" from "optimal." The floors prevent catastrophic regression in any single dimension. The optimization above the floors can be aggressive because the worst outcomes are gated out.
+</p>
+
+<h2>Curriculum: weakest-first scheduling</h2>
+
+<p>
+  Curriculum learning takes adaptive weighting to its logical conclusion. Instead of blending all dimensions with shifting weights, focus on one dimension at a time. Identify the weakest dimension. Optimize for it specifically. Once it crosses a threshold, move to the next weakest.
+</p>
+
+<p>
+  This avoids the blurriness of a composite entirely. Each iteration has a single, clear objective. The proposer knows exactly what it is trying to improve. The audit knows exactly what to scrutinize. The decision function is simple: did the target dimension improve without the others collapsing?
+</p>
+
+<p>
+  The downside is scheduling. How do you pick the thresholds for advancing? What if improving dimension A necessarily hurts dimension B, so the curriculum oscillates between them? These are hyperparameters of the curriculum, and they themselves need tuning.
+</p>
+
+<h2>LOC as a proxy metric</h2>
+
+<p>
+  Lines of code is the compaction track's primary gate. Code must get shorter. But shorter code and better code overlap without coinciding. A 200-line visualization can be worse than a 300-line one if the extra hundred lines are meaningful interaction code, accessible labels, or responsive layout logic. The LOC gate cannot tell the difference between removing dead code and removing necessary complexity.
+</p>
+
+<p>
+  The same proxy problem applies to every metric in the composite. A stress_test score of 8 means the evaluator found no rendering failures under the test conditions it checked. It does not mean the block is robust. The score is a proxy for robustness, not robustness itself. The composite is a proxy of proxies.
+</p>
+
+<h2>Asymmetric regression penalties</h2>
+
+<p>
+  The current system applies a uniform -0.3 tolerance. But regressions are not equal. A 1-point drop in visual_critic is immediately visible to any viewer. A 1-point drop in stress_test may only manifest under edge-case data. A 1-point drop in encoding_integrity might mean a missing axis label that 80% of viewers will never notice.
+</p>
+
+<p>
+  An asymmetric penalty schedule would weight regressions differently:
+</p>
+
+<pre>regression_penalty:
+  visual_critic:       -0.15  # tight: regression is obvious
+  encoding_integrity:  -0.25  # moderate
+  cognitive_load:      -0.25  # moderate
+  stress_test:         -0.40  # loose: less visible, noisier signal</pre>
+
+<p>
+  This acknowledges that not all regressions are created equal. The system tolerates more noise in dimensions where the signal itself is noisy, while guarding dimensions where even small drops are perceptible.
+</p>
+
+<div class="insight">
+  <p>
+    <strong>Use the simulator below</strong> to see how composite, Pareto, and adaptive strategies produce different optimization trajectories. Toggle between modes. Each dot is a candidate experiment. The boundary determines which experiments survive. Watch how the accepted set changes shape.
+  </p>
+</div>
+
+<figure>
+  <div class="mode-toggles" id="mode-toggles"></div>
+  <div class="legend" id="legend"></div>
+  <div id="chart"></div>
+  <div class="live-stats" id="stats"></div>
+  <div class="mode-desc" id="mode-desc"></div>
+  <figcaption>
+    Each dot is a candidate experiment. X axis: visual quality score. Y axis: code conciseness (inverse of LOC, normalized 0-10). The boundary line or frontier determines which experiments are kept. Click "Step" to run one iteration, or "Run 12" to watch a full trajectory unfold.
+  </figcaption>
+</figure>
+
+<div class="warning">
+  <p>
+    <strong>Tradeoffs in every direction.</strong> Pareto optimization is slower to converge. It keeps more experiments because partial improvements are not rejected, but it also means less aggressive pruning. Adaptive weights can oscillate: improving the weakest dimension shifts the weights, making a different dimension weakest, pulling the optimizer back. Curriculum scheduling adds hyperparameters (thresholds, ordering rules) that themselves need tuning. There is no free lunch here. Each strategy trades one failure mode for another.
+  </p>
+</div>
+
+<h2>What changes in practice</h2>
+
+<p>
+  The composite works. It has shipped 107 blocks through compaction. But it works the way a hammer works: reliably, bluntly, without knowing what it is hitting. The approaches described here are scalpels. They cut more precisely, but they require more setup and more judgment about where to cut.
+</p>
+
+<p>
+  If the autoresearch loop were running thousands of iterations per block, the composite would be fine. Noise averages out at scale. But the loop typically runs 5 to 15 iterations per block. At that scale, every decision matters. A single bad keep (dimension collapse) or bad discard (rejecting a Pareto improvement because the composite dipped) can shape the entire trajectory.
+</p>
+
+<p>
+  The practical path forward is probably layered: threshold constraints as hard gates, adaptive weighting as the optimization signal, Pareto tracking as a diagnostic. Not one strategy replacing the composite, but three strategies working together to compensate for its blind spots.
+</p>
+
+<script>
+// ──────────────────────────────────────────────
+//  Multi-objective optimization simulator
+// ──────────────────────────────────────────────
+
+(function() {
+
+const containerEl = document.getElementById("chart");
+const containerWidth = Math.min(700, containerEl.clientWidth);
+const margin = { top: 20, right: 24, bottom: 48, left: 56 };
+const width = containerWidth - margin.left - margin.right;
+const height = 440 - margin.top - margin.bottom;
+
+// Tooltip
+const tooltip = d3.select("body").append("div").attr("class", "tooltip");
+
+// SVG
+const svg = d3.select("#chart")
+  .append("svg")
+  .attr("width", containerWidth)
+  .attr("height", 440)
+  .append("g")
+  .attr("transform", `translate(${margin.left},${margin.top})`);
+
+// Scales: visual quality (x) and code conciseness (y), both 0-10
+const x = d3.scaleLinear().domain([0, 10]).range([0, width]);
+const y = d3.scaleLinear().domain([0, 10]).range([height, 0]);
+
+// Axes
+svg.append("g").attr("class", "axis")
+  .attr("transform", `translate(0,${height})`).call(d3.axisBottom(x).ticks(10));
+
+svg.append("g").attr("class", "axis").call(d3.axisLeft(y).ticks(10));
+
+svg.append("text").attr("class", "axis-label")
+  .attr("x", width / 2).attr("y", height + 40)
+  .attr("text-anchor", "middle").text("Visual quality");
+
+svg.append("text").attr("class", "axis-label")
+  .attr("x", -height / 2).attr("y", -42)
+  .attr("text-anchor", "middle")
+  .attr("transform", "rotate(-90)")
+  .text("Code conciseness");
+
+// Grid lines
+svg.append("g").attr("class", "grid-lines")
+  .selectAll("line.hgrid")
+  .data(d3.range(1, 10))
+  .enter().append("line")
+  .attr("x1", 0).attr("x2", width)
+  .attr("y1", d => y(d)).attr("y2", d => y(d))
+  .attr("stroke", "#f0f0f5").attr("stroke-width", 1);
+
+svg.append("g").attr("class", "grid-lines")
+  .selectAll("line.vgrid")
+  .data(d3.range(1, 10))
+  .enter().append("line")
+  .attr("x1", d => x(d)).attr("x2", d => x(d))
+  .attr("y1", 0).attr("y2", height)
+  .attr("stroke", "#f0f0f5").attr("stroke-width", 1);
+
+// ── Deterministic PRNG ──
+function mulberry32(seed) {
+  return function() {
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+const rng = mulberry32(42);
+
+function gaussRng() {
+  // Box-Muller
+  const u1 = rng(), u2 = rng();
+  return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+}
+
+// ── Generate candidate experiments ──
+// Starting point: a block with moderate visual quality, moderate conciseness
+const startVisual = 4.5;
+const startConcise = 5.0;
+
+// Generate 40 candidate experiments around the starting point
+// Each represents a proposed change with some effect on both dimensions
+function generateCandidates(cx, cy, n) {
+  const pts = [];
+  for (let i = 0; i < n; i++) {
+    // Experiments cluster in the neighborhood of current position
+    // with varying tradeoffs between the two dimensions
+    const dv = gaussRng() * 1.8;  // visual delta
+    const dc = gaussRng() * 1.8;  // conciseness delta
+    // Slight negative correlation: improving visual often costs LOC
+    const corr = -0.3;
+    const dcCorr = dc + corr * dv;
+    const pv = Math.max(0.5, Math.min(9.8, cx + dv));
+    const pc = Math.max(0.5, Math.min(9.8, cy + dcCorr));
+    pts.push({ visual: pv, concise: pc, id: i });
+  }
+  return pts;
+}
+
+let candidates = generateCandidates(startVisual, startConcise, 40);
+
+// ── Mode state ──
+let currentMode = "composite";
+let currentPos = { visual: startVisual, concise: startConcise };
+let trajectory = [{ visual: startVisual, concise: startConcise, step: 0 }];
+let stepCount = 0;
+let isRunning = false;
+
+// Layers for drawing order
+const boundaryLayer = svg.append("g").attr("class", "boundary-layer");
+const trajectoryLayer = svg.append("g").attr("class", "trajectory-layer");
+const dotLayer = svg.append("g").attr("class", "dot-layer");
+const posLayer = svg.append("g").attr("class", "pos-layer");
+
+// ── Decision functions ──
+
+function compositeScore(v, c) {
+  // Simple weighted sum, normalized
+  return 0.6 * v + 0.4 * c;
+}
+
+function compositeDecision(candidate, current) {
+  return compositeScore(candidate.visual, candidate.concise)
+       >= compositeScore(current.visual, current.concise) - 0.15;
+}
+
+function paretoDecision(candidate, current) {
+  // Pareto dominance: at least as good on both, strictly better on at least one
+  const atLeastV = candidate.visual >= current.visual - 0.05;
+  const atLeastC = candidate.concise >= current.concise - 0.05;
+  const betterV = candidate.visual > current.visual + 0.05;
+  const betterC = candidate.concise > current.concise + 0.05;
+  return atLeastV && atLeastC && (betterV || betterC);
+}
+
+function adaptiveDecision(candidate, current) {
+  // Weight the weaker dimension more heavily
+  const vGap = 10 - current.visual;
+  const cGap = 10 - current.concise;
+  const total = vGap + cGap;
+  const wV = total > 0 ? vGap / total : 0.5;
+  const wC = total > 0 ? cGap / total : 0.5;
+  const scoreBefore = wV * current.visual + wC * current.concise;
+  const scoreAfter = wV * candidate.visual + wC * candidate.concise;
+  return scoreAfter >= scoreBefore - 0.1;
+}
+
+function decide(candidate, current) {
+  if (currentMode === "composite") return compositeDecision(candidate, current);
+  if (currentMode === "pareto") return paretoDecision(candidate, current);
+  if (currentMode === "adaptive") return adaptiveDecision(candidate, current);
+  return false;
+}
+
+// ── Drawing ──
+
+function drawBoundary() {
+  boundaryLayer.selectAll("*").remove();
+
+  const cv = currentPos.visual;
+  const cc = currentPos.concise;
+
+  if (currentMode === "composite") {
+    // The composite threshold is a diagonal line:
+    // 0.6*v + 0.4*c = 0.6*cv + 0.4*cc - 0.15
+    const threshold = compositeScore(cv, cc) - 0.15;
+    // c = (threshold - 0.6*v) / 0.4
+    const lineData = [];
+    for (let v = 0; v <= 10; v += 0.1) {
+      const c = (threshold - 0.6 * v) / 0.4;
+      if (c >= 0 && c <= 10) lineData.push([v, c]);
+    }
+
+    // Shade the "keep" region above the line
+    const areaData = [...lineData];
+    // Close the polygon: go to top-right, top-left, then back
+    if (areaData.length > 0) {
+      const lastV = areaData[areaData.length - 1][0];
+      const firstV = areaData[0][0];
+      areaData.push([lastV, 10]);
+      areaData.push([10, 10]);
+      areaData.push([10, Math.max(0, (threshold - 0.6 * 10) / 0.4)]);
+    }
+
+    // Only fill area above the line
+    const keepArea = d3.area()
+      .x(d => x(d[0]))
+      .y0(d => y(d[1]))
+      .y1(y(10));
+
+    boundaryLayer.append("path")
+      .datum(lineData)
+      .attr("d", keepArea)
+      .attr("fill", "var(--composite)")
+      .attr("opacity", 0.04);
+
+    const line = d3.line().x(d => x(d[0])).y(d => y(d[1]));
+    boundaryLayer.append("path")
+      .datum(lineData)
+      .attr("d", line)
+      .attr("fill", "none")
+      .attr("stroke", "var(--composite)")
+      .attr("stroke-width", 2)
+      .attr("stroke-dasharray", "8,4");
+
+    boundaryLayer.append("text")
+      .attr("class", "trajectory-label")
+      .attr("x", x(Math.min(9, cv + 2)))
+      .attr("y", y(Math.max(1, (threshold - 0.6 * Math.min(9, cv + 2)) / 0.4)) - 8)
+      .attr("fill", "var(--composite)")
+      .attr("font-weight", 600)
+      .text("composite threshold");
+
+  } else if (currentMode === "pareto") {
+    // Pareto frontier: L-shaped region from current position
+    // Keep region is upper-right quadrant from current pos (with tolerance)
+    const tolV = cv - 0.05;
+    const tolC = cc - 0.05;
+
+    boundaryLayer.append("rect")
+      .attr("x", x(tolV))
+      .attr("y", y(10))
+      .attr("width", x(10) - x(tolV))
+      .attr("height", y(tolC) - y(10))
+      .attr("fill", "var(--pareto)")
+      .attr("opacity", 0.04);
+
+    // L-shaped boundary
+    const lPath = [
+      [tolV, 10],
+      [tolV, tolC],
+      [10, tolC]
+    ];
+    const line = d3.line().x(d => x(d[0])).y(d => y(d[1]));
+    boundaryLayer.append("path")
+      .datum(lPath)
+      .attr("d", line)
+      .attr("fill", "none")
+      .attr("stroke", "var(--pareto)")
+      .attr("stroke-width", 2)
+      .attr("stroke-dasharray", "8,4");
+
+    boundaryLayer.append("text")
+      .attr("class", "trajectory-label")
+      .attr("x", x(Math.min(9.5, tolV + 0.15)))
+      .attr("y", y(10) + 14)
+      .attr("fill", "var(--pareto)")
+      .attr("font-weight", 600)
+      .text("Pareto frontier");
+
+  } else if (currentMode === "adaptive") {
+    // Adaptive: tilted line based on current weaknesses
+    const vGap = 10 - cv;
+    const cGap = 10 - cc;
+    const total = vGap + cGap;
+    const wV = total > 0 ? vGap / total : 0.5;
+    const wC = total > 0 ? cGap / total : 0.5;
+    const threshold = wV * cv + wC * cc - 0.1;
+    // wV*v + wC*c = threshold
+    // c = (threshold - wV*v) / wC
+
+    const lineData = [];
+    for (let v = 0; v <= 10; v += 0.1) {
+      const c = wC > 0.01 ? (threshold - wV * v) / wC : 0;
+      if (c >= 0 && c <= 10) lineData.push([v, c]);
+    }
+
+    const keepArea = d3.area()
+      .x(d => x(d[0]))
+      .y0(d => y(d[1]))
+      .y1(y(10));
+
+    boundaryLayer.append("path")
+      .datum(lineData)
+      .attr("d", keepArea)
+      .attr("fill", "var(--adaptive)")
+      .attr("opacity", 0.04);
+
+    const line = d3.line().x(d => x(d[0])).y(d => y(d[1]));
+    boundaryLayer.append("path")
+      .datum(lineData)
+      .attr("d", line)
+      .attr("fill", "none")
+      .attr("stroke", "var(--adaptive)")
+      .attr("stroke-width", 2)
+      .attr("stroke-dasharray", "8,4");
+
+    // Show weight annotation
+    const wVPct = Math.round(wV * 100);
+    const wCPct = Math.round(wC * 100);
+    boundaryLayer.append("text")
+      .attr("class", "trajectory-label")
+      .attr("x", x(Math.min(9, cv + 1.5)))
+      .attr("y", y(Math.max(1, lineData.length > 0 ? (threshold - wV * Math.min(9, cv + 1.5)) / wC : 5)) - 8)
+      .attr("fill", "var(--adaptive)")
+      .attr("font-weight", 600)
+      .text(`adaptive (${wVPct}% visual, ${wCPct}% concise)`);
+  }
+}
+
+function classifyCandidates() {
+  candidates.forEach(c => {
+    c.kept = decide(c, currentPos);
+  });
+}
+
+function drawDots() {
+  dotLayer.selectAll("*").remove();
+
+  const dots = dotLayer.selectAll("circle")
+    .data(candidates)
+    .enter().append("circle")
+    .attr("cx", d => x(d.visual))
+    .attr("cy", d => y(d.concise))
+    .attr("r", 5)
+    .attr("fill", d => d.kept ? "var(--keep)" : "var(--discard)")
+    .attr("opacity", d => d.kept ? 0.75 : 0.35)
+    .attr("stroke", d => d.kept ? "var(--keep)" : "var(--discard)")
+    .attr("stroke-width", d => d.kept ? 1.5 : 0.5)
+    .on("mouseenter", function(event, d) {
+      d3.select(this).attr("r", 8).attr("opacity", 1);
+      tooltip.style("opacity", 1)
+        .html(`<strong>Experiment ${d.id + 1}</strong><br>Visual: ${d.visual.toFixed(1)}<br>Concise: ${d.concise.toFixed(1)}<br>Decision: ${d.kept ? "keep" : "discard"}`);
+    })
+    .on("mousemove", function(event) {
+      tooltip.style("left", (event.pageX + 12) + "px")
+        .style("top", (event.pageY - 28) + "px");
+    })
+    .on("mouseleave", function() {
+      d3.select(this).attr("r", 5).attr("opacity", d => d.kept ? 0.75 : 0.35);
+      tooltip.style("opacity", 0);
+    });
+}
+
+function drawCurrentPos() {
+  posLayer.selectAll("*").remove();
+
+  // Current position marker
+  posLayer.append("circle")
+    .attr("cx", x(currentPos.visual))
+    .attr("cy", y(currentPos.concise))
+    .attr("r", 9)
+    .attr("fill", "var(--text)")
+    .attr("stroke", "white")
+    .attr("stroke-width", 2.5);
+
+  posLayer.append("text")
+    .attr("class", "trajectory-label")
+    .attr("x", x(currentPos.visual) + 14)
+    .attr("y", y(currentPos.concise) + 4)
+    .attr("fill", "var(--text)")
+    .attr("font-weight", 600)
+    .attr("font-size", "0.75rem")
+    .text(`current (${currentPos.visual.toFixed(1)}, ${currentPos.concise.toFixed(1)})`);
+}
+
+function drawTrajectory() {
+  trajectoryLayer.selectAll("*").remove();
+
+  if (trajectory.length < 2) return;
+
+  const line = d3.line()
+    .x(d => x(d.visual))
+    .y(d => y(d.concise));
+
+  trajectoryLayer.append("path")
+    .datum(trajectory)
+    .attr("d", line)
+    .attr("fill", "none")
+    .attr("stroke", "var(--text)")
+    .attr("stroke-width", 1.5)
+    .attr("stroke-dasharray", "4,3")
+    .attr("opacity", 0.4);
+
+  // Step markers
+  trajectoryLayer.selectAll("circle.step")
+    .data(trajectory.slice(0, -1))
+    .enter().append("circle")
+    .attr("class", "step")
+    .attr("cx", d => x(d.visual))
+    .attr("cy", d => y(d.concise))
+    .attr("r", 3)
+    .attr("fill", "var(--text)")
+    .attr("opacity", 0.3);
+}
+
+function updateStats() {
+  const kept = candidates.filter(c => c.kept).length;
+  const discarded = candidates.length - kept;
+  const pct = Math.round(100 * kept / candidates.length);
+
+  const modeColor = currentMode === "composite" ? "var(--composite)"
+    : currentMode === "pareto" ? "var(--pareto)"
+    : "var(--adaptive)";
+
+  d3.select("#stats").html(
+    `<span class="stat"><span class="stat-value" style="color:var(--keep)">${kept}</span><span class="stat-label">kept</span></span>` +
+    `<span class="stat"><span class="stat-value" style="color:var(--discard)">${discarded}</span><span class="stat-label">discarded</span></span>` +
+    `<span class="stat"><span class="stat-value">${pct}%</span><span class="stat-label">accept rate</span></span>` +
+    `<span class="stat"><span class="stat-value">${stepCount}</span><span class="stat-label">steps</span></span>`
+  );
+
+  const descs = {
+    composite: "Composite mode: a single diagonal line. Experiments above the line are kept. The line is fixed at 0.6\u00d7visual + 0.4\u00d7concise. Tradeoffs between dimensions are invisible.",
+    pareto: "Pareto mode: keep only experiments that improve at least one dimension without worsening any. The boundary is L-shaped. More experiments are rejected, especially those that trade one dimension for another.",
+    adaptive: "Adaptive mode: the boundary tilts toward the weaker dimension. As the block improves on one axis, the system shifts pressure to the other. The weights update after every kept experiment."
+  };
+  d3.select("#mode-desc").text(descs[currentMode]);
+}
+
+function render() {
+  classifyCandidates();
+  drawBoundary();
+  drawDots();
+  drawTrajectory();
+  drawCurrentPos();
+  updateStats();
+}
+
+// ── Step function ──
+
+function step() {
+  // Find the best kept candidate
+  const kept = candidates.filter(c => c.kept);
+  if (kept.length === 0) {
+    // No improvements found, regenerate
+    candidates = generateCandidates(currentPos.visual, currentPos.concise, 40);
+    render();
+    return;
+  }
+
+  // Pick the best kept candidate by composite score (or mode-specific metric)
+  let best;
+  if (currentMode === "pareto") {
+    // Pick the one that maximizes minimum improvement
+    best = kept.reduce((a, b) => {
+      const aMin = Math.min(a.visual - currentPos.visual, a.concise - currentPos.concise);
+      const bMin = Math.min(b.visual - currentPos.visual, b.concise - currentPos.concise);
+      return aMin >= bMin ? a : b;
+    });
+  } else if (currentMode === "adaptive") {
+    const vGap = 10 - currentPos.visual;
+    const cGap = 10 - currentPos.concise;
+    const total = vGap + cGap;
+    const wV = total > 0 ? vGap / total : 0.5;
+    const wC = total > 0 ? cGap / total : 0.5;
+    best = kept.reduce((a, b) => {
+      const aS = wV * a.visual + wC * a.concise;
+      const bS = wV * b.visual + wC * b.concise;
+      return aS >= bS ? a : b;
+    });
+  } else {
+    best = kept.reduce((a, b) =>
+      compositeScore(a.visual, a.concise) >= compositeScore(b.visual, b.concise) ? a : b
+    );
+  }
+
+  // Move to the best candidate
+  currentPos = { visual: best.visual, concise: best.concise };
+  stepCount++;
+  trajectory.push({ visual: currentPos.visual, concise: currentPos.concise, step: stepCount });
+
+  // Generate new candidates around the new position
+  candidates = generateCandidates(currentPos.visual, currentPos.concise, 40);
+  render();
+}
+
+// ── Controls ──
+
+const modes = [
+  { id: "composite", label: "Composite" },
+  { id: "pareto", label: "Pareto" },
+  { id: "adaptive", label: "Adaptive" }
+];
+
+const toggleContainer = d3.select("#mode-toggles");
+
+modes.forEach(m => {
+  toggleContainer.append("button")
+    .attr("class", "mode-btn" + (m.id === currentMode ? " active-" + m.id : ""))
+    .attr("data-mode", m.id)
+    .text(m.label)
+    .on("click", function() {
+      currentMode = m.id;
+      toggleContainer.selectAll(".mode-btn")
+        .attr("class", function() {
+          const mid = d3.select(this).attr("data-mode");
+          return "mode-btn" + (mid === currentMode ? " active-" + mid : "");
+        });
+      render();
+    });
+});
+
+// Step button
+toggleContainer.append("button")
+  .attr("class", "mode-btn")
+  .text("Step")
+  .style("margin-left", "auto")
+  .on("click", function() {
+    if (!isRunning) step();
+  });
+
+// Run 12 button
+toggleContainer.append("button")
+  .attr("class", "mode-btn")
+  .text("Run 12")
+  .on("click", function() {
+    if (isRunning) return;
+    isRunning = true;
+    let i = 0;
+    const interval = d3.interval(function() {
+      step();
+      i++;
+      if (i >= 12) {
+        interval.stop();
+        isRunning = false;
+      }
+    }, 400);
+  });
+
+// Reset button
+toggleContainer.append("button")
+  .attr("class", "mode-btn")
+  .text("Reset")
+  .on("click", function() {
+    if (isRunning) return;
+    currentPos = { visual: startVisual, concise: startConcise };
+    trajectory = [{ visual: startVisual, concise: startConcise, step: 0 }];
+    stepCount = 0;
+    candidates = generateCandidates(startVisual, startConcise, 40);
+    render();
+  });
+
+// Legend
+const legendDiv = d3.select("#legend");
+
+const keptItem = legendDiv.append("span").attr("class", "legend-item");
+keptItem.append("span").attr("class", "legend-swatch").style("background", "var(--keep)");
+keptItem.append("span").text("kept");
+
+const discardedItem = legendDiv.append("span").attr("class", "legend-item");
+discardedItem.append("span").attr("class", "legend-swatch").style("background", "var(--discard)").style("opacity", "0.4");
+discardedItem.append("span").text("discarded");
+
+const posItem = legendDiv.append("span").attr("class", "legend-item");
+posItem.append("span").attr("class", "legend-swatch").style("background", "var(--text)");
+posItem.append("span").text("current position");
+
+const trajItem = legendDiv.append("span").attr("class", "legend-item");
+trajItem.append("span").attr("class", "legend-line").style("background", "var(--text)").style("opacity", "0.4");
+trajItem.append("span").text("trajectory");
+
+// Initial render
+render();
+
+})();
+</script>
+
+</body>
+</html>

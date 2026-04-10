@@ -1,0 +1,1017 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Transfer Learning Across Blocks</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;500&family=Source+Sans+3:wght@400;600;700&family=Source+Serif+4:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+  :root {
+    --text: #1a1a2e;
+    --text-2: #4a4a6a;
+    --accent: #2563eb;
+    --bg: #fafafa;
+    --fig-bg: #ffffff;
+    --border: #e2e2e8;
+    --skill-parallel: #2563eb;
+    --skill-hierarchy: #059669;
+    --skill-network: #d97706;
+    --skill-distribution: #9333ea;
+    --edge-default: #cbd5e1;
+    --edge-transfer: #f59e0b;
+    --keep: #16a34a;
+    --discard: #dc2626;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Source Serif 4', Georgia, serif;
+    font-size: 18px;
+    line-height: 1.6;
+    color: var(--text);
+    background: var(--bg);
+    max-width: 740px;
+    margin: 0 auto;
+    padding: 2rem 1.25rem 4rem;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: 'Source Sans 3', sans-serif;
+    line-height: 1.25;
+  }
+
+  h1 { font-size: 2rem; font-weight: 700; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.35rem; font-weight: 600; margin-top: 2.5rem; margin-bottom: 0.75rem; }
+  h3 { font-size: 1.1rem; font-weight: 600; margin-top: 1.5rem; margin-bottom: 0.5rem; }
+
+  p { margin-bottom: 1rem; }
+  strong { font-weight: 600; }
+
+  .subtitle {
+    font-family: 'Source Sans 3', sans-serif;
+    color: var(--text-2);
+    font-size: 1.05rem;
+    margin-bottom: 2rem;
+  }
+
+  code {
+    font-family: 'Source Code Pro', monospace;
+    font-size: 0.88em;
+    background: #f0f0f5;
+    padding: 0.15em 0.4em;
+    border-radius: 3px;
+  }
+
+  figure {
+    background: var(--fig-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1.25rem;
+    margin: 1.5rem 0;
+  }
+
+  figcaption {
+    font-family: 'Source Sans 3', sans-serif;
+    font-size: 0.85rem;
+    color: var(--text-2);
+    margin-top: 0.75rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--border);
+  }
+
+  .insight {
+    border-left: 4px solid var(--accent);
+    background: #eff6ff;
+    padding: 1rem 1.25rem;
+    margin: 1.5rem 0;
+    border-radius: 0 6px 6px 0;
+  }
+  .insight p:last-child { margin-bottom: 0; }
+
+  .warning {
+    border-left: 4px solid #d97706;
+    background: #fffbeb;
+    padding: 1rem 1.25rem;
+    margin: 1.5rem 0;
+    border-radius: 0 6px 6px 0;
+  }
+  .warning p:last-child { margin-bottom: 0; }
+
+  /* Network figure */
+  #network-fig {
+    position: relative;
+  }
+
+  .network-legend {
+    font-family: 'Source Sans 3', sans-serif;
+    font-size: 0.8rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 1rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    color: var(--text-2);
+  }
+
+  .legend-swatch {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .node-label {
+    font-family: 'Source Sans 3', sans-serif;
+    font-size: 0.7rem;
+    fill: var(--text);
+    pointer-events: none;
+    text-anchor: middle;
+  }
+
+  /* Panels */
+  .panels {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+    margin-top: 0.75rem;
+  }
+
+  @media (max-width: 560px) {
+    .panels { grid-template-columns: 1fr; }
+  }
+
+  .panel {
+    font-family: 'Source Sans 3', sans-serif;
+    font-size: 0.82rem;
+    background: #f8f9fc;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.75rem;
+    min-height: 80px;
+  }
+
+  .panel-title {
+    font-weight: 600;
+    font-size: 0.78rem;
+    color: var(--text-2);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 0.4rem;
+  }
+
+  .panel .empty-msg {
+    color: var(--text-2);
+    font-style: italic;
+  }
+
+  .exp-row {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin-bottom: 0.2rem;
+    line-height: 1.3;
+  }
+
+  .exp-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .exp-label {
+    color: var(--text);
+  }
+
+  .exp-label.transferable {
+    font-weight: 600;
+  }
+
+  .lesson-row {
+    margin-bottom: 0.35rem;
+    line-height: 1.35;
+  }
+
+  .lesson-source {
+    color: var(--text-2);
+    font-size: 0.75rem;
+  }
+
+  /* Tooltip */
+  .tooltip {
+    position: absolute;
+    font-family: 'Source Sans 3', sans-serif;
+    font-size: 0.78rem;
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.4rem 0.6rem;
+    pointer-events: none;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+    line-height: 1.4;
+    z-index: 10;
+    opacity: 0;
+    transition: opacity 0.15s;
+    max-width: 220px;
+  }
+
+  .back-link {
+    display: inline-block;
+    margin-bottom: 1.5rem;
+    font-family: 'Source Sans 3', sans-serif;
+    font-size: 0.88rem;
+    color: var(--text-2);
+    text-decoration: none;
+  }
+  .back-link:hover { color: var(--accent); }
+
+  .footer {
+    margin-top: 3rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border);
+    font-family: 'Source Sans 3', sans-serif;
+    font-size: 0.85rem;
+    color: var(--text-2);
+  }
+  .footer a { color: var(--text-2); text-decoration: underline; text-underline-offset: 2px; }
+
+  .strategy-list {
+    margin: 0.5rem 0 1rem 1.25rem;
+    list-style: none;
+  }
+
+  .strategy-list li {
+    margin-bottom: 0.75rem;
+    padding-left: 0;
+  }
+
+  .strategy-list li strong {
+    font-family: 'Source Sans 3', sans-serif;
+  }
+
+  @media (max-width: 560px) {
+    h1 { font-size: 1.6rem; }
+  }
+</style>
+</head>
+<body>
+
+<a class="back-link" href="index.html">All explanations</a>
+
+<h1>Transfer Learning Across Blocks</h1>
+<p class="subtitle">How insights from iterating one visualization can accelerate iteration on similar ones</p>
+
+<p>
+  Every block starts from scratch. The 50th block the system iterates learns the same lessons the 5th one did. "Consolidating color scales breaks the density encoding." "Removing the charge force collapses the layout." "Merging tick handlers kills the animation." Each of these lessons was paid for in API budget and experiment time. And then forgotten.
+</p>
+
+<p>
+  The experiment JSONs from 100+ iterated blocks contain thousands of proposer explanations and audit notes. This is a corpus of what works and what fails for D3 visualization improvement. But today, none of that accumulated knowledge flows from one block to the next. Every new iteration run starts cold.
+</p>
+
+<p>
+  Transfer learning is the idea that it does not have to work this way. A lesson learned on one bee swarm visualization should carry over to the next bee swarm. A color scale fix discovered on a parallel coordinates block should apply to any block with a similar color setup. The question is how.
+</p>
+
+<h2>Four strategies</h2>
+
+<p>
+  Transfer can happen at different levels of abstraction. The strategies below go from narrow (one skill type) to broad (any block pair that shares a code pattern).
+</p>
+
+<ol class="strategy-list">
+  <li>
+    <strong>Skill-level transfer.</strong> All blocks generated by the same skill share common structure. Parallel coordinates blocks share axis drawing code, brushing logic, path generators. A lesson from iterating one parallel-coords block ("do not remove the brush extent clamp; it prevents selection from escaping the axis") applies to every other parallel-coords block. This is the narrowest form of transfer: same skill, same patterns, same pitfalls.
+  </li>
+  <li>
+    <strong>Pattern-level transfer.</strong> Across skills, blocks share code patterns even when the visualizations look nothing alike. Tooltip placement code appears in bee swarms, network graphs, and treemaps. Color scale setup appears everywhere. Axis formatting is universal. When the proposer learns that a particular tooltip refactoring breaks hover interaction, that lesson applies to any block that uses the same tooltip pattern, regardless of skill type.
+  </li>
+  <li>
+    <strong>Failure library.</strong> A structured database of "this change failed because..." indexed by pattern type. Before proposing a change, the proposer checks: has a similar change on a similar block failed before? If the library says "removing redundant <code>d3.select</code> calls from axis setup breaks update transitions" and the current block has the same axis pattern, skip that proposal. The library turns individual failures into collective memory.
+  </li>
+  <li>
+    <strong>Meta-prompts.</strong> After iterating 10 blocks of a given type, distill the accumulated lessons into a prompt fragment that guides future proposers. "When iterating force-directed graphs, avoid: removing the charge force, consolidating tick handlers, inlining the drag behavior." This is the most compressed form of transfer: hundreds of experiments condensed into a few sentences.
+  </li>
+</ol>
+
+<h2>The network</h2>
+
+<p>
+  The interactive figure below shows how transfer relationships connect a set of blocks. Nodes are blocks, colored by skill type. Edges connect blocks that share transferable lessons. Click a block to see its iteration history. Then click a neighbor to see which lessons transfer.
+</p>
+
+<figure id="network-fig">
+  <div class="network-legend" id="network-legend"></div>
+  <div id="network-svg"></div>
+  <div class="panels">
+    <div class="panel" id="panel-history">
+      <div class="panel-title">Iteration history</div>
+      <div class="empty-msg">Click a block to see its experiments.</div>
+    </div>
+    <div class="panel" id="panel-transfer">
+      <div class="panel-title">Transferable lessons</div>
+      <div class="empty-msg">Click two connected blocks to compare.</div>
+    </div>
+  </div>
+  <figcaption>
+    Nodes colored by skill type. Edges connect blocks with transferable lessons (same skill, shared code patterns, similar audit profiles). Click a node to inspect; click a neighbor to see transfer.
+  </figcaption>
+</figure>
+
+<h2>Skill-level transfer in practice</h2>
+
+<p>
+  Consider the three parallel coordinates blocks in the figure. All three share a common structure: parallel axes, polyline paths, optional brushing. When the system iterated the first one, it discovered that consolidating the axis scale setup into a shared function reduced lines but broke per-axis domain clamping. That experiment was discarded.
+</p>
+
+<p>
+  The second parallel-coords block hit the same wall. And the third. Three blocks, three wasted experiments, the same lesson learned three times. With skill-level transfer, the second and third blocks would have started with the knowledge: "do not consolidate per-axis scale setup."
+</p>
+
+<div class="insight">
+  <p>
+    <strong>The unit of skill-level transfer is the iteration record.</strong> Each experiment in the JSON log contains the proposer's intended change, the audit result, and the keep/discard outcome. Filter these records by skill tag, group by failure mode, and you have a per-skill transfer corpus.
+  </p>
+</div>
+
+<h2>Pattern-level transfer</h2>
+
+<p>
+  Skill-level transfer is clean but narrow. Most blocks share patterns that cross skill boundaries. Tooltip placement logic shows up in 70% of blocks. Color scale setup is nearly universal. Responsive resize handlers recur across every skill type.
+</p>
+
+<p>
+  Pattern-level transfer requires a different index. Instead of grouping by skill tag, group by code pattern. A lightweight approach: extract function signatures and D3 method chains from each block, then compute pairwise similarity. When two blocks share a tooltip pattern, lessons about that pattern transfer, even if one is a bee swarm and the other is a force-directed graph.
+</p>
+
+<p>
+  A heavier approach: embed each block's code as a vector (using the code itself, the audit profile, or both) and find nearest neighbors in embedding space. The nearest iterated block becomes the source of transfer. Its successful changes become candidate proposals. Its failed changes become warnings.
+</p>
+
+<h2>The failure library</h2>
+
+<p>
+  The failure library inverts the usual framing. Instead of asking "what worked?" it asks "what broke?" Every discarded experiment is a data point: a change that seemed reasonable, applied to a specific code pattern, that the audit caught as a regression.
+</p>
+
+<p>
+  Structure it as a lookup table. Key: the type of change (e.g., "consolidate color scales," "inline drag handler," "remove redundant selections"). Value: the blocks where this change was tried, the pattern context, and the audit dimensions that regressed. Before proposing, the proposer queries the library. If the proposed change matches a known failure pattern on a structurally similar block, the proposer skips it or adjusts.
+</p>
+
+<p>
+  The failure library is cheap to build. The experiment JSONs already contain the raw material. It just needs indexing. The cost is maintaining it as the codebase evolves and making sure the index stays current.
+</p>
+
+<h2>Meta-prompts</h2>
+
+<p>
+  After enough blocks of a given type have been iterated, the accumulated lessons can be distilled into a prompt fragment. This is the most compressed form of transfer. A meta-prompt for force-directed graph iteration might read:
+</p>
+
+<div class="insight">
+  <p>
+    <strong>Example meta-prompt.</strong> "When iterating force-directed graphs: (1) never remove <code>d3.forceCollide</code> or <code>d3.forceManyBody</code> without verifying layout stability; (2) tick handler consolidation breaks when nodes have heterogeneous update logic; (3) extracting link styling into CSS saves lines but breaks dynamic coloring; (4) drag behavior is load-bearing and should not be inlined."
+  </p>
+</div>
+
+<p>
+  Meta-prompts are human-readable, auditable, and easy to inject into the proposer's context window. They represent the final stage of transfer: raw experiment data, compressed through the failure library, distilled into natural language guidance.
+</p>
+
+<h2>The skill track</h2>
+
+<p>
+  The autoresearch system already has the concept of tracks: the block track compresses individual files, the prompt track improves the iteration prompts. There is a deferred track that has not been built yet: the skill track.
+</p>
+
+<p>
+  The skill track closes the loop. It measures quality across all blocks generated with a given skill, identifies the skill's systemic weaknesses, and updates the skill text. Transfer learning is the mechanism: aggregate experiment outcomes by skill, find recurring failure patterns, and rewrite the skill to avoid them.
+</p>
+
+<p>
+  This makes the skill a living document. It starts as a static set of instructions. After the first ten blocks are iterated, the skill absorbs what was learned. After fifty blocks, it encodes a deep map of what works and what does not for that visualization type. The skill becomes the canonical location for transferred knowledge.
+</p>
+
+<h2>Embedding similarity</h2>
+
+<p>
+  The strategies above rely on explicit structure: skill tags, pattern signatures, failure categories. Embedding similarity offers a complementary approach that works without any manual indexing.
+</p>
+
+<p>
+  Represent each block as a vector, derived from its source code, its audit profile (the four dimension scores), or a combination. When a new block enters iteration, find its nearest neighbors among already-iterated blocks. Pull the top experiments from those neighbors. Successful experiments become candidate proposals. Failed experiments become warnings.
+</p>
+
+<p>
+  The advantage is generality. Embedding similarity can discover transfer relationships that no one anticipated. A treemap and a sunburst might share more code structure than two treemaps with different interaction patterns. The embeddings surface this without anyone having to define a taxonomy.
+</p>
+
+<p>
+  The risk is noise. Two blocks that are close in embedding space might share superficial features (both use <code>d3.scaleOrdinal</code>) without sharing deep structural patterns. The transferred lesson might not apply. This is the false transfer problem.
+</p>
+
+<h2>Risks</h2>
+
+<div class="warning">
+  <p>
+    <strong>False transfer.</strong> A lesson from one block type does not always apply to another, even when they look similar. "Removing the charge force collapses the layout" is true for force-directed graphs but meaningless for radial dendrograms. If the similarity index is noisy, the proposer inherits bad advice and wastes experiments on inapplicable changes. Worse, it might apply a change that passes the audit on a superficially similar block but degrades a subtle interaction.
+  </p>
+</div>
+
+<div class="warning">
+  <p>
+    <strong>Cold start.</strong> Transfer learning requires a corpus. For well-represented skill types (parallel coordinates, tree layouts), there are enough iterated blocks to build a meaningful transfer set. For novel or rare block types, there is nothing to transfer from. The system falls back to starting from scratch, which is exactly where it is today. The gap between "has transfer data" and "does not" creates two tiers of iteration quality.
+  </p>
+</div>
+
+<div class="warning">
+  <p>
+    <strong>Maintenance cost.</strong> The failure library and meta-prompts are not free. The library needs indexing, deduplication, and periodic pruning as skills evolve and code patterns change. Meta-prompts can go stale: a lesson that was valid six months ago might not apply after a skill rewrite. If the maintenance burden exceeds the transfer benefit, the system accumulates outdated advice.
+  </p>
+</div>
+
+<div class="warning">
+  <p>
+    <strong>Staleness.</strong> Meta-prompts crystallize lessons at a point in time. As skills evolve, blocks change, and the proposer improves, those lessons may become obsolete or actively misleading. A meta-prompt that says "avoid inlining drag behavior" might become wrong after a refactor that makes drag handlers composable. The system needs a mechanism to retire or update stale guidance.
+  </p>
+</div>
+
+<h2>What this changes</h2>
+
+<p>
+  Today, the iteration pipeline treats every block as independent. The total cost of iterating 100 blocks is 100 times the cost of iterating one. Transfer learning bends that curve. Each subsequent block benefits from the blocks that came before it. The 50th bee swarm iteration starts with the distilled knowledge of the first 49.
+</p>
+
+<p>
+  The practical path is probably incremental. Start with skill-level transfer, because it is the lowest-risk form: same skill, same patterns, high confidence that lessons apply. Build the failure library as a byproduct of normal iteration (the data already exists in the experiment JSONs). Introduce meta-prompts when a skill has accumulated enough iteration data to make distillation worthwhile. Save embedding similarity for later, when the infrastructure to compute and index vectors is justified by scale.
+</p>
+
+<p>
+  The skill track is the natural home for all of this. It already exists conceptually. Building it means wiring transfer learning into the place where it can do the most good: the instructions that shape every block a skill generates from the start.
+</p>
+
+<footer class="footer">
+  <p>Part of <a href="index.html">Autoresearch</a>, a series of interactive explanations about autonomous D3 iteration.</p>
+</footer>
+
+<script>
+// ──────────────────────────────────────────────
+//  Data
+// ──────────────────────────────────────────────
+
+const skillTypes = [
+  { id: "parallel", label: "Parallel coordinates", color: "#2563eb" },
+  { id: "hierarchy", label: "Hierarchy", color: "#059669" },
+  { id: "network", label: "Network", color: "#d97706" },
+  { id: "distribution", label: "Distribution", color: "#9333ea" }
+];
+
+const skillColor = {};
+skillTypes.forEach(s => { skillColor[s.id] = s.color; });
+
+const blocks = [
+  {
+    id: "pc-sparklines", name: "Parallel Coords + Sparklines", skill: "parallel",
+    experiments: [
+      { idx: 1, kept: true,  note: "Extracted shared axis margin constant" },
+      { idx: 2, kept: false, note: "Consolidated per-axis scale setup; broke clamping" },
+      { idx: 3, kept: true,  note: "Simplified brush event handler" },
+      { idx: 4, kept: true,  note: "Removed redundant path recalculation" },
+      { idx: 5, kept: false, note: "Inlined sparkline render; broke resize" },
+      { idx: 6, kept: true,  note: "Merged duplicate tooltip logic" },
+      { idx: 7, kept: false, note: "Removed axis label repositioning; labels collide" }
+    ],
+    lessons: ["Axis clamping is per-axis", "Sparkline resize is independent", "Brush handler can be simplified"]
+  },
+  {
+    id: "pc-census", name: "Parallel Coords Census", skill: "parallel",
+    experiments: [
+      { idx: 1, kept: true,  note: "Merged duplicate dimension filters" },
+      { idx: 2, kept: false, note: "Consolidated per-axis scale setup; broke domain" },
+      { idx: 3, kept: true,  note: "Simplified highlight path logic" },
+      { idx: 4, kept: true,  note: "Extracted color scale to constant" },
+      { idx: 5, kept: false, note: "Removed axis reorder drag; broke interaction" },
+      { idx: 6, kept: true,  note: "Cleaned up redundant selections" }
+    ],
+    lessons: ["Per-axis scales must stay separate", "Drag reorder is load-bearing"]
+  },
+  {
+    id: "pc-brushable", name: "Brushable Parallel Coords", skill: "parallel",
+    experiments: [
+      { idx: 1, kept: true,  note: "Simplified brush extent calculation" },
+      { idx: 2, kept: false, note: "Consolidated axis scales; broke brush domain" },
+      { idx: 3, kept: true,  note: "Removed redundant path updates on brush" },
+      { idx: 4, kept: false, note: "Merged axis draw calls; lost individual formatting" },
+      { idx: 5, kept: true,  note: "Extracted shared transition duration" },
+      { idx: 6, kept: true,  note: "Consolidated color legend code" },
+      { idx: 7, kept: true,  note: "Simplified data filter function" },
+      { idx: 8, kept: false, note: "Removed null-check on brush; null pointer error" }
+    ],
+    lessons: ["Brush domain needs per-axis setup", "Null check on brush is required"]
+  },
+  {
+    id: "h-tree", name: "Collapsible Tree Search", skill: "hierarchy",
+    experiments: [
+      { idx: 1, kept: true,  note: "Collapsed duplicate toggle handlers" },
+      { idx: 2, kept: true,  note: "Extracted node transition to shared function" },
+      { idx: 3, kept: true,  note: "Removed redundant d3.select calls" },
+      { idx: 4, kept: false, note: "Consolidated node/link transitions; broke stagger" },
+      { idx: 5, kept: true,  note: "Simplified search highlight logic" },
+      { idx: 6, kept: true,  note: "Merged duplicate expand/collapse code paths" }
+    ],
+    lessons: ["Node/link transitions must stay separate", "Toggle handlers can share code"]
+  },
+  {
+    id: "h-treemap", name: "Zoomable Treemap", skill: "hierarchy",
+    experiments: [
+      { idx: 1, kept: true,  note: "Simplified zoom transition chain" },
+      { idx: 2, kept: false, note: "Consolidated color scales; broke depth encoding" },
+      { idx: 3, kept: true,  note: "Extracted padding constant" },
+      { idx: 4, kept: true,  note: "Removed redundant text truncation logic" },
+      { idx: 5, kept: false, note: "Merged zoom in/out handlers; broke breadcrumb state" }
+    ],
+    lessons: ["Depth-based color must be separate", "Zoom in/out have different state needs"]
+  },
+  {
+    id: "h-bundles", name: "Hierarchy Bundles", skill: "hierarchy",
+    experiments: [
+      { idx: 1, kept: true,  note: "Extracted bundle strength to constant" },
+      { idx: 2, kept: true,  note: "Simplified hover highlight path" },
+      { idx: 3, kept: false, note: "Consolidated radial layout recalculation; broke update" },
+      { idx: 4, kept: true,  note: "Removed redundant link color logic" },
+      { idx: 5, kept: true,  note: "Merged text rotation calculations" },
+      { idx: 6, kept: false, note: "Inlined mouse handler; broke debounce" },
+      { idx: 7, kept: true,  note: "Cleaned up stale DOM references" }
+    ],
+    lessons: ["Radial layout is stateful", "Mouse debounce is load-bearing"]
+  },
+  {
+    id: "n-force", name: "Force-Directed Network", skill: "network",
+    experiments: [
+      { idx: 1, kept: true,  note: "Extracted force parameters to config object" },
+      { idx: 2, kept: false, note: "Removed forceCollide; nodes overlap" },
+      { idx: 3, kept: false, note: "Consolidated tick handler; broke link positioning" },
+      { idx: 4, kept: true,  note: "Simplified drag behavior setup" },
+      { idx: 5, kept: true,  note: "Removed redundant simulation restart calls" },
+      { idx: 6, kept: false, note: "Inlined charge force; broke repulsion tuning" },
+      { idx: 7, kept: true,  note: "Cleaned up tooltip event handlers" }
+    ],
+    lessons: ["Never remove collision force", "Tick handler for links is separate", "Charge force must be named"]
+  },
+  {
+    id: "n-sankey", name: "Sankey Diagram", skill: "network",
+    experiments: [
+      { idx: 1, kept: true,  note: "Simplified link gradient generation" },
+      { idx: 2, kept: true,  note: "Extracted node padding to constant" },
+      { idx: 3, kept: false, note: "Consolidated node/link color logic; broke flow encoding" },
+      { idx: 4, kept: true,  note: "Removed redundant layout iterations" },
+      { idx: 5, kept: false, note: "Merged tooltip for nodes and links; lost context" },
+      { idx: 6, kept: true,  note: "Simplified label positioning" }
+    ],
+    lessons: ["Node and link colors encode different data", "Tooltips need entity-specific context"]
+  },
+  {
+    id: "n-arc", name: "Arc Diagram", skill: "network",
+    experiments: [
+      { idx: 1, kept: true,  note: "Extracted arc height scale to constant" },
+      { idx: 2, kept: true,  note: "Simplified node sort comparison" },
+      { idx: 3, kept: false, note: "Removed link hover highlight; lost context on dense arcs" },
+      { idx: 4, kept: true,  note: "Consolidated identical mouse handlers" },
+      { idx: 5, kept: false, note: "Inlined arc path generator; broke curvature calc" },
+      { idx: 6, kept: true,  note: "Removed unused variable declarations" }
+    ],
+    lessons: ["Link hover is critical for dense layouts", "Arc curvature is a computed property"]
+  },
+  {
+    id: "d-bee", name: "Bee Swarm Census", skill: "distribution",
+    experiments: [
+      { idx: 1, kept: true,  note: "Simplified force simulation parameters" },
+      { idx: 2, kept: false, note: "Consolidated color scales; broke density encoding" },
+      { idx: 3, kept: true,  note: "Extracted collision radius to constant" },
+      { idx: 4, kept: true,  note: "Removed redundant position clamping" },
+      { idx: 5, kept: false, note: "Merged axis and legend update; broke independent resize" },
+      { idx: 6, kept: true,  note: "Simplified tooltip content generation" },
+      { idx: 7, kept: true,  note: "Cleaned up stale event listeners" }
+    ],
+    lessons: ["Color and density encodings are separate concerns", "Collision radius is a tuning param"]
+  },
+  {
+    id: "d-violin", name: "Violin Plot Orchestra", skill: "distribution",
+    experiments: [
+      { idx: 1, kept: false, note: "Simplified KDE bandwidth; distorted density shape" },
+      { idx: 2, kept: false, note: "Consolidated violin and box plot rendering; broke alignment" },
+      { idx: 3, kept: true,  note: "Extracted shared margin constant" },
+      { idx: 4, kept: false, note: "Removed mirror path; violins became one-sided" },
+      { idx: 5, kept: false, note: "Merged color scales; broke group distinction" },
+      { idx: 6, kept: false, note: "Inlined area generator; broke curve interpolation" }
+    ],
+    lessons: ["KDE bandwidth is carefully tuned", "Violin mirror path is structural"]
+  },
+  {
+    id: "d-histogram", name: "Linked Histogram Matrix", skill: "distribution",
+    experiments: [
+      { idx: 1, kept: true,  note: "Simplified bin calculation" },
+      { idx: 2, kept: true,  note: "Extracted bar padding to constant" },
+      { idx: 3, kept: false, note: "Consolidated cross-chart highlight; broke linking" },
+      { idx: 4, kept: true,  note: "Removed redundant axis redraw on filter" },
+      { idx: 5, kept: false, note: "Merged brush callback; lost per-chart state" },
+      { idx: 6, kept: true,  note: "Cleaned up selection event propagation" },
+      { idx: 7, kept: true,  note: "Simplified data join key function" }
+    ],
+    lessons: ["Cross-chart linking must preserve per-chart state", "Brush callbacks are chart-specific"]
+  }
+];
+
+// Transfer edges: block pairs with shared lessons
+const edges = [
+  // Same skill: parallel coords
+  { source: "pc-sparklines", target: "pc-census",    type: "skill", lesson: "Per-axis scale consolidation breaks domain clamping" },
+  { source: "pc-census",     target: "pc-brushable",  type: "skill", lesson: "Axis scale setup is per-axis; consolidation always fails" },
+  { source: "pc-sparklines", target: "pc-brushable",  type: "skill", lesson: "Brush handlers can be simplified independently" },
+  // Same skill: hierarchy
+  { source: "h-tree",    target: "h-treemap",  type: "skill", lesson: "Transition consolidation breaks stagger/depth encoding" },
+  { source: "h-treemap", target: "h-bundles",  type: "skill", lesson: "Layout recalculation is stateful; do not inline" },
+  { source: "h-tree",    target: "h-bundles",  type: "skill", lesson: "Toggle/hover handlers can be merged within a block" },
+  // Same skill: network
+  { source: "n-force",  target: "n-sankey", type: "skill", lesson: "Node and link logic must stay separate" },
+  { source: "n-sankey", target: "n-arc",    type: "skill", lesson: "Link hover is critical for readability" },
+  { source: "n-force",  target: "n-arc",    type: "skill", lesson: "Mouse handler consolidation is usually safe" },
+  // Same skill: distribution
+  { source: "d-bee",       target: "d-violin",    type: "skill", lesson: "Color scale consolidation breaks encoding" },
+  { source: "d-violin",    target: "d-histogram",  type: "skill", lesson: "Per-chart state must be preserved" },
+  { source: "d-bee",       target: "d-histogram",  type: "skill", lesson: "Simulation/bin parameters are tuning values, not redundancy" },
+  // Cross-skill: pattern-level
+  { source: "pc-sparklines", target: "d-bee",      type: "pattern", lesson: "Tooltip logic can be shared across visualization types" },
+  { source: "h-tree",        target: "n-force",    type: "pattern", lesson: "Transition stagger and tick handler patterns are analogous" },
+  { source: "h-treemap",     target: "d-histogram", type: "pattern", lesson: "Color scale consolidation fails when encoding different semantics" },
+  { source: "n-force",       target: "d-bee",      type: "pattern", lesson: "Force simulation parameters are tuning values in both contexts" },
+  { source: "pc-brushable",  target: "d-histogram", type: "pattern", lesson: "Brush state is per-axis/per-chart; never merge" }
+];
+
+// ──────────────────────────────────────────────
+//  Legend
+// ──────────────────────────────────────────────
+
+const legendContainer = d3.select("#network-legend");
+skillTypes.forEach(s => {
+  const item = legendContainer.append("span").attr("class", "legend-item");
+  item.append("span").attr("class", "legend-swatch").style("background", s.color);
+  item.append("span").text(s.label);
+});
+const edgeLegend = [
+  { label: "Same skill", dash: "none", color: "#94a3b8" },
+  { label: "Cross-skill pattern", dash: "5,3", color: "#94a3b8" }
+];
+edgeLegend.forEach(e => {
+  const item = legendContainer.append("span").attr("class", "legend-item").style("margin-left", "0.3rem");
+  const sw = item.append("svg").attr("width", 20).attr("height", 10);
+  sw.append("line").attr("x1",0).attr("y1",5).attr("x2",20).attr("y2",5)
+    .attr("stroke", e.color).attr("stroke-width", 1.5)
+    .attr("stroke-dasharray", e.dash);
+  item.append("span").text(e.label);
+});
+
+// ──────────────────────────────────────────────
+//  Force layout
+// ──────────────────────────────────────────────
+
+const container = document.getElementById("network-svg");
+const width = Math.min(690, container.clientWidth || 690);
+const height = 380;
+
+const svg = d3.select("#network-svg").append("svg")
+  .attr("width", width)
+  .attr("height", height)
+  .attr("viewBox", `0 0 ${width} ${height}`);
+
+const tooltip = d3.select("body").append("div").attr("class", "tooltip");
+
+// Build node/link data for force sim
+const nodeData = blocks.map(b => ({ ...b }));
+const nodeById = {};
+nodeData.forEach(n => { nodeById[n.id] = n; });
+
+const linkData = edges.map(e => ({
+  source: e.source,
+  target: e.target,
+  type: e.type,
+  lesson: e.lesson
+}));
+
+const simulation = d3.forceSimulation(nodeData)
+  .force("link", d3.forceLink(linkData).id(d => d.id).distance(90))
+  .force("charge", d3.forceManyBody().strength(-280))
+  .force("center", d3.forceCenter(width / 2, height / 2))
+  .force("collision", d3.forceCollide(28))
+  .force("x", d3.forceX(width / 2).strength(0.06))
+  .force("y", d3.forceY(height / 2).strength(0.06));
+
+// Draw edges
+const linkG = svg.append("g");
+const linkEls = linkG.selectAll("line")
+  .data(linkData)
+  .enter().append("line")
+  .attr("stroke", "#cbd5e1")
+  .attr("stroke-width", 1.2)
+  .attr("stroke-dasharray", d => d.type === "pattern" ? "5,3" : "none")
+  .attr("opacity", 0.6);
+
+// Draw nodes
+const nodeG = svg.append("g");
+const nodeEls = nodeG.selectAll("g")
+  .data(nodeData)
+  .enter().append("g")
+  .attr("cursor", "pointer")
+  .call(d3.drag()
+    .on("start", dragStart)
+    .on("drag", dragging)
+    .on("end", dragEnd));
+
+nodeEls.append("circle")
+  .attr("r", 16)
+  .attr("fill", d => skillColor[d.skill])
+  .attr("fill-opacity", 0.15)
+  .attr("stroke", d => skillColor[d.skill])
+  .attr("stroke-width", 2);
+
+nodeEls.append("text")
+  .attr("class", "node-label")
+  .attr("dy", "0.35em")
+  .text(d => {
+    // Short label: first word or abbreviation
+    const parts = d.name.split(" ");
+    if (parts.length <= 2) return parts[0];
+    return parts.slice(0, 2).join(" ");
+  });
+
+// Tick
+simulation.on("tick", () => {
+  linkEls
+    .attr("x1", d => d.source.x)
+    .attr("y1", d => d.source.y)
+    .attr("x2", d => d.target.x)
+    .attr("y2", d => d.target.y);
+
+  nodeEls.attr("transform", d => {
+    d.x = Math.max(20, Math.min(width - 20, d.x));
+    d.y = Math.max(20, Math.min(height - 20, d.y));
+    return `translate(${d.x},${d.y})`;
+  });
+});
+
+// Drag
+function dragStart(event, d) {
+  if (!event.active) simulation.alphaTarget(0.3).restart();
+  d.fx = d.x;
+  d.fy = d.y;
+}
+function dragging(event, d) {
+  d.fx = event.x;
+  d.fy = event.y;
+}
+function dragEnd(event, d) {
+  if (!event.active) simulation.alphaTarget(0);
+  d.fx = null;
+  d.fy = null;
+}
+
+// ──────────────────────────────────────────────
+//  Interaction: click to select
+// ──────────────────────────────────────────────
+
+let selectedA = null;
+let selectedB = null;
+
+nodeEls.on("click", function(event, d) {
+  event.stopPropagation();
+
+  if (!selectedA || (selectedA && selectedB)) {
+    // First click or reset
+    selectedA = d;
+    selectedB = null;
+    highlightNode(d);
+    showHistory(d);
+    clearTransferPanel();
+  } else if (selectedA.id === d.id) {
+    // Clicked same node: deselect
+    selectedA = null;
+    selectedB = null;
+    resetHighlight();
+    clearHistoryPanel();
+    clearTransferPanel();
+  } else {
+    // Second click
+    selectedB = d;
+    highlightTransfer(selectedA, selectedB);
+    showHistory(selectedB);
+    showTransfer(selectedA, selectedB);
+  }
+});
+
+nodeEls.on("mouseenter", function(event, d) {
+  tooltip.style("opacity", 1)
+    .html(`<strong>${d.name}</strong><br>${d.experiments.length} experiments, ${d.experiments.filter(e => e.kept).length} kept`);
+  moveTooltip(event);
+}).on("mousemove", function(event) {
+  moveTooltip(event);
+}).on("mouseleave", function() {
+  tooltip.style("opacity", 0);
+});
+
+function moveTooltip(event) {
+  const ttNode = tooltip.node();
+  const ttW = ttNode.offsetWidth;
+  let left = event.pageX + 12;
+  let top = event.pageY - 10;
+  if (left + ttW > window.innerWidth - 10) left = event.pageX - ttW - 12;
+  tooltip.style("left", left + "px").style("top", top + "px");
+}
+
+svg.on("click", () => {
+  selectedA = null;
+  selectedB = null;
+  resetHighlight();
+  clearHistoryPanel();
+  clearTransferPanel();
+});
+
+function highlightNode(d) {
+  // Dim everything
+  nodeEls.select("circle")
+    .attr("fill-opacity", n => n.id === d.id ? 0.25 : 0.06)
+    .attr("stroke-opacity", n => n.id === d.id ? 1 : 0.2);
+  nodeEls.select("text")
+    .attr("opacity", n => n.id === d.id ? 1 : 0.3);
+
+  // Highlight connected edges
+  const connectedIds = new Set();
+  connectedIds.add(d.id);
+  linkEls
+    .attr("opacity", e => {
+      const sid = typeof e.source === "object" ? e.source.id : e.source;
+      const tid = typeof e.target === "object" ? e.target.id : e.target;
+      if (sid === d.id || tid === d.id) {
+        connectedIds.add(sid === d.id ? tid : sid);
+        return 0.7;
+      }
+      return 0.08;
+    })
+    .attr("stroke", e => {
+      const sid = typeof e.source === "object" ? e.source.id : e.source;
+      const tid = typeof e.target === "object" ? e.target.id : e.target;
+      return (sid === d.id || tid === d.id) ? "#f59e0b" : "#cbd5e1";
+    })
+    .attr("stroke-width", e => {
+      const sid = typeof e.source === "object" ? e.source.id : e.source;
+      const tid = typeof e.target === "object" ? e.target.id : e.target;
+      return (sid === d.id || tid === d.id) ? 2 : 1.2;
+    });
+
+  // Brighten connected nodes
+  nodeEls.select("circle")
+    .attr("fill-opacity", n => connectedIds.has(n.id) ? 0.2 : 0.06)
+    .attr("stroke-opacity", n => connectedIds.has(n.id) ? 1 : 0.2);
+  nodeEls.select("text")
+    .attr("opacity", n => connectedIds.has(n.id) ? 1 : 0.3);
+}
+
+function highlightTransfer(a, b) {
+  const pairIds = new Set([a.id, b.id]);
+
+  nodeEls.select("circle")
+    .attr("fill-opacity", n => pairIds.has(n.id) ? 0.3 : 0.06)
+    .attr("stroke-opacity", n => pairIds.has(n.id) ? 1 : 0.15)
+    .attr("stroke-width", n => pairIds.has(n.id) ? 3 : 2);
+  nodeEls.select("text")
+    .attr("opacity", n => pairIds.has(n.id) ? 1 : 0.25);
+
+  linkEls
+    .attr("opacity", e => {
+      const sid = typeof e.source === "object" ? e.source.id : e.source;
+      const tid = typeof e.target === "object" ? e.target.id : e.target;
+      if ((sid === a.id && tid === b.id) || (sid === b.id && tid === a.id)) return 1;
+      return 0.06;
+    })
+    .attr("stroke", e => {
+      const sid = typeof e.source === "object" ? e.source.id : e.source;
+      const tid = typeof e.target === "object" ? e.target.id : e.target;
+      if ((sid === a.id && tid === b.id) || (sid === b.id && tid === a.id)) return "#f59e0b";
+      return "#cbd5e1";
+    })
+    .attr("stroke-width", e => {
+      const sid = typeof e.source === "object" ? e.source.id : e.source;
+      const tid = typeof e.target === "object" ? e.target.id : e.target;
+      if ((sid === a.id && tid === b.id) || (sid === b.id && tid === a.id)) return 3;
+      return 1.2;
+    });
+}
+
+function resetHighlight() {
+  nodeEls.select("circle")
+    .attr("fill-opacity", 0.15)
+    .attr("stroke-opacity", 1)
+    .attr("stroke-width", 2);
+  nodeEls.select("text").attr("opacity", 1);
+  linkEls
+    .attr("stroke", "#cbd5e1")
+    .attr("stroke-width", 1.2)
+    .attr("opacity", 0.6);
+}
+
+// ──────────────────────────────────────────────
+//  Panels
+// ──────────────────────────────────────────────
+
+const historyPanel = document.getElementById("panel-history");
+const transferPanel = document.getElementById("panel-transfer");
+
+function showHistory(block) {
+  let html = `<div class="panel-title">${block.name}</div>`;
+  block.experiments.forEach(exp => {
+    const color = exp.kept ? "#16a34a" : "#dc2626";
+    const label = exp.kept ? "Kept" : "Discarded";
+    html += `<div class="exp-row">
+      <span class="exp-dot" style="background:${color}"></span>
+      <span class="exp-label">${label}: ${exp.note}</span>
+    </div>`;
+  });
+  historyPanel.innerHTML = html;
+}
+
+function showTransfer(a, b) {
+  // Find connecting edges
+  const connecting = edges.filter(e =>
+    (e.source === a.id && e.target === b.id) ||
+    (e.source === b.id && e.target === a.id)
+  );
+
+  if (connecting.length === 0) {
+    transferPanel.innerHTML = `<div class="panel-title">No direct transfer</div>
+      <div class="empty-msg">These blocks are not directly connected. Transfer would require an intermediate block or embedding similarity.</div>`;
+    return;
+  }
+
+  let html = `<div class="panel-title">Transfer: ${a.name} &#x2194; ${b.name}</div>`;
+
+  // Show connecting lessons
+  connecting.forEach(e => {
+    const typeLabel = e.type === "skill" ? "Same skill" : "Cross-skill pattern";
+    html += `<div class="lesson-row">
+      <strong>${e.lesson}</strong><br>
+      <span class="lesson-source">${typeLabel}</span>
+    </div>`;
+  });
+
+  // Find experiments from A that are transferable to B
+  html += `<div style="margin-top:0.5rem; padding-top:0.4rem; border-top:1px solid var(--border);">`;
+  html += `<div class="panel-title" style="margin-top:0;">Applicable experiments from ${a.name}</div>`;
+
+  // Match failed experiments from A that match lessons relevant to B
+  const failedA = a.experiments.filter(e => !e.kept);
+  const transferable = failedA.filter(exp => {
+    return connecting.some(edge => {
+      const note = exp.note.toLowerCase();
+      const lesson = edge.lesson.toLowerCase();
+      // Simple keyword match
+      const keywords = lesson.split(/\s+/).filter(w => w.length > 4);
+      return keywords.some(kw => note.includes(kw));
+    });
+  });
+
+  if (transferable.length > 0) {
+    transferable.forEach(exp => {
+      html += `<div class="exp-row">
+        <span class="exp-dot" style="background:#dc2626"></span>
+        <span class="exp-label transferable">${exp.note}</span>
+      </div>`;
+    });
+  } else {
+    html += `<div class="exp-row"><span class="exp-label" style="color:var(--text-2);font-style:italic">No directly matching failed experiments (lesson is inferred from patterns)</span></div>`;
+  }
+
+  html += `</div>`;
+  transferPanel.innerHTML = html;
+}
+
+function clearHistoryPanel() {
+  historyPanel.innerHTML = `<div class="panel-title">Iteration history</div>
+    <div class="empty-msg">Click a block to see its experiments.</div>`;
+}
+
+function clearTransferPanel() {
+  transferPanel.innerHTML = `<div class="panel-title">Transferable lessons</div>
+    <div class="empty-msg">Click two connected blocks to compare.</div>`;
+}
+
+</script>
+</body>
+</html>

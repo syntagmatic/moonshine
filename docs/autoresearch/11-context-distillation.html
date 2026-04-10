@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Context Distillation - Autoresearch</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;500&family=Source+Sans+3:wght@400;500;600;700&family=Source+Serif+4:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --text: #1a1a2e;
+  --text-2: #4a4a6a;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --bg: #fafafa;
+  --fig-bg: #ffffff;
+  --border: #e2e2e8;
+  --keep: #16a34a;
+  --discard: #dc2626;
+  --amber: #d97706;
+  --amber-bg: #fffbeb;
+  --amber-border: #f59e0b;
+  --overflow: #dc2626;
+  --sys: #6366f1;
+  --file: #2563eb;
+  --audit: #0891b2;
+  --history: #d97706;
+  --free: #e2e2e8;
+}
+
+body {
+  font-family: 'Source Serif 4', Georgia, serif;
+  font-size: 18px;
+  line-height: 1.6;
+  color: var(--text);
+  background: var(--bg);
+  max-width: 740px;
+  margin: 0 auto;
+  padding: 2rem 1.25rem 4rem;
+}
+
+h1, h2, h3, h4 {
+  font-family: 'Source Sans 3', sans-serif;
+  line-height: 1.25;
+}
+
+h1 { font-size: 2rem; font-weight: 700; margin-bottom: 0.25rem; }
+h2 { font-size: 1.35rem; font-weight: 600; margin-top: 2.5rem; margin-bottom: 0.75rem; }
+h3 { font-size: 1.1rem; font-weight: 600; margin-top: 1.5rem; margin-bottom: 0.5rem; }
+
+p { margin-bottom: 1rem; }
+strong { font-weight: 600; }
+
+.subtitle {
+  font-family: 'Source Sans 3', sans-serif;
+  color: var(--text-2);
+  font-size: 1rem;
+  margin-bottom: 2rem;
+}
+
+code {
+  font-family: 'Source Code Pro', monospace;
+  font-size: 0.88em;
+  background: #f0f0f5;
+  padding: 0.15em 0.4em;
+  border-radius: 3px;
+}
+
+pre {
+  font-family: 'Source Code Pro', monospace;
+  font-size: 0.82rem;
+  background: #f0f0f5;
+  padding: 1rem 1.25rem;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin-bottom: 1rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.insight {
+  border-left: 4px solid var(--accent);
+  background: #eef4ff;
+  padding: 1rem 1.25rem;
+  margin: 1.5rem 0;
+  border-radius: 0 6px 6px 0;
+}
+.insight p:last-child { margin-bottom: 0; }
+
+.warning {
+  border-left: 4px solid var(--amber-border);
+  background: var(--amber-bg);
+  padding: 1rem 1.25rem;
+  margin: 1.5rem 0;
+  border-radius: 0 6px 6px 0;
+}
+.warning p:last-child { margin-bottom: 0; }
+.warning strong { color: var(--amber); }
+
+figure {
+  background: var(--fig-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1.25rem;
+  margin: 1.5rem 0;
+}
+
+figcaption {
+  font-family: 'Source Sans 3', sans-serif;
+  font-size: 0.85rem;
+  color: var(--text-2);
+  margin-top: 0.75rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border);
+}
+
+/* Controls */
+.controls {
+  font-family: 'Source Sans 3', sans-serif;
+  font-size: 0.85rem;
+  margin-bottom: 1rem;
+}
+
+.slider-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.6rem;
+}
+
+.slider-row label {
+  color: var(--text-2);
+  min-width: 90px;
+  font-weight: 600;
+}
+
+.slider-row input[type="range"] {
+  flex: 1;
+  max-width: 300px;
+  accent-color: var(--accent);
+}
+
+.slider-value {
+  font-family: 'Source Code Pro', monospace;
+  font-size: 0.85rem;
+  font-weight: 500;
+  min-width: 28px;
+  text-align: right;
+}
+
+.strategy-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 0.6rem;
+}
+
+.strategy-btn {
+  font-family: 'Source Sans 3', sans-serif;
+  font-size: 0.8rem;
+  font-weight: 600;
+  background: var(--fig-bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.3rem 0.7rem;
+  cursor: pointer;
+  color: var(--text-2);
+  transition: all 0.15s;
+}
+
+.strategy-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.strategy-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+}
+
+/* Live stats */
+.live-stats {
+  font-family: 'Source Sans 3', sans-serif;
+  font-size: 0.85rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.5rem;
+  margin-top: 0.5rem;
+}
+
+.stat-item {
+  display: flex;
+  align-items: baseline;
+  gap: 0.3rem;
+}
+
+.stat-value {
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+.stat-label {
+  color: var(--text-2);
+}
+
+.stat-value.overflow {
+  color: var(--overflow);
+}
+
+/* Legend */
+.legend {
+  font-family: 'Source Sans 3', sans-serif;
+  font-size: 0.78rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--text-2);
+}
+
+.legend-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+/* Quality chart */
+.quality-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.3rem;
+  font-family: 'Source Sans 3', sans-serif;
+  font-size: 0.8rem;
+}
+
+.quality-label {
+  width: 100px;
+  flex-shrink: 0;
+  color: var(--text-2);
+  text-align: right;
+}
+
+.quality-bar-track {
+  flex: 1;
+  height: 14px;
+  background: #f0f0f5;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.quality-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.4s ease;
+}
+
+.quality-value {
+  width: 32px;
+  font-family: 'Source Code Pro', monospace;
+  font-size: 0.78rem;
+  font-weight: 500;
+}
+
+/* Strategy descriptions */
+.strategy-desc {
+  font-family: 'Source Sans 3', sans-serif;
+  font-size: 0.85rem;
+  color: var(--text-2);
+  margin-bottom: 0.75rem;
+  min-height: 2.4rem;
+  line-height: 1.45;
+}
+
+/* Footer */
+.footer {
+  margin-top: 3rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+  font-family: 'Source Sans 3', sans-serif;
+  font-size: 0.82rem;
+  color: var(--text-2);
+}
+
+.footer a {
+  color: var(--text-2);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+</style>
+</head>
+<body>
+
+<h1>Context Distillation</h1>
+<p class="subtitle">Part 11 of the Autoresearch series. Compressing experiment history into effective proposer context.</p>
+
+<p>
+  The proposer learns from history. But only the history that fits in its context window.
+</p>
+
+<p>
+  After one experiment, the proposer's context is lean: the current file, the current audit scores and notes, and a single past result. It all fits easily. After five experiments, there is more signal: five sets of scores, five diffs, five explanations of what the proposer tried and why. Still manageable. After twenty experiments, the history alone might run to 50,000 tokens. And the context window has not grown.
+</p>
+
+<p>
+  Something has to give. The question is what you choose to lose.
+</p>
+
+<h2>The budget</h2>
+
+<p>
+  The proposer's context has four sections, each competing for space:
+</p>
+
+<pre>System prompt       ~300 tokens   (fixed)
+Current file        ~500-2000     (fixed, this is the artifact being improved)
+Audit scores+notes  ~500          (fixed, current round only)
+History             ~???          (variable, grows with each experiment)</pre>
+
+<p>
+  The system prompt, the file, and the audit scores are non-negotiable. They define the task. History is the only section that can flex, and it is the only section that grows. With an 8K context window, the history budget is roughly 5,000 to 7,000 tokens depending on file size. A single experiment's record (diff, scores, explanation) runs about 200 to 400 tokens. So naive inclusion of all history works for maybe 15 to 20 experiments before it crowds out the file itself.
+</p>
+
+<div class="insight">
+  <p>
+    <strong>Use the simulator below</strong> to see this play out. Drag the experiment slider and toggle between strategies to watch how each one manages the history budget.
+  </p>
+</div>
+
+<figure>
+  <div class="controls">
+    <div class="slider-row">
+      <label>Experiments</label>
+      <input type="range" id="exp-slider" min="1" max="30" value="1">
+      <span class="slider-value" id="exp-value">1</span>
+    </div>
+    <div class="strategy-btns" id="strategy-btns">
+      <button class="strategy-btn active" data-strategy="naive">Naive</button>
+      <button class="strategy-btn" data-strategy="windowed">Windowed-5</button>
+      <button class="strategy-btn" data-strategy="distilled">Distilled</button>
+      <button class="strategy-btn" data-strategy="failures">Failure catalog</button>
+    </div>
+    <div class="strategy-desc" id="strategy-desc">
+      Include all past experiments. Grows linearly until it overflows the context window.
+    </div>
+  </div>
+
+  <div class="legend" id="bar-legend">
+    <div class="legend-item"><span class="legend-swatch" style="background: var(--sys);"></span> System prompt</div>
+    <div class="legend-item"><span class="legend-swatch" style="background: var(--file);"></span> Current file</div>
+    <div class="legend-item"><span class="legend-swatch" style="background: var(--audit);"></span> Audit scores</div>
+    <div class="legend-item"><span class="legend-swatch" style="background: var(--history);"></span> History</div>
+    <div class="legend-item"><span class="legend-swatch" style="background: var(--free);"></span> Free</div>
+  </div>
+
+  <div id="context-bar"></div>
+
+  <div class="live-stats" id="context-stats"></div>
+
+  <h4 style="font-size: 0.95rem; margin-top: 1.25rem; margin-bottom: 0.5rem;">Effective knowledge retained</h4>
+  <div id="quality-chart"></div>
+
+  <figcaption>
+    The top bar shows how context space is allocated. The bottom chart shows how much useful historical knowledge the proposer retains under each strategy. Move the slider from 1 to 30 experiments to watch the tradeoffs emerge.
+  </figcaption>
+</figure>
+
+<h2>Strategy 1: Naive history</h2>
+
+<p>
+  The simplest approach. Every past experiment goes into the context: its diff, its scores, whether it was kept or discarded, and the proposer's explanation. At experiment 5, this is helpful. At experiment 15, it is getting crowded. At experiment 22 or so, the history section exceeds the budget and starts pushing out the file. The proposer can no longer see the full artifact it is trying to modify.
+</p>
+
+<p>
+  The failure mode is predictable: as history grows, the bottom of the file gets truncated. The proposer starts making changes that conflict with code it cannot see. Quality drops. Experiments get discarded. The discards add more history, which pushes out more of the file. A feedback loop in the wrong direction.
+</p>
+
+<h2>Strategy 2: Windowed history</h2>
+
+<p>
+  Keep only the last N experiments. With N=5, the history section stays at roughly 1,500 tokens. The context window never overflows. But the window slides forward, and early lessons fall off the edge.
+</p>
+
+<p>
+  Consider this scenario: experiment 3 tried consolidating three color scale definitions into one shared scale. The auditor caught a visual_critic regression because the distinct hues for different hierarchy levels became indistinguishable. The proposer learned this lesson and avoided color consolidation for the next several rounds. But by experiment 15, that lesson has scrolled out of the window. The proposer has no memory of the failure and tries the same consolidation again. Another discard. The loop has forgotten.
+</p>
+
+<div class="insight">
+  <p>
+    The windowed approach trades completeness for budget discipline. It guarantees the context will never overflow, but it also guarantees the proposer will eventually repeat old mistakes.
+  </p>
+</div>
+
+<h2>Strategy 3: Distilled history</h2>
+
+<p>
+  After each experiment, a separate LLM call reads the full experiment history and produces a compressed "lessons learned" summary. This summary replaces the raw history in the proposer's context. A 20-experiment history that would normally consume 6,000+ tokens gets compressed to roughly 200 tokens of high-signal prose.
+</p>
+
+<p>
+  The summary might look like this:
+</p>
+
+<pre>Lessons from 20 experiments (12 kept, 8 discarded):
+- Color scale consolidation causes visual_critic regressions (tried 2x, failed 2x)
+- Dead code removal is reliably safe (5/6 kept)
+- Pattern consolidation is moderate risk (2/4 kept, regressions in layout logic)
+- Tooltip refactoring is safe when scoped to positioning only
+- Avoid merging event handlers: interaction complexity breaks stress_test
+- cognitive_load gains come from reducing nesting, not from shortening names</pre>
+
+<p>
+  This captures the essential patterns without the verbosity. The proposer sees decades of institutional memory in a paragraph. And the budget stays flat: whether you have 5 experiments or 50, the summary takes roughly the same space.
+</p>
+
+<h2>Strategy 4: Failure catalog</h2>
+
+<p>
+  The most aggressive compression: only remember what failed and why. The current file already embodies everything that worked. The proposer does not need a record of successful experiments because their results are visible in the artifact. What it needs is a record of dead ends.
+</p>
+
+<pre>Failed approaches:
+- Color scale consolidation: visual_critic -1.2 (hierarchy levels lost distinction)
+- Event handler merging: stress_test -0.8 (interaction conflicts under rapid input)
+- Variable name shortening: cognitive_load -0.5 (lost semantic clarity)
+- Layout grid extraction: encoding_integrity -0.9 (broke responsive breakpoints)</pre>
+
+<p>
+  This is even more compact than the distilled summary, and arguably higher signal. Every line is a concrete warning. The proposer knows exactly what to avoid.
+</p>
+
+<h2>Strategy tags</h2>
+
+<p>
+  All of these compression strategies benefit from tagging experiments by type. If the proposer categorizes each change (dead code elimination, pattern consolidation, design refinement, tooltip cleanup, color adjustment), the distilled summary can report hit rates per category.
+</p>
+
+<pre>Strategy hit rates (20 experiments):
+  dead_code_elimination:   5/6 kept  (83%)
+  pattern_consolidation:   2/4 kept  (50%)
+  design_refinement:       0/3 kept  (  0% - visual_critic regressions)
+  tooltip_cleanup:         3/3 kept  (100%)
+  color_adjustment:        1/2 kept  ( 50%)
+  event_handler_merge:     1/2 kept  ( 50%)</pre>
+
+<p>
+  This gives the proposer a menu of approaches ranked by historical success. It can lean into high-yield strategies and avoid categories with poor track records. The tags turn raw history into a decision-support tool.
+</p>
+
+<h2>The costs</h2>
+
+<div class="warning">
+  <p>
+    <strong>Distillation is lossy.</strong> The LLM summarizing the history might drop a critical detail. If experiment 7 revealed a subtle interaction between tooltip positioning and SVG viewBox clipping, the summary might reduce that to "tooltip refactoring is risky" without capturing the specific mechanism. The proposer then avoids all tooltip work, even the safe kind.
+  </p>
+</div>
+
+<div class="warning">
+  <p>
+    <strong>Distillation adds latency and cost.</strong> Each experiment now requires an additional LLM call to update the summary. At 30 experiments, that is 30 extra calls. The summary step is fast (small input, small output), but it adds 5 to 10 seconds per round and a few cents per experiment. Over a long run, this adds up.
+  </p>
+</div>
+
+<div class="warning">
+  <p>
+    <strong>Failure catalogs bias toward conservatism.</strong> A proposer that only sees failures will develop an increasingly long list of things it must not try. After enough experiments, the negative space grows large enough that the proposer becomes timid. It sticks to the safest possible changes (removing whitespace, deleting comments) because everything else resembles some past failure. The loop still runs, but the proposals lose ambition.
+  </p>
+</div>
+
+<p>
+  There is no free compression. Each strategy trades one kind of error for another. Naive history is complete but overflows. Windowed history fits but forgets. Distilled history remembers but might remember wrong. Failure catalogs are high-signal but breed caution. The right choice depends on how many experiments you expect to run and how much you trust the distillation step.
+</p>
+
+<h2>In practice</h2>
+
+<p>
+  The current autoresearch implementation uses a hybrid: windowed raw history for the last few experiments (so the proposer sees exact diffs for recent rounds) plus a distilled summary of everything older. This gives the proposer both precision for recent context and coverage for long-term patterns. The summary is updated every 5 experiments rather than every round, reducing distillation cost.
+</p>
+
+<p>
+  The failure catalog is appended to the summary as a separate section. This way the proposer gets both the strategic overview (what categories of change tend to work) and the tactical warnings (specific things that broke). The combined format runs about 300 to 400 tokens and stays roughly flat regardless of experiment count.
+</p>
+
+<div class="insight">
+  <p>
+    The context window is the proposer's working memory. Context distillation is the act of choosing what to remember. Get it wrong and the proposer either forgets critical lessons or drowns in irrelevant detail. Get it right and twenty experiments of trial and error compress into a paragraph that makes experiment twenty-one smarter than experiment one.
+  </p>
+</div>
+
+<footer class="footer">
+  <a href="index.html">Autoresearch series</a>
+</footer>
+
+<script>
+// ──────────────────────────────────────────────
+//  Constants
+// ──────────────────────────────────────────────
+
+const CONTEXT_BUDGET = 8192;
+const SYSTEM_TOKENS = 300;
+const AUDIT_TOKENS = 500;
+const FILE_TOKENS = 1200;
+const FIXED_TOKENS = SYSTEM_TOKENS + AUDIT_TOKENS + FILE_TOKENS;
+const HISTORY_BUDGET = CONTEXT_BUDGET - FIXED_TOKENS;
+
+// Per-experiment token costs for raw history
+const TOKENS_PER_EXP = 300;
+
+// Strategy definitions
+const strategies = {
+  naive: {
+    label: "Naive",
+    desc: "Include all past experiments. Grows linearly until it overflows the context window.",
+    historyTokens(n) { return n * TOKENS_PER_EXP; },
+    knowledge(n) { return Math.min(1.0, n / 30); }
+  },
+  windowed: {
+    label: "Windowed-5",
+    desc: "Keep only the last 5 experiments. Stays within budget, but early lessons are lost.",
+    historyTokens(n) { return Math.min(n, 5) * TOKENS_PER_EXP; },
+    knowledge(n) {
+      if (n <= 5) return n / 30;
+      // Knowledge degrades as early lessons fall off
+      const recent = 5 / 30;
+      const earlyDecay = Math.max(0, 1 - (n - 5) * 0.04);
+      return recent + (n - 5) / 30 * earlyDecay * 0.3;
+    }
+  },
+  distilled: {
+    label: "Distilled",
+    desc: "An LLM compresses full history into ~200 tokens of lessons learned. Updated periodically.",
+    historyTokens(n) {
+      // Base summary + slight growth for more nuanced summaries
+      if (n === 0) return 0;
+      return 150 + Math.min(n * 5, 100);
+    },
+    knowledge(n) {
+      // High retention but slightly lossy
+      return Math.min(0.92, n / 30 * 0.95);
+    }
+  },
+  failures: {
+    label: "Failure catalog",
+    desc: "Only remember discarded experiments and why they failed. Compact but biases toward caution.",
+    historyTokens(n) {
+      // ~40% of experiments fail, each failure is ~80 tokens
+      const failures = Math.floor(n * 0.4);
+      return failures * 80;
+    },
+    knowledge(n) {
+      // Knows what not to do, but misses positive patterns
+      const failureKnowledge = Math.min(n * 0.4, 12) / 30;
+      const positiveGap = -0.15 * Math.min(1, n / 15);
+      return Math.max(0, failureKnowledge * 1.8 + positiveGap);
+    }
+  }
+};
+
+let currentStrategy = "naive";
+let currentExp = 1;
+
+// ──────────────────────────────────────────────
+//  Context bar chart
+// ──────────────────────────────────────────────
+
+const barMargin = { top: 8, right: 16, bottom: 20, left: 16 };
+const barWidth = 690;
+const barHeight = 56;
+const barInnerW = barWidth - barMargin.left - barMargin.right;
+const barInnerH = barHeight - barMargin.top - barMargin.bottom;
+
+const barSvg = d3.select("#context-bar")
+  .append("svg")
+    .attr("viewBox", `0 0 ${barWidth} ${barHeight}`)
+    .attr("width", "100%")
+    .attr("preserveAspectRatio", "xMidYMid meet")
+  .append("g")
+    .attr("transform", `translate(${barMargin.left},${barMargin.top})`);
+
+const barX = d3.scaleLinear().domain([0, CONTEXT_BUDGET]).range([0, barInnerW]);
+
+// Background track
+barSvg.append("rect")
+  .attr("width", barInnerW)
+  .attr("height", barInnerH)
+  .attr("rx", 4)
+  .attr("fill", "#f0f0f5")
+  .attr("stroke", "var(--border)")
+  .attr("stroke-width", 0.5);
+
+// Sections
+const sections = ["sys", "file", "audit", "history", "free"];
+const sectionColors = {
+  sys: "var(--sys)",
+  file: "var(--file)",
+  audit: "var(--audit)",
+  history: "var(--history)",
+  free: "var(--free)"
+};
+
+const sectionRects = {};
+sections.forEach(s => {
+  sectionRects[s] = barSvg.append("rect")
+    .attr("y", 0)
+    .attr("height", barInnerH)
+    .attr("fill", sectionColors[s])
+    .attr("opacity", s === "free" ? 0.4 : 0.75)
+    .attr("rx", 0);
+});
+
+// Overflow indicator
+const overflowLine = barSvg.append("line")
+  .attr("y1", -2)
+  .attr("y2", barInnerH + 2)
+  .attr("stroke", "var(--overflow)")
+  .attr("stroke-width", 2)
+  .attr("stroke-dasharray", "4,3")
+  .attr("opacity", 0);
+
+// Budget label
+const budgetLabel = barSvg.append("text")
+  .attr("x", barInnerW)
+  .attr("y", barInnerH + 14)
+  .attr("text-anchor", "end")
+  .attr("font-family", "Source Code Pro, monospace")
+  .attr("font-size", "0.7rem")
+  .attr("fill", "var(--text-2)")
+  .text("8,192 tokens");
+
+// ──────────────────────────────────────────────
+//  Quality bars
+// ──────────────────────────────────────────────
+
+const qualityMetrics = [
+  { key: "recent", label: "Recent detail" },
+  { key: "early", label: "Early lessons" },
+  { key: "patterns", label: "Pattern recognition" },
+  { key: "overall", label: "Overall knowledge" }
+];
+
+function computeQuality(strategy, n) {
+  const s = strategies[strategy];
+  const overflow = Math.max(0, FIXED_TOKENS + s.historyTokens(n) - CONTEXT_BUDGET);
+  const overflowPenalty = overflow > 0 ? Math.min(1, overflow / 3000) : 0;
+
+  let recent, early, patterns;
+
+  if (strategy === "naive") {
+    // Great recent and early detail when it fits, degrades when overflowing
+    recent = Math.min(1, n * 0.2) * (1 - overflowPenalty);
+    early = n > 0 ? (1 - overflowPenalty) : 0;
+    patterns = Math.min(1, n * 0.08) * (1 - overflowPenalty * 0.5);
+  } else if (strategy === "windowed") {
+    recent = Math.min(1, n * 0.2);
+    // Early lessons decay as they scroll out of the window
+    early = n <= 5 ? (n > 0 ? 1 : 0) : Math.max(0.05, 1 - (n - 5) * 0.08);
+    patterns = Math.min(0.6, n * 0.05);
+  } else if (strategy === "distilled") {
+    // Lower recent detail (summaries lack raw diffs) but high early/pattern retention
+    recent = Math.min(0.65, n * 0.13);
+    early = n > 0 ? Math.min(0.9, 0.3 + n * 0.04) : 0;
+    patterns = Math.min(0.95, n * 0.1);
+  } else {
+    // Failure catalog: moderate recent, moderate early, skewed pattern recognition
+    recent = Math.min(0.5, n * 0.1);
+    early = n > 0 ? Math.min(0.75, 0.2 + n * 0.035) : 0;
+    // Knows what NOT to do, but misses what works
+    patterns = Math.min(0.7, n * 0.06);
+  }
+
+  const overall = (recent * 0.25 + early * 0.3 + patterns * 0.45);
+  return { recent, early, patterns, overall };
+}
+
+const qualityContainer = d3.select("#quality-chart");
+
+qualityMetrics.forEach(m => {
+  const row = qualityContainer.append("div").attr("class", "quality-row");
+  row.append("div").attr("class", "quality-label").text(m.label);
+  const track = row.append("div").attr("class", "quality-bar-track");
+  track.append("div")
+    .attr("class", "quality-bar-fill")
+    .attr("id", `q-${m.key}`)
+    .style("width", "0%")
+    .style("background", m.key === "overall" ? "var(--accent)" : "var(--audit)");
+  row.append("div")
+    .attr("class", "quality-value")
+    .attr("id", `qv-${m.key}`)
+    .text("0%");
+});
+
+// ──────────────────────────────────────────────
+//  Update function
+// ──────────────────────────────────────────────
+
+function update() {
+  const n = currentExp;
+  const s = strategies[currentStrategy];
+  const histTokens = s.historyTokens(n);
+  const totalUsed = FIXED_TOKENS + histTokens;
+  const overflow = totalUsed > CONTEXT_BUDGET;
+  const clampedTotal = Math.min(totalUsed, CONTEXT_BUDGET + 2000);
+
+  // Compute section positions
+  let x = 0;
+  const layout = {};
+
+  // System prompt
+  layout.sys = { x: 0, w: barX(SYSTEM_TOKENS) };
+  x += layout.sys.w;
+
+  // File
+  const fileDisplay = overflow
+    ? barX(Math.max(200, FILE_TOKENS - (totalUsed - CONTEXT_BUDGET) * 0.6))
+    : barX(FILE_TOKENS);
+  layout.file = { x, w: fileDisplay };
+  x += layout.file.w;
+
+  // Audit
+  layout.audit = { x, w: barX(AUDIT_TOKENS) };
+  x += layout.audit.w;
+
+  // History
+  const histDisplay = overflow
+    ? barX(Math.min(histTokens, CONTEXT_BUDGET - SYSTEM_TOKENS - 200 - AUDIT_TOKENS))
+    : barX(histTokens);
+  layout.history = { x, w: Math.max(0, histDisplay) };
+  x += layout.history.w;
+
+  // Free space
+  const freeW = Math.max(0, barInnerW - x);
+  layout.free = { x, w: freeW };
+
+  // Round first rect
+  const firstKey = sections[0];
+  sectionRects[firstKey]
+    .attr("rx", 4);
+
+  sections.forEach(s => {
+    sectionRects[s]
+      .transition().duration(300)
+      .attr("x", layout[s].x)
+      .attr("width", Math.max(0, layout[s].w));
+  });
+
+  // Overflow styling
+  if (overflow) {
+    sectionRects.history
+      .attr("opacity", 0.9)
+      .attr("fill", "var(--overflow)");
+    overflowLine
+      .attr("x1", barInnerW)
+      .attr("x2", barInnerW)
+      .attr("opacity", 1);
+  } else {
+    sectionRects.history
+      .attr("opacity", 0.75)
+      .attr("fill", "var(--history)");
+    overflowLine.attr("opacity", 0);
+  }
+
+  // Stats
+  const statsDiv = d3.select("#context-stats");
+  statsDiv.html("");
+
+  const histTxt = histTokens.toLocaleString();
+  const totalTxt = Math.min(totalUsed, CONTEXT_BUDGET).toLocaleString();
+  const freeTxt = Math.max(0, CONTEXT_BUDGET - totalUsed).toLocaleString();
+
+  const addStat = (val, label, cls) => {
+    const item = statsDiv.append("span").attr("class", "stat-item");
+    item.append("span").attr("class", `stat-value ${cls || ""}`).text(val);
+    item.append("span").attr("class", "stat-label").text(label);
+  };
+
+  addStat(histTxt, "history tokens");
+  addStat(totalTxt, "total used");
+  if (overflow) {
+    addStat("overflow", "", "overflow");
+  } else {
+    addStat(freeTxt, "free");
+  }
+
+  // Quality bars
+  const q = computeQuality(currentStrategy, n);
+  qualityMetrics.forEach(m => {
+    const pct = Math.round(q[m.key] * 100);
+    d3.select(`#q-${m.key}`)
+      .transition().duration(350)
+      .style("width", pct + "%");
+    d3.select(`#qv-${m.key}`).text(pct + "%");
+  });
+}
+
+// ──────────────────────────────────────────────
+//  Event handlers
+// ──────────────────────────────────────────────
+
+const slider = document.getElementById("exp-slider");
+const sliderValue = document.getElementById("exp-value");
+
+slider.addEventListener("input", () => {
+  currentExp = +slider.value;
+  sliderValue.textContent = currentExp;
+  update();
+});
+
+document.querySelectorAll(".strategy-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".strategy-btn").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    currentStrategy = btn.dataset.strategy;
+    document.getElementById("strategy-desc").textContent = strategies[currentStrategy].desc;
+    update();
+  });
+});
+
+// Initial render
+update();
+</script>
+</body>
+</html>
