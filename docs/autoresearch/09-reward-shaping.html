@@ -263,6 +263,64 @@
     fill: var(--text-2);
     pointer-events: none;
   }
+
+  .amber {
+    border-left: 4px solid #d97706;
+    background: #fffbeb;
+    padding: 1rem 1.25rem;
+    margin: 1.5rem 0;
+    border-radius: 0 6px 6px 0;
+  }
+
+  .amber h3 {
+    font-family: 'Source Sans 3', sans-serif;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #92400e;
+    margin-top: 0;
+    margin-bottom: 0.5rem;
+  }
+
+  .amber p:last-child { margin-bottom: 0; }
+
+  .amber ul {
+    margin: 0.5rem 0 0.5rem 1.25rem;
+    font-size: 0.95rem;
+    line-height: 1.5;
+  }
+
+  .amber li {
+    margin-bottom: 0.35rem;
+  }
+
+  .cost-table {
+    font-family: 'Source Sans 3', sans-serif;
+    font-size: 0.88rem;
+    border-collapse: collapse;
+    width: 100%;
+    margin: 1rem 0;
+  }
+
+  .cost-table th, .cost-table td {
+    text-align: left;
+    padding: 0.4rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .cost-table th {
+    font-weight: 600;
+    color: var(--text-2);
+    font-size: 0.82rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+
+  .cost-table td:nth-child(2),
+  .cost-table td:nth-child(3),
+  .cost-table th:nth-child(2),
+  .cost-table th:nth-child(3) {
+    text-align: right;
+  }
 </style>
 </head>
 <body>
@@ -326,6 +384,14 @@
 
 <p>
   When visual_critic is at 4 and stress_test is at 9, the adaptive weights might be 0.42 for visual and 0.08 for stress. The optimization pressure concentrates where the block needs it most. As visual quality climbs, its weight drops, and the next-weakest dimension takes priority. This is a soft version of curriculum learning.
+</p>
+
+<p>
+  The formula in full: <code>weight_i = (10 - score_i) / sum(10 - score_j)</code>. A block scoring [4, 9, 7, 6] on its four dimensions has gaps of [6, 1, 3, 4]. The normalizer is 6+1+3+4 = 14. So the adaptive weights become [0.43, 0.07, 0.21, 0.29]. The dimension at 4 gets six times the weight of the dimension at 9. No base weights, no hyperparameters, just the raw gap from the ceiling. As a dimension climbs toward 10 its gap shrinks toward zero, and its weight converges to zero. The system cannot over-optimize a dimension that is already strong because the formula will not let it allocate budget there.
+</p>
+
+<p>
+  One subtlety: if all four dimensions score 10, the normalizer is zero and the formula is undefined. In practice this never happens because 10/10 scores are rare and the system would stop iterating before reaching that state. But the implementation needs a fallback: if the sum of gaps falls below some epsilon (say 0.5), revert to uniform weights.
 </p>
 
 <h3>3. Threshold constraints</h3>
@@ -418,6 +484,131 @@
 <p>
   The practical path forward is probably layered: threshold constraints as hard gates, adaptive weighting as the optimization signal, Pareto tracking as a diagnostic. Not one strategy replacing the composite, but three strategies working together to compensate for its blind spots.
 </p>
+
+<h2>Validating a new reward function</h2>
+
+<p>
+  Designing a better reward function is one problem. Proving it is better is a different problem, and harder. The natural approach is an A/B test: run 10 blocks through the iteration loop with the old composite, run 10 blocks with the new Pareto-based approach, and compare final quality. But what counts as "final quality"? The composite itself is the metric you are trying to improve on. Measuring the new reward by the old reward's yardstick defeats the purpose.
+</p>
+
+<p>
+  The protocol: select 10 blocks of comparable starting quality. Run each block through both reward functions, holding the proposer prompt, temperature, and iteration budget constant. The only variable is the keep/discard decision function. After both arms finish, compare the final artifacts on three axes: composite score (the old metric), dimension-floor compliance (the structural metric), and human preference (the ground truth).
+</p>
+
+<p>
+  The cleanest validation uses human judgment as ground truth. Take the final artifacts from both arms. Show them to a reviewer blind to which reward function produced them. Ask: which block is better? If the Pareto arm wins 7 out of 10 pairwise comparisons, you have evidence. If it wins 5 out of 10, you have noise. The human evaluation is expensive but it sidesteps the circularity of using one reward function to evaluate another.
+</p>
+
+<p>
+  A cheaper proxy is dimension-floor compliance. Count how many blocks in each arm finish with all four dimensions above 6. The composite frequently produces blocks that score 8 on one dimension and 4 on another because it optimizes the average. Pareto selection should produce fewer extreme imbalances. If the Pareto arm has 9/10 blocks with all dimensions above 6, and the composite arm has 6/10, that is a structural improvement even if the composite scores are similar.
+</p>
+
+<h3>The cost of knowing</h3>
+
+<p>
+  Each experiment in the iteration loop costs roughly $0.10: a proposer call to generate the candidate, an audit call to score it, and occasionally a vision call for screenshot validation. Ten blocks times 10 experiments per arm times two arms is 200 experiments, so $20 for a single A/B comparison. That is cheap by the standards of ML research and expensive by the standards of "I want to test a one-line change to the keep/discard logic."
+</p>
+
+<p>
+  The cost pressure creates a temptation to reduce the sample size. Five blocks per arm instead of 10. Eight experiments instead of 12. But the iterate loop has high variance: a single lucky proposer output can dominate a trajectory. With five blocks per arm, one outlier shifts the mean by 20%. The A/B comparison becomes a coin flip dressed up as evidence. Ten blocks per arm is the minimum for a claim worth acting on. Twenty would be better but costs $40 and a full afternoon of wall-clock time.
+</p>
+
+<p>
+  A compromise: run a small pilot (3 blocks per arm) to check for gross differences. If one arm is clearly worse, stop early. If the results are ambiguous, run the full 10-block comparison. This is not rigorous sequential testing, but it catches the obvious failures before committing the full budget.
+</p>
+
+<table class="cost-table">
+  <thead>
+    <tr><th>Protocol</th><th>Blocks per arm</th><th>Estimated cost</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Quick pilot</td><td>3</td><td>$6</td></tr>
+    <tr><td>Standard A/B</td><td>10</td><td>$20</td></tr>
+    <tr><td>High-confidence A/B</td><td>20</td><td>$40</td></tr>
+  </tbody>
+</table>
+
+<h2>What the A/B test actually measures</h2>
+
+<p>
+  The A/B comparison reveals something beyond which reward function is "better." It reveals the shape of the optimization trajectory. Two reward functions that reach the same final quality via different paths produce different intermediate artifacts, different failure modes, and different demands on the iteration budget. A composite-driven trajectory might hit a high score quickly but bounce around as dimension collapse pulls it back. A Pareto-driven trajectory might climb slowly but monotonically, with fewer discards and less wasted budget.
+</p>
+
+<p>
+  This is why the trajectory plot matters. Comparing only final scores loses the process information. A reward function that reaches 7.5 in 8 experiments is more valuable than one that reaches 7.6 in 14, because the 6 extra experiments cost time and money. The right metric is not peak quality but quality per experiment.
+</p>
+
+<p>
+  The figure below makes this concrete. Both panels start from the same block. The left trajectory uses composite threshold scoring: a single weighted sum with a -0.3 tolerance gate. The right trajectory uses Pareto dominance: no dimension may regress, at least one must improve. Watch the accept rate badges and the cumulative cost counters. Composite scoring is aggressive. It discards more experiments, converges faster, but leaves dimension imbalances unchecked. Pareto scoring is conservative. It accepts more experiments (because partial improvements count), but each accepted experiment makes smaller jumps. The cumulative cost tells you what that caution costs in dollars.
+</p>
+
+<figure id="ab-figure">
+  <div style="font-family: 'Source Sans 3', sans-serif; font-size: 0.85rem; margin-bottom: 0.5rem; display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+    <button id="ab-btn-run" style="font-family:'Source Sans 3',sans-serif;font-size:0.82rem;font-weight:600;background:var(--accent);color:white;border:1px solid var(--accent);border-radius:4px;padding:0.3rem 0.7rem;cursor:pointer;">Run A/B comparison</button>
+    <span id="ab-status" style="color: var(--text-2); font-size: 0.82rem;"></span>
+  </div>
+  <div class="legend" id="ab-legend" style="margin-bottom: 0.5rem;">
+    <div class="legend-item"><span class="legend-swatch" style="background: var(--composite);"></span> Composite threshold</div>
+    <div class="legend-item"><span class="legend-swatch" style="background: var(--pareto);"></span> Pareto dominance</div>
+    <div class="legend-item"><span class="legend-line" style="background: var(--border); height: 1px; border-top: 2px dashed var(--text-2); width: 18px; background: none;"></span> accept rate</div>
+  </div>
+  <div id="ab-chart"></div>
+  <figcaption>
+    Same starting block, same proposer, different reward function. Left: composite threshold scoring. Right: Pareto dominance. Each dot is one experiment. Solid lines track composite score; dashed lines track accept rate. Cumulative cost appears below each panel. Click "Run A/B comparison" to regenerate with fresh noise. The Pareto arm typically accepts more experiments (higher accept rate) but converges more slowly to a similar final quality.
+  </figcaption>
+</figure>
+
+<p>
+  Regenerate the comparison a few times. The pattern is consistent: the composite arm takes bigger jumps but occasionally regresses on one dimension while climbing on another. The Pareto arm moves in smaller increments but almost never loses ground. Over 10 experiments, the composite arm spends less total (fewer experiments pass the gate, so the proposer gets called less often in a real budget-limited loop) while the Pareto arm spends more but produces more balanced final scores.
+</p>
+
+<h2>Amber risks</h2>
+
+<p>
+  Every alternative reward function trades one failure mode for another. The composite's failure mode is well-understood: dimension collapse, silent tradeoffs, insensitivity to the block's current weaknesses. The alternatives introduce failure modes that are less familiar and harder to detect.
+</p>
+
+<div class="amber">
+  <h3>Pareto dominance is slow</h3>
+  <p>
+    Pareto selection keeps any experiment that improves at least one dimension without worsening any other. In principle this sounds conservative. In practice it means more experiments pass the gate. More accepted experiments means less aggressive pruning. The optimizer explores a wider region of the quality space but takes longer to converge. On a 10-experiment budget, the Pareto arm may still be climbing when the composite arm has already plateaued. If the iteration budget is tight (and at $0.10 per experiment, it usually is), the slower convergence translates directly into lower final quality or higher cost.
+  </p>
+  <ul>
+    <li>Accept rates under Pareto are typically 50-70%, vs. 30-45% under composite threshold.</li>
+    <li>Convergence takes 2-4 more experiments to reach the same composite score.</li>
+    <li>The Pareto arm produces more balanced scores but may not reach the same peak on any single dimension.</li>
+  </ul>
+</div>
+
+<div class="amber">
+  <h3>Adaptive weights can oscillate</h3>
+  <p>
+    The adaptive weighting formula recalculates weights after every accepted experiment. This creates a feedback loop. Suppose visual_critic is at 4 and stress_test is at 8. The formula concentrates weight on visual. The next experiment improves visual to 6. Now the gap between visual and stress has narrowed. The formula shifts weight toward whatever dimension is now weakest. If encoding_integrity was quietly sitting at 5.5, it becomes the new target. The next experiment pushes encoding up. But that experiment might slightly degrade visual (because the proposer was not optimizing for visual anymore). Visual drops to 5.5, and the formula swings weight back.
+  </p>
+  <p>
+    This oscillation is not catastrophic. The block still improves on average because each step is a net positive. But the trajectory zig-zags between dimensions rather than climbing steadily on all of them. In a 10-experiment budget, 2-3 experiments may be spent correcting regressions caused by the previous experiment's weight shift. That is 20-30% of the budget lost to oscillation overhead.
+  </p>
+  <p>
+    A damping factor helps: instead of recalculating weights from scratch each step, blend the new weights with the previous ones. <code>weight_new = 0.7 * weight_calculated + 0.3 * weight_previous</code>. This smooths the transitions but introduces another hyperparameter (the blend rate) that itself needs tuning.
+  </p>
+</div>
+
+<div class="amber">
+  <h3>Curriculum scheduling adds hyperparameters</h3>
+  <p>
+    Curriculum learning sounds elegant: focus on the weakest dimension, improve it past a threshold, move to the next. But "threshold" and "which dimension is next" and "what happens when two dimensions are tied" are all decisions that need values. Each value is a hyperparameter. The original composite has four weights and one tolerance. A full curriculum schedule has four thresholds, a tie-breaking rule, a fallback strategy for when no dimension is below threshold, and a transition policy (hard switch vs. gradual blend). That is at least eight hyperparameters, each of which interacts with the others.
+  </p>
+  <p>
+    Worse, the optimal curriculum depends on the starting block. A block that starts at [4, 4, 4, 4] benefits from focusing on any dimension. A block at [8, 4, 7, 6] needs the curriculum to target the clear weakness. A block at [7, 6, 6, 7] has no clear weakness and the curriculum has to pick one arbitrarily. A single fixed curriculum cannot serve all three cases well. The reward function now needs a meta-policy for selecting curricula, which is the reward shaping problem restated at a higher level.
+  </p>
+</div>
+
+<div class="amber">
+  <h3>Validation costs compound</h3>
+  <p>
+    Each of these alternatives needs its own A/B validation. Pareto vs. composite: $20. Adaptive vs. composite: $20. Curriculum vs. adaptive: $20. Testing a damping factor at three settings: $60. The menu of possible reward functions grows faster than the budget for testing them. Without discipline, reward shaping becomes its own infinite iterate loop: changing the objective function, testing it, finding an edge case, changing it again. The composite's greatest virtue may be that it is boring enough to leave alone.
+  </p>
+</div>
 
 <script>
 // ──────────────────────────────────────────────
@@ -976,6 +1167,302 @@ trajItem.append("span").attr("class", "legend-line").style("background", "var(--
 trajItem.append("span").text("trajectory");
 
 // Initial render
+render();
+
+})();
+
+// ──────────────────────────────────────────────
+//  A/B comparison figure (enhanced with cost + accept rate)
+// ──────────────────────────────────────────────
+(function() {
+
+const margin = { top: 28, right: 52, bottom: 40, left: 48 };
+const totalW = 690;
+const gapW = 44;
+const panelW = (totalW - margin.left - margin.right - gapW) / 2;
+const panelH = 260;
+const costBarH = 28;
+const height = margin.top + panelH + costBarH + margin.bottom + 8;
+const maxExp = 10;
+const costPerExp = 0.10;
+
+const container = d3.select("#ab-chart");
+
+function generateTrajectory(isPareto, startDims) {
+  // Clone start dims so both arms share the same starting point
+  const dims = [...startDims];
+
+  const compositeW = [0.30, 0.25, 0.25, 0.20];
+  const composite = () => dims.reduce((s, d, i) => s + d * compositeW[i], 0);
+  const minDim = () => Math.min(...dims);
+
+  let totalAccepted = 0;
+  let totalProposed = 0;
+  let cumCost = 0;
+
+  const trajectory = [{
+    exp: 0, composite: composite(), minDim: minDim(),
+    dims: [...dims], acceptRate: 0, cumCost: 0, accepted: false
+  }];
+
+  for (let e = 1; e <= maxExp; e++) {
+    const deltas = dims.map(() => (Math.random() - 0.35) * 0.8);
+
+    if (isPareto) {
+      const weakest = dims.indexOf(Math.min(...dims));
+      deltas[weakest] += 0.3 + Math.random() * 0.3;
+      deltas.forEach((d, i) => {
+        if (i !== weakest && d < -0.2) deltas[i] = d * 0.3;
+      });
+    } else {
+      const strongest = dims.indexOf(Math.max(...dims));
+      deltas[strongest] += 0.2 + Math.random() * 0.2;
+      const weakest = dims.indexOf(Math.min(...dims));
+      if (Math.random() < 0.3) deltas[weakest] -= 0.2;
+    }
+
+    const newDims = dims.map((d, i) => Math.max(2, Math.min(10, d + deltas[i])));
+
+    totalProposed++;
+    cumCost += costPerExp;
+    let accepted = false;
+
+    if (isPareto) {
+      const dominated = newDims.some((nd, i) => nd < dims[i] - 0.1);
+      const improved = newDims.some((nd, i) => nd > dims[i] + 0.05);
+      if (!dominated && improved) {
+        newDims.forEach((nd, i) => dims[i] = nd);
+        accepted = true;
+      }
+    } else {
+      const oldC = composite();
+      const tempC = newDims.reduce((s, d, i) => s + d * compositeW[i], 0);
+      if (tempC > oldC - 0.3) {
+        newDims.forEach((nd, i) => dims[i] = nd);
+        accepted = true;
+      }
+    }
+
+    if (accepted) totalAccepted++;
+    const acceptRate = totalProposed > 0 ? totalAccepted / totalProposed : 0;
+
+    trajectory.push({
+      exp: e, composite: composite(), minDim: minDim(),
+      dims: [...dims], acceptRate: acceptRate, cumCost: cumCost, accepted: accepted
+    });
+  }
+
+  return trajectory;
+}
+
+function render() {
+  container.selectAll("*").remove();
+
+  // Shared starting dimensions for both arms
+  const startDims = [
+    5.5 + Math.random() * 1.0,
+    5.0 + Math.random() * 1.5,
+    6.0 + Math.random() * 1.0,
+    5.5 + Math.random() * 1.0,
+  ];
+
+  const compositeData = generateTrajectory(false, [...startDims]);
+  const paretoData = generateTrajectory(true, [...startDims]);
+
+  const svg = container.append("svg")
+    .attr("viewBox", `0 0 ${totalW} ${height}`)
+    .attr("width", "100%");
+
+  // Left panel: composite threshold trajectory
+  const gLeft = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+
+  // Right panel: Pareto dominance trajectory
+  const gRight = svg.append("g").attr("transform", `translate(${margin.left + panelW + gapW},${margin.top})`);
+
+  // Scales
+  const xScale = d3.scaleLinear().domain([0, maxExp]).range([0, panelW]);
+
+  const allComps = [...compositeData.map(d => d.composite), ...paretoData.map(d => d.composite)];
+  const yLo = Math.floor(Math.min(...allComps) - 0.5);
+  const yHi = Math.ceil(Math.max(...allComps) + 0.5);
+  const yScale = d3.scaleLinear().domain([yLo, yHi]).range([panelH, 0]);
+
+  const yRateScale = d3.scaleLinear().domain([0, 1]).range([panelH, 0]);
+
+  // Helper to draw one panel
+  function drawPanel(g, data, color, title) {
+    // Grid
+    g.append("g")
+      .attr("transform", `translate(0,${panelH})`)
+      .call(d3.axisBottom(xScale).ticks(10).tickSize(-panelH))
+      .call(g => g.select(".domain").attr("stroke", "var(--border)"))
+      .call(g => g.selectAll(".tick line").attr("stroke", "var(--border)").attr("opacity", 0.3))
+      .call(g => g.selectAll(".tick text").attr("font-family", "Source Sans 3, sans-serif").attr("font-size", "0.68rem").attr("fill", "var(--text-2)"));
+
+    // Left Y axis: composite score
+    g.append("g")
+      .call(d3.axisLeft(yScale).ticks(5).tickSize(-panelW))
+      .call(g => g.select(".domain").attr("stroke", "var(--border)"))
+      .call(g => g.selectAll(".tick line").attr("stroke", "var(--border)").attr("opacity", 0.3))
+      .call(g => g.selectAll(".tick text").attr("font-family", "Source Sans 3, sans-serif").attr("font-size", "0.68rem").attr("fill", "var(--text-2)"));
+
+    // Right Y axis: accept rate
+    g.append("g")
+      .attr("transform", `translate(${panelW},0)`)
+      .call(d3.axisRight(yRateScale).ticks(5).tickFormat(d3.format(".0%")).tickSize(0))
+      .call(g => g.select(".domain").attr("stroke", "none"))
+      .call(g => g.selectAll(".tick text").attr("font-family", "Source Sans 3, sans-serif").attr("font-size", "0.62rem").attr("fill", "var(--text-2)").attr("opacity", 0.6));
+
+    // Composite score line (solid)
+    const lineScore = d3.line()
+      .x(d => xScale(d.exp))
+      .y(d => yScale(d.composite))
+      .curve(d3.curveMonotoneX);
+
+    g.append("path")
+      .attr("d", lineScore(data))
+      .attr("fill", "none")
+      .attr("stroke", color)
+      .attr("stroke-width", 2.5)
+      .attr("opacity", 0.85);
+
+    // Accept rate line (dashed)
+    const lineRate = d3.line()
+      .x(d => xScale(d.exp))
+      .y(d => yRateScale(d.acceptRate))
+      .defined(d => d.exp > 0)
+      .curve(d3.curveMonotoneX);
+
+    g.append("path")
+      .attr("d", lineRate(data.filter(d => d.exp > 0)))
+      .attr("fill", "none")
+      .attr("stroke", "var(--text-2)")
+      .attr("stroke-width", 1.5)
+      .attr("stroke-dasharray", "5,4")
+      .attr("opacity", 0.5);
+
+    // Dots: filled for accepted, hollow for discarded
+    data.forEach(d => {
+      if (d.exp === 0) {
+        // Starting point
+        g.append("circle")
+          .attr("cx", xScale(d.exp))
+          .attr("cy", yScale(d.composite))
+          .attr("r", 4.5)
+          .attr("fill", color)
+          .attr("stroke", "white")
+          .attr("stroke-width", 1.5);
+      } else {
+        g.append("circle")
+          .attr("cx", xScale(d.exp))
+          .attr("cy", yScale(d.composite))
+          .attr("r", 3.5)
+          .attr("fill", d.accepted ? color : "white")
+          .attr("stroke", color)
+          .attr("stroke-width", d.accepted ? 0 : 1.5)
+          .attr("opacity", d.accepted ? 0.8 : 0.5);
+      }
+    });
+
+    // Final score annotation
+    const last = data[data.length - 1];
+    g.append("text")
+      .attr("x", xScale(last.exp) + 4)
+      .attr("y", yScale(last.composite) - 8)
+      .attr("font-family", "Source Code Pro, monospace")
+      .attr("font-size", "0.68rem")
+      .attr("font-weight", 500)
+      .attr("fill", color)
+      .text(last.composite.toFixed(1));
+  }
+
+  drawPanel(gLeft, compositeData, "var(--composite)", "Composite threshold");
+  drawPanel(gRight, paretoData, "var(--pareto)", "Pareto dominance");
+
+  // Panel titles
+  svg.append("text")
+    .attr("x", margin.left + panelW / 2).attr("y", 16)
+    .attr("text-anchor", "middle")
+    .attr("font-family", "Source Sans 3, sans-serif").attr("font-size", "0.78rem").attr("font-weight", 600).attr("fill", "var(--composite)")
+    .text("Composite threshold");
+
+  svg.append("text")
+    .attr("x", margin.left + panelW + gapW + panelW / 2).attr("y", 16)
+    .attr("text-anchor", "middle")
+    .attr("font-family", "Source Sans 3, sans-serif").attr("font-size", "0.78rem").attr("font-weight", 600).attr("fill", "var(--pareto)")
+    .text("Pareto dominance");
+
+  // X label
+  svg.append("text")
+    .attr("x", totalW / 2).attr("y", margin.top + panelH + 34)
+    .attr("text-anchor", "middle")
+    .attr("font-family", "Source Sans 3, sans-serif").attr("font-size", "0.72rem").attr("fill", "var(--text-2)")
+    .text("Experiment number");
+
+  // Y axis labels
+  svg.append("text")
+    .attr("x", 12).attr("y", margin.top + panelH / 2)
+    .attr("text-anchor", "middle")
+    .attr("transform", `rotate(-90, 12, ${margin.top + panelH / 2})`)
+    .attr("font-family", "Source Sans 3, sans-serif").attr("font-size", "0.7rem").attr("fill", "var(--text-2)")
+    .text("Composite score");
+
+  // Cumulative cost bars below each panel
+  const costY = margin.top + panelH + margin.bottom + 2;
+
+  function drawCostBar(gParent, data, xOff, color) {
+    const g = gParent.append("g").attr("transform", `translate(${xOff}, ${costY})`);
+    const cFinal = data[data.length - 1];
+    const accepted = data.filter(d => d.exp > 0 && d.accepted).length;
+    const total = data.filter(d => d.exp > 0).length;
+    const rate = total > 0 ? Math.round(100 * accepted / total) : 0;
+
+    g.append("rect")
+      .attr("x", 0).attr("y", 0)
+      .attr("width", panelW).attr("height", costBarH)
+      .attr("fill", "#f8f8fc")
+      .attr("rx", 3);
+
+    // Cost fill proportional to spend
+    const maxCost = maxExp * costPerExp;
+    const fillW = panelW * (cFinal.cumCost / maxCost);
+    g.append("rect")
+      .attr("x", 0).attr("y", 0)
+      .attr("width", fillW).attr("height", costBarH)
+      .attr("fill", color)
+      .attr("opacity", 0.12)
+      .attr("rx", 3);
+
+    g.append("text")
+      .attr("x", 8).attr("y", costBarH / 2 + 4)
+      .attr("font-family", "Source Code Pro, monospace")
+      .attr("font-size", "0.7rem")
+      .attr("font-weight", 500)
+      .attr("fill", "var(--text)")
+      .text(`$${cFinal.cumCost.toFixed(2)} spent`);
+
+    g.append("text")
+      .attr("x", panelW - 8).attr("y", costBarH / 2 + 4)
+      .attr("text-anchor", "end")
+      .attr("font-family", "Source Sans 3, sans-serif")
+      .attr("font-size", "0.7rem")
+      .attr("fill", "var(--text-2)")
+      .text(`${accepted}/${total} accepted (${rate}%)`);
+  }
+
+  drawCostBar(svg, compositeData, margin.left, "var(--composite)");
+  drawCostBar(svg, paretoData, margin.left + panelW + gapW, "var(--pareto)");
+
+  // Status text
+  const cFinal = compositeData[compositeData.length - 1];
+  const pFinal = paretoData[paretoData.length - 1];
+  const cAccepted = compositeData.filter(d => d.exp > 0 && d.accepted).length;
+  const pAccepted = paretoData.filter(d => d.exp > 0 && d.accepted).length;
+  d3.select("#ab-status")
+    .text(`Composite: ${cFinal.composite.toFixed(1)} score, ${cAccepted}/${maxExp} kept, $${cFinal.cumCost.toFixed(2)}.  Pareto: ${pFinal.composite.toFixed(1)} score, ${pAccepted}/${maxExp} kept, $${pFinal.cumCost.toFixed(2)}.`);
+}
+
+document.getElementById("ab-btn-run").addEventListener("click", render);
 render();
 
 })();

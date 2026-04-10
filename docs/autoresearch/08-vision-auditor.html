@@ -268,8 +268,81 @@
   }
   .footer a { color: var(--text-2); }
 
+  /* Resolution comparison */
+  .res-tabs {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+  }
+  .res-tab {
+    font-family: 'Source Sans 3', sans-serif;
+    font-size: 0.82rem;
+    font-weight: 600;
+    padding: 0.35rem 0.9rem;
+    border-radius: 5px;
+    border: 1px solid var(--border);
+    background: var(--fig-bg);
+    color: var(--text-2);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .res-tab:hover { border-color: var(--accent); color: var(--accent); }
+  .res-tab.active {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+  }
+  .res-panels {
+    display: flex;
+    gap: 1rem;
+    align-items: flex-end;
+    flex-wrap: wrap;
+  }
+  .res-panel {
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+    position: relative;
+    background: #fafafa;
+  }
+  .res-panel-label {
+    font-family: 'Source Sans 3', sans-serif;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--text-2);
+    text-align: center;
+    padding: 0.25rem 0;
+    background: #f0f0f5;
+    border-bottom: 1px solid var(--border);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .res-bug-tag {
+    position: absolute;
+    font-family: 'Source Sans 3', sans-serif;
+    font-size: 0.65rem;
+    font-weight: 600;
+    padding: 0.1rem 0.35rem;
+    border-radius: 3px;
+    color: white;
+    pointer-events: none;
+    white-space: nowrap;
+  }
+
+  /* Dual auditor flow */
+  .dual-flow-node {
+    font-family: 'Source Sans 3', sans-serif;
+    font-size: 0.76rem;
+    font-weight: 600;
+  }
+  .dual-flow-desc {
+    font-family: 'Source Sans 3', sans-serif;
+    font-size: 0.66rem;
+  }
+
   @media (max-width: 600px) {
     .compare-panel { grid-template-columns: 1fr; }
+    .res-panels { flex-direction: column; align-items: center; }
     body { padding: 1.5rem 1rem 3rem; }
   }
 </style>
@@ -412,6 +485,87 @@
 <div class="risk">
   <p>
     <strong>Amber risk:</strong> Vision models hallucinate spatial locations. A model may report an overlap at coordinates that do not correspond to any element in the image. Resolution dependence is real: bugs visible at 2x rendering may vanish at 1x, and vice versa. Each vision API call costs more than a text call, so adding a vision audit to every iteration increases the per-experiment budget. And there is an uncanny valley of almost-right visual feedback, where the model identifies a real region but mischaracterizes the problem, leading the proposer to make a "fix" that introduces a new bug.
+  </p>
+</div>
+
+<h2>The resolution problem</h2>
+
+<p>
+  A bug that is obvious on a retina display can be invisible on a standard screen. The reverse is also true. A 1px separator line renders crisply at 2x DPR (device pixel ratio) but vanishes entirely at 1x because the browser rounds it to zero effective pixels. A label that fits comfortably at 1200px width collides with its neighbor at 600px because the layout engine compresses the tick spacing. These are not edge cases. They are the normal behavior of responsive rendering, and any auditor that renders at a single resolution will miss the bugs that appear at the others.
+</p>
+
+<p>
+  The fix is straightforward: render at multiple resolutions and audit each one. A three-tier approach works well. The thumbnail tier (around 300px wide) catches problems that appear when the chart is embedded in a dashboard grid or a mobile viewport. Labels collapse, legends overflow, thin lines disappear. The standard tier (600px) is the default editing view and catches the majority of layout bugs: overlapping annotations, axis truncation, color similarity. The retina tier (1200px, rendered at 2x DPR) reveals fine-grained issues: hairline strokes that are too thin, anti-aliasing artifacts on diagonal lines, subpixel misalignment between grid lines and data points.
+</p>
+
+<p>
+  No single resolution catches everything. The thumbnail misses subtle color problems because there are not enough pixels to distinguish nearby hues. The retina view misses density problems because everything has room to breathe. Running all three tiers and merging the results produces a more complete audit than any single render could.
+</p>
+
+<figure>
+  <div class="controls">
+    <div class="res-tabs" id="res-tabs">
+      <button class="res-tab active" data-res="all">All Three</button>
+      <button class="res-tab" data-res="300">300px</button>
+      <button class="res-tab" data-res="600">600px</button>
+      <button class="res-tab" data-res="1200">1200px</button>
+    </div>
+  </div>
+  <div class="res-panels" id="res-panels"></div>
+  <figcaption>The same bar chart rendered at three resolutions. At 300px the 1px grid lines vanish and the axis labels collide. At 600px the labels separate but a color-similarity problem in the legend becomes apparent. At 1200px the fine grid lines reappear and the layout looks clean. Toggle each resolution to see which bugs surface where.</figcaption>
+</figure>
+
+<h2>The golden reference pattern</h2>
+
+<p>
+  Multi-resolution auditing catches bugs at a single point in time. But autoresearch is iterative. The proposer modifies the block, the auditor re-scores, and the loop decides whether to keep the change. Over many iterations, small regressions accumulate. A label shifts two pixels left, then three more, then five. No single delta is large enough to flag. After ten iterations the label sits on top of a data point.
+</p>
+
+<p>
+  The golden reference pattern prevents this drift. At the start of an autoresearch run, capture screenshots at all three resolutions. These become the baseline. On every subsequent iteration, compare the new screenshots against the golden set, not just against the previous iteration. If the cumulative visual distance from the baseline exceeds a threshold, the auditor flags a regression even if the most recent change was small. The comparison is always against the starting point, so gradual drift gets caught before it compounds into a visible problem.
+</p>
+
+<p>
+  This pattern also protects intentional structure. If the initial block has a specific layout (legend on the right, title centered, axis labels horizontal), the golden reference encodes that layout as an implicit constraint. The proposer can improve colors, fix data scaling, and clean up tooltips without the auditor penalizing those changes. But if an iteration accidentally moves the legend to the bottom or rotates the axis labels, the golden comparison catches it as a layout regression.
+</p>
+
+<div class="insight">
+  <p>
+    The golden reference does not need to be pixel-perfect. The vision model compares structural similarity: are the same elements in roughly the same places? Small shifts in padding or font rendering are expected between iterations. The comparison looks for semantic changes, not byte-level differences.
+  </p>
+</div>
+
+<h2>Combining text and vision auditors</h2>
+
+<p>
+  The text-based auditor and the vision auditor have complementary blind spots. The text auditor reads code and catches structural problems: duplicated selections, missing error handling, hardcoded magic numbers, non-idiomatic D3 patterns. It cannot see the rendered output. The vision auditor sees the rendered output and catches perceptual problems: color confusion, label occlusion, layout overflow, invisible elements. It cannot read the code. Neither one alone covers the full surface area of quality.
+</p>
+
+<p>
+  The architecture for combining them is a fork-and-merge pattern. After rendering the block, the pipeline forks. One branch sends the source code to the text auditor, which returns code quality scores across its dimensions (idiomatic structure, code clarity, data binding correctness). The other branch sends the screenshot to the vision auditor, which returns visual quality scores across its dimensions (readability, color differentiation, spatial layout, completeness). The two score vectors merge into a single composite assessment.
+</p>
+
+<p>
+  The merge is not a simple average. Some dimensions are text-only (code duplication has no visual signal). Some are vision-only (color distinguishability has no reliable code signal). And some are cross-validated: the text auditor might flag a suspicious <code>viewBox</code> value, while the vision auditor confirms that the chart is indeed clipped. When both auditors agree on a problem from different angles, the confidence in that finding is much higher than either signal alone.
+</p>
+
+<figure>
+  <div class="controls">
+    <button class="btn btn-accent" id="btn-dual-run">Animate Flow</button>
+    <button class="btn" id="btn-dual-reset">Reset</button>
+    <span id="dual-status" style="font-style: italic; color: var(--text-2);"></span>
+  </div>
+  <div id="dual-flow-diagram"></div>
+  <figcaption>The dual auditor architecture. After rendering, the pipeline forks: source code goes to the text auditor, the screenshot goes to the vision auditor. Each produces quality scores across different dimensions. The merge step combines them into a composite assessment, with higher confidence where both auditors agree.</figcaption>
+</figure>
+
+<p>
+  The practical benefit is coverage. In the current moonshine pipeline, the text-based auditor catches roughly 70% of code-level issues but misses nearly all rendering bugs. Adding a vision auditor in parallel does not slow down the text path. It adds a second opinion that covers the 30% of problems that only become visible in the final output. The cost is one additional vision API call per iteration. The benefit is catching the class of bugs that currently slip through undetected: the chart that scores 85 on code quality but renders with two identical-looking series, a clipped axis, and a label sitting directly behind a tooltip.
+</p>
+
+<div class="insight">
+  <p>
+    The two auditors do not need to agree on a single score. The text auditor's code quality score and the vision auditor's visual quality score can travel separately through the autoresearch loop. A block with high code quality and low visual quality gets sent back for visual fixes. A block with high visual quality and low code quality gets sent back for refactoring. The proposer receives targeted feedback from the auditor that found the problem.
   </p>
 </div>
 
@@ -1016,6 +1170,412 @@
       highlights.transition().duration(400).attr("opacity", 1);
       this.textContent = "Hide Diff Highlights";
     }
+  });
+})();
+
+
+// =============================================
+// Resolution Comparison Figure
+// =============================================
+(function() {
+  const container = document.getElementById("res-panels");
+  const tabContainer = document.getElementById("res-tabs");
+
+  // Chart data shared across resolutions
+  const categories = ["Jan", "Feb", "Mar", "Apr", "May"];
+  const values = [34, 52, 41, 63, 47];
+
+  // Resolution configs: width, scale factor, and which bugs appear
+  const resolutions = [
+    {
+      key: "300", label: "300px (thumbnail)", w: 150, h: 110,
+      margin: { top: 14, right: 6, bottom: 26, left: 24 },
+      bugs: [
+        { type: "line-vanish", desc: "Grid lines invisible" },
+        { type: "label-collide", desc: "Labels collide" }
+      ]
+    },
+    {
+      key: "600", label: "600px (standard)", w: 280, h: 170,
+      margin: { top: 20, right: 12, bottom: 34, left: 34 },
+      bugs: [
+        { type: "color-similar", desc: "Legend colors too close" }
+      ]
+    },
+    {
+      key: "1200", label: "1200px (retina)", w: 380, h: 210,
+      margin: { top: 26, right: 16, bottom: 40, left: 40 },
+      bugs: []
+    }
+  ];
+
+  function drawResChart(res) {
+    const panelDiv = document.createElement("div");
+    panelDiv.className = "res-panel";
+    panelDiv.dataset.res = res.key;
+    panelDiv.style.width = res.w + "px";
+
+    const labelDiv = document.createElement("div");
+    labelDiv.className = "res-panel-label";
+    labelDiv.textContent = res.label;
+    panelDiv.appendChild(labelDiv);
+
+    const svgContainer = document.createElement("div");
+    svgContainer.style.position = "relative";
+    panelDiv.appendChild(svgContainer);
+
+    const iW = res.w - res.margin.left - res.margin.right;
+    const iH = res.h - res.margin.top - res.margin.bottom;
+
+    const svg = d3.select(svgContainer)
+      .append("svg")
+      .attr("width", res.w)
+      .attr("height", res.h);
+
+    const g = svg.append("g")
+      .attr("transform", `translate(${res.margin.left},${res.margin.top})`);
+
+    const x = d3.scaleBand()
+      .domain(categories)
+      .range([0, iW])
+      .padding(0.3);
+
+    const y = d3.scaleLinear()
+      .domain([0, 70])
+      .range([iH, 0]);
+
+    // Grid lines: at thumbnail resolution, these are 0.5px and vanish
+    const gridStroke = res.key === "300" ? 0.3 : 1;
+    const gridOpacity = res.key === "300" ? 0.15 : 0.6;
+    g.selectAll("line.grid")
+      .data(y.ticks(5))
+      .enter().append("line")
+      .attr("x1", 0)
+      .attr("x2", iW)
+      .attr("y1", d => y(d))
+      .attr("y2", d => y(d))
+      .attr("stroke", "#aaa")
+      .attr("stroke-width", gridStroke)
+      .attr("opacity", gridOpacity);
+
+    // Bars
+    g.selectAll("rect.bar")
+      .data(values)
+      .enter().append("rect")
+      .attr("x", (d, i) => x(categories[i]))
+      .attr("y", d => y(d))
+      .attr("width", x.bandwidth())
+      .attr("height", d => iH - y(d))
+      .attr("fill", "#3b82f6")
+      .attr("rx", 2);
+
+    // X axis labels: at thumbnail, they collide
+    const fontSize = res.key === "300" ? "0.6rem" : res.key === "600" ? "0.68rem" : "0.75rem";
+    g.append("g")
+      .attr("transform", `translate(0,${iH})`)
+      .call(d3.axisBottom(x).tickSize(0))
+      .select(".domain").attr("stroke", "var(--border)");
+
+    g.selectAll(".tick text")
+      .attr("font-family", "'Source Sans 3', sans-serif")
+      .attr("font-size", fontSize)
+      .attr("fill", "var(--text-2)");
+
+    // At thumbnail resolution, simulate label collision by rotating and overlapping
+    if (res.key === "300") {
+      g.selectAll(".tick text")
+        .attr("text-anchor", "end")
+        .attr("dx", "-0.4em")
+        .attr("dy", "0.15em")
+        .attr("transform", "rotate(-35)");
+    }
+
+    // Y axis
+    const yTicks = res.key === "300" ? 3 : 5;
+    g.append("g")
+      .call(d3.axisLeft(y).ticks(yTicks))
+      .select(".domain").attr("stroke", "var(--border)");
+
+    g.selectAll(".tick text")
+      .attr("font-family", "'Source Sans 3', sans-serif")
+      .attr("font-size", fontSize)
+      .attr("fill", "var(--text-2)");
+
+    // At standard resolution, add a legend with confusable colors
+    if (res.key === "600" || res.key === "1200") {
+      const legX = iW - (res.key === "600" ? 100 : 130);
+      const legY = -12;
+      const legG = g.append("g")
+        .attr("transform", `translate(${legX},${legY})`);
+
+      const legItems = res.key === "600"
+        ? [{ label: "Actual", color: "#3b82f6" }, { label: "Target", color: "#60a5fa" }]
+        : [{ label: "Actual", color: "#3b82f6" }, { label: "Target", color: "#f97316" }];
+
+      legItems.forEach((item, i) => {
+        const lx = i * (res.key === "600" ? 52 : 68);
+        legG.append("rect")
+          .attr("x", lx).attr("y", 0)
+          .attr("width", 8).attr("height", 8)
+          .attr("rx", 2)
+          .attr("fill", item.color);
+        legG.append("text")
+          .attr("x", lx + 12).attr("y", 8)
+          .attr("font-family", "'Source Sans 3', sans-serif")
+          .attr("font-size", res.key === "600" ? "0.6rem" : "0.68rem")
+          .attr("fill", "var(--text-2)")
+          .text(item.label);
+      });
+    }
+
+    // Bug annotation tags
+    res.bugs.forEach((bug, i) => {
+      const tag = document.createElement("span");
+      tag.className = "res-bug-tag";
+      tag.textContent = bug.desc;
+      tag.style.background = bug.type === "line-vanish" ? "var(--issue-overlap)"
+        : bug.type === "label-collide" ? "var(--issue-truncated)"
+        : "var(--issue-contrast)";
+
+      if (bug.type === "line-vanish") {
+        tag.style.top = (res.margin.top + iH * 0.35) + "px";
+        tag.style.right = "4px";
+      } else if (bug.type === "label-collide") {
+        tag.style.bottom = "4px";
+        tag.style.left = "4px";
+      } else {
+        tag.style.top = "2px";
+        tag.style.right = "4px";
+      }
+
+      svgContainer.appendChild(tag);
+    });
+
+    // "No bugs" tag for retina
+    if (res.bugs.length === 0) {
+      const tag = document.createElement("span");
+      tag.className = "res-bug-tag";
+      tag.textContent = "No issues at this resolution";
+      tag.style.background = "var(--fixed)";
+      tag.style.top = "4px";
+      tag.style.right = "4px";
+      svgContainer.appendChild(tag);
+    }
+
+    container.appendChild(panelDiv);
+  }
+
+  // Initial render: all three
+  resolutions.forEach(r => drawResChart(r));
+
+  // Tab switching
+  tabContainer.addEventListener("click", function(e) {
+    const tab = e.target.closest(".res-tab");
+    if (!tab) return;
+    const res = tab.dataset.res;
+
+    tabContainer.querySelectorAll(".res-tab").forEach(t => t.classList.remove("active"));
+    tab.classList.add("active");
+
+    const panels = container.querySelectorAll(".res-panel");
+    if (res === "all") {
+      panels.forEach(p => { p.style.display = ""; });
+    } else {
+      panels.forEach(p => {
+        p.style.display = p.dataset.res === res ? "" : "none";
+      });
+    }
+  });
+})();
+
+
+// =============================================
+// Dual Auditor Architecture Diagram
+// =============================================
+(function() {
+  const container = document.getElementById("dual-flow-diagram");
+  const totalW = Math.min(690, container.clientWidth);
+  const totalH = 320;
+
+  const svg = d3.select(container)
+    .append("svg")
+    .attr("width", totalW)
+    .attr("height", totalH);
+
+  // Layout constants
+  const nodeH = 48;
+  const nodeW = 120;
+  const smallNodeW = 110;
+  const scoreNodeW = 140;
+  const centerX = totalW / 2;
+
+  // Node positions
+  const nodes = {
+    render:     { x: centerX - nodeW/2, y: 10, w: nodeW, label: "Render", desc: "Headless browser", accent: false },
+    fork:       { x: centerX - 4, y: 10 + nodeH + 20, w: 8, h: 8, type: "dot" },
+    source:     { x: centerX - 200, y: 100, w: smallNodeW, label: "Source Code", desc: "HTML + JS", accent: false },
+    screenshot: { x: centerX + 90, y: 100, w: smallNodeW, label: "Screenshot", desc: "PNG capture", accent: false },
+    textAudit:  { x: centerX - 210, y: 172, w: scoreNodeW, label: "Text Auditor", desc: "Reads code, not pixels", accent: false },
+    vizAudit:   { x: centerX + 70, y: 172, w: scoreNodeW, label: "Vision Auditor", desc: "Reads pixels, not code", accent: true },
+    textScores: { x: centerX - 210, y: 244, w: scoreNodeW, label: "Code Quality", desc: "Structure, idioms, clarity", accent: false },
+    vizScores:  { x: centerX + 70, y: 244, w: scoreNodeW, label: "Visual Quality", desc: "Color, layout, readability", accent: true },
+    merge:      { x: centerX - scoreNodeW/2, y: 280, w: scoreNodeW, label: "Combined Score", desc: "Cross-validated assessment", accent: false, isMerge: true }
+  };
+
+  // Arrows: [fromNode, toNode]
+  const arrows = [
+    ["render", "fork"],
+    ["fork", "source"],
+    ["fork", "screenshot"],
+    ["source", "textAudit"],
+    ["screenshot", "vizAudit"],
+    ["textAudit", "textScores"],
+    ["vizAudit", "vizScores"],
+    ["textScores", "merge"],
+    ["vizScores", "merge"]
+  ];
+
+  // Helper: center point of a node
+  function cx(n) { return n.type === "dot" ? n.x : n.x + n.w / 2; }
+  function cy(n) { return n.type === "dot" ? n.y : n.y + nodeH / 2; }
+  function bot(n) { return n.type === "dot" ? n.y + 4 : n.y + nodeH; }
+  function top_(n) { return n.type === "dot" ? n.y - 4 : n.y; }
+
+  // Draw arrow lines (drawn first so nodes sit on top)
+  const arrowGroup = svg.append("g").attr("class", "arrows");
+
+  arrows.forEach(([fromKey, toKey]) => {
+    const from = nodes[fromKey];
+    const to = nodes[toKey];
+
+    const x1 = cx(from);
+    const y1 = bot(from);
+    const x2 = cx(to);
+    const y2 = top_(to);
+
+    // For fork arrows, use an elbow path
+    if (fromKey === "fork") {
+      const path = arrowGroup.append("path")
+        .attr("d", `M${x1},${y1} L${x1},${y1 + 8} L${x2},${y1 + 8} L${x2},${y2}`)
+        .attr("fill", "none")
+        .attr("stroke", "var(--border)")
+        .attr("stroke-width", 1.5);
+      // arrowhead
+      arrowGroup.append("polygon")
+        .attr("points", `${x2},${y2} ${x2-4},${y2-6} ${x2+4},${y2-6}`)
+        .attr("fill", "var(--border)");
+    } else if (toKey === "merge") {
+      // Merge arrows converge
+      const midY = (y1 + y2) / 2;
+      arrowGroup.append("path")
+        .attr("d", `M${x1},${y1} L${x1},${midY} L${x2},${midY} L${x2},${y2}`)
+        .attr("fill", "none")
+        .attr("stroke", "var(--border)")
+        .attr("stroke-width", 1.5);
+      arrowGroup.append("polygon")
+        .attr("points", `${x2},${y2} ${x2-4},${y2-6} ${x2+4},${y2-6}`)
+        .attr("fill", "var(--border)");
+    } else {
+      // Straight vertical arrow
+      arrowGroup.append("line")
+        .attr("x1", x1).attr("y1", y1)
+        .attr("x2", x2).attr("y2", y2)
+        .attr("stroke", "var(--border)")
+        .attr("stroke-width", 1.5);
+      arrowGroup.append("polygon")
+        .attr("points", `${x2},${y2} ${x2-4},${y2-6} ${x2+4},${y2-6}`)
+        .attr("fill", "var(--border)");
+    }
+  });
+
+  // Draw nodes
+  const nodeGroup = svg.append("g").attr("class", "nodes");
+
+  Object.entries(nodes).forEach(([key, n]) => {
+    if (n.type === "dot") {
+      // Fork dot
+      nodeGroup.append("circle")
+        .attr("cx", n.x).attr("cy", n.y)
+        .attr("r", 4)
+        .attr("fill", "var(--text-2)");
+      return;
+    }
+
+    const isMerge = n.isMerge;
+    const g = nodeGroup.append("g").attr("class", "flow-node").attr("data-key", key);
+
+    g.append("rect")
+      .attr("x", n.x)
+      .attr("y", n.y)
+      .attr("width", n.w)
+      .attr("height", nodeH)
+      .attr("rx", 6)
+      .attr("fill", n.accent ? "#eff6ff" : isMerge ? "#f0fdf4" : "#f8f9fc")
+      .attr("stroke", n.accent ? "var(--accent)" : isMerge ? "var(--fixed)" : "var(--border)")
+      .attr("stroke-width", n.accent || isMerge ? 2 : 1);
+
+    g.append("text")
+      .attr("class", "dual-flow-node")
+      .attr("x", n.x + n.w / 2)
+      .attr("y", n.y + 20)
+      .attr("text-anchor", "middle")
+      .attr("fill", n.accent ? "var(--accent)" : isMerge ? "var(--fixed)" : "var(--text)")
+      .text(n.label);
+
+    g.append("text")
+      .attr("class", "dual-flow-desc")
+      .attr("x", n.x + n.w / 2)
+      .attr("y", n.y + 34)
+      .attr("text-anchor", "middle")
+      .attr("fill", "var(--text-2)")
+      .text(n.desc);
+  });
+
+  // Animate flow button
+  let animating = false;
+
+  document.getElementById("btn-dual-run").addEventListener("click", function() {
+    if (animating) return;
+    animating = true;
+    const btn = this;
+    btn.disabled = true;
+    const status = document.getElementById("dual-status");
+    status.textContent = "";
+
+    // Reset all node opacities
+    nodeGroup.selectAll(".flow-node").attr("opacity", 0.2);
+
+    // Animate nodes appearing in sequence
+    const sequence = [
+      { keys: ["render"], delay: 0, msg: "Rendering block..." },
+      { keys: ["source", "screenshot"], delay: 500, msg: "Forking to both auditors..." },
+      { keys: ["textAudit", "vizAudit"], delay: 1100, msg: "Running audits in parallel..." },
+      { keys: ["textScores", "vizScores"], delay: 1800, msg: "Scoring dimensions..." },
+      { keys: ["merge"], delay: 2500, msg: "Merging into composite..." }
+    ];
+
+    sequence.forEach(step => {
+      setTimeout(() => {
+        status.textContent = step.msg;
+        step.keys.forEach(key => {
+          nodeGroup.select(`[data-key="${key}"]`)
+            .transition().duration(350)
+            .attr("opacity", 1);
+        });
+      }, step.delay);
+    });
+
+    setTimeout(() => {
+      status.textContent = "Assessment complete.";
+      btn.disabled = false;
+      animating = false;
+    }, 3200);
+  });
+
+  document.getElementById("btn-dual-reset").addEventListener("click", function() {
+    if (animating) return;
+    nodeGroup.selectAll(".flow-node").attr("opacity", 1);
+    document.getElementById("dual-status").textContent = "";
   });
 })();
 </script>

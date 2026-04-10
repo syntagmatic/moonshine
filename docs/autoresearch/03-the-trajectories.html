@@ -16,6 +16,9 @@
     --bg: #fafafa;
     --fig-bg: #ffffff;
     --border: #e2e2e8;
+    --amber: #d97706;
+    --amber-bg: #fffbeb;
+    --amber-border: #f59e0b;
   }
 
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -222,6 +225,33 @@
 
   ol { margin-bottom: 1rem; padding-left: 1.5rem; }
   ol li { margin-bottom: 0.5rem; }
+
+  .warning {
+    border-left: 4px solid var(--amber-border);
+    background: var(--amber-bg);
+    padding: 1rem 1.25rem;
+    margin: 1.5rem 0;
+    border-radius: 0 6px 6px 0;
+  }
+
+  .warning p:last-child { margin-bottom: 0; }
+  .warning strong { color: var(--amber); }
+
+  /* Footer */
+  .footer {
+    margin-top: 3rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border);
+    font-family: 'Source Sans 3', sans-serif;
+    font-size: 0.85rem;
+    color: var(--text-2);
+  }
+
+  .footer a {
+    color: var(--text-2);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
 </style>
 </head>
 <body>
@@ -324,6 +354,172 @@
   The three-discard rule is a reasonable default. For blocks with low composite scores, a longer
   leash might be warranted.
 </p>
+
+<h2>Three trajectory archetypes</h2>
+
+<p>
+  After running enough blocks through the loop, you start seeing three shapes repeat. They are
+  distinct enough to name, and the name tells you what to expect before the run finishes.
+</p>
+
+<h3>Steep decline</h3>
+<p>
+  The trajectory drops fast in the first few experiments, then gradually flattens. This is the
+  shape you see on verbose, LLM-generated code with redundant variables, overly explicit style
+  setups, and inline constants that belong in a scale. The loop finds genuine waste and removes it.
+  Keep rates are high (70% or above) because almost every proposal finds something real to cut.
+  The collapsible-tree block is a textbook example: 694 to 522 lines, most of the compression
+  happening in the first eight experiments. These blocks are ideal candidates. They reward
+  iteration cheaply.
+</p>
+
+<h3>Gradual plateau</h3>
+<p>
+  The trajectory drifts downward with small, irregular steps. Each kept experiment shaves two to
+  six lines. The keep rate hovers around 50%: half the proposals are rejected because the remaining
+  code is tightly enough written that most changes break something or fail to improve the score.
+  The bee-swarm block shows this pattern. It started reasonably compact and the loop scraped out
+  17% through persistent small bites. Whether those last few experiments are worth running depends
+  on your budget. The per-experiment cost is the same regardless of how many lines it saves.
+</p>
+
+<h3>Flat refusal</h3>
+<p>
+  Nearly flat. The line barely moves. Most experiments are discards. The block was already near its
+  optimum, or its code is too tightly coupled for the proposer to find safe, isolated changes.
+  The violin-plot block is the clearest case: 350 to 338 lines, six of nine experiments thrown
+  away. The composite score actually dropped on most proposals, meaning the code was written well
+  enough that shortening it made it worse. A flat trajectory is not failure. It is a signal that
+  the code does not need this kind of help.
+</p>
+
+<h3>What the shape tells you about code quality</h3>
+<p>
+  The trajectory is a diagnostic. Steep decline means the original code had structural bloat:
+  redundant declarations, verbose patterns that D3 idioms handle more concisely, dead branches.
+  Gradual plateau means the code was competent but not tight. Flat refusal means it was already
+  well-written, or at least well-coupled enough that every part depends on every other part.
+</p>
+
+<p>
+  There is a subtlety here. "Well-coupled" is not the same as "well-written." A block can be
+  tightly coupled because the author mixed concerns, not because the design demanded it. In that
+  case the trajectory is flat not because the code is good but because the proposer cannot safely
+  touch any piece without breaking another. The composite score helps distinguish: if the flat
+  trajectory has a high composite (above 7.5), the code is genuinely good. If the composite is
+  low (below 6), the code is probably a tangled mess that the loop cannot untangle.
+</p>
+
+<h2>Compression ratio as a quality signal</h2>
+
+<p>
+  Think of it this way: if a block compresses 25%, it had 25% waste. That waste might be verbose
+  variable declarations, duplicated style assignments, non-idiomatic patterns, or dead code. The
+  compression ratio is a rough but honest measure of how much unnecessary material the original
+  author included.
+</p>
+
+<p>
+  This reframes what the loop is doing. It is not just "making code shorter." It is measuring the
+  gap between what the code does and how concisely it could do it, then closing that gap
+  experiment by experiment. A block that compresses 5% was already close to its minimum viable
+  size. A block that compresses 30% was carrying significant overhead. Neither number is inherently
+  better. But if you are writing D3 blocks from scratch and your code consistently compresses
+  25% or more, that is a signal to study what the loop removes and internalize those patterns.
+</p>
+
+<figure id="scatter-container">
+  <div id="scatter-chart"></div>
+  <figcaption>
+    Compression ratio scatter. Each dot is one block. The diagonal is the "no compression" line
+    (final LOC = starting LOC). Distance below the diagonal shows how much the loop removed.
+    Color encodes the keep rate: greener dots had more proposals accepted.
+  </figcaption>
+</figure>
+
+<h2>Cost efficiency</h2>
+
+<p>
+  Each experiment in the loop costs roughly $0.05 to $0.10 in API calls, depending on block size
+  and whether the proposer generates a long chain-of-thought. A 13-experiment run on the
+  collapsible-tree costs about $0.65 to $1.30. A 20-experiment run on hierarchy-bundles costs
+  $1.00 to $2.00. These are small numbers individually, but they accumulate across a library of
+  100+ blocks.
+</p>
+
+<p>
+  The question is not "how much did it cost" but "what did you get for the money." The collapsible-tree
+  spent ~$1 and removed 172 lines while improving its composite from 7.2 to 7.7. That is roughly
+  $0.006 per line removed, and the quality went up. The violin-plot spent ~$0.60 and removed 12
+  lines, most of which came from a single lucky experiment. That is $0.05 per line removed, nearly
+  10x worse. Hierarchy-bundles is somewhere in the middle: high absolute savings (264 lines) but
+  the 20-experiment run and volatile quality make the per-line cost moderate.
+</p>
+
+<p>
+  The useful metric is cost per line saved, but only when quality holds or improves. Removing 50
+  lines while dropping the composite from 7.5 to 6.0 is not savings. It is damage.
+</p>
+
+<figure id="cost-container">
+  <div id="cost-chart"></div>
+  <figcaption>
+    Cost efficiency by block. The horizontal axis shows total estimated cost (experiments times
+    $0.075 average). The vertical axis shows lines saved. Blocks in the upper-left are efficient:
+    high savings, low cost. Blocks in the lower-right spent more and gained less.
+  </figcaption>
+</figure>
+
+<h2>Amber: the diminishing-returns trap</h2>
+
+<div class="warning">
+  <p>
+    <strong>The last five lines are the most expensive.</strong> Once a block reaches its gradual
+    plateau, each additional experiment is unlikely to find meaningful compression. But the loop
+    does not know that. It keeps proposing, the evaluator keeps scoring, and the API meter keeps
+    running. On the bee-swarm block, the final four experiments (10 through 13) saved a total of
+    11 lines across two keeps and two discards. That is roughly $0.30 for 11 lines, compared to
+    $0.15 for the first 9 lines removed in experiment 2 alone.
+  </p>
+</div>
+
+<p>
+  The "last 5 lines" trap is a pattern that shows up across many blocks. The proposer, having
+  exhausted the obvious waste, starts attempting changes that are either too small to matter or
+  too risky to keep. You see it in the data: a sequence of -2, -3, discard, -2, discard. Each
+  experiment costs the same as the first one did, when it was removing 30 lines at a time. The
+  marginal cost per line saved climbs steeply at the tail.
+</p>
+
+<p>
+  This is a budget leak. If you run 100 blocks and each one wastes three to five experiments at
+  the tail, that is 300 to 500 extra API calls with minimal return. At $0.075 each, that is $22
+  to $37 spent on the code equivalent of wringing out an already-dry towel.
+</p>
+
+<div class="warning">
+  <p>
+    <strong>Trajectory shape does not predict when to stop early enough.</strong> The three-discard
+    stopping rule catches the flat-refusal blocks reasonably well, but it is poor at detecting the
+    transition from steep decline into gradual plateau. By the time you see three discards in a
+    row on a plateau block, you have already spent five to eight experiments in the low-return
+    zone. A smarter stopping rule would track the rolling average of lines saved per kept
+    experiment and halt when it drops below a threshold. That rule does not exist yet in the
+    current implementation.
+  </p>
+</div>
+
+<p>
+  There is also a quality trap. Some blocks oscillate in composite score at the tail: 7.7, 7.3,
+  7.7, 7.3. The loop keeps going because it occasionally finds a keep, but the quality is not
+  converging. It is bouncing. The block has reached a local optimum where different trade-offs
+  produce similar overall scores. Continuing to run experiments at this point is spending money
+  on lateral moves, not improvements.
+</p>
+
+<footer class="footer">
+  <a href="index.html">Autoresearch series</a>
+</footer>
 
 <script>
 const experiments = [
@@ -668,6 +864,332 @@ function render() {
 }
 
 render();
+</script>
+
+<script>
+// ── Compression Ratio Scatter ──────────────────────────────────────
+
+(function() {
+  // Derive per-block summary from experiments data
+  const blockSummary = [];
+  const grp = d3.group(experiments, d => d.target);
+
+  grp.forEach((rows, target) => {
+    const startLOC = rows[0].metric;
+    const keeps = rows.filter(d => d.decision === "keep" || d.decision === "baseline");
+    const finalLOC = keeps[keeps.length - 1].metric;
+    const totalExps = rows.length;
+    const keepCount = rows.filter(d => d.decision === "keep").length;
+    const keepRate = keepCount / (totalExps - 1); // exclude baseline
+    blockSummary.push({ target, startLOC, finalLOC, keepRate, totalExps });
+  });
+
+  const scatterMargin = { top: 24, right: 24, bottom: 42, left: 52 };
+  const scatterW = Math.min(
+    document.getElementById("scatter-container").clientWidth - 2.5 * 16,
+    600
+  );
+  const scatterH = 340;
+
+  const svg = d3.select("#scatter-chart").append("svg")
+    .attr("viewBox", `0 0 ${scatterW + scatterMargin.left + scatterMargin.right} ${scatterH + scatterMargin.top + scatterMargin.bottom}`)
+    .style("width", "100%")
+    .style("height", "auto")
+    .append("g")
+    .attr("transform", `translate(${scatterMargin.left},${scatterMargin.top})`);
+
+  const locMax = d3.max(blockSummary, d => d.startLOC) * 1.1;
+
+  const x = d3.scaleLinear().domain([0, locMax]).range([0, scatterW]);
+  const y = d3.scaleLinear().domain([0, locMax]).range([scatterH, 0]);
+
+  // Keep-rate color: green = high keep rate, red = low
+  const colorScale = d3.scaleLinear()
+    .domain([0.3, 0.5, 0.8])
+    .range(["#f56565", "#ecc94b", "#48bb78"])
+    .clamp(true);
+
+  // Grid
+  svg.append("g")
+    .attr("class", "axis grid")
+    .call(d3.axisLeft(y).ticks(6).tickSize(-scatterW).tickFormat(""));
+
+  // Diagonal: final = start (no compression)
+  svg.append("line")
+    .attr("x1", x(0)).attr("y1", y(0))
+    .attr("x2", x(locMax)).attr("y2", y(locMax))
+    .attr("stroke", "#a0aec0")
+    .attr("stroke-width", 1.5)
+    .attr("stroke-dasharray", "6,4");
+
+  // Label on diagonal
+  svg.append("text")
+    .attr("class", "axis-label")
+    .attr("x", x(locMax * 0.62))
+    .attr("y", y(locMax * 0.62) - 8)
+    .attr("transform", `rotate(-38, ${x(locMax * 0.62)}, ${y(locMax * 0.62) - 8})`)
+    .attr("fill", "#a0aec0")
+    .attr("font-size", "11px")
+    .text("no compression");
+
+  // Axes
+  svg.append("g")
+    .attr("class", "axis")
+    .attr("transform", `translate(0,${scatterH})`)
+    .call(d3.axisBottom(x).ticks(6));
+
+  svg.append("g")
+    .attr("class", "axis")
+    .call(d3.axisLeft(y).ticks(6));
+
+  svg.append("text")
+    .attr("class", "axis-label")
+    .attr("x", scatterW / 2)
+    .attr("y", scatterH + 38)
+    .attr("text-anchor", "middle")
+    .text("Starting LOC");
+
+  svg.append("text")
+    .attr("class", "axis-label")
+    .attr("transform", "rotate(-90)")
+    .attr("x", -scatterH / 2)
+    .attr("y", -40)
+    .attr("text-anchor", "middle")
+    .text("Final LOC");
+
+  // Tooltip
+  const tip = d3.select("#tooltip");
+
+  // Dots
+  svg.selectAll(".scatter-dot")
+    .data(blockSummary)
+    .join("circle")
+    .attr("class", "scatter-dot")
+    .attr("cx", d => x(d.startLOC))
+    .attr("cy", d => y(d.finalLOC))
+    .attr("r", 8)
+    .attr("fill", d => colorScale(d.keepRate))
+    .attr("stroke", "#1a1a2e")
+    .attr("stroke-width", 1.5)
+    .attr("opacity", 0.9)
+    .on("mouseenter", function(event, d) {
+      d3.select(this).attr("r", 11);
+      const pct = Math.round((1 - d.finalLOC / d.startLOC) * 100);
+      tip.classed("visible", true)
+        .html(
+          `<strong>${d.target}</strong><br>` +
+          `${d.startLOC} → ${d.finalLOC} LOC (${pct}% compressed)<br>` +
+          `Keep rate: ${Math.round(d.keepRate * 100)}%<br>` +
+          `Experiments: ${d.totalExps}`
+        );
+      const r = tip.node().getBoundingClientRect();
+      let left = event.pageX + 14;
+      if (left + r.width > window.innerWidth - 10) left = event.pageX - r.width - 14;
+      tip.style("left", left + "px").style("top", (event.pageY - 14) + "px");
+    })
+    .on("mousemove", function(event, d) {
+      const pct = Math.round((1 - d.finalLOC / d.startLOC) * 100);
+      tip.html(
+        `<strong>${d.target}</strong><br>` +
+        `${d.startLOC} → ${d.finalLOC} LOC (${pct}% compressed)<br>` +
+        `Keep rate: ${Math.round(d.keepRate * 100)}%<br>` +
+        `Experiments: ${d.totalExps}`
+      );
+      const r = tip.node().getBoundingClientRect();
+      let left = event.pageX + 14;
+      if (left + r.width > window.innerWidth - 10) left = event.pageX - r.width - 14;
+      tip.style("left", left + "px").style("top", (event.pageY - 14) + "px");
+    })
+    .on("mouseleave", function() {
+      d3.select(this).attr("r", 8);
+      tip.classed("visible", false);
+    });
+
+  // Block labels
+  svg.selectAll(".scatter-label")
+    .data(blockSummary)
+    .join("text")
+    .attr("class", "axis-label")
+    .attr("x", d => x(d.startLOC) + 12)
+    .attr("y", d => y(d.finalLOC) + 4)
+    .attr("font-size", "10px")
+    .text(d => d.target.replace(/^\d+-/, ""));
+})();
+</script>
+
+<script>
+// ── Cost Efficiency Chart ──────────────────────────────────────────
+
+(function() {
+  const costPerExp = 0.075; // midpoint of $0.05-$0.10 range
+  const grp = d3.group(experiments, d => d.target);
+  const costData = [];
+
+  grp.forEach((rows, target) => {
+    const startLOC = rows[0].metric;
+    const keeps = rows.filter(d => d.decision === "keep" || d.decision === "baseline");
+    const finalLOC = keeps[keeps.length - 1].metric;
+    const linesSaved = startLOC - finalLOC;
+    const totalExps = rows.length - 1; // exclude baseline
+    const cost = totalExps * costPerExp;
+    const costPerLine = linesSaved > 0 ? cost / linesSaved : Infinity;
+
+    // Composite improvement
+    const compKeeps = rows.filter(d => d.decision === "keep" && d.comp !== null);
+    const firstComp = rows.find(d => d.comp !== null);
+    const lastComp = compKeeps.length > 0 ? compKeeps[compKeeps.length - 1] : firstComp;
+    const compDelta = lastComp && firstComp ? lastComp.comp - firstComp.comp : 0;
+
+    costData.push({ target, linesSaved, cost, costPerLine, totalExps, compDelta, startLOC });
+  });
+
+  const costMargin = { top: 24, right: 24, bottom: 42, left: 52 };
+  const costW = Math.min(
+    document.getElementById("cost-container").clientWidth - 2.5 * 16,
+    600
+  );
+  const costH = 320;
+
+  const svg = d3.select("#cost-chart").append("svg")
+    .attr("viewBox", `0 0 ${costW + costMargin.left + costMargin.right} ${costH + costMargin.top + costMargin.bottom}`)
+    .style("width", "100%")
+    .style("height", "auto")
+    .append("g")
+    .attr("transform", `translate(${costMargin.left},${costMargin.top})`);
+
+  const x = d3.scaleLinear()
+    .domain([0, d3.max(costData, d => d.cost) * 1.15])
+    .range([0, costW]);
+
+  const y = d3.scaleLinear()
+    .domain([0, d3.max(costData, d => d.linesSaved) * 1.15])
+    .range([costH, 0]);
+
+  // Composite-delta color: green = improved, gray = flat, red = dropped
+  const compColor = d3.scaleLinear()
+    .domain([-0.5, 0, 1.0])
+    .range(["#f56565", "#a0aec0", "#2563eb"])
+    .clamp(true);
+
+  // Grid
+  svg.append("g")
+    .attr("class", "axis grid")
+    .call(d3.axisLeft(y).ticks(6).tickSize(-costW).tickFormat(""));
+
+  // Iso-cost lines (cost per line saved)
+  const isoRates = [0.005, 0.01, 0.025, 0.05];
+  isoRates.forEach(rate => {
+    const xEnd = d3.max(costData, d => d.cost) * 1.15;
+    const yEnd = xEnd / rate;
+    const clippedY = Math.min(yEnd, d3.max(costData, d => d.linesSaved) * 1.15);
+    const clippedX = clippedY * rate;
+    svg.append("line")
+      .attr("x1", x(0)).attr("y1", y(0))
+      .attr("x2", x(clippedX)).attr("y2", y(clippedY))
+      .attr("stroke", "#e2e2e8")
+      .attr("stroke-width", 1)
+      .attr("stroke-dasharray", "3,4");
+
+    svg.append("text")
+      .attr("class", "axis-label")
+      .attr("x", x(clippedX) + 3)
+      .attr("y", y(clippedY) - 4)
+      .attr("font-size", "9px")
+      .attr("fill", "#a0aec0")
+      .text(`$${rate * 100 < 1 ? rate.toFixed(3) : rate.toFixed(2)}/line`);
+  });
+
+  // Axes
+  svg.append("g")
+    .attr("class", "axis")
+    .attr("transform", `translate(0,${costH})`)
+    .call(d3.axisBottom(x).ticks(6).tickFormat(d => `$${d.toFixed(2)}`));
+
+  svg.append("g")
+    .attr("class", "axis")
+    .call(d3.axisLeft(y).ticks(6));
+
+  svg.append("text")
+    .attr("class", "axis-label")
+    .attr("x", costW / 2)
+    .attr("y", costH + 38)
+    .attr("text-anchor", "middle")
+    .text("Estimated API cost");
+
+  svg.append("text")
+    .attr("class", "axis-label")
+    .attr("transform", "rotate(-90)")
+    .attr("x", -costH / 2)
+    .attr("y", -40)
+    .attr("text-anchor", "middle")
+    .text("Lines saved");
+
+  // Tooltip
+  const tip = d3.select("#tooltip");
+
+  // Dots: size by starting LOC, color by composite delta
+  const rScale = d3.scaleSqrt()
+    .domain([200, 1100])
+    .range([6, 14]);
+
+  svg.selectAll(".cost-dot")
+    .data(costData)
+    .join("circle")
+    .attr("class", "cost-dot")
+    .attr("cx", d => x(d.cost))
+    .attr("cy", d => y(d.linesSaved))
+    .attr("r", d => rScale(d.startLOC))
+    .attr("fill", d => compColor(d.compDelta))
+    .attr("stroke", "#1a1a2e")
+    .attr("stroke-width", 1.5)
+    .attr("opacity", 0.85)
+    .on("mouseenter", function(event, d) {
+      d3.select(this).attr("opacity", 1).attr("stroke-width", 2.5);
+      const cpl = d.linesSaved > 0 ? `$${d.costPerLine.toFixed(3)}` : "n/a";
+      const compSign = d.compDelta >= 0 ? "+" : "";
+      tip.classed("visible", true)
+        .html(
+          `<strong>${d.target}</strong><br>` +
+          `${d.totalExps} experiments, $${d.cost.toFixed(2)} est. cost<br>` +
+          `Lines saved: ${d.linesSaved}<br>` +
+          `Cost per line: ${cpl}<br>` +
+          `Composite: ${compSign}${d.compDelta.toFixed(1)}`
+        );
+      const r = tip.node().getBoundingClientRect();
+      let left = event.pageX + 14;
+      if (left + r.width > window.innerWidth - 10) left = event.pageX - r.width - 14;
+      tip.style("left", left + "px").style("top", (event.pageY - 14) + "px");
+    })
+    .on("mousemove", function(event, d) {
+      const cpl = d.linesSaved > 0 ? `$${d.costPerLine.toFixed(3)}` : "n/a";
+      const compSign = d.compDelta >= 0 ? "+" : "";
+      tip.html(
+        `<strong>${d.target}</strong><br>` +
+        `${d.totalExps} experiments, $${d.cost.toFixed(2)} est. cost<br>` +
+        `Lines saved: ${d.linesSaved}<br>` +
+        `Cost per line: ${cpl}<br>` +
+        `Composite: ${compSign}${d.compDelta.toFixed(1)}`
+      );
+      const r = tip.node().getBoundingClientRect();
+      let left = event.pageX + 14;
+      if (left + r.width > window.innerWidth - 10) left = event.pageX - r.width - 14;
+      tip.style("left", left + "px").style("top", (event.pageY - 14) + "px");
+    })
+    .on("mouseleave", function() {
+      d3.select(this).attr("opacity", 0.85).attr("stroke-width", 1.5);
+      tip.classed("visible", false);
+    });
+
+  // Labels
+  svg.selectAll(".cost-label")
+    .data(costData)
+    .join("text")
+    .attr("class", "axis-label")
+    .attr("x", d => x(d.cost) + rScale(d.startLOC) + 5)
+    .attr("y", d => y(d.linesSaved) + 4)
+    .attr("font-size", "10px")
+    .text(d => d.target.replace(/^\d+-/, ""));
+})();
 </script>
 
 </body>

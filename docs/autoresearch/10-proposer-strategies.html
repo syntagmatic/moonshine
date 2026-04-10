@@ -541,6 +541,43 @@ figcaption {
   outcomes at scale remains an open question.
 </p>
 
+<h2>Measuring strategy effectiveness</h2>
+
+<p>
+  The only honest way to evaluate a strategy is to track its keep rate across many blocks. Anecdotal evidence ("dead code removal usually works") is not evidence. It is pattern-matching on a biased sample. A strategy that was tried 3 times and kept 3 times has a 100% hit rate and a confidence interval wide enough to drive a truck through.
+</p>
+
+<p>
+  The measurement protocol is simple in concept: tag every proposal with its strategy type, record whether it was kept or discarded, and accumulate a hit-rate table over time. After 50 or 100 blocks, the table has enough data to say something real. Dead code elimination might show 82% across 38 attempts. Pattern consolidation might show 55% across 22 attempts. Restructuring might show 28% across 14 attempts. Now you have a basis for scheduling: lean into dead code early, use pattern consolidation when scores plateau, and reserve restructuring for cases where the other strategies have dried up.
+</p>
+
+<p>
+  But the keep rate is not uniform across block types. Dead code elimination might be 90% on simple bar charts and 60% on complex force-directed networks, because the network blocks have more entangled code where "dead" paths turn out to be load-bearing. The useful signal is not the global keep rate but the keep rate per strategy per block type. This is a matrix, not a vector, and it takes longer to populate. A system that has iterated on 100 blocks might have 5 to 8 data points per cell. Enough to spot trends, not enough for precision.
+</p>
+
+<h2>When strategy metrics mislead</h2>
+
+<p>
+  Keep rate is a proxy for value, and like all proxies, it lies in specific ways. A strategy with a 90% keep rate that produces 0.1-point gains per keep is less valuable than a strategy with a 40% keep rate that produces 0.8-point gains per keep. The timid strategy survives more often but moves the needle less. Expected value, not keep rate, is the right metric. Expected value is (keep rate) times (average gain when kept). A strategy table that reports both columns tells a more complete story.
+</p>
+
+<p>
+  There is also a selection effect. Strategies that are tried more often accumulate better statistics, which makes them look more reliable, which causes them to be tried even more. Rare strategies never get enough data to prove themselves. This is the explore-exploit tradeoff from bandit theory, applied to strategy selection. A system that always picks the highest-keep-rate strategy will converge on a local optimum and never discover that restructuring, attempted at the right moment, produces the largest single-round gains in the entire catalog.
+</p>
+
+<figure id="heatmap-figure">
+  <div style="font-family: 'Source Sans 3', sans-serif; font-size: 0.85rem; margin-bottom: 0.5rem; display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+    <button id="hm-btn-refresh" style="font-family:'Source Sans 3',sans-serif;font-size:0.82rem;font-weight:600;background:var(--accent);color:white;border:1px solid var(--accent);border-radius:4px;padding:0.3rem 0.7rem;cursor:pointer;">Regenerate data</button>
+    <label style="color: var(--text-2); font-size: 0.82rem; display: flex; align-items: center; gap: 0.3rem;">
+      <input type="checkbox" id="hm-toggle-ev"> Show expected value instead of keep rate
+    </label>
+  </div>
+  <div id="heatmap-viz"></div>
+  <figcaption>
+    Rows are proposer strategies. Columns are block types. Cell color and label show the keep rate (or expected value per attempt). Darker green cells indicate more effective strategy-block pairings. Hover a cell for detail.
+  </figcaption>
+</figure>
+
 <footer class="footer">
   <p><a href="index.html">All explanations</a></p>
   <p>Part of <a href="https://github.com/kaidrumm/moonshine">Moonshine</a>, a project for interactive technical explanations.</p>
@@ -1023,6 +1060,202 @@ document.getElementById("btn-compare-reset").addEventListener("click", function(
   d3.select("#compare-stats").html("");
   compRunning = false;
 });
+
+// ────────────────────────────────────────
+//  Strategy effectiveness heatmap
+// ────────────────────────────────────────
+
+(function() {
+
+const strategies = [
+  "Dead code elimination",
+  "Pattern consolidation",
+  "Algorithm simplification",
+  "Design refinement",
+  "Interaction refactoring",
+  "Restructuring"
+];
+
+const blockTypes = [
+  "Bar/Line", "Scatter", "Hierarchy", "Network", "Map", "Parallel coords"
+];
+
+// Base keep rates: strategies x block types (rows x cols)
+const baseKeepRates = [
+  [0.88, 0.90, 0.82, 0.75, 0.85, 0.80],   // dead code
+  [0.65, 0.60, 0.55, 0.45, 0.58, 0.50],   // pattern
+  [0.55, 0.50, 0.40, 0.35, 0.42, 0.38],   // algo
+  [0.42, 0.45, 0.30, 0.28, 0.35, 0.32],   // design
+  [0.50, 0.48, 0.55, 0.60, 0.45, 0.52],   // interaction
+  [0.30, 0.28, 0.25, 0.22, 0.20, 0.18],   // restructure
+];
+
+// Average gain when kept
+const baseGains = [
+  [0.15, 0.12, 0.18, 0.20, 0.14, 0.16],
+  [0.30, 0.28, 0.35, 0.40, 0.32, 0.38],
+  [0.45, 0.40, 0.55, 0.50, 0.42, 0.48],
+  [0.55, 0.60, 0.65, 0.70, 0.58, 0.62],
+  [0.35, 0.38, 0.40, 0.45, 0.30, 0.42],
+  [0.80, 0.75, 0.90, 0.85, 0.70, 0.82],
+];
+
+const margin = { top: 60, right: 20, bottom: 20, left: 150 };
+const cellW = 78;
+const cellH = 40;
+const width = margin.left + blockTypes.length * cellW + margin.right;
+const height = margin.top + strategies.length * cellH + margin.bottom;
+
+let showEV = false;
+
+function generateData() {
+  const data = [];
+  strategies.forEach((s, si) => {
+    blockTypes.forEach((b, bi) => {
+      const noise = (Math.random() - 0.5) * 0.12;
+      const keepRate = Math.max(0.05, Math.min(0.98, baseKeepRates[si][bi] + noise));
+      const gainNoise = (Math.random() - 0.5) * 0.1;
+      const avgGain = Math.max(0.05, baseGains[si][bi] + gainNoise);
+      const attempts = Math.floor(5 + Math.random() * 12);
+      data.push({
+        strategy: s, blockType: b,
+        si, bi, keepRate, avgGain, attempts,
+        ev: keepRate * avgGain
+      });
+    });
+  });
+  return data;
+}
+
+let data = generateData();
+
+const container = d3.select("#heatmap-viz");
+
+function render() {
+  container.selectAll("*").remove();
+
+  const svg = container.append("svg")
+    .attr("viewBox", `0 0 ${width} ${height}`)
+    .attr("width", "100%");
+
+  const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+
+  const colorScale = showEV
+    ? d3.scaleSequential(d3.interpolateGreens).domain([0, 0.45])
+    : d3.scaleSequential(d3.interpolateGreens).domain([0, 1]);
+
+  // Column headers
+  blockTypes.forEach((b, i) => {
+    svg.append("text")
+      .attr("x", margin.left + i * cellW + cellW / 2)
+      .attr("y", margin.top - 10)
+      .attr("text-anchor", "middle")
+      .attr("font-family", "Source Sans 3, sans-serif")
+      .attr("font-size", "0.72rem")
+      .attr("font-weight", 600)
+      .attr("fill", "var(--text-2)")
+      .text(b);
+  });
+
+  // Row headers
+  strategies.forEach((s, i) => {
+    svg.append("text")
+      .attr("x", margin.left - 10)
+      .attr("y", margin.top + i * cellH + cellH / 2 + 4)
+      .attr("text-anchor", "end")
+      .attr("font-family", "Source Sans 3, sans-serif")
+      .attr("font-size", "0.75rem")
+      .attr("fill", "var(--text)")
+      .text(s);
+  });
+
+  // Tooltip
+  let tooltip = d3.select("#heatmap-figure").select(".hm-tooltip");
+  if (tooltip.empty()) {
+    tooltip = d3.select("#heatmap-figure").append("div")
+      .attr("class", "hm-tooltip")
+      .style("position", "absolute")
+      .style("font-family", "Source Sans 3, sans-serif")
+      .style("font-size", "0.78rem")
+      .style("background", "white")
+      .style("border", "1px solid var(--border)")
+      .style("border-radius", "4px")
+      .style("padding", "0.4rem 0.6rem")
+      .style("pointer-events", "none")
+      .style("box-shadow", "0 2px 6px rgba(0,0,0,0.08)")
+      .style("opacity", 0)
+      .style("z-index", 10)
+      .style("line-height", "1.4");
+  }
+
+  // Cells
+  data.forEach(d => {
+    const val = showEV ? d.ev : d.keepRate;
+    const cellG = g.append("g")
+      .attr("transform", `translate(${d.bi * cellW}, ${d.si * cellH})`);
+
+    cellG.append("rect")
+      .attr("width", cellW - 2)
+      .attr("height", cellH - 2)
+      .attr("rx", 3)
+      .attr("fill", colorScale(val))
+      .attr("stroke", "white")
+      .attr("stroke-width", 1)
+      .style("cursor", "pointer")
+      .on("mouseenter", function(event) {
+        d3.select(this).attr("stroke", "var(--accent)").attr("stroke-width", 2);
+        tooltip
+          .style("opacity", 1)
+          .html(`<strong>${d.strategy}</strong> on ${d.blockType}<br>` +
+                `Keep rate: ${(d.keepRate * 100).toFixed(0)}% (${d.attempts} attempts)<br>` +
+                `Avg gain when kept: +${d.avgGain.toFixed(2)}<br>` +
+                `Expected value: +${d.ev.toFixed(2)}/attempt`);
+        const fig = document.getElementById("heatmap-figure");
+        const rect = fig.getBoundingClientRect();
+        tooltip
+          .style("left", (event.clientX - rect.left + 12) + "px")
+          .style("top", (event.clientY - rect.top - 10) + "px");
+      })
+      .on("mousemove", function(event) {
+        const fig = document.getElementById("heatmap-figure");
+        const rect = fig.getBoundingClientRect();
+        tooltip
+          .style("left", (event.clientX - rect.left + 12) + "px")
+          .style("top", (event.clientY - rect.top - 10) + "px");
+      })
+      .on("mouseleave", function() {
+        d3.select(this).attr("stroke", "white").attr("stroke-width", 1);
+        tooltip.style("opacity", 0);
+      });
+
+    // Cell label
+    const textColor = val > (showEV ? 0.25 : 0.6) ? "white" : "var(--text)";
+    cellG.append("text")
+      .attr("x", (cellW - 2) / 2)
+      .attr("y", (cellH - 2) / 2 + 4)
+      .attr("text-anchor", "middle")
+      .attr("font-family", "Source Code Pro, monospace")
+      .attr("font-size", "0.72rem")
+      .attr("font-weight", 500)
+      .attr("fill", textColor)
+      .attr("pointer-events", "none")
+      .text(showEV ? ("+" + val.toFixed(2)) : ((val * 100).toFixed(0) + "%"));
+  });
+}
+
+document.getElementById("hm-btn-refresh").addEventListener("click", () => {
+  data = generateData();
+  render();
+});
+
+document.getElementById("hm-toggle-ev").addEventListener("change", function() {
+  showEV = this.checked;
+  render();
+});
+
+render();
+
+})();
 </script>
 </body>
 </html>

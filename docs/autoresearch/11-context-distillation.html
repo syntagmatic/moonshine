@@ -500,6 +500,45 @@ History             ~???          (variable, grows with each experiment)</pre>
   </p>
 </div>
 
+<h2>The distillation prompt itself</h2>
+
+<p>
+  The quality of the distilled summary depends almost entirely on the instructions given to the distillation LLM. A vague prompt produces vague summaries. A good prompt produces something the proposer can act on.
+</p>
+
+<p>
+  The naive instruction is "summarize these experiments." This reliably produces a list of what happened, in order, with no judgment about what matters. Experiment 1 tried X. Experiment 2 tried Y. The summary reads like minutes from a meeting: complete, chronological, and useless for decision-making. The proposer gets a recap instead of a strategy.
+</p>
+
+<p>
+  A better instruction specifies the output format and the audience: "You are writing a briefing for a code editor that is about to modify this file. It has never seen any prior experiment. Produce a concise list of lessons organized by strategy category (dead code, pattern consolidation, design refinement, etc.). For each category, report the keep rate and name the specific failure modes that caused discards. Do not describe what happened. Describe what to do and what to avoid." This framing changes the summary from a narrative into a decision tool.
+</p>
+
+<p>
+  The worst failure mode is when the distillation prompt allows the LLM to editorialize. If the distiller adds its own interpretation of why something failed, rather than quoting the auditor's notes, the proposer acts on a hypothesis twice removed from the data. The auditor said "color contrast ratio dropped below 3:1 on the secondary axis labels." The distiller summarizes this as "color changes are risky." The proposer then avoids all color work, including safe changes to background fills or legend swatches. The fix is to require the distillation prompt to preserve the auditor's specific language for any failure with a regression greater than 0.5 points.
+</p>
+
+<h2>Measuring distillation fidelity</h2>
+
+<p>
+  How do you know whether a summary is good? One concrete test: feed the distilled summary to the proposer and ask it to predict, for each past experiment, whether it was kept or discarded. If the proposer can reconstruct the keep/discard decision at 80%+ accuracy from the summary alone, the summary retained the essential signal. If accuracy drops below 60%, the distillation lost too much.
+</p>
+
+<p>
+  This is not a test you run in production. It is a calibration exercise you run once when designing the distillation prompt, using 10 or 20 historical experiment logs as input. You try three or four prompt variants, measure reconstruction accuracy for each, and ship the one that scores highest. The cost is a handful of extra LLM calls during development. The payoff is confidence that your compression is not silently dropping the information the proposer needs most.
+</p>
+
+<figure id="distill-figure">
+  <div style="font-family: 'Source Sans 3', sans-serif; font-size: 0.85rem; margin-bottom: 0.75rem;">
+    <button class="strategy-btn active" id="distill-btn-before">Full history (2,000 tokens)</button>
+    <button class="strategy-btn" id="distill-btn-after">Distilled (200 tokens)</button>
+  </div>
+  <div id="distill-viz"></div>
+  <figcaption>
+    The full history on the left contains 12 experiment records. The distilled version on the right compresses them into a briefing. Green highlights mark key facts preserved. Red strikethrough marks facts lost in compression. Toggle between views to see what survives.
+  </figcaption>
+</figure>
+
 <footer class="footer">
   <a href="index.html">Autoresearch series</a>
 </footer>
@@ -830,6 +869,209 @@ document.querySelectorAll(".strategy-btn").forEach(btn => {
 
 // Initial render
 update();
+
+// ──────────────────────────────────────────────
+//  Distillation before/after figure
+// ──────────────────────────────────────────────
+
+(function() {
+
+const experiments = [
+  { id: 1, strategy: "dead code", kept: true, delta: +0.4, note: "Removed unused tooltip handler and orphan CSS classes" },
+  { id: 2, strategy: "pattern merge", kept: true, delta: +0.2, note: "Consolidated three color scale definitions into shared scale" },
+  { id: 3, strategy: "design refine", kept: false, delta: -0.8, note: "Changed axis font to sans-serif; visual_critic: contrast ratio dropped below 3:1 on secondary axis labels" },
+  { id: 4, strategy: "dead code", kept: true, delta: +0.3, note: "Deleted commented-out zoom handler from v1" },
+  { id: 5, strategy: "interaction", kept: false, delta: -0.5, note: "Merged mouseover and click handlers; stress_test: rapid input caused event queue conflicts" },
+  { id: 6, strategy: "dead code", kept: true, delta: +0.2, note: "Removed unused data-transform branch for CSV fallback" },
+  { id: 7, strategy: "pattern merge", kept: false, delta: -1.2, note: "Consolidated hierarchy color scales; visual_critic: distinct hues for depth levels became indistinguishable" },
+  { id: 8, strategy: "tooltip", kept: true, delta: +0.3, note: "Scoped tooltip positioning to use getBoundingClientRect instead of mouse offset" },
+  { id: 9, strategy: "design refine", kept: false, delta: -0.6, note: "Shortened variable names for conciseness; cognitive_load: lost semantic clarity in data pipeline" },
+  { id: 10, strategy: "dead code", kept: true, delta: +0.1, note: "Removed legacy IE11 polyfill block" },
+  { id: 11, strategy: "pattern merge", kept: true, delta: +0.2, note: "Unified margin constants into single config object" },
+  { id: 12, strategy: "interaction", kept: true, delta: +0.1, note: "Extracted debounce utility for resize handler" },
+];
+
+const distilled = [
+  { text: "dead code removal: 4/4 kept (100%)", type: "preserved", source: [1,4,6,10] },
+  { text: "Safe: remove unused handlers, orphan CSS, commented code, polyfills", type: "preserved", source: [1,4,6,10] },
+  { text: "pattern consolidation: 2/3 kept (67%)", type: "preserved", source: [2,7,11] },
+  { text: "AVOID: consolidating hierarchy color scales (depth hues become indistinguishable, visual_critic -1.2)", type: "preserved", source: [7] },
+  { text: "Safe: shared color scales for non-hierarchy uses, unified margin constants", type: "preserved", source: [2,11] },
+  { text: "design refinement: 0/2 kept (0%)", type: "preserved", source: [3,9] },
+  { text: "AVOID: font changes without contrast check, variable name shortening", type: "preserved", source: [3,9] },
+  { text: "tooltip refactoring: 1/1 kept (100%)", type: "preserved", source: [8] },
+  { text: "Safe when scoped to positioning only (getBoundingClientRect)", type: "preserved", source: [8] },
+  { text: "interaction refactoring: 1/2 kept (50%)", type: "preserved", source: [5,12] },
+  { text: "AVOID: merging event handlers (stress_test conflicts)", type: "preserved", source: [5] },
+  { text: "Safe: extracting standalone utilities like debounce", type: "preserved", source: [12] },
+];
+
+const lostFacts = [
+  "Experiment 3: specific font was sans-serif (summary says 'font changes')",
+  "Experiment 5: the exact event queue conflict mechanism",
+  "Experiment 6: the CSV fallback detail (summary says 'unused branch')",
+  "Experiment 10: that it was IE11 specifically",
+];
+
+const margin = { top: 20, right: 20, bottom: 20, left: 20 };
+const width = 690;
+const rowH = 28;
+let showBefore = true;
+
+const container = d3.select("#distill-viz");
+
+function renderBefore() {
+  container.selectAll("*").remove();
+  const svgH = margin.top + experiments.length * rowH + 60 + margin.bottom;
+  const svg = container.append("svg")
+    .attr("viewBox", `0 0 ${width} ${svgH}`)
+    .attr("width", "100%");
+
+  // Title
+  svg.append("text")
+    .attr("x", margin.left)
+    .attr("y", margin.top)
+    .attr("font-family", "Source Sans 3, sans-serif")
+    .attr("font-size", "0.8rem")
+    .attr("font-weight", 600)
+    .attr("fill", "var(--text-2)")
+    .text("FULL EXPERIMENT HISTORY (12 records, ~2,000 tokens)");
+
+  const g = svg.append("g").attr("transform", `translate(${margin.left}, ${margin.top + 16})`);
+
+  experiments.forEach((exp, i) => {
+    const y = i * rowH;
+    const row = g.append("g").attr("transform", `translate(0, ${y})`);
+
+    // Keep/discard dot
+    row.append("circle")
+      .attr("cx", 8)
+      .attr("cy", 10)
+      .attr("r", 5)
+      .attr("fill", exp.kept ? "var(--keep)" : "var(--discard)")
+      .attr("opacity", 0.8);
+
+    // Experiment label
+    row.append("text")
+      .attr("x", 22)
+      .attr("y", 14)
+      .attr("font-family", "Source Code Pro, monospace")
+      .attr("font-size", "0.72rem")
+      .attr("fill", "var(--text)")
+      .text(`#${exp.id} [${exp.strategy}] ${exp.kept ? "kept" : "disc"} (${exp.delta > 0 ? "+" : ""}${exp.delta.toFixed(1)}) ${exp.note.substring(0, 75)}${exp.note.length > 75 ? "..." : ""}`);
+  });
+
+  // Token count bar
+  const barY = experiments.length * rowH + 16;
+  const barW = width - margin.left - margin.right;
+  const tokenPct = 2000 / 7000;
+  g.append("rect").attr("y", barY).attr("width", barW).attr("height", 12).attr("rx", 3).attr("fill", "#f0f0f5");
+  g.append("rect").attr("y", barY).attr("width", barW * tokenPct).attr("height", 12).attr("rx", 3).attr("fill", "var(--history)").attr("opacity", 0.7);
+  g.append("text").attr("x", barW * tokenPct + 6).attr("y", barY + 10)
+    .attr("font-family", "Source Code Pro, monospace").attr("font-size", "0.68rem").attr("fill", "var(--text-2)")
+    .text("~2,000 tokens (29% of history budget)");
+}
+
+function renderAfter() {
+  container.selectAll("*").remove();
+  const svgH = margin.top + distilled.length * rowH + 80 + lostFacts.length * 20 + margin.bottom;
+  const svg = container.append("svg")
+    .attr("viewBox", `0 0 ${width} ${svgH}`)
+    .attr("width", "100%");
+
+  svg.append("text")
+    .attr("x", margin.left)
+    .attr("y", margin.top)
+    .attr("font-family", "Source Sans 3, sans-serif")
+    .attr("font-size", "0.8rem")
+    .attr("font-weight", 600)
+    .attr("fill", "var(--text-2)")
+    .text("DISTILLED SUMMARY (~200 tokens)");
+
+  const g = svg.append("g").attr("transform", `translate(${margin.left}, ${margin.top + 16})`);
+
+  distilled.forEach((line, i) => {
+    const y = i * rowH;
+    const row = g.append("g").attr("transform", `translate(0, ${y})`);
+
+    // Green preserved marker
+    row.append("rect")
+      .attr("x", 0)
+      .attr("y", 1)
+      .attr("width", 4)
+      .attr("height", 18)
+      .attr("rx", 1)
+      .attr("fill", "var(--keep)")
+      .attr("opacity", 0.6);
+
+    const isCategory = line.text.match(/^\w.*:\s*\d+\/\d+/);
+    row.append("text")
+      .attr("x", 14)
+      .attr("y", 14)
+      .attr("font-family", isCategory ? "Source Sans 3, sans-serif" : "Source Code Pro, monospace")
+      .attr("font-size", isCategory ? "0.78rem" : "0.72rem")
+      .attr("font-weight", isCategory ? 600 : 400)
+      .attr("fill", line.text.startsWith("AVOID") ? "var(--discard)" : "var(--text)")
+      .text(line.text);
+  });
+
+  // Token count bar
+  const barY = distilled.length * rowH + 16;
+  const barW = width - margin.left - margin.right;
+  const tokenPct = 200 / 7000;
+  g.append("rect").attr("y", barY).attr("width", barW).attr("height", 12).attr("rx", 3).attr("fill", "#f0f0f5");
+  g.append("rect").attr("y", barY).attr("width", barW * tokenPct).attr("height", 12).attr("rx", 3).attr("fill", "var(--keep)").attr("opacity", 0.5);
+  g.append("text").attr("x", barW * tokenPct + 6).attr("y", barY + 10)
+    .attr("font-family", "Source Code Pro, monospace").attr("font-size", "0.68rem").attr("fill", "var(--text-2)")
+    .text("~200 tokens (3% of history budget)");
+
+  // Lost facts section
+  const lostY = barY + 36;
+  g.append("text")
+    .attr("x", 0).attr("y", lostY)
+    .attr("font-family", "Source Sans 3, sans-serif")
+    .attr("font-size", "0.75rem")
+    .attr("font-weight", 600)
+    .attr("fill", "var(--discard)")
+    .text("LOST IN COMPRESSION:");
+
+  lostFacts.forEach((fact, i) => {
+    const fy = lostY + 18 + i * 20;
+    g.append("line")
+      .attr("x1", 14).attr("x2", 14 + fact.length * 4.2)
+      .attr("y1", fy - 3).attr("y2", fy - 3)
+      .attr("stroke", "var(--discard)").attr("stroke-width", 1).attr("opacity", 0.4);
+    g.append("text")
+      .attr("x", 14).attr("y", fy)
+      .attr("font-family", "Source Code Pro, monospace")
+      .attr("font-size", "0.68rem")
+      .attr("fill", "var(--discard)")
+      .attr("opacity", 0.7)
+      .text(fact);
+  });
+}
+
+// Button handlers
+const btnBefore = document.getElementById("distill-btn-before");
+const btnAfter = document.getElementById("distill-btn-after");
+
+btnBefore.addEventListener("click", () => {
+  showBefore = true;
+  btnBefore.classList.add("active");
+  btnAfter.classList.remove("active");
+  renderBefore();
+});
+
+btnAfter.addEventListener("click", () => {
+  showBefore = false;
+  btnAfter.classList.add("active");
+  btnBefore.classList.remove("active");
+  renderAfter();
+});
+
+renderBefore();
+
+})();
 </script>
 </body>
 </html>

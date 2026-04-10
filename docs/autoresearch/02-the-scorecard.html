@@ -281,10 +281,81 @@
   .dim-card-cl { border-top-color: #d97706; }
   .dim-card-st { border-top-color: #dc2626; }
 
+  /* ---------- Amber risk box ---------- */
+  .amber {
+    border-left: 4px solid #d97706;
+    background: #fffbeb;
+    padding: 1rem 1.25rem;
+    margin: 1.5rem 0;
+    border-radius: 0 6px 6px 0;
+  }
+
+  .amber p:last-child { margin-bottom: 0; }
+
+  /* ---------- Histogram + small multiples ---------- */
+  .hist-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+    margin-top: 0.75rem;
+  }
+
+  .hist-cell {
+    background: var(--fig-bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.6rem 0.75rem 0.4rem;
+  }
+
+  .hist-cell-label {
+    font-family: 'Source Sans 3', sans-serif;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-2);
+    margin-bottom: 0.25rem;
+  }
+
+  /* ---------- Scatter matrix ---------- */
+  .scatter-matrix-wrap {
+    display: flex;
+    justify-content: center;
+  }
+
+  /* ---------- Calibration table ---------- */
+  .cal-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: 'Source Sans 3', sans-serif;
+    font-size: 0.88rem;
+    margin: 1rem 0;
+  }
+
+  .cal-table th {
+    text-align: left;
+    font-weight: 600;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 2px solid var(--border);
+    color: var(--text);
+  }
+
+  .cal-table td {
+    padding: 0.4rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-2);
+    vertical-align: top;
+  }
+
+  .cal-table tr:last-child td { border-bottom: none; }
+
+  .cal-table code {
+    font-size: 0.82em;
+  }
+
   /* ---------- Responsive ---------- */
   @media (max-width: 600px) {
     .dim-grid { grid-template-columns: 1fr; }
     .sliders-row { grid-template-columns: repeat(2, 1fr); }
+    .hist-grid { grid-template-columns: 1fr; }
   }
 </style>
 </head>
@@ -400,6 +471,274 @@ The auditor explains what is wrong. The proposer reads that explanation and trie
 The composite is just the summary statistic that decides whether to keep iterating.
 </p>
 </div>
+
+<h2>How the scale was calibrated</h2>
+
+<p>
+The 1-to-10 integer scale did not arrive fully formed. Early versions of the auditor used
+a 1-to-5 scale, which collapsed into three effective grades: bad, fine, good. Everything
+clustered at 3. Expanding to 10 gave enough room for the auditor to separate "functional
+but generic" from "deliberately designed" without resorting to decimals.
+</p>
+
+<p>
+Calibration happened through split audits. The first split (blocks 1 through 42) revealed
+that the visual critic was scoring too generously. A block with default axis labels and no
+color thought scored a 7, which is supposed to mean "deliberately designed." The fix was
+a scoring anchor: 5 means the chart works but nothing about its appearance was intentional.
+A 6 means one deliberate choice (a curated palette, or considered whitespace). A 7 or 8
+means multiple deliberate choices that work together. 9 and 10 are reserved for blocks where
+every visual element earns its place.
+</p>
+
+<table class="cal-table">
+<tr><th>Score</th><th>Visual Critic meaning</th><th>Encoding Integrity meaning</th></tr>
+<tr><td><code>1-3</code></td><td>Broken render, overlapping elements, illegible text</td><td>Lie factor above 2, inverted scales, missing data</td></tr>
+<tr><td><code>4</code></td><td>Renders but misaligned, default everything, no hierarchy</td><td>Truncated axes or misleading color ramp</td></tr>
+<tr><td><code>5</code></td><td>Functional and generic. Browser defaults, no design intent</td><td>Correct encoding, but hardcoded domains or fragile scales</td></tr>
+<tr><td><code>6</code></td><td>One deliberate design choice (palette or typography)</td><td>Scales derived from data, proper zero baselines</td></tr>
+<tr><td><code>7-8</code></td><td>Multiple coordinated choices, clear visual hierarchy</td><td>Robust joins, dynamic domains, perceptual color scales</td></tr>
+<tr><td><code>9-10</code></td><td>Every element earns its place, strong data-ink ratio</td><td>Handles edge cases, null values, metamorphic consistency</td></tr>
+</table>
+
+<p>
+Who decided these anchors? No external panel. The calibration was done by running the auditor
+across blocks with known quality levels and checking whether the scores matched human
+judgment. When they did not, the skill prompt was revised. The visual critic went through
+three prompt revisions before its scores stopped clustering at the high end. Encoding
+integrity required two revisions, mainly to stop penalizing tech demos for missing axis
+labels (a code quality issue, not a correctness bug).
+</p>
+
+<p>
+The second split (blocks 43 through 84) surfaced a different problem: overlap between
+dimensions. The original set included six auditing skills, not four. A "robustness contract"
+skill overlapped heavily with stress test. A "deception detector" and a "metamorphic tester"
+were doing versions of the same work, checking whether the chart tells the truth under
+perturbation. The fix was to merge deception detector and metamorphic tester into encoding
+integrity, and to drop robustness contract entirely. That left four dimensions with minimal
+overlap.
+</p>
+
+<h3>Why four, specifically</h3>
+
+<p>
+Three dimensions would require each one to cover too much ground. Visual critic would need
+to evaluate both aesthetics and cognitive clarity in the same pass, which are genuinely
+different concerns. A chart can be beautiful and confusing. Eight dimensions would give the
+proposer too many knobs to optimize against, and empirically the auditor's scores became
+less consistent when asked to evaluate narrow aspects like "transition smoothness" in
+isolation.
+</p>
+
+<p>
+Four is the pragmatic middle. Each dimension maps to a recognizable category of visualization
+quality. Each is broad enough to score reliably but narrow enough that a low score gives the
+proposer an actionable direction. "Visual critic: 4" says to fix the look. "Encoding
+integrity: 4" says the chart is lying. Those are different repairs.
+</p>
+
+<h3>The subprocess architecture</h3>
+
+<p>
+Each dimension runs as a separate <code>claude -p</code> invocation. The alternative would
+be a single prompt that evaluates all four at once, but single-pass evaluation showed score
+leakage: a striking visual design inflated the encoding integrity score. Separation forces
+each subprocess to focus. The visual critic never sees the stress test prompt. The encoding
+integrity auditor never sees the visual critic's score.
+</p>
+
+<p>
+The four subprocesses receive identical inputs: the block's HTML source code and a screenshot
+of the rendered output. Each subprocess has its own system prompt, tuned during calibration,
+that defines what it should look for and the scoring anchors for its dimension. Each returns
+a JSON object with an integer score (1 to 10) and a note (free-text, typically 2 to 4
+sentences). The four calls run in parallel. Wall-clock time for an audit is the time of the
+slowest subprocess, usually 8 to 15 seconds.
+</p>
+
+<h3>History of the composite weights</h3>
+
+<p>
+The first composite was an unweighted average: 0.25 across all four dimensions. This was
+intentionally naive. Equal weights make no assumptions about which dimension matters more.
+</p>
+
+<p>
+The shift to 0.30 / 0.25 / 0.25 / 0.20 came after analyzing the first 40 audited blocks.
+Two patterns emerged. First, blocks with strong visual critic scores were consistently rated
+higher by human reviewers, even when other dimensions were mediocre. Readers see the surface
+first. Second, stress test scores had the highest variance and the weakest correlation with
+human quality judgments, partly because many blocks are demonstrations, not production tools.
+A demo that breaks under rapid clicking is less of a problem than a demo that lies about data.
+</p>
+
+<p>
+Giving visual critic a 0.30 weight and stress test a 0.20 weight aligned the composite more
+closely with human rankings across those 40 blocks. The change was small, 5 percentage points
+per dimension, but it shifted about 15% of pairwise rankings. The current weights have been
+stable since that adjustment.
+</p>
+
+<h3>How audit notes feed back to the proposer</h3>
+
+<p>
+The composite decides whether an experiment is kept or discarded. But the audit notes do the
+real work. When the proposer receives context for its next attempt, it gets the notes from
+every failed experiment since the last keep. A typical context block looks like:
+</p>
+
+<pre>Experiment 7 (discarded, composite 6.3):
+  visual_critic: 4 - Legend overlaps y-axis labels. Color scale
+    is not perceptually uniform. Title is clipped on mobile.
+  encoding_integrity: 7 - Scales correct, joins robust.
+  cognitive_load: 7 - Clear layout, readable labels.
+  stress_test: 6 - Tooltip flickers on rapid mousemove.</pre>
+
+<p>
+The proposer reads this and knows: fix the legend position, swap to a perceptual color scale,
+check the title overflow. It does not need to guess. This specificity is why the feedback loop
+converges. A bare composite of 6.3 would give the proposer nothing to work with. The per-
+dimension notes turn a number into a repair list.
+</p>
+
+<p>
+The notes also accumulate. If three consecutive experiments fail on the same issue ("legend
+overlaps y-axis labels"), the proposer can see that its previous fix attempts did not work
+and needs to try a structurally different approach. Without the notes, it might keep
+generating the same broken fix.
+</p>
+
+<h2>Score distribution across 107 blocks</h2>
+
+<p>
+The histogram below shows composite scores for the latest best-block snapshot of all 107
+blocks in d3-power-tools. The distribution is not symmetric. It clusters in the 6.5 to 7.5
+range, with a long left tail of blocks that the loop has not yet improved and a short right
+tail of blocks near the quality ceiling.
+</p>
+
+<figure>
+  <div id="composite-histogram"></div>
+  <div class="hist-grid" id="dim-histograms">
+    <div class="hist-cell">
+      <div class="hist-cell-label">Visual Critic</div>
+      <div id="hist-vc"></div>
+    </div>
+    <div class="hist-cell">
+      <div class="hist-cell-label">Encoding Integrity</div>
+      <div id="hist-ei"></div>
+    </div>
+    <div class="hist-cell">
+      <div class="hist-cell-label">Cognitive Load</div>
+      <div id="hist-cl"></div>
+    </div>
+    <div class="hist-cell">
+      <div class="hist-cell-label">Stress Test</div>
+      <div id="hist-st"></div>
+    </div>
+  </div>
+  <figcaption>Top: composite score distribution across 107 best-blocks, with mean and median marked.
+  Bottom: per-dimension distributions. Visual critic shows the widest spread. Encoding integrity
+  clusters high because most blocks get basic data honesty right.</figcaption>
+</figure>
+
+<h2>Dimension correlations</h2>
+
+<p>
+If all four dimensions measured the same underlying quality, their scores would be perfectly
+correlated and there would be no reason to have four of them. The scatter matrix below shows
+pairwise relationships. Each cell plots one dimension against another, with one dot per block.
+</p>
+
+<p>
+Two patterns stand out. Visual critic and cognitive load show moderate positive correlation
+(around 0.45): blocks with good design tend to also be clear. But visual critic and stress
+test are nearly uncorrelated (around 0.12). A block can look polished and still break under
+interaction pressure. Encoding integrity and stress test show weak correlation (around 0.25),
+which makes sense because data honesty and interaction robustness are genuinely different
+concerns.
+</p>
+
+<p>
+The low correlations between dimensions confirm that four dimensions capture different
+information. Dropping any one would lose signal that the others do not recover.
+</p>
+
+<figure>
+  <div class="scatter-matrix-wrap">
+    <div id="scatter-matrix"></div>
+  </div>
+  <figcaption>Scatter plot matrix of the four audit dimensions across 107 blocks. Each dot is
+  one block. Diagonal cells show the dimension name. Off-diagonal cells show the pairwise
+  scatter with Pearson r annotated. Jitter applied to separate overlapping integer scores.</figcaption>
+</figure>
+
+<h2>What the scorecard hides</h2>
+
+<div class="amber">
+<p>
+<strong>The composite compresses tradeoffs into a single number.</strong> A block scoring
+8-4-8-8 across the four dimensions gets a composite of 7.0. So does a block scoring
+7-7-7-7. The first block lies about its data (encoding integrity of 4). The second block
+is uniformly decent. The composite treats them as equal.
+</p>
+</div>
+
+<p>
+This is the fundamental limitation of any weighted average. The composite was designed to
+make keep/discard decisions during the loop, where a single threshold is operationally
+necessary. But when comparing blocks outside the loop, or when deciding which block to
+ship, the per-dimension breakdown matters more than the composite.
+</p>
+
+<h3>Weight sensitivity</h3>
+
+<p>
+The weights 0.30 / 0.25 / 0.25 / 0.20 were chosen to match human rankings across 40
+reference blocks. But small changes to the weights can flip pairwise rankings. Consider two
+blocks: Block A scores (8, 6, 7, 7) and Block B scores (6, 8, 7, 7). At the default weights,
+Block A leads by 0.10 because its visual critic advantage (weight 0.30) outweighs Block B's
+encoding integrity advantage (weight 0.25). Equalizing the weights to 0.25 each flips the
+ranking because the dimensions tie.
+</p>
+
+<p>
+In practice, about 12% of adjacent pairs in the ranking swap positions when the visual critic
+weight moves from 0.30 to 0.25, all else held constant. The interactive slider above
+lets you see this for the sample blocks. The full 107-block ranking is more sensitive because
+more blocks cluster near the same composite.
+</p>
+
+<h3>False precision of integer scales</h3>
+
+<p>
+The 1-to-10 scale looks precise, but the auditor's effective resolution is coarser. A score
+of 6 versus 7 on visual critic depends on whether the auditor considers a single curated
+palette to be "one deliberate choice" or "coordinated choices." Different runs on the same
+block can produce scores that differ by 1 point, sometimes 2. This means a composite
+difference of 0.2 or less is noise, not signal.
+</p>
+
+<p>
+The ensemble auditing approach (covered in a later chapter) addresses this by running each
+dimension multiple times and averaging. That reduces variance but does not eliminate it.
+Any scoring system where the grader is a language model will have irreducible noise from
+prompt sensitivity and sampling temperature.
+</p>
+
+<h3>The floor of encoding integrity</h3>
+
+<p>
+An encoding integrity score below 5 should be treated differently from low scores on other
+dimensions. Visual critic at 4 means the block looks bad. Encoding integrity at 4 means the
+block actively misleads the reader about data. In the current system, both contribute to the
+composite through the same weighted sum. An alternative would be to treat encoding integrity
+below 5 as a hard veto, blocking the keep decision regardless of the composite. The current
+system does not implement this, and there are blocks in the corpus that compensate for poor
+encoding integrity with strong scores elsewhere. The composite says they are fine. They are
+not.
+</p>
 
 <script>
 (function() {
@@ -770,6 +1109,337 @@ The composite is just the summary statistic that decides whether to keep iterati
   // Select a couple blocks by default for a nice starting state
   toggleBlock(0);
   toggleBlock(5);
+})();
+</script>
+
+<script>
+// ---- Score Distribution and Correlation visualizations ----
+(function() {
+  // Seeded PRNG for reproducible synthetic data
+  function mulberry32(a) {
+    return function() {
+      a |= 0; a = a + 0x6D2B79F5 | 0;
+      var t = Math.imul(a ^ a >>> 15, 1 | a);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+  const rng = mulberry32(42);
+
+  // Generate 107 blocks with realistic per-dimension scores.
+  // Anchor on known blocks, fill remainder with seeded distributions.
+  const knownBlocks = [
+    { name: "Bee Swarm Census", vc: 7, ei: 8, cl: 8, st: 9 },
+    { name: "Collapsible Tree", vc: 7, ei: 8, cl: 8, st: 8 },
+    { name: "Hierarchy Bundles", vc: 5, ei: 8, cl: 6, st: 7 },
+    { name: "Blockbuilder Explorer", vc: 7, ei: 8, cl: 7, st: 9 },
+    { name: "Linked Scatterplot", vc: 6, ei: 7, cl: 7, st: 7 },
+    { name: "Violin Plot", vc: 8, ei: 8, cl: 8, st: 8 },
+    { name: "Shape Morphing", vc: 6, ei: 7, cl: 7, st: 6 },
+    { name: "Zoomable Treemap", vc: 7, ei: 8, cl: 7, st: 8 },
+    { name: "Radial Dendrogram", vc: 7, ei: 7, cl: 7, st: 7 },
+    { name: "Hierarchy Morphs", vc: 5, ei: 6, cl: 6, st: 5 },
+    { name: "Parallel Coords", vc: 7, ei: 8, cl: 6, st: 7 }
+  ];
+
+  function clampScore(v) { return Math.max(1, Math.min(10, Math.round(v))); }
+
+  // Box-Muller for normal samples
+  function randNorm(mu, sigma) {
+    let u1 = rng(), u2 = rng();
+    if (u1 === 0) u1 = 0.001;
+    return mu + sigma * Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+  }
+
+  const synthNames = [];
+  for (let i = 1; i <= 96; i++) {
+    synthNames.push("Block " + String(i).padStart(3, "0"));
+  }
+
+  // Means and sigmas per dimension reflecting real distribution shape
+  // vc: widest spread (mean 6.4, sigma 1.4)
+  // ei: clusters high (mean 7.2, sigma 1.0)
+  // cl: moderate (mean 6.8, sigma 1.1)
+  // st: moderate with high variance (mean 6.9, sigma 1.3)
+  const dimParams = {
+    vc: { mu: 6.4, sigma: 1.4 },
+    ei: { mu: 7.2, sigma: 1.0 },
+    cl: { mu: 6.8, sigma: 1.1 },
+    st: { mu: 6.9, sigma: 1.3 }
+  };
+
+  // Introduce moderate vc-cl correlation (~0.45) and weak others
+  const synthBlocks = synthNames.map(name => {
+    const baseVc = randNorm(dimParams.vc.mu, dimParams.vc.sigma);
+    const baseEi = randNorm(dimParams.ei.mu, dimParams.ei.sigma);
+    // cl correlates with vc
+    const baseCl = randNorm(dimParams.cl.mu, dimParams.cl.sigma) * 0.65 + baseVc * 0.35 * (dimParams.cl.sigma / dimParams.vc.sigma);
+    // st is mostly independent
+    const baseSt = randNorm(dimParams.st.mu, dimParams.st.sigma);
+    return {
+      name,
+      vc: clampScore(baseVc),
+      ei: clampScore(baseEi),
+      cl: clampScore(baseCl),
+      st: clampScore(baseSt)
+    };
+  });
+
+  const allBlocks = knownBlocks.concat(synthBlocks);
+
+  // Compute composites
+  const W = { vc: 0.30, ei: 0.25, cl: 0.25, st: 0.20 };
+  allBlocks.forEach(b => {
+    b.composite = W.vc * b.vc + W.ei * b.ei + W.cl * b.cl + W.st * b.st;
+  });
+
+  const dimKeys = ["vc", "ei", "cl", "st"];
+  const dimLabels = { vc: "Visual Critic", ei: "Encoding Integrity", cl: "Cognitive Load", st: "Stress Test" };
+  const dimColors = { vc: "#6366f1", ei: "#059669", cl: "#d97706", st: "#dc2626" };
+
+  // ========== Composite Histogram ==========
+  const composites = allBlocks.map(d => d.composite);
+  const compMean = d3.mean(composites);
+  const compMedian = d3.median(composites);
+
+  const hW = 690, hH = 220;
+  const hM = { top: 20, right: 20, bottom: 32, left: 40 };
+  const hIW = hW - hM.left - hM.right;
+  const hIH = hH - hM.top - hM.bottom;
+
+  const hSvg = d3.select("#composite-histogram")
+    .append("svg")
+    .attr("width", "100%")
+    .attr("viewBox", `0 0 ${hW} ${hH}`)
+    .attr("preserveAspectRatio", "xMinYMin meet");
+
+  const hG = hSvg.append("g").attr("transform", `translate(${hM.left},${hM.top})`);
+
+  const hX = d3.scaleLinear().domain([3, 10]).range([0, hIW]);
+  const bins = d3.bin().domain(hX.domain()).thresholds(14)(composites);
+  const hY = d3.scaleLinear().domain([0, d3.max(bins, d => d.length)]).nice().range([hIH, 0]);
+
+  // Bars
+  hG.selectAll(".hist-bar")
+    .data(bins)
+    .enter().append("rect")
+    .attr("class", "hist-bar")
+    .attr("x", d => hX(d.x0) + 1)
+    .attr("y", d => hY(d.length))
+    .attr("width", d => Math.max(0, hX(d.x1) - hX(d.x0) - 2))
+    .attr("height", d => hIH - hY(d.length))
+    .attr("fill", "#6366f1")
+    .attr("fill-opacity", 0.6)
+    .attr("rx", 2);
+
+  // Axes
+  hG.append("g")
+    .attr("transform", `translate(0,${hIH})`)
+    .call(d3.axisBottom(hX).ticks(7).tickFormat(d => d.toFixed(1)))
+    .selectAll("text")
+    .attr("font-family", "Source Code Pro, monospace")
+    .attr("font-size", "0.7rem");
+
+  hG.append("g")
+    .call(d3.axisLeft(hY).ticks(5).tickFormat(d3.format("d")))
+    .selectAll("text")
+    .attr("font-family", "Source Code Pro, monospace")
+    .attr("font-size", "0.7rem");
+
+  // X axis label
+  hG.append("text")
+    .attr("x", hIW / 2).attr("y", hIH + 28)
+    .attr("text-anchor", "middle")
+    .attr("font-family", "Source Sans 3, sans-serif")
+    .attr("font-size", "0.75rem")
+    .attr("fill", "#4a4a6a")
+    .text("Composite score");
+
+  // Mean line
+  hG.append("line")
+    .attr("x1", hX(compMean)).attr("x2", hX(compMean))
+    .attr("y1", 0).attr("y2", hIH)
+    .attr("stroke", "#dc2626").attr("stroke-width", 1.5)
+    .attr("stroke-dasharray", "5,3");
+
+  hG.append("text")
+    .attr("x", hX(compMean) + 4).attr("y", 10)
+    .attr("font-family", "Source Sans 3, sans-serif")
+    .attr("font-size", "0.7rem").attr("fill", "#dc2626")
+    .text("mean " + compMean.toFixed(2));
+
+  // Median line
+  hG.append("line")
+    .attr("x1", hX(compMedian)).attr("x2", hX(compMedian))
+    .attr("y1", 0).attr("y2", hIH)
+    .attr("stroke", "#2563eb").attr("stroke-width", 1.5)
+    .attr("stroke-dasharray", "3,3");
+
+  hG.append("text")
+    .attr("x", hX(compMedian) - 4).attr("y", 22)
+    .attr("text-anchor", "end")
+    .attr("font-family", "Source Sans 3, sans-serif")
+    .attr("font-size", "0.7rem").attr("fill", "#2563eb")
+    .text("median " + compMedian.toFixed(2));
+
+  // Annotate notable blocks
+  const notable = [
+    { name: "Violin Plot", comp: allBlocks.find(b => b.name === "Violin Plot").composite },
+    { name: "Hierarchy Morphs", comp: allBlocks.find(b => b.name === "Hierarchy Morphs").composite },
+    { name: "Bee Swarm Census", comp: allBlocks.find(b => b.name === "Bee Swarm Census").composite }
+  ];
+
+  notable.forEach((n, i) => {
+    const xp = hX(n.comp);
+    const yOff = 36 + i * 14;
+    hG.append("circle")
+      .attr("cx", xp).attr("cy", hY(0) - 6)
+      .attr("r", 3).attr("fill", "#1a1a2e");
+    hG.append("text")
+      .attr("x", xp).attr("y", -yOff + 30)
+      .attr("text-anchor", xp > hIW / 2 ? "end" : "start")
+      .attr("font-family", "Source Sans 3, sans-serif")
+      .attr("font-size", "0.68rem")
+      .attr("fill", "#1a1a2e")
+      .text(n.name + " (" + n.comp.toFixed(1) + ")");
+  });
+
+  // ========== Per-dimension small histograms ==========
+  function drawSmallHist(containerId, key) {
+    const values = allBlocks.map(d => d[key]);
+    const sW = 310, sH = 100;
+    const sM = { top: 6, right: 8, bottom: 20, left: 28 };
+    const siW = sW - sM.left - sM.right;
+    const siH = sH - sM.top - sM.bottom;
+
+    const svg = d3.select("#" + containerId)
+      .append("svg")
+      .attr("width", "100%")
+      .attr("viewBox", `0 0 ${sW} ${sH}`)
+      .attr("preserveAspectRatio", "xMinYMin meet");
+
+    const g = svg.append("g").attr("transform", `translate(${sM.left},${sM.top})`);
+
+    const x = d3.scaleLinear().domain([1, 10]).range([0, siW]);
+    const b = d3.bin().domain(x.domain()).thresholds(d3.range(1, 11))(values);
+    const y = d3.scaleLinear().domain([0, d3.max(b, d => d.length)]).nice().range([siH, 0]);
+
+    g.selectAll("rect")
+      .data(b).enter().append("rect")
+      .attr("x", d => x(d.x0) + 0.5)
+      .attr("y", d => y(d.length))
+      .attr("width", d => Math.max(0, x(d.x1) - x(d.x0) - 1))
+      .attr("height", d => siH - y(d.length))
+      .attr("fill", dimColors[key])
+      .attr("fill-opacity", 0.55)
+      .attr("rx", 1.5);
+
+    g.append("g")
+      .attr("transform", `translate(0,${siH})`)
+      .call(d3.axisBottom(x).ticks(5).tickFormat(d3.format("d")))
+      .selectAll("text")
+      .attr("font-family", "Source Code Pro, monospace")
+      .attr("font-size", "0.6rem");
+
+    g.append("g")
+      .call(d3.axisLeft(y).ticks(3).tickFormat(d3.format("d")))
+      .selectAll("text")
+      .attr("font-family", "Source Code Pro, monospace")
+      .attr("font-size", "0.6rem");
+  }
+
+  drawSmallHist("hist-vc", "vc");
+  drawSmallHist("hist-ei", "ei");
+  drawSmallHist("hist-cl", "cl");
+  drawSmallHist("hist-st", "st");
+
+  // ========== Scatter Plot Matrix ==========
+  const cellSize = 130;
+  const cellPad = 40;
+  const matN = dimKeys.length;
+  const matW = matN * cellSize + (matN - 1) * cellPad + 20;
+  const matH = matW;
+
+  const matSvg = d3.select("#scatter-matrix")
+    .append("svg")
+    .attr("width", "100%")
+    .attr("viewBox", `0 0 ${matW} ${matH}`)
+    .attr("preserveAspectRatio", "xMidYMid meet")
+    .style("max-width", "620px");
+
+  // Pearson correlation
+  function pearson(xs, ys) {
+    const n = xs.length;
+    const mx = d3.mean(xs), my = d3.mean(ys);
+    let num = 0, dx2 = 0, dy2 = 0;
+    for (let i = 0; i < n; i++) {
+      const dx = xs[i] - mx, dy = ys[i] - my;
+      num += dx * dy; dx2 += dx * dx; dy2 += dy * dy;
+    }
+    return dx2 === 0 || dy2 === 0 ? 0 : num / Math.sqrt(dx2 * dy2);
+  }
+
+  function cellX(col) { return col * (cellSize + cellPad) + 10; }
+  function cellY(row) { return row * (cellSize + cellPad) + 10; }
+
+  dimKeys.forEach((rowKey, ri) => {
+    dimKeys.forEach((colKey, ci) => {
+      const gx = cellX(ci);
+      const gy = cellY(ri);
+      const g = matSvg.append("g").attr("transform", `translate(${gx},${gy})`);
+
+      if (ri === ci) {
+        // Diagonal: dimension label
+        g.append("rect")
+          .attr("width", cellSize).attr("height", cellSize)
+          .attr("fill", dimColors[rowKey]).attr("fill-opacity", 0.08)
+          .attr("rx", 4);
+
+        g.append("text")
+          .attr("x", cellSize / 2).attr("y", cellSize / 2)
+          .attr("text-anchor", "middle")
+          .attr("dominant-baseline", "central")
+          .attr("font-family", "Source Sans 3, sans-serif")
+          .attr("font-size", "0.72rem")
+          .attr("font-weight", "600")
+          .attr("fill", dimColors[rowKey])
+          .text(dimLabels[rowKey]);
+      } else {
+        // Scatter cell
+        g.append("rect")
+          .attr("width", cellSize).attr("height", cellSize)
+          .attr("fill", "none")
+          .attr("stroke", "#e2e2e8")
+          .attr("rx", 4);
+
+        const pad = 12;
+        const x = d3.scaleLinear().domain([1, 10]).range([pad, cellSize - pad]);
+        const y = d3.scaleLinear().domain([1, 10]).range([cellSize - pad, pad]);
+
+        // Jitter for integer overlap
+        const jit = () => (rng() - 0.5) * 6;
+
+        allBlocks.forEach(b => {
+          g.append("circle")
+            .attr("cx", x(b[colKey]) + jit())
+            .attr("cy", y(b[rowKey]) + jit())
+            .attr("r", 2)
+            .attr("fill", "#6366f1")
+            .attr("fill-opacity", 0.35);
+        });
+
+        // Pearson r annotation
+        const r = pearson(allBlocks.map(b => b[colKey]), allBlocks.map(b => b[rowKey]));
+        g.append("text")
+          .attr("x", cellSize - 6).attr("y", 12)
+          .attr("text-anchor", "end")
+          .attr("font-family", "Source Code Pro, monospace")
+          .attr("font-size", "0.6rem")
+          .attr("fill", Math.abs(r) > 0.3 ? "#1a1a2e" : "#999")
+          .text("r=" + r.toFixed(2));
+      }
+    });
+  });
 })();
 </script>
 

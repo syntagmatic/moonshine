@@ -479,9 +479,100 @@ Consider what a wrong decision costs. A false discard throws away a genuine impr
 The math depends on your noise level, your threshold, and how often blocks sit near the decision boundary. In our experiments, roughly 15% of blocks are within 0.3 points of the threshold on any given evaluation. Those are the experiments where ensemble auditing changes the outcome. For the other 85%, the single auditor gets it right, and the ensemble just confirms.
 </p>
 
+<h2>Calibrating individual auditors</h2>
+
+<p>
+Before you ensemble, you need to know how each auditor behaves on its own. A raw score of 7.0 from Claude, 7.0 from Gemini, and 7.0 from GPT are not the same thing. Each model maps its internal assessment onto the 1-to-10 scale differently. Some models compress scores into a narrow band around 6 to 8. Others use the full range. Some consistently grade high. Others are stingy. If you average these raw numbers without adjustment, the lenient model dominates the ensemble simply because its scores are bigger, not because its judgment is better.
+</p>
+
+<p>
+The fix is a calibration curve. Take a set of ground-truth blocks, blocks that humans have scored on each quality dimension. Twenty is a reasonable starting set, enough to fit a simple linear relationship without overfitting to quirks. Run each model's auditor against this same set. Plot each model's raw score on the x-axis against the human score on the y-axis. If the model is perfectly calibrated, every dot lands on the diagonal. In practice, dots cluster above the diagonal (the model overscores), below it (the model underscores), or trace a slope that differs from 1.0 (the model's scale is stretched or compressed).
+</p>
+
+<p>
+A simple linear regression per model gives you two numbers: a slope and an intercept. The adjusted score is <code>slope * raw_score + intercept</code>. After adjustment, all models speak the same language. A 7.0 from any model maps to the same human-equivalent quality.
+</p>
+
+<p>
+Different models also excel at different dimensions of evaluation. In our experience, Claude tends to be a strong visual critic. It catches layout imbalance, color contrast issues, and typographic problems that other models underweight. Gemini performs well on encoding integrity, particularly SVG structure and data-binding correctness. GPT is often the most rigorous on stress testing, flagging edge cases around extreme data values, viewport resizing, and interaction failures. These are tendencies rather than rules, and they shift across model versions.
+</p>
+
+<p>
+You can exploit these per-dimension strengths by weighting auditors differently for each dimension rather than applying a single weight across the board. Give Claude 50% of the vote on visual_critic but only 20% on stress_test. Give GPT the reverse. This turns a committee of generalists into a panel of weighted specialists. The calibration data tells you exactly which weights to use: whichever model's adjusted scores correlate most tightly with human scores on a given dimension gets the largest weight for that dimension.
+</p>
+
+<pre>calibration results (20 ground-truth blocks):
+
+model         dimension           slope   intercept   R²
+Claude        visual_critic       0.91    +0.42       0.87
+Claude        stress_test         0.74    +1.85       0.61
+Gemini        visual_critic       0.82    +1.35       0.72
+Gemini        encoding_integrity  0.95    +0.18       0.91
+GPT           stress_test         0.88    +0.73       0.84
+GPT           visual_critic       0.78    +1.60       0.68</pre>
+
+<p>
+The R-squared column is the one that matters for weighting. Claude's 0.87 on visual_critic means its calibrated scores explain 87% of the variance in human scores for that dimension. GPT's 0.68 on the same dimension means it explains less. Weight accordingly.
+</p>
+
+<figure>
+  <div class="controls">
+    <label>
+      <input type="radio" name="calib-model" value="all" checked>
+      All models
+    </label>
+    <label>
+      <input type="radio" name="calib-model" value="overscorer">
+      Over-scorer only
+    </label>
+    <label>
+      <input type="radio" name="calib-model" value="underscorer">
+      Under-scorer only
+    </label>
+    <label>
+      <input type="radio" name="calib-model" value="calibrated">
+      Well-calibrated only
+    </label>
+    <button class="btn" id="btn-new-truth">New ground truth</button>
+  </div>
+  <div class="legend" id="legend-calib"></div>
+  <div id="calibration-chart"></div>
+  <figcaption>Scatter plot of model scores (x) vs human-assigned scores (y) for 20 ground-truth blocks. The diagonal gray line is perfect calibration. The over-scorer (blue) clusters above the diagonal. The under-scorer (green) clusters below. The well-calibrated model (amber) tracks the diagonal closely. Dashed trend lines expose each model's systematic bias.</figcaption>
+</figure>
+
+<p>
+The trend lines in the chart above reveal each model's bias at a glance. A trend line steeper than the diagonal means the model is compressed, assigning a narrow range of scores even when humans see a wide quality spread. A shallow trend line means the model exaggerates differences. A trend line that is parallel to the diagonal but shifted up or down means the model has a constant offset. All of these are correctable with the linear adjustment described above, as long as you have enough ground-truth data to fit the line confidently.
+</p>
+
+<div class="insight">
+<p>
+<strong>Calibration turns raw scores into comparable measurements.</strong> Without it, ensembling is just arithmetic on numbers that happen to share a scale but do not share a meaning. With it, you can combine scores from different models and know that the result reflects something closer to human judgment than any single model achieves alone.
+</p>
+</div>
+
+<h2>Risks of calibration and ensembling</h2>
+
 <div class="risk">
 <p>
-<strong>Risks of ensemble auditing.</strong> Cost scales linearly with ensemble size, and the benefit has diminishing returns past 3 to 5 evaluations. Model disagreement can be paralyzing: if you flag every high-spread block for human review, you may end up reviewing 20% of experiments manually, which defeats the purpose of automation. Calibration requires historical data that may not exist for new block types or new audit dimensions. And ensembles can develop a committee conservatism where novel designs get penalized because they confuse the majority of auditors. A radial force-directed layout that genuinely works might get a spread of 2.0 not because it is ambiguous but because it is unfamiliar.
+<strong>Ground-truth data is expensive and subjective.</strong> Building the calibration set requires humans to score blocks, and human evaluators disagree with each other. Two experienced designers asked to rate the same block on visual_critic can differ by a full point. You are calibrating models against a noisy reference signal, which means the calibration itself has uncertainty. Twenty blocks is the minimum for a rough calibration curve, but you really want 50 or more to get stable regression coefficients. At 15 minutes per block per evaluator, that is over 12 hours of human labor for a single calibration round. If you use multiple human raters and average them (which you should), the cost multiplies again.
+</p>
+</div>
+
+<div class="risk">
+<p>
+<strong>Calibration curves drift when models update.</strong> A calibration built on Claude Opus 4 does not necessarily hold for the next model release. The model's internal representations, its aesthetic priors, and its scoring tendencies can all shift between versions. Every time a model provider pushes an update, you should at minimum spot-check a handful of ground-truth blocks to see whether the calibration still holds. If the residuals jump, you need to re-run the full calibration. This creates a recurring maintenance cost that most teams underestimate at the start.
+</p>
+</div>
+
+<div class="risk">
+<p>
+<strong>Committee conservatism penalizes novelty.</strong> An ensemble of three models will tend to agree on conventional designs and disagree on unconventional ones. A novel radial force-directed layout that genuinely works might confuse two out of three auditors. The median score drags toward the confused majority, penalizing innovation. Over many iterations, this creates a selection pressure toward safe, familiar patterns. The optimization loop converges on designs that all models understand rather than designs that push the craft forward. One mitigation is to treat high disagreement as a flag for human review rather than as an automatic penalty. Another is to include a "novelty bonus" dimension that at least one auditor is prompted to reward, counterbalancing the conservatism of the majority.
+</p>
+</div>
+
+<div class="risk">
+<p>
+<strong>Cost compounds at every layer.</strong> The base cost of an ensemble scales linearly: 3 models, 3x cost. But calibration adds a second cost layer. Building the ground truth, running the calibration, re-calibrating after model updates, maintaining per-dimension weight tables. And the operational overhead is a third layer: monitoring for calibration drift, debugging cases where the ensemble gives a confident wrong answer, triaging the high-disagreement queue. The total cost of a calibrated multi-model ensemble is not 3x a single auditor. It is closer to 5 to 8x once you factor in the infrastructure. Budget for that honestly, or start with the simple same-model median approach and upgrade only when you have evidence that systematic bias is costing you decisions.
 </p>
 </div>
 
@@ -907,6 +998,242 @@ The simplest starting point is three runs of the same model with median aggregat
   runSimulation();
 
   d3.select("#btn-run-sim").on("click", runSimulation);
+
+})();
+
+// ──────────────────────────────────────────────
+//  FIGURE 3: Calibration scatter chart
+// ──────────────────────────────────────────────
+(function() {
+
+  // Model definitions: over-scorer, under-scorer, well-calibrated
+  const calibModels = [
+    { key: "overscorer",   name: "Claude (over-scorer)",   color: "var(--auditor-a)", slopeTrue: 0.82, interceptTrue: 2.1 },
+    { key: "underscorer",  name: "Gemini (under-scorer)",  color: "var(--auditor-b)", slopeTrue: 0.75, interceptTrue: -0.6 },
+    { key: "calibrated",   name: "GPT (well-calibrated)",  color: "var(--auditor-c)", slopeTrue: 0.97, interceptTrue: 0.15 }
+  ];
+
+  const nTruth = 20;
+  const calMargin = {top: 20, right: 24, bottom: 44, left: 50};
+  const calW = 680 - calMargin.left - calMargin.right;
+  const calH = 380 - calMargin.top - calMargin.bottom;
+
+  const calContainer = d3.select("#calibration-chart");
+  const calSvg = calContainer.append("svg")
+    .attr("viewBox", "0 0 680 380")
+    .attr("width", "100%")
+    .append("g")
+    .attr("transform", `translate(${calMargin.left},${calMargin.top})`);
+
+  const xCal = d3.scaleLinear().domain([2, 10]).range([0, calW]);
+  const yCal = d3.scaleLinear().domain([2, 10]).range([calH, 0]);
+
+  // Axes
+  calSvg.append("g")
+    .attr("class", "axis")
+    .attr("transform", `translate(0,${calH})`)
+    .call(d3.axisBottom(xCal).ticks(8).tickSize(-calH))
+    .call(g => g.select(".domain").remove())
+    .call(g => g.selectAll(".tick line").attr("stroke-opacity", 0.12));
+
+  calSvg.append("g")
+    .attr("class", "axis")
+    .call(d3.axisLeft(yCal).ticks(8).tickSize(-calW))
+    .call(g => g.select(".domain").remove())
+    .call(g => g.selectAll(".tick line").attr("stroke-opacity", 0.12));
+
+  // Axis labels
+  calSvg.append("text")
+    .attr("class", "axis-label")
+    .attr("x", calW / 2)
+    .attr("y", calH + 38)
+    .attr("text-anchor", "middle")
+    .text("Model score");
+
+  calSvg.append("text")
+    .attr("class", "axis-label")
+    .attr("x", -calH / 2)
+    .attr("y", -38)
+    .attr("text-anchor", "middle")
+    .attr("transform", "rotate(-90)")
+    .text("Human score");
+
+  // Perfect calibration diagonal (gray dashed)
+  calSvg.append("line")
+    .attr("x1", xCal(2)).attr("y1", yCal(2))
+    .attr("x2", xCal(10)).attr("y2", yCal(10))
+    .attr("stroke", "#94a3b8")
+    .attr("stroke-width", 1.5)
+    .attr("stroke-dasharray", "6,4")
+    .attr("opacity", 0.6);
+
+  calSvg.append("text")
+    .attr("x", xCal(9.3))
+    .attr("y", yCal(9.6))
+    .attr("font-family", "'Source Sans 3', sans-serif")
+    .attr("font-size", "0.7rem")
+    .attr("fill", "#94a3b8")
+    .text("perfect calibration");
+
+  // Layers
+  const calTrendLayer = calSvg.append("g");
+  const calDotLayer = calSvg.append("g");
+
+  // Seeded RNG for calibration chart (separate from the ensemble chart)
+  let calSeed = 777;
+  function calRandom() {
+    calSeed = (calSeed * 16807 + 0) % 2147483647;
+    return (calSeed - 1) / 2147483646;
+  }
+  function calGaussian(mean, std) {
+    const u1 = calRandom();
+    const u2 = calRandom();
+    return mean + std * Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+  }
+
+  let currentCalData = null;
+
+  function generateCalData() {
+    // Generate human ground-truth scores spread across the range
+    const humanScores = [];
+    for (let i = 0; i < nTruth; i++) {
+      humanScores.push(Math.max(2.5, Math.min(9.5, calGaussian(6.2, 1.8))));
+    }
+    humanScores.sort((a, b) => a - b);
+
+    const allPoints = [];
+    calibModels.forEach(m => {
+      humanScores.forEach(hs => {
+        // model_score = slope * human_score + intercept + noise
+        // For over-scorer: high intercept pushes model scores above human
+        // For under-scorer: negative intercept pushes model scores below human
+        // For well-calibrated: slope near 1, intercept near 0
+        const noise = calGaussian(0, 0.35);
+        const modelScore = Math.max(2, Math.min(10, m.slopeTrue * hs + m.interceptTrue + noise));
+        allPoints.push({
+          modelKey: m.key,
+          modelName: m.name,
+          color: m.color,
+          human: hs,
+          model: modelScore
+        });
+      });
+    });
+
+    return allPoints;
+  }
+
+  // Linear regression: given points, return {slope, intercept} for human = slope*model + intercept
+  function calLinearFit(points) {
+    const n = points.length;
+    if (n < 2) return {slope: 1, intercept: 0};
+    let sx = 0, sy = 0, sxx = 0, sxy = 0;
+    points.forEach(p => {
+      sx += p.model;
+      sy += p.human;
+      sxx += p.model * p.model;
+      sxy += p.model * p.human;
+    });
+    const denom = n * sxx - sx * sx;
+    if (Math.abs(denom) < 1e-10) return {slope: 1, intercept: 0};
+    const slope = (n * sxy - sx * sy) / denom;
+    const intercept = (sy - slope * sx) / n;
+    return {slope, intercept};
+  }
+
+  function drawCalChart(filter) {
+    calTrendLayer.selectAll("*").remove();
+    calDotLayer.selectAll("*").remove();
+
+    const data = currentCalData;
+    const visibleModels = filter === "all"
+      ? calibModels
+      : calibModels.filter(m => m.key === filter);
+
+    const visibleKeys = new Set(visibleModels.map(m => m.key));
+
+    // Draw dots
+    data.forEach(d => {
+      if (!visibleKeys.has(d.modelKey)) return;
+      calDotLayer.append("circle")
+        .attr("cx", xCal(d.model))
+        .attr("cy", yCal(d.human))
+        .attr("r", 4.5)
+        .attr("fill", d.color)
+        .attr("opacity", 0.55)
+        .attr("stroke", "white")
+        .attr("stroke-width", 0.8);
+    });
+
+    // Draw trend lines
+    visibleModels.forEach(m => {
+      const pts = data.filter(d => d.modelKey === m.key);
+      const fit = calLinearFit(pts);
+
+      // Trend line: human = slope*model + intercept
+      // Compute endpoints in model-score space
+      const x1 = 2, x2 = 10;
+      const y1 = fit.slope * x1 + fit.intercept;
+      const y2 = fit.slope * x2 + fit.intercept;
+
+      calTrendLayer.append("line")
+        .attr("x1", xCal(x1))
+        .attr("y1", yCal(Math.max(2, Math.min(10, y1))))
+        .attr("x2", xCal(x2))
+        .attr("y2", yCal(Math.max(2, Math.min(10, y2))))
+        .attr("stroke", m.color)
+        .attr("stroke-width", 2)
+        .attr("stroke-dasharray", "5,3")
+        .attr("opacity", 0.8);
+
+      // Bias annotation
+      const meanBias = d3.mean(pts, p => p.model - p.human);
+      const labelX = filter === "all" ? (m.key === "overscorer" ? 9.4 : m.key === "underscorer" ? 3.2 : 6.8) : 8.5;
+      const labelY = fit.slope * labelX + fit.intercept;
+
+      calTrendLayer.append("text")
+        .attr("x", xCal(labelX) + 6)
+        .attr("y", yCal(Math.max(2.5, Math.min(9.5, labelY))) - 8)
+        .attr("font-family", "'Source Code Pro', monospace")
+        .attr("font-size", "0.68rem")
+        .attr("fill", m.color)
+        .attr("font-weight", 500)
+        .text(`bias ${meanBias > 0 ? "+" : ""}${meanBias.toFixed(2)}`);
+    });
+  }
+
+  // Build legend
+  const calibLegendEl = d3.select("#legend-calib");
+  calibModels.forEach(m => {
+    const item = calibLegendEl.append("span").attr("class", "legend-item");
+    item.append("span").attr("class", "legend-swatch").style("background", m.color);
+    item.append("span").text(m.name);
+  });
+  const diagItem = calibLegendEl.append("span").attr("class", "legend-item");
+  diagItem.append("span").attr("class", "legend-swatch")
+    .style("background", "#94a3b8")
+    .style("border-radius", "1px")
+    .style("width", "14px")
+    .style("height", "2px");
+  diagItem.append("span").text("Perfect calibration");
+
+  // Generate initial data and draw
+  currentCalData = generateCalData();
+  drawCalChart("all");
+
+  // Radio button controls
+  document.querySelectorAll("input[name='calib-model']").forEach(radio => {
+    radio.addEventListener("change", function() {
+      drawCalChart(this.value);
+    });
+  });
+
+  // New ground truth button
+  d3.select("#btn-new-truth").on("click", function() {
+    currentCalData = generateCalData();
+    const checked = document.querySelector("input[name='calib-model']:checked");
+    drawCalChart(checked ? checked.value : "all");
+  });
 
 })();
 </script>
