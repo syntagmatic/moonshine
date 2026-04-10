@@ -10,7 +10,9 @@ Moonshine helps users create interactive, web-based explanations of technical co
 
 AI tools generate complexity faster than people can consume it. Moonshine is for bridging that gap: helping people digest and communicate technical concepts clearly.
 
-**Tech stack:** React 18 + Vite, D3 via [d3-power-tools](https://github.com/syntagmatic/d3-power-tools), TypeScript
+**Tech stack:** Self-contained HTML, vanilla JS, D3 v7. No build tools, no frameworks.
+
+**Visualization patterns:** See `VISUALS.md` for D3 chart types, interaction recipes, and the moonshine style foundation.
 
 ## How to Use This Skill
 
@@ -49,32 +51,13 @@ Create projects in `~/.agent/moonshine/project-name/`. This keeps generated expl
 
 ```
 ~/.agent/moonshine/project-name/
-  package.json          # React 18 + Vite + D3 deps
-  vite.config.ts
-  tsconfig.json
-  index.html
-  src/
-    main.tsx            # Entry point
-    App.tsx             # Article layout and scroll management
-    styles/
-      article.css       # Typography, layout, information hierarchy
-      variables.css     # Design tokens (colors, spacing, type scale)
-    components/
-      Article.tsx        # Main article container with scroll context
-      Section.tsx        # Content section with intersection observer
-      Figure.tsx         # Figure container with caption and margin notes
-      Prose.tsx          # Rich text block with proper typography
-    interactive/         # Concept-specific interactive components
-      (created per-explanation)
-    hooks/
-      useScrollProgress.ts   # Track reader position
-      useIntersection.ts     # Intersection observer hook
-      useLinkedState.ts      # Shared state across linked visualizations
-    data/
-      (datasets for visualizations)
+  index.html          # Self-contained explanation (HTML + CSS + JS)
+  data/               # Optional external datasets
 ```
 
-After scaffolding, run `npm install` and `npm run dev`, then open the result in the browser.
+Each explanation is a single HTML file with inline CSS and JS. D3 loads from CDN. No build tools, no npm install. Open the file in a browser and it works.
+
+After scaffolding, open the result in the browser to verify.
 
 ### 4. Build Iteratively
 
@@ -130,190 +113,105 @@ Use typography, spacing, and visual weight to make this hierarchy clear. The rea
 | Scroll-driven narrative | The explanation has a natural sequence of reveals | Chart that builds up as the reader scrolls through the argument |
 | Animated transition | Two states are meaningfully different and the path between them matters | Morphing between two chart types to show they represent the same data |
 
-## Template: package.json
+## Template: HTML Scaffold
 
-```json
-{
-  "name": "explanation-name",
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
-    "preview": "vite preview"
-  },
-  "dependencies": {
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "d3": "^7.9.0"
-  },
-  "devDependencies": {
-    "@types/d3": "^7.4.3",
-    "@types/react": "^18.3.0",
-    "@types/react-dom": "^18.3.0",
-    "@vitejs/plugin-react": "^4.3.0",
-    "typescript": "^5.5.0",
-    "vite": "^5.4.0"
-  }
-}
-```
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Explanation Title</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-## Template: Article CSS Foundation
-
-```css
-/* article.css */
 :root {
-  --article-width: 720px;
-  --margin-width: 240px;
+  --article-width: 740px;
   --body-font: 'Source Serif 4', Georgia, serif;
   --heading-font: 'Source Sans 3', system-ui, sans-serif;
   --mono-font: 'Source Code Pro', monospace;
-  --body-size: 1.125rem;     /* 18px */
+  --body-size: 1.125rem;
   --line-height: 1.6;
-  --color-text: #1a1a2e;
-  --color-text-secondary: #4a4a6a;
-  --color-accent: #2563eb;
-  --color-bg: #fafafa;
-  --color-figure-bg: #ffffff;
-  --color-border: #e2e2e8;
-  --spacing-unit: 0.5rem;
+  --text: #1a1a2e;
+  --text-2: #4a4a6a;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --bg: #fafafa;
+  --fig-bg: #ffffff;
+  --border: #e2e2e8;
 }
 
-.article {
-  max-width: var(--article-width);
-  margin: 0 auto;
-  padding: 2rem 1rem;
+body {
   font-family: var(--body-font);
   font-size: var(--body-size);
   line-height: var(--line-height);
-  color: var(--color-text);
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
 }
 
-.article h1, .article h2, .article h3 {
-  font-family: var(--heading-font);
-  font-weight: 700;
-  line-height: 1.2;
-}
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
+h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+h3 { font-size: 1.15rem; margin: 2rem 0 0.75rem; }
+p { margin: 0 0 1rem; }
 
-.article h1 { font-size: 2.25rem; margin: 3rem 0 1.5rem; }
-.article h2 { font-size: 1.5rem; margin: 2.5rem 0 1rem; }
-.article h3 { font-size: 1.25rem; margin: 2rem 0 0.75rem; }
+.figure { margin: 2rem 0; padding: 1.5rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; }
+.figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; }
+.figure-label { font-weight: 600; color: var(--text); }
 
-.figure {
-  margin: 2rem -2rem;
-  padding: 1.5rem 2rem;
-  background: var(--color-figure-bg);
-  border: 1px solid var(--color-border);
-  border-radius: 4px;
-}
+.insight { background: var(--accent-light); border-left: 3px solid var(--accent); padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 4px 4px 0; }
+.insight p { margin: 0; }
 
-.figure-caption {
-  font-family: var(--heading-font);
-  font-size: 0.875rem;
-  color: var(--color-text-secondary);
-  margin-top: 0.75rem;
-}
+.margin-note { font-size: 0.8125rem; color: var(--text-2); line-height: 1.4; border-left: 2px solid var(--border); padding-left: 0.75rem; margin: 1rem 0; }
 
-.margin-note {
-  font-size: 0.8125rem;
-  color: var(--color-text-secondary);
-  line-height: 1.4;
-}
+.controls { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); }
+
+svg text { font-family: var(--heading-font); }
+svg .axis text { font-size: 11px; fill: var(--text-2); }
+svg .axis line, svg .axis path { stroke: var(--border); }
+</style>
+</head>
+<body>
+<div class="article">
+  <header>
+    <h1>Title</h1>
+    <p style="font-family: var(--heading-font); font-size: 1.15rem; color: var(--text-2);">
+      A clear one-sentence description of what the reader will understand.
+    </p>
+  </header>
+
+  <!-- Sections go here -->
+
+</div>
+
+<script>
+// State coordination pattern (replaces React Context)
+const state = {};
+const dispatch = d3.dispatch('update', 'select', 'hover');
+
+// Visualization code goes here
+</script>
+</body>
+</html>
 ```
 
-## Template: Base App Component
+## D3 Integration
 
-```tsx
-// App.tsx
-import { useState, createContext, useContext } from 'react'
-import './styles/article.css'
+Use `VISUALS.md` for visualization patterns. Key principles:
 
-// Shared state context for linked visualizations
-interface ArticleState {
-  // Add concept-specific shared state here
-  [key: string]: unknown
-}
+- D3 owns the DOM. No framework abstraction layer.
+- Use `d3.dispatch` for cross-chart communication (see State Coordination in VISUALS.md).
+- Use `.join()` for data binding with enter/update/exit.
+- Use `selection.call()` to compose reusable chart functions.
+- Load D3 from CDN: `https://d3js.org/d3.v7.min.js`
 
-const ArticleContext = createContext<{
-  state: ArticleState
-  setState: (updates: Partial<ArticleState>) => void
-}>({ state: {}, setState: () => {} })
-
-export function useArticleState() {
-  return useContext(ArticleContext)
-}
-
-export default function App() {
-  const [state, setFullState] = useState<ArticleState>({})
-  const setState = (updates: Partial<ArticleState>) =>
-    setFullState(prev => ({ ...prev, ...updates }))
-
-  return (
-    <ArticleContext.Provider value={{ state, setState }}>
-      <article className="article">
-        <header>
-          <h1>Title</h1>
-          <p className="subtitle">A clear one-sentence description of what the reader will understand.</p>
-        </header>
-
-        {/* Sections go here, each a step in the progression of understanding */}
-
-      </article>
-    </ArticleContext.Provider>
-  )
-}
-```
-
-## D3 Integration Pattern
-
-Use [d3-power-tools](https://github.com/syntagmatic/d3-power-tools) subskills for visualization work rather than writing ad-hoc D3 code. The collection includes specialized skills for linked views, brushing, motion, scales, responsive layout, and more.
-
-For custom D3 visuals in React:
-
-```tsx
-import { useRef, useEffect } from 'react'
-import * as d3 from 'd3'
-
-interface ChartProps {
-  data: number[]
-  width?: number
-  height?: number
-}
-
-export function Chart({ data, width = 600, height = 300 }: ChartProps) {
-  const svgRef = useRef<SVGSVGElement>(null)
-
-  useEffect(() => {
-    if (!svgRef.current) return
-    const svg = d3.select(svgRef.current)
-    svg.selectAll('*').remove()
-
-    // D3 rendering logic here
-    // Use enter/update/exit or join pattern
-
-  }, [data, width, height])
-
-  return (
-    <div className="figure">
-      <svg ref={svgRef} width={width} height={height} />
-    </div>
-  )
-}
-```
-
-Let React own the DOM. Use D3 for scales, layouts, generators, and transitions, but render SVG elements via JSX where practical. Fall back to D3 DOM manipulation only for complex animations or bindngs that are awkward in React.
-
-## Dependencies
-
-Moonshine works best alongside [d3-power-tools](https://github.com/syntagmatic/d3-power-tools). If the user doesn't have it installed, suggest they add it:
-
-```
-/plugin marketplace add syntagmatic/d3-power-tools
-```
-
-There is no formal dependency mechanism in the plugin system, so this is a recommendation, not a requirement. Moonshine can function without it, but the visualization output will be better with the specialized D3 skills available.
+For any chart type (line, bar, scatter, network, hierarchy, heatmap, etc.), consult VISUALS.md for the pattern, judgment call, and common pitfall.
 
 ## Reference Skills
 
-- **[d3-power-tools](https://github.com/syntagmatic/d3-power-tools)** Reusable D3 visualization patterns and components. Use these subskills for any D3 visualization work rather than writing ad-hoc D3 code.
 - **grill-me** Approach to guided question-asking to help users clarify their thinking.

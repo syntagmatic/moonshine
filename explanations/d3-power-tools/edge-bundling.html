@@ -1,0 +1,981 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hierarchical Edge Bundling</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --article-width: 740px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem;
+  --line-height: 1.6;
+  --text: #1a1a2e;
+  --text-2: #4a4a6a;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --bg: #fafafa;
+  --fig-bg: #ffffff;
+  --border: #e2e2e8;
+}
+
+body {
+  font-family: var(--body-font);
+  font-size: var(--body-size);
+  line-height: var(--line-height);
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+.article {
+  max-width: var(--article-width);
+  margin: 0 auto;
+  padding: 2rem 1.25rem 6rem;
+}
+
+h1, h2, h3 {
+  font-family: var(--heading-font);
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+
+p { margin: 0 0 1rem; }
+a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+a:hover { color: #1d4ed8; }
+
+code {
+  font-family: var(--mono-font);
+  font-size: 0.9em;
+  background: #f1f1f5;
+  padding: 0.15em 0.4em;
+  border-radius: 3px;
+}
+
+.header {
+  padding: 4rem 0 2rem;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 2.5rem;
+}
+.header .subtitle {
+  font-family: var(--heading-font);
+  font-size: 1.15rem;
+  color: var(--text-2);
+  margin-bottom: 0;
+  max-width: 580px;
+}
+
+/* Figures */
+.figure {
+  margin: 2rem 0;
+  padding: 1.5rem;
+  background: var(--fig-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.figure-wide {
+  margin-left: -2rem;
+  margin-right: -2rem;
+}
+.figure-caption {
+  font-family: var(--heading-font);
+  font-size: 0.85rem;
+  color: var(--text-2);
+  margin-top: 0.75rem;
+  line-height: 1.4;
+}
+.figure-label { font-weight: 600; color: var(--text); }
+
+/* Insight box */
+.insight {
+  background: var(--accent-light);
+  border-left: 3px solid var(--accent);
+  padding: 1rem 1.25rem;
+  margin: 1.5rem 0;
+  border-radius: 0 4px 4px 0;
+}
+.insight p { margin: 0; }
+.insight p + p { margin-top: 0.5rem; }
+
+/* Controls */
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  font-family: var(--heading-font);
+  font-size: 0.85rem;
+  color: var(--text-2);
+  margin-top: 1rem;
+}
+
+.controls label {
+  font-weight: 600;
+  color: var(--text);
+  min-width: 60px;
+}
+
+.controls input[type="range"] {
+  flex: 1;
+  max-width: 280px;
+  accent-color: var(--accent);
+  height: 6px;
+  cursor: pointer;
+}
+
+.tension-value {
+  font-family: var(--mono-font);
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--accent);
+  min-width: 2.5rem;
+  text-align: right;
+}
+
+/* Footer */
+.footer {
+  margin-top: 4rem;
+  padding-top: 2rem;
+  border-top: 1px solid var(--border);
+  font-family: var(--heading-font);
+  font-size: 0.85rem;
+  color: var(--text-2);
+}
+.footer a { color: var(--text-2); }
+
+/* SVG text defaults */
+svg text { font-family: var(--heading-font); }
+
+/* Legend */
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.25rem;
+  font-family: var(--heading-font);
+  font-size: 0.8rem;
+  color: var(--text-2);
+  margin-top: 0.75rem;
+}
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.legend-swatch {
+  width: 14px;
+  height: 3px;
+  border-radius: 1px;
+}
+
+@media (max-width: 640px) {
+  .figure-wide { margin-left: 0; margin-right: 0; }
+  h1 { font-size: 1.75rem; }
+}
+
+/* Risk callout (amber) */
+.risk {
+  background: #fef3c7;
+  border-left: 3px solid #d97706;
+  padding: 1rem 1.25rem;
+  margin: 1.5rem 0;
+  border-radius: 0 4px 4px 0;
+}
+.risk p { margin: 0; }
+.risk p + p { margin-top: 0.5rem; }
+.risk strong { color: #92400e; }
+
+/* Side-by-side comparison panels */
+.comparison-row {
+  display: flex;
+  gap: 1rem;
+}
+.comparison-panel {
+  flex: 1;
+  text-align: center;
+}
+.comparison-panel-label {
+  font-family: var(--heading-font);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-2);
+  margin-bottom: 0.5rem;
+}
+
+/* LCA path figure */
+.lca-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.25rem;
+  font-family: var(--heading-font);
+  font-size: 0.8rem;
+  color: var(--text-2);
+  margin-top: 0.75rem;
+}
+.lca-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.lca-legend-line {
+  width: 20px;
+  height: 3px;
+  border-radius: 1px;
+}
+
+@media (max-width: 640px) {
+  .comparison-row { flex-direction: column; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0s !important;
+    transition-duration: 0s !important;
+  }
+}
+</style>
+</head>
+<body>
+
+<div class="article">
+
+  <header class="header">
+    <p style="margin-bottom: 1rem;"><a href="index.html">&larr; Back</a></p>
+    <h1>Hierarchical Edge Bundling</h1>
+    <p class="subtitle">Routing connections through a tree to reveal group-level patterns that straight lines hide.</p>
+  </header>
+
+  <p>A network with 80 connections between 40 nodes is, drawn naively, a tangle of crossing lines. Every edge competes for attention and none of them win. The viewer sees density but not structure. This is the hairball problem, and it gets worse fast: double the edges and the diagram becomes unreadable.</p>
+
+  <p>Hierarchical edge bundling solves this by exploiting something the raw graph does not have: a tree. If the nodes belong to groups, and those groups form a hierarchy, each connection can be routed through the tree structure instead of drawn as a straight line. Edges between nodes in the same cluster bend inward together, merging into visible rivers of traffic. Edges between distant clusters arc through higher ancestors, separating cleanly from local connections.</p>
+
+  <div class="insight">
+    <p>The key insight: bundling edges along a hierarchy's structure reveals connection patterns that a straight-line graph hides as a hairball. The tradeoff is that you lose the ability to trace individual connections. A single parameter, tension, controls how much you trade one for the other.</p>
+  </div>
+
+  <p>The diagram below shows 40 nodes arranged in 5 groups around a radial dendrogram, with roughly 80 cross-group connections. Drag the tension slider from 0 (straight lines) to 1 (tight bundling) and watch the hairball organize itself into legible bundles. At low tension the connections are accurate but cluttered. At high tension the group-level traffic patterns become obvious, but individual edges blur together. The sweet spot is somewhere in between, and it depends on what question you are trying to answer.</p>
+
+  <div class="figure figure-wide" id="bundle-figure">
+    <div id="bundle-svg-container" style="display:flex;justify-content:center;"></div>
+    <div class="controls">
+      <label for="tension-slider">Tension</label>
+      <input type="range" id="tension-slider" min="0" max="1" step="0.01" value="0.85">
+      <span class="tension-value" id="tension-readout">0.85</span>
+    </div>
+    <div class="legend" id="legend"></div>
+    <p class="figure-caption"><span class="figure-label">Figure 1.</span> 40 leaf nodes in 5 groups with ~80 cross-group connections. At tension 0 the edges are straight lines. At tension 1 they follow the hierarchy exactly. Hover a node to highlight its connections.</p>
+  </div>
+
+  <p>The construction relies on three D3 pieces working together. <code>d3.cluster</code> computes the radial layout, placing all leaves at equal radius around the ring. <code>node.path(target)</code> finds the route through the tree from one leaf to another, passing through their least common ancestor. And <code>d3.curveBundle.beta()</code> turns that route into a smooth curve whose tightness you control. Beta is the inverse of tension: beta 0 means maximum bundling (tension 1), and beta 1 means straight lines (tension 0). The naming is counterintuitive, but the slider above maps it correctly.</p>
+
+  <h2>LCA Path Routing</h2>
+
+  <p>The least common ancestor (LCA) is the deepest node in the tree that is an ancestor of both endpoints. When you call <code>source.path(target)</code>, D3 returns an array of nodes: the source, its ancestors up to the LCA, then the target's ancestors back down to the target. This array of nodes becomes the control points for the bundled curve.</p>
+
+  <p>Consider two leaves in different groups, say <code>Auth.login</code> and <code>UI.chart</code>. Their LCA is <code>root</code>, because Auth and UI are sibling subtrees. The path walks up from <code>login</code> to <code>Auth</code> to <code>root</code>, then back down to <code>UI</code> to <code>chart</code>. With high tension, the curve hugs this tree path closely, passing through the center of the diagram where <code>root</code> sits. With low tension, it ignores the waypoints and flies nearly straight across.</p>
+
+  <p>Now consider two leaves in the same group: <code>Auth.login</code> and <code>Auth.mfa</code>. Their LCA is <code>Auth</code>, so the path is short: <code>login</code> to <code>Auth</code> to <code>mfa</code>. The curve stays near the ring's edge, barely bending inward. This is why same-group edges bundle tightly together at the periphery while cross-group edges sweep through the interior.</p>
+
+  <div class="figure figure-wide" id="lca-figure">
+    <div id="lca-svg-container" style="display:flex;justify-content:center;"></div>
+    <div class="lca-legend" id="lca-legend"></div>
+    <p class="figure-caption"><span class="figure-label">Figure 2.</span> One edge highlighted to show its LCA path. The path walks from the source leaf up through the tree to the least common ancestor, then back down to the target. The bundled curve uses these intermediate nodes as control points. Hover any node to see its connections and their tree paths.</p>
+  </div>
+
+  <h2>Tension as a Lens</h2>
+
+  <p>The tension parameter is often presented as a slider to tune and forget. It is better understood as a lens that controls what the viewer sees.</p>
+
+  <p>At <strong>high tension</strong> (0.85 to 1.0), edges are pulled tightly along the hierarchy. Bundles merge aggressively, making group-level traffic patterns visible: you can immediately see which clusters are heavily interconnected. The cost is that unrelated edges sharing a common ancestor get merged into the same visual river. The viewer perceives a single thick bundle and reads it as a cohesive relationship, when the edges may have nothing in common besides their routing path. This is the phantom-pattern problem described below.</p>
+
+  <p>At <strong>low tension</strong> (0.0 to 0.3), edges barely curve. You get near-straight lines from source to target, which is accurate for tracing individual connections but defeats the purpose of bundling. The diagram looks like a conventional node-link graph with slightly curved edges. This is the spaghetti regime.</p>
+
+  <p>The useful range is typically <strong>0.5 to 0.85</strong>. Within this window, edges bundle enough to reveal group structure but not so much that distinct bundles merge into a single amorphous mass. The right value depends on the data: a graph with 5 well-separated clusters can handle higher tension than one with 20 overlapping groups. The best approach is to expose the slider and let the viewer adjust.</p>
+
+  <h2>Bundled vs. Straight Edges</h2>
+
+  <p>The same network looks fundamentally different depending on whether edges are bundled. Straight lines preserve individual connection accuracy but create visual noise that obscures structure. Bundling sacrifices individual edge traceability to reveal which groups communicate heavily.</p>
+
+  <div class="figure figure-wide" id="comparison-figure">
+    <div class="comparison-row">
+      <div class="comparison-panel">
+        <div class="comparison-panel-label">Straight edges (tension 0)</div>
+        <div id="compare-straight-container"></div>
+      </div>
+      <div class="comparison-panel">
+        <div class="comparison-panel-label">Bundled edges (tension 0.85)</div>
+        <div id="compare-bundled-container"></div>
+      </div>
+    </div>
+    <p class="figure-caption"><span class="figure-label">Figure 3.</span> The same 40-node, 80-edge graph drawn with straight lines (left) and hierarchical bundling (right). Straight lines show every individual connection but the group structure is invisible. Bundling reveals that Auth and API are heavily linked, and that Infra connects broadly to every other group. Hover a node in either panel to highlight its connections in both.</p>
+  </div>
+
+  <h2>Rendering at Scale: Canvas for Dense Graphs</h2>
+
+  <p>SVG handles edge bundling well up to about 200 edges. Each edge is a <code>&lt;path&gt;</code> element in the DOM, which means the browser must lay out, composite, and potentially animate hundreds of complex cubic Bezier curves. Past 200 edges, interaction starts to lag and memory use climbs.</p>
+
+  <p>Canvas eliminates per-edge DOM overhead. The <code>.context(ctx)</code> method on D3's line generators is the key: instead of producing an SVG path string (<code>d</code> attribute), the generator writes <code>moveTo</code> and <code>bezierCurveTo</code> calls directly onto the Canvas 2D context. One loop over the links array draws everything in a single compositing pass.</p>
+
+  <p>The tradeoff is interaction. Canvas has no DOM elements to attach event listeners to, so hover-highlighting requires a secondary structure. The standard approach is a hidden SVG layer on top of the Canvas, with invisible fat stroke-width paths that serve as hit targets. Or you can use a quadtree over leaf node positions and do distance-based picking. Either way, the rendering stays fast while interaction remains possible.</p>
+
+  <h2>Radial vs. Linear Dendrograms</h2>
+
+  <p>The radial layout, where leaves sit on a circle, is the classic form. It uses angular space efficiently and handles 100+ leaves before labels collide. But it is not the only option.</p>
+
+  <p>A <strong>linear dendrogram</strong> places the hierarchy vertically (or horizontally), with leaves along one edge and bundled curves arcing across the middle. This works well when the hierarchy has a natural ordering (alphabetical, temporal, geographic) that the viewer expects to read linearly. It also fits better in tall, narrow containers like sidebars or mobile screens.</p>
+
+  <p>The construction is identical except you use <code>d3.line</code> instead of <code>d3.lineRadial</code>, and the cluster layout uses pixel coordinates instead of polar. LCA paths work the same way. The main challenge is that linear layouts consume more vertical space per leaf, so they hit label-collision limits sooner.</p>
+
+  <h2>Color Encoding Strategies</h2>
+
+  <p>The simplest approach, and the default in Figure 1 above, colors each edge by its <strong>source group</strong>. This makes it easy to see where traffic originates: a cluster of blue edges radiating from the Auth group tells you Auth has many outbound connections.</p>
+
+  <p>Coloring by <strong>target group</strong> reverses the reading. Now you see where traffic lands. A cluster of orange edges converging on the Infra group tells you Infra is a dependency sink. Both encodings are valid; the choice depends on whether the story is about who sends or who receives.</p>
+
+  <p>Coloring by <strong>edge weight</strong> (using a sequential scale) works when connections carry a quantitative attribute: call frequency, data volume, dependency strength. This requires a color legend and careful palette choice to avoid the perception trap where thick bundles of light-colored edges look more important than thin bundles of dark ones.</p>
+
+  <p>A less common but effective strategy is a <strong>gradient along the edge</strong>, blending from the source group's color to the target group's color. This encodes directionality without arrows, which are impractical on curved bundled paths. D3 can achieve this with SVG <code>&lt;linearGradient&gt;</code> elements, though it requires one gradient definition per edge and does not work on Canvas.</p>
+
+  <h2>When to Use Something Else</h2>
+
+  <p>Edge bundling is not the only way to show network structure, and it is often not the best.</p>
+
+  <p>An <strong>adjacency matrix</strong> excels when you need precise answers: does node A connect to node B? A matrix makes this a table lookup. It also scales to thousands of nodes without visual clutter, since every cell is the same size and there are no crossing edges. The cost is that path-following (A connects to B, B connects to C) is difficult, and the matrix does not convey hierarchy or spatial structure.</p>
+
+  <p>A <strong>chord diagram</strong> is a close cousin of edge bundling but aggregates edges between groups into thick bands whose width encodes volume. Use a chord diagram when you care about the total flow between groups, not the individual leaf-level connections. It is simpler to read for group-level questions but loses all leaf-level detail.</p>
+
+  <p>A <strong>force-directed layout</strong> with highlight-on-hover is better when there is no meaningful hierarchy, when individual connections matter, or when the viewer needs to explore the graph freely. Force layouts handle small to medium graphs (up to a few hundred nodes) well and are more intuitive for viewers unfamiliar with radial dendrograms.</p>
+
+  <h2>When This Skill Hurts</h2>
+
+  <div class="risk">
+    <p><strong>Phantom patterns.</strong> Bundling creates visual clusters where none exist in the data. Edges are routed through shared ancestors by the hierarchy, not by data similarity. Two edges that happen to share a common ancestor merge into the same bundle, and the viewer reads this as a meaningful relationship. It is not. The merge is an artifact of the tree structure. CHI 2025 research confirms that viewers consistently perceive false connections at bundle merge points. LLMs are especially prone to presenting these bundled patterns as meaningful findings in their commentary, describing "strong connections between X and Y" when the visual proximity is entirely an artifact of the routing algorithm.</p>
+  </div>
+
+  <div class="risk">
+    <p><strong>Tension as editorial choice.</strong> The tension parameter controls what the viewer perceives. High tension emphasizes group-level flow; low tension emphasizes individual edges. This is a design decision with real interpretive consequences, equivalent to choosing a map projection or a bin width. But LLMs treat it as a fixed technical value from the skill (typically 0.85) rather than something to justify for the specific dataset. A graph with 5 well-separated clusters needs different tension than one with 20 overlapping groups. A presentation for executives needs different tension than an analyst's exploration tool. Defaulting to 0.85 without explanation is not wrong, but it is not a considered choice either.</p>
+  </div>
+
+  <div class="risk">
+    <p><strong>Hierarchy requirement.</strong> Edge bundling requires a hierarchical grouping of nodes. If the hierarchy is arbitrary, the bundling is misleading. A two-level hierarchy where nodes are randomly assigned to groups will produce bundles that reflect the random assignment, not any real structure. The skill assumes the hierarchy is given and meaningful, but does not warn about this assumption. LLMs will take any grouping column in the data (alphabetical, by ID prefix, by creation date) and feed it to <code>d3.stratify</code> without questioning whether it represents a meaningful relationship. The resulting diagram looks authoritative but encodes nothing.</p>
+  </div>
+
+  <div class="risk">
+    <p><strong>Hover identification.</strong> In a densely bundled graph, it is nearly impossible to trace a single edge from source to target by eye. The entire point of bundling is that individual edges merge. The skill's hover-highlight interaction solves this: hover a node to dim everything except its connections, making them individually traceable. But LLMs often omit the interaction code, producing beautiful static bundles that look impressive in a screenshot but give the viewer no way to answer "what connects to this node?" A bundled diagram without hover-highlighting is a visualization that has traded away its only mechanism for answering specific questions.</p>
+  </div>
+
+  <footer class="footer">
+    <p><a href="index.html">&larr; Back</a></p>
+  </footer>
+
+</div>
+
+<script>
+(function() {
+
+  // --- Synthetic data: 5 groups, ~8 nodes each, ~80 cross-group links ---
+
+  const groups = [
+    { name: "Auth",    nodes: ["login", "signup", "oauth", "session", "token", "password", "mfa", "sso"] },
+    { name: "Data",    nodes: ["query", "cache", "index", "migrate", "schema", "pool", "backup", "replicate"] },
+    { name: "API",     nodes: ["router", "middleware", "handler", "validate", "throttle", "cors", "logger", "serialize"] },
+    { name: "UI",      nodes: ["layout", "theme", "modal", "toast", "form", "table", "chart", "nav"] },
+    { name: "Infra",   nodes: ["deploy", "monitor", "alert", "config", "secrets", "scale", "logs", "health"] },
+  ];
+
+  const groupColors = ["#2563eb", "#d946ef", "#059669", "#ea580c", "#8b5cf6"];
+
+  // Build hierarchy data for d3.stratify
+  const hierarchyData = [{ id: "root", parent: null }];
+  groups.forEach(g => {
+    hierarchyData.push({ id: g.name, parent: "root" });
+    g.nodes.forEach(n => {
+      hierarchyData.push({ id: `${g.name}.${n}`, parent: g.name, group: g.name });
+    });
+  });
+
+  // Build cross-group connections (seeded for reproducibility)
+  function mulberry32(a) {
+    return function() {
+      a |= 0; a = a + 0x6D2B79F5 | 0;
+      let t = Math.imul(a ^ a >>> 15, 1 | a);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+
+  const rand = mulberry32(42);
+  const connections = [];
+  const allLeaves = [];
+  groups.forEach(g => g.nodes.forEach(n => allLeaves.push({ id: `${g.name}.${n}`, group: g.name })));
+
+  // Generate ~80 cross-group connections
+  while (connections.length < 80) {
+    const a = allLeaves[Math.floor(rand() * allLeaves.length)];
+    const b = allLeaves[Math.floor(rand() * allLeaves.length)];
+    if (a.group !== b.group) {
+      const key = [a.id, b.id].sort().join("|");
+      if (!connections.find(c => [c.source, c.target].sort().join("|") === key)) {
+        connections.push({ source: a.id, target: b.id, sourceGroup: a.group });
+      }
+    }
+  }
+
+  // --- Layout ---
+
+  const containerEl = document.getElementById("bundle-svg-container");
+  const W = Math.min(containerEl.getBoundingClientRect().width, 680);
+  const H = W;
+  const outerRadius = W / 2;
+  const innerRadius = outerRadius - 120;
+
+  const root = d3.stratify()
+    .id(d => d.id)
+    .parentId(d => d.parent)(hierarchyData);
+
+  const cluster = d3.cluster()
+    .size([2 * Math.PI, innerRadius])
+    .separation((a, b) => (a.parent === b.parent ? 1 : 2) / a.depth);
+
+  cluster(root);
+
+  // Map for fast lookup
+  const nodesById = new Map(root.descendants().map(d => [d.data.id, d]));
+
+  // Group color map
+  const groupColorMap = new Map(groups.map((g, i) => [g.name, groupColors[i]]));
+
+  // Compute LCA paths for each connection
+  const links = connections.map(c => {
+    const source = nodesById.get(c.source);
+    const target = nodesById.get(c.target);
+    if (!source || !target) return null;
+    const path = source.path(target);
+    path.sourceGroup = c.sourceGroup;
+    path.sourceId = c.source;
+    path.targetId = c.target;
+    return path;
+  }).filter(Boolean);
+
+  // --- SVG ---
+
+  const svg = d3.select("#bundle-svg-container").append("svg")
+    .attr("width", W)
+    .attr("height", H)
+    .attr("viewBox", [-outerRadius, -outerRadius, W, H]);
+
+  // Edge group (below nodes)
+  const linkGroup = svg.append("g").attr("fill", "none");
+
+  // Node group
+  const nodeGroup = svg.append("g");
+
+  // Line generator
+  let currentBeta = 0.15; // tension 0.85
+
+  const line = d3.lineRadial()
+    .curve(d3.curveBundle.beta(currentBeta))
+    .radius(d => d.y)
+    .angle(d => d.x);
+
+  // Draw edges
+  const linkPaths = linkGroup.selectAll("path")
+    .data(links)
+    .join("path")
+      .attr("d", line)
+      .attr("stroke", d => groupColorMap.get(d.sourceGroup))
+      .attr("stroke-opacity", 0.3)
+      .attr("stroke-width", 1.2);
+
+  // Draw leaf nodes
+  const leaves = root.leaves();
+
+  const nodeElements = nodeGroup.selectAll("g")
+    .data(leaves)
+    .join("g")
+      .attr("transform", d =>
+        `rotate(${d.x * 180 / Math.PI - 90}) translate(${d.y},0)`)
+      .style("cursor", "pointer");
+
+  nodeElements.append("circle")
+    .attr("r", 3)
+    .attr("fill", d => groupColorMap.get(d.parent.data.id))
+    .attr("stroke", "white")
+    .attr("stroke-width", 1);
+
+  // Labels
+  nodeElements.append("text")
+    .attr("dy", "0.32em")
+    .attr("x", d => d.x < Math.PI ? 6 : -6)
+    .attr("text-anchor", d => d.x < Math.PI ? "start" : "end")
+    .attr("transform", d => d.x >= Math.PI ? "rotate(180)" : null)
+    .attr("font-size", "10px")
+    .attr("fill", "var(--text-2)")
+    .text(d => d.data.id.split(".")[1]);
+
+  // --- Interaction: hover to highlight ---
+
+  function getConnected(node) {
+    return links.filter(link =>
+      link.sourceId === node.data.id || link.targetId === node.data.id
+    );
+  }
+
+  function getConnectedNodeIds(node) {
+    const ids = new Set();
+    links.forEach(link => {
+      if (link.sourceId === node.data.id) ids.add(link.targetId);
+      if (link.targetId === node.data.id) ids.add(link.sourceId);
+    });
+    ids.add(node.data.id);
+    return ids;
+  }
+
+  nodeElements
+    .on("pointerenter", function(event, d) {
+      const connected = getConnected(d);
+      const connectedIds = getConnectedNodeIds(d);
+
+      linkPaths
+        .attr("stroke-opacity", link =>
+          connected.includes(link) ? 0.8 : 0.04)
+        .attr("stroke-width", link =>
+          connected.includes(link) ? 2 : 1);
+
+      // Raise highlighted links
+      linkPaths.filter(link => connected.includes(link)).raise();
+
+      nodeElements.select("circle")
+        .attr("opacity", nd => connectedIds.has(nd.data.id) ? 1 : 0.2);
+      nodeElements.select("text")
+        .attr("opacity", nd => connectedIds.has(nd.data.id) ? 1 : 0.15)
+        .attr("font-weight", nd => nd.data.id === d.data.id ? 700 : 400);
+    })
+    .on("pointerleave", function() {
+      linkPaths
+        .attr("stroke-opacity", 0.3)
+        .attr("stroke-width", 1.2);
+      nodeElements.select("circle").attr("opacity", 1);
+      nodeElements.select("text").attr("opacity", 1).attr("font-weight", 400);
+    });
+
+  // --- Tension slider ---
+
+  const slider = document.getElementById("tension-slider");
+  const readout = document.getElementById("tension-readout");
+
+  slider.addEventListener("input", function() {
+    const tension = +this.value;
+    currentBeta = 1 - tension;
+    readout.textContent = tension.toFixed(2);
+
+    const updatedLine = d3.lineRadial()
+      .curve(d3.curveBundle.beta(currentBeta))
+      .radius(d => d.y)
+      .angle(d => d.x);
+
+    linkPaths.attr("d", updatedLine);
+  });
+
+  // --- Legend ---
+
+  const legendEl = document.getElementById("legend");
+  groups.forEach((g, i) => {
+    const item = document.createElement("span");
+    item.className = "legend-item";
+    item.innerHTML = `<span class="legend-swatch" style="background:${groupColors[i]}"></span>${g.name}`;
+    legendEl.appendChild(item);
+  });
+
+})();
+</script>
+
+<script>
+// ─── Figure 2: LCA Path Highlight ───
+(function() {
+
+  const groups = [
+    { name: "Auth",  nodes: ["login", "signup", "oauth", "session", "token", "password", "mfa", "sso"] },
+    { name: "Data",  nodes: ["query", "cache", "index", "migrate", "schema", "pool", "backup", "replicate"] },
+    { name: "API",   nodes: ["router", "middleware", "handler", "validate", "throttle", "cors", "logger", "serialize"] },
+    { name: "UI",    nodes: ["layout", "theme", "modal", "toast", "form", "table", "chart", "nav"] },
+    { name: "Infra", nodes: ["deploy", "monitor", "alert", "config", "secrets", "scale", "logs", "health"] },
+  ];
+  const groupColors = ["#2563eb", "#d946ef", "#059669", "#ea580c", "#8b5cf6"];
+  const groupColorMap = new Map(groups.map((g, i) => [g.name, groupColors[i]]));
+
+  const hierarchyData = [{ id: "root", parent: null }];
+  groups.forEach(g => {
+    hierarchyData.push({ id: g.name, parent: "root" });
+    g.nodes.forEach(n => {
+      hierarchyData.push({ id: `${g.name}.${n}`, parent: g.name, group: g.name });
+    });
+  });
+
+  function mulberry32(a) {
+    return function() {
+      a |= 0; a = a + 0x6D2B79F5 | 0;
+      let t = Math.imul(a ^ a >>> 15, 1 | a);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+  const rand = mulberry32(42);
+  const allLeaves = [];
+  groups.forEach(g => g.nodes.forEach(n => allLeaves.push({ id: `${g.name}.${n}`, group: g.name })));
+  const connections = [];
+  while (connections.length < 80) {
+    const a = allLeaves[Math.floor(rand() * allLeaves.length)];
+    const b = allLeaves[Math.floor(rand() * allLeaves.length)];
+    if (a.group !== b.group) {
+      const key = [a.id, b.id].sort().join("|");
+      if (!connections.find(c => [c.source, c.target].sort().join("|") === key)) {
+        connections.push({ source: a.id, target: b.id, sourceGroup: a.group });
+      }
+    }
+  }
+
+  const containerEl = document.getElementById("lca-svg-container");
+  const W = Math.min(containerEl.getBoundingClientRect().width, 580);
+  const H = W;
+  const outerRadius = W / 2;
+  const innerRadius = outerRadius - 100;
+
+  const root = d3.stratify().id(d => d.id).parentId(d => d.parent)(hierarchyData);
+  const cluster = d3.cluster()
+    .size([2 * Math.PI, innerRadius])
+    .separation((a, b) => (a.parent === b.parent ? 1 : 2) / a.depth);
+  cluster(root);
+
+  const nodesById = new Map(root.descendants().map(d => [d.data.id, d]));
+
+  const links = connections.map(c => {
+    const source = nodesById.get(c.source);
+    const target = nodesById.get(c.target);
+    if (!source || !target) return null;
+    const path = source.path(target);
+    path.sourceGroup = c.sourceGroup;
+    path.sourceId = c.source;
+    path.targetId = c.target;
+    return path;
+  }).filter(Boolean);
+
+  const svg = d3.select("#lca-svg-container").append("svg")
+    .attr("width", W).attr("height", H)
+    .attr("viewBox", [-outerRadius, -outerRadius, W, H]);
+
+  const line = d3.lineRadial()
+    .curve(d3.curveBundle.beta(0.15))
+    .radius(d => d.y)
+    .angle(d => d.x);
+
+  // Background edges
+  const linkPaths = svg.append("g").attr("fill", "none")
+    .selectAll("path").data(links).join("path")
+      .attr("d", line)
+      .attr("stroke", "#ccc")
+      .attr("stroke-opacity", 0.15)
+      .attr("stroke-width", 1);
+
+  // Highlighted LCA path group (on top)
+  const highlightGroup = svg.append("g").attr("fill", "none");
+
+  // Pick a default highlighted edge: Auth.login -> UI.chart (cross-group, long LCA path)
+  const defaultHighlight = links.find(l => l.sourceId === "Auth.login" && l.targetId === "UI.chart")
+    || links.find(l => l.sourceId === "UI.chart" && l.targetId === "Auth.login")
+    || links[0];
+
+  // Draw LCA waypoints for a given path
+  function toCartesian(node) {
+    return [node.y * Math.cos(node.x - Math.PI / 2), node.y * Math.sin(node.x - Math.PI / 2)];
+  }
+
+  function showLCAPath(path) {
+    highlightGroup.selectAll("*").remove();
+
+    // Draw the bundled curve in highlight color
+    highlightGroup.append("path")
+      .datum(path)
+      .attr("d", line)
+      .attr("stroke", "#d97706")
+      .attr("stroke-width", 2.5)
+      .attr("stroke-opacity", 0.9);
+
+    // Draw straight-line segments through LCA waypoints (dotted)
+    const waypointLine = d3.lineRadial()
+      .curve(d3.curveLinear)
+      .radius(d => d.y)
+      .angle(d => d.x);
+
+    highlightGroup.append("path")
+      .datum(path)
+      .attr("d", waypointLine)
+      .attr("stroke", "#92400e")
+      .attr("stroke-width", 1)
+      .attr("stroke-opacity", 0.5)
+      .attr("stroke-dasharray", "3,3");
+
+    // Draw waypoint dots
+    path.forEach((node, i) => {
+      const [cx, cy] = toCartesian(node);
+      const isLeaf = i === 0 || i === path.length - 1;
+      const isLCA = !node.children || node.data.id === "root";
+      highlightGroup.append("circle")
+        .attr("cx", cx).attr("cy", cy)
+        .attr("r", isLeaf ? 5 : 4)
+        .attr("fill", isLeaf ? (groupColorMap.get(node.parent.data.id) || "#d97706") : "#d97706")
+        .attr("stroke", "#fff")
+        .attr("stroke-width", 1.5)
+        .attr("opacity", 0.9);
+
+      // Label LCA node
+      if (i > 0 && i < path.length - 1 && node.data.id !== "root") {
+        highlightGroup.append("text")
+          .attr("x", cx).attr("y", cy - 8)
+          .attr("text-anchor", "middle")
+          .attr("font-size", "9px")
+          .attr("font-family", "var(--heading-font)")
+          .attr("fill", "#92400e")
+          .attr("font-weight", 600)
+          .text(node.data.id);
+      }
+      if (node.data.id === "root") {
+        highlightGroup.append("text")
+          .attr("x", cx).attr("y", cy - 8)
+          .attr("text-anchor", "middle")
+          .attr("font-size", "9px")
+          .attr("font-family", "var(--heading-font)")
+          .attr("fill", "#92400e")
+          .attr("font-weight", 600)
+          .text("LCA: root");
+      }
+    });
+  }
+
+  showLCAPath(defaultHighlight);
+
+  // Leaf nodes
+  const leaves = root.leaves();
+  const nodeGroup = svg.append("g");
+  const nodeElements = nodeGroup.selectAll("g").data(leaves).join("g")
+    .attr("transform", d => `rotate(${d.x * 180 / Math.PI - 90}) translate(${d.y},0)`)
+    .style("cursor", "pointer");
+
+  nodeElements.append("circle")
+    .attr("r", 3)
+    .attr("fill", d => groupColorMap.get(d.parent.data.id))
+    .attr("stroke", "white")
+    .attr("stroke-width", 1);
+
+  nodeElements.append("text")
+    .attr("dy", "0.32em")
+    .attr("x", d => d.x < Math.PI ? 6 : -6)
+    .attr("text-anchor", d => d.x < Math.PI ? "start" : "end")
+    .attr("transform", d => d.x >= Math.PI ? "rotate(180)" : null)
+    .attr("font-size", "9px")
+    .attr("fill", "var(--text-2)")
+    .text(d => d.data.id.split(".")[1]);
+
+  // Hover interaction: show LCA path for hovered node's first connection
+  nodeElements
+    .on("pointerenter", function(event, d) {
+      const connected = links.filter(l => l.sourceId === d.data.id || l.targetId === d.data.id);
+      if (connected.length > 0) {
+        showLCAPath(connected[0]);
+        // Dim unrelated edges
+        linkPaths.attr("stroke-opacity", l => connected.includes(l) ? 0.3 : 0.05);
+      }
+    })
+    .on("pointerleave", function() {
+      showLCAPath(defaultHighlight);
+      linkPaths.attr("stroke-opacity", 0.15);
+    });
+
+  // Legend
+  const legendEl = document.getElementById("lca-legend");
+  [
+    { color: "#d97706", label: "Bundled curve (tension 0.85)", style: "solid" },
+    { color: "#92400e", label: "Tree path through LCA", style: "dashed" },
+  ].forEach(item => {
+    const span = document.createElement("span");
+    span.className = "lca-legend-item";
+    const lineStyle = item.style === "dashed"
+      ? `border-top: 2px dashed ${item.color}`
+      : `background: ${item.color}`;
+    span.innerHTML = `<span class="lca-legend-line" style="${lineStyle}"></span>${item.label}`;
+    legendEl.appendChild(span);
+  });
+
+})();
+</script>
+
+<script>
+// ─── Figure 3: Side-by-side Straight vs Bundled ───
+(function() {
+
+  const groups = [
+    { name: "Auth",  nodes: ["login", "signup", "oauth", "session", "token", "password", "mfa", "sso"] },
+    { name: "Data",  nodes: ["query", "cache", "index", "migrate", "schema", "pool", "backup", "replicate"] },
+    { name: "API",   nodes: ["router", "middleware", "handler", "validate", "throttle", "cors", "logger", "serialize"] },
+    { name: "UI",    nodes: ["layout", "theme", "modal", "toast", "form", "table", "chart", "nav"] },
+    { name: "Infra", nodes: ["deploy", "monitor", "alert", "config", "secrets", "scale", "logs", "health"] },
+  ];
+  const groupColors = ["#2563eb", "#d946ef", "#059669", "#ea580c", "#8b5cf6"];
+  const groupColorMap = new Map(groups.map((g, i) => [g.name, groupColors[i]]));
+
+  const hierarchyData = [{ id: "root", parent: null }];
+  groups.forEach(g => {
+    hierarchyData.push({ id: g.name, parent: "root" });
+    g.nodes.forEach(n => {
+      hierarchyData.push({ id: `${g.name}.${n}`, parent: g.name, group: g.name });
+    });
+  });
+
+  function mulberry32(a) {
+    return function() {
+      a |= 0; a = a + 0x6D2B79F5 | 0;
+      let t = Math.imul(a ^ a >>> 15, 1 | a);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+  const rand = mulberry32(42);
+  const allLeaves = [];
+  groups.forEach(g => g.nodes.forEach(n => allLeaves.push({ id: `${g.name}.${n}`, group: g.name })));
+  const connections = [];
+  while (connections.length < 80) {
+    const a = allLeaves[Math.floor(rand() * allLeaves.length)];
+    const b = allLeaves[Math.floor(rand() * allLeaves.length)];
+    if (a.group !== b.group) {
+      const key = [a.id, b.id].sort().join("|");
+      if (!connections.find(c => [c.source, c.target].sort().join("|") === key)) {
+        connections.push({ source: a.id, target: b.id, sourceGroup: a.group });
+      }
+    }
+  }
+
+  // Build two side-by-side diagrams
+  function buildPanel(containerId, beta) {
+    const containerEl = document.getElementById(containerId);
+    const W = Math.min(containerEl.getBoundingClientRect().width, 320);
+    const H = W;
+    const outerRadius = W / 2;
+    const innerRadius = outerRadius - 70;
+
+    const root = d3.stratify().id(d => d.id).parentId(d => d.parent)(hierarchyData);
+    const cluster = d3.cluster()
+      .size([2 * Math.PI, innerRadius])
+      .separation((a, b) => (a.parent === b.parent ? 1 : 2) / a.depth);
+    cluster(root);
+
+    const nodesById = new Map(root.descendants().map(d => [d.data.id, d]));
+
+    const links = connections.map(c => {
+      const source = nodesById.get(c.source);
+      const target = nodesById.get(c.target);
+      if (!source || !target) return null;
+      const path = source.path(target);
+      path.sourceGroup = c.sourceGroup;
+      path.sourceId = c.source;
+      path.targetId = c.target;
+      return path;
+    }).filter(Boolean);
+
+    const svg = d3.select(`#${containerId}`).append("svg")
+      .attr("width", W).attr("height", H)
+      .attr("viewBox", [-outerRadius, -outerRadius, W, H]);
+
+    const line = d3.lineRadial()
+      .curve(d3.curveBundle.beta(beta))
+      .radius(d => d.y)
+      .angle(d => d.x);
+
+    const linkPaths = svg.append("g").attr("fill", "none")
+      .selectAll("path").data(links).join("path")
+        .attr("d", line)
+        .attr("stroke", d => groupColorMap.get(d.sourceGroup))
+        .attr("stroke-opacity", 0.3)
+        .attr("stroke-width", 1);
+
+    const leaves = root.leaves();
+    const nodeGroup = svg.append("g");
+    const nodeElements = nodeGroup.selectAll("g").data(leaves).join("g")
+      .attr("transform", d => `rotate(${d.x * 180 / Math.PI - 90}) translate(${d.y},0)`)
+      .style("cursor", "pointer");
+
+    nodeElements.append("circle")
+      .attr("r", 2.5)
+      .attr("fill", d => groupColorMap.get(d.parent.data.id))
+      .attr("stroke", "white")
+      .attr("stroke-width", 0.8);
+
+    nodeElements.append("text")
+      .attr("dy", "0.32em")
+      .attr("x", d => d.x < Math.PI ? 5 : -5)
+      .attr("text-anchor", d => d.x < Math.PI ? "start" : "end")
+      .attr("transform", d => d.x >= Math.PI ? "rotate(180)" : null)
+      .attr("font-size", "7px")
+      .attr("fill", "var(--text-2)")
+      .text(d => d.data.id.split(".")[1]);
+
+    return { linkPaths, nodeElements, links, root };
+  }
+
+  const panelStraight = buildPanel("compare-straight-container", 1.0);
+  const panelBundled  = buildPanel("compare-bundled-container", 0.15);
+
+  // Linked hover: highlight in both panels
+  function highlightNode(nodeData, panels) {
+    panels.forEach(panel => {
+      const connected = panel.links.filter(l =>
+        l.sourceId === nodeData.data.id || l.targetId === nodeData.data.id);
+      const connectedIds = new Set();
+      panel.links.forEach(l => {
+        if (l.sourceId === nodeData.data.id) connectedIds.add(l.targetId);
+        if (l.targetId === nodeData.data.id) connectedIds.add(l.sourceId);
+      });
+      connectedIds.add(nodeData.data.id);
+
+      panel.linkPaths
+        .attr("stroke-opacity", l => connected.includes(l) ? 0.8 : 0.04)
+        .attr("stroke-width", l => connected.includes(l) ? 1.8 : 0.8);
+      panel.linkPaths.filter(l => connected.includes(l)).raise();
+
+      panel.nodeElements.select("circle")
+        .attr("opacity", d => connectedIds.has(d.data.id) ? 1 : 0.2);
+      panel.nodeElements.select("text")
+        .attr("opacity", d => connectedIds.has(d.data.id) ? 1 : 0.15);
+    });
+  }
+
+  function resetHighlight(panels) {
+    panels.forEach(panel => {
+      panel.linkPaths.attr("stroke-opacity", 0.3).attr("stroke-width", 1);
+      panel.nodeElements.select("circle").attr("opacity", 1);
+      panel.nodeElements.select("text").attr("opacity", 1);
+    });
+  }
+
+  const allPanels = [panelStraight, panelBundled];
+
+  [panelStraight, panelBundled].forEach(panel => {
+    panel.nodeElements
+      .on("pointerenter", function(event, d) { highlightNode(d, allPanels); })
+      .on("pointerleave", function() { resetHighlight(allPanels); });
+  });
+
+})();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,954 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Data Tables as Visualization</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --article-width: 740px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem;
+  --line-height: 1.6;
+  --text: #1a1a2e;
+  --text-2: #4a4a6a;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --bg: #fafafa;
+  --fig-bg: #ffffff;
+  --border: #e2e2e8;
+  --cat-a: #2563eb;
+  --cat-b: #e45c3a;
+  --cat-c: #16a34a;
+  --cat-d: #9333ea;
+  --cat-e: #ca8a04;
+  --ghost: #d8d8de;
+  --row-hover: #f0f4ff;
+  --row-highlight: #dbeafe;
+}
+
+body {
+  font-family: var(--body-font);
+  font-size: var(--body-size);
+  line-height: var(--line-height);
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+.article {
+  max-width: var(--article-width);
+  margin: 0 auto;
+  padding: 2rem 1.25rem 6rem;
+}
+
+h1, h2, h3 {
+  font-family: var(--heading-font);
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+
+p { margin: 0 0 1rem; }
+a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+a:hover { color: #1d4ed8; }
+
+code {
+  font-family: var(--mono-font);
+  font-size: 0.9em;
+  background: #f1f1f5;
+  padding: 0.15em 0.4em;
+  border-radius: 3px;
+}
+
+.header {
+  padding: 4rem 0 2rem;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 2.5rem;
+}
+.header .subtitle {
+  font-family: var(--heading-font);
+  font-size: 1.15rem;
+  color: var(--text-2);
+  margin-bottom: 0;
+  max-width: 580px;
+}
+
+.back-link {
+  font-family: var(--heading-font);
+  font-size: 0.85rem;
+  display: inline-block;
+  margin-bottom: 0.5rem;
+}
+
+/* Figures */
+.figure {
+  margin: 2rem 0;
+  padding: 1.5rem;
+  background: var(--fig-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.figure-wide {
+  margin-left: -2rem;
+  margin-right: -2rem;
+}
+.figure-caption {
+  font-family: var(--heading-font);
+  font-size: 0.85rem;
+  color: var(--text-2);
+  margin-top: 0.75rem;
+  line-height: 1.4;
+}
+.figure-label { font-weight: 600; color: var(--text); }
+
+/* Insight box */
+.insight {
+  background: var(--accent-light);
+  border-left: 3px solid var(--accent);
+  padding: 1rem 1.25rem;
+  margin: 1.5rem 0;
+  border-radius: 0 4px 4px 0;
+}
+.insight p { margin: 0; }
+.insight p + p { margin-top: 0.5rem; }
+
+/* Controls */
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  font-family: var(--heading-font);
+  font-size: 0.85rem;
+  color: var(--text-2);
+  margin-bottom: 0.75rem;
+}
+
+.btn {
+  font-family: var(--heading-font);
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.45rem 1.1rem;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  background: var(--fig-bg);
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  user-select: none;
+}
+.btn:hover { border-color: var(--accent); background: var(--accent-light); }
+.btn.active {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+/* Split layout: scatter + table side by side */
+.split-container {
+  display: flex;
+  gap: 1.25rem;
+  align-items: flex-start;
+}
+.split-chart { flex: 0 0 300px; min-width: 0; }
+.split-table { flex: 1; min-width: 0; overflow: hidden; }
+
+/* Filter input */
+.filter-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+  font-family: var(--heading-font);
+  font-size: 0.85rem;
+}
+.filter-input {
+  font-family: var(--heading-font);
+  font-size: 0.85rem;
+  padding: 0.35rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--fig-bg);
+  color: var(--text);
+  width: 180px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.filter-input:focus { border-color: var(--accent); }
+.filter-status {
+  font-family: var(--heading-font);
+  font-size: 0.8rem;
+  color: var(--text-2);
+}
+
+/* Data table */
+.data-table-wrap {
+  max-height: 380px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+.data-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-family: var(--heading-font);
+  font-size: 0.8rem;
+}
+.data-table thead { position: sticky; top: 0; z-index: 2; }
+.data-table th {
+  background: #f4f4f8;
+  font-weight: 600;
+  text-align: left;
+  padding: 0.5rem 0.6rem;
+  border-bottom: 2px solid var(--border);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  position: relative;
+}
+.data-table th:hover { background: #eaeaf0; }
+.data-table th.num { text-align: right; }
+.data-table th .sort-arrow {
+  display: inline-block;
+  width: 1em;
+  text-align: center;
+  color: var(--text-2);
+  font-size: 0.75rem;
+  margin-left: 0.2em;
+}
+.data-table td {
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid #f0f0f4;
+  white-space: nowrap;
+}
+.data-table td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-family: var(--mono-font);
+  font-size: 0.78rem;
+}
+.data-table tr.data-row { transition: background 0.1s; }
+.data-table tr.data-row:hover { background: var(--row-hover); }
+.data-table tr.data-row.highlighted { background: var(--row-highlight); }
+.data-table .cat-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 0.4em;
+  vertical-align: middle;
+}
+
+/* SVG defaults */
+svg text { font-family: var(--heading-font); }
+
+/* Risk/warning callout (amber) */
+.risk {
+  background: #fef3c7;
+  border-left: 3px solid #d97706;
+  padding: 1rem 1.25rem;
+  margin: 1.5rem 0;
+  border-radius: 0 4px 4px 0;
+}
+.risk p { margin: 0; }
+.risk p + p { margin-top: 0.5rem; }
+.risk strong { color: #92400e; }
+
+/* Sparkline table */
+.spark-table-wrap {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.spark-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-family: var(--heading-font);
+  font-size: 0.8rem;
+}
+.spark-table thead { position: sticky; top: 0; z-index: 2; }
+.spark-table th {
+  background: #f4f4f8;
+  font-weight: 600;
+  text-align: left;
+  padding: 0.5rem 0.6rem;
+  border-bottom: 2px solid var(--border);
+  white-space: nowrap;
+}
+.spark-table th.num { text-align: right; }
+.spark-table td {
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid #f0f0f4;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.spark-table td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-family: var(--mono-font);
+  font-size: 0.78rem;
+}
+.spark-table td.spark-cell {
+  padding: 0.2rem 0.4rem;
+}
+.spark-table tr:hover { background: var(--row-hover); }
+.spark-table .trend-up { color: #16a34a; font-weight: 600; }
+.spark-table .trend-down { color: #dc2626; font-weight: 600; }
+.spark-table .trend-flat { color: var(--text-2); }
+
+h3 {
+  font-family: var(--heading-font);
+  font-weight: 700;
+  font-size: 1.15rem;
+  line-height: 1.2;
+  margin: 2rem 0 0.75rem;
+}
+
+/* Footer */
+.footer {
+  margin-top: 4rem;
+  padding-top: 2rem;
+  border-top: 1px solid var(--border);
+  font-family: var(--heading-font);
+  font-size: 0.85rem;
+  color: var(--text-2);
+}
+.footer a { color: var(--text-2); }
+
+@media (max-width: 700px) {
+  .figure-wide { margin-left: 0; margin-right: 0; }
+  .split-container { flex-direction: column; }
+  .split-chart { flex: none; width: 100%; }
+  h1 { font-size: 1.75rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0s !important;
+    transition-duration: 0s !important;
+  }
+}
+</style>
+</head>
+<body>
+
+<div class="article">
+
+  <header class="header">
+    <a href="index.html" class="back-link">&larr; Back</a>
+    <h1>Data Tables as Visualization</h1>
+    <p class="subtitle">A well-designed table is a visualization, not a fallback. It shows the exact values that charts can only approximate.</p>
+  </header>
+
+  <p>Charts encode values as position, length, or color. Those encodings are efficient for spotting trends, clusters, and outliers, but they are lossy. A reader looking at a scatter plot can tell that two points are close, not that one is 47.3 and the other is 48.1. When the viewer's task requires exact numbers, comparison across several attributes, or mixed units in a single view, a table outperforms any chart.</p>
+
+  <p>The interactive below shows the same 30-row dataset in two forms side by side. The scatter plot reveals the shape of the relationship between revenue and employees. The table reveals the specific values. Hover a row to highlight the corresponding point, or hover a point to highlight the row. Click a column header to sort. Type in the filter box to narrow both views at once.</p>
+
+  <div class="insight">
+    <p>Tables and charts answer different questions about the same data. "Is there a correlation?" is a chart question. "What is Acme Corp's exact revenue?" is a table question. Offering both lets the reader switch tasks without switching tools.</p>
+  </div>
+
+  <div class="figure figure-wide" id="main-figure">
+    <div class="controls">
+      <span>View:</span>
+      <button class="btn active" data-view="both" id="btn-both">Both</button>
+      <button class="btn" data-view="chart" id="btn-chart">Chart view</button>
+      <button class="btn" data-view="table" id="btn-table">Table view</button>
+    </div>
+    <div class="filter-row">
+      <label for="filter-input">Filter:</label>
+      <input type="text" id="filter-input" class="filter-input" placeholder="Type to search...">
+      <span id="filter-status" class="filter-status"></span>
+    </div>
+    <div class="split-container" id="split-container">
+      <div class="split-chart" id="chart-panel">
+        <div id="scatter-container"></div>
+      </div>
+      <div class="split-table" id="table-panel">
+        <div class="data-table-wrap" id="table-wrap">
+          <table class="data-table" id="data-table" role="grid">
+            <thead id="table-head"></thead>
+            <tbody id="table-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <p class="figure-caption"><span class="figure-label">Figure 1.</span> Thirty fictional companies. The scatter plot shows the revenue-employees relationship; the table provides exact figures. Hover to cross-highlight. Click column headers to sort. Filter narrows both views.</p>
+  </div>
+
+  <p>Notice how the chart makes the outlier obvious at a glance, but the table is the only way to identify which company it is and read its exact numbers. The sort feature lets you rank companies by any column, something that requires a completely different chart (a bar chart) for each variable. A single table handles all of them.</p>
+
+  <h2>Accessible Table Markup</h2>
+
+  <p>A table that looks right but lacks semantic structure is invisible to screen readers. The interactive above uses <code>role="grid"</code> on the <code>&lt;table&gt;</code> element and <code>role="columnheader"</code> on each <code>&lt;th&gt;</code>. Those are not decorative. They tell assistive technology that this is an interactive data grid, not just a layout table, and that clicking or pressing Enter on a header does something.</p>
+
+  <p>Three attributes carry most of the accessibility weight. <code>role="grid"</code> on the table signals that cells are navigable with arrow keys, not just tab stops. <code>scope="col"</code> on header cells binds each <code>&lt;th&gt;</code> to the column below it, so a screen reader can announce "Revenue, $47.3 million" rather than just "$47.3 million" with no context. And <code>aria-sort</code> on the active sort column tells the user which column is sorted and in which direction, without requiring them to visually spot a tiny arrow glyph.</p>
+
+  <p>The sort interaction deserves special attention. Each <code>&lt;th&gt;</code> needs <code>tabindex="0"</code> so keyboard users can reach it, plus an event handler for both Enter and Space. When the sort changes, a live region (a <code>div</code> with <code>aria-live="polite"</code>) should announce the new state: "Sorted by Revenue, descending." Without that announcement, a keyboard user presses Enter on a header and has no confirmation that anything happened. The table in Figure 1 sets <code>aria-sort</code> to <code>"ascending"</code>, <code>"descending"</code>, or <code>"none"</code> on every header after each sort action.</p>
+
+  <div class="insight">
+    <p>For tables with row headers (the first column identifies each row), add <code>scope="row"</code> to those cells. This lets a screen reader announce "Apex Corp, Revenue, 247.3" when navigating across a row, instead of just "247.3."</p>
+  </div>
+
+  <h2>Right-Aligned Numbers and Tabular Figures</h2>
+
+  <p>Numbers in a table column need to be right-aligned so the decimal points (or the ones digits, for integers) stack vertically. Left-aligned numbers are nearly impossible to compare because the digits do not line up. The reader has to mentally right-justify each value before they can see that 1,234 is larger than 987.</p>
+
+  <p>Right alignment alone is not enough. Proportional fonts give different widths to different digits: a "1" is narrower than a "0," so even right-aligned numbers wobble from row to row. The fix is <code>font-variant-numeric: tabular-nums</code>, which forces every digit to occupy the same horizontal space. The table above uses it on every <code>.num</code> cell. The visual effect is subtle but important: columns of numbers look like they were typeset in a ledger, with clean vertical alignment.</p>
+
+  <p>The CSS is two lines. Put <code>text-align: right</code> and <code>font-variant-numeric: tabular-nums</code> on numeric <code>&lt;td&gt;</code> elements. Mirror the <code>text-align: right</code> on the corresponding <code>&lt;th&gt;</code> so the header sits above its column of numbers rather than floating off to the left. Pair these with a consistent <code>d3.format</code> per column: every value in the Revenue column gets <code>,.1f</code>, every value in Employees gets <code>,</code>. Mixing decimal places within a column defeats the purpose of alignment.</p>
+
+  <h2>Chart-Table Toggle Patterns</h2>
+
+  <p>The toggle in Figure 1 offers three modes: chart only, table only, and both side by side. This is the simplest form of the pattern. The chart container and the table container are siblings in the DOM, and the toggle just sets <code>display: none</code> on whichever view is hidden. Both views bind to the same data array, so filter and selection state transfer automatically when switching.</p>
+
+  <p>Two implementation details matter. First, toggling to "chart only" should not destroy the table DOM. The table rows are expensive to rebuild from data if the dataset is large, and preserving them means the table reappears instantly when the user switches back. Just hide with <code>display: none</code>. Second, toggling to "table only" should not keep the chart's SVG or Canvas in memory if performance is a concern. Charts are cheap to redraw from data, and the pixel buffer of a Canvas element consumes real memory. For most tables the difference is negligible, but for dashboards with many chart-table pairs, lazy-destroying the chart on toggle and rebuilding on switch-back keeps memory bounded.</p>
+
+  <p>The toggle buttons use <code>aria-pressed</code> to communicate which view is active. A screen reader user pressing the "Table view" button hears "Table view, pressed" and knows the chart is now hidden. The hidden container should also carry <code>aria-hidden="true"</code> so assistive technology does not try to navigate invisible content.</p>
+
+  <h2>Linked Highlighting Between Chart and Table</h2>
+
+  <p>Cross-highlighting is the interaction that makes the chart-table pair feel like a single tool rather than two unrelated views. Hover a scatter point and the corresponding table row lights up. Hover a table row and the dot in the scatter plot grows and gets a stroke. The shared state is a single variable, <code>hoveredId</code>, that both views read from.</p>
+
+  <p>The update path is deliberately asymmetric. When the hover comes from the chart, the table row gets a CSS class (<code>.highlighted</code>) that sets a background color. The table does not scroll to the highlighted row. Scrolling on hover fights the user: if they are reading the chart, the table jumping around in the corner is distracting rather than helpful. When the hover comes from the table, the chart dot updates its radius and stroke, a small visual change that does not disrupt the chart's spatial layout.</p>
+
+  <p>Scroll-to-row is appropriate only for click or selection events, not for hover. If the user clicks a dot (or selects it with the keyboard), that is an intentional focus change, and scrolling the table to show the selected row is helpful. The distinction between hover (ephemeral attention) and click (intentional selection) should drive the scroll decision.</p>
+
+  <div class="insight">
+    <p>For Voronoi-based hover on the chart side, build the Delaunay triangulation from the filtered dataset, not the full dataset. If a point is filtered out, hovering near its former position should not highlight a ghost. The scatter in Figure 1 rebuilds the Delaunay on every filter change for this reason.</p>
+  </div>
+
+  <h2>Virtual Scrolling for Large Datasets</h2>
+
+  <p>A table with 50 rows renders instantly. A table with 50,000 rows creates 50,000 <code>&lt;tr&gt;</code> elements, each containing several <code>&lt;td&gt;</code> elements, and the browser spends hundreds of milliseconds building that DOM. Scrolling becomes sluggish. Sort operations freeze the page while D3 removes and re-adds thousands of nodes.</p>
+
+  <p>Virtual scrolling solves this by rendering only the rows that are visible in the scroll viewport, plus a small buffer above and below to prevent white flash during fast scrolling. The technique requires a fixed row height (so the total scrollable height can be computed as <code>data.length * rowHeight</code>) and a scroll listener that computes which rows are in view.</p>
+
+  <p>The implementation has five parts. A scroll container with <code>max-height</code> and <code>overflow-y: auto</code> provides the scrollbar. A spacer element inside it is sized to <code>data.length * rowHeight</code> so the scrollbar thumb reflects the full dataset. On scroll, compute <code>startIdx = Math.floor(scrollTop / rowHeight) - buffer</code> and <code>endIdx = startIdx + visibleCount + 2 * buffer</code>. Slice the sorted/filtered data to that range. Use D3's keyed data join to bind the slice, and offset the <code>&lt;tbody&gt;</code> with <code>transform: translateY(startIdx * rowHeight)</code> so the visible rows appear at the correct vertical position.</p>
+
+  <p>D3's data join handles the recycling: <code>tbody.selectAll('tr').data(slice, d => d.id).join('tr')</code> reuses existing row elements and creates or removes only the difference. This is the same pattern as a regular table, just applied to a moving window of data.</p>
+
+  <p>Two gotchas. First, after sorting, you must re-render the visible window even though the scroll position has not changed: the data order changed beneath the scroll position. Second, the browser's Ctrl+F find-in-page cannot search rows that do not exist in the DOM. Compensate with a visible search input that uses the filter pipeline, as the skill recommends. Set <code>aria-rowcount</code> on the <code>&lt;table&gt;</code> to the full dataset length so screen readers know there are more rows than the DOM contains.</p>
+
+  <h2>Inline Sparklines in Table Cells</h2>
+
+  <p>A sparkline in a table cell adds a sixth sense to tabular data. The viewer reads across a row and sees not just the current value but the trajectory that led to it. Edward Tufte called sparklines "data words," and embedding them in table cells is the most literal version of that idea: the chart lives inside the sentence of numbers.</p>
+
+  <p>The technique appends a small inline <code>&lt;svg&gt;</code> (typically 60 to 80 pixels wide, 16 to 20 pixels tall) inside a <code>&lt;td&gt;</code>. D3's <code>d3.line()</code> generator draws the path from a <code>d.series</code> array stored on each row. The x scale maps array index to pixel position. The y scale maps the value range. Because each sparkline may have a different y range (per-row normalization) or share a global range (for cross-row comparison), the scale choice is a design decision, not just an implementation detail.</p>
+
+  <p>Per-row scaling makes each sparkline fill its cell vertically, emphasizing the shape of each individual trend. Shared scaling lets the viewer compare magnitudes across rows, but rows with small values flatten to near-invisible lines. The table in Figure 2 uses shared scaling so the viewer can see which companies had the most volatile quarters alongside which had the highest absolute revenue.</p>
+
+  <p>For accessibility, each sparkline SVG carries an <code>aria-label</code> that summarizes the trend in text: "Trending up 12.3%" or "Down 5.1% over 8 quarters." A screen reader user gets the story without needing to interpret a tiny path element.</p>
+
+  <div class="figure figure-wide" id="sparkline-figure">
+    <div class="spark-table-wrap">
+      <table class="spark-table" id="spark-table" role="grid">
+        <thead>
+          <tr>
+            <th scope="col">Company</th>
+            <th scope="col">Sector</th>
+            <th scope="col" class="num">Latest ($M)</th>
+            <th scope="col">Quarterly Revenue</th>
+            <th scope="col" class="num">Change</th>
+          </tr>
+        </thead>
+        <tbody id="spark-table-body"></tbody>
+      </table>
+    </div>
+    <p class="figure-caption"><span class="figure-label">Figure 2.</span> The same company data with eight quarters of simulated revenue history. The sparkline column shows each company's trajectory at a glance. Shared y-scaling lets you compare magnitudes across rows. The "Change" column shows first-to-last quarter movement.</p>
+  </div>
+
+  <p>The combination of sparklines and numeric columns gives the reader two tasks in one view. The numbers answer "what is the current value?" and the sparklines answer "how did it get there?" A company showing $120M in the latest column might be recovering from a dip or declining from a peak. The sparkline disambiguates without requiring the reader to open a separate time-series chart.</p>
+
+  <h2>When This Skill Hurts</h2>
+
+  <div class="risk">
+    <p><strong>Tables as fallback rather than designed artifact.</strong> The skill's central argument is that a table is a visualization, not a consolation prize. But LLMs frequently treat tables as the "accessible alternative" they tack on after the chart is finished, rather than a view that deserves its own design work. The result is a bare <code>&lt;table&gt;</code> with default browser styling, no alignment, no sort, no hover, no filter. The skill tries to counter this by leading with the table-as-visualization framing, but the pattern persists. If you find yourself generating a plain HTML table dump beneath a polished D3 chart, stop and ask whether the table deserves the same care as the chart.</p>
+  </div>
+
+  <div class="risk">
+    <p><strong>Sort interaction that resets scroll position.</strong> When the user clicks a column header to re-sort, the browser re-renders the table body. If the implementation clears and rebuilds the <code>&lt;tbody&gt;</code> (as the naive D3 join does by removing all rows and re-appending), the scroll container jumps back to the top. The user was looking at row 35 of 200, clicked "Sort by Growth," and now they are staring at row 1. They have to scroll back down to find what they were looking at. The fix is to use a keyed data join (<code>d => d.id</code>) that reorders existing DOM nodes instead of destroying and recreating them, or to save and restore <code>scrollTop</code> around the re-render.</p>
+  </div>
+
+  <div class="risk">
+    <p><strong>Filter that produces empty state with no feedback.</strong> A text filter that narrows to zero results and leaves the table body simply blank is a usability failure. The viewer types a query, the rows vanish, and they cannot tell whether the filter is broken or the data genuinely has no matches. Always show an explicit "No matching rows" message and keep the status bar updated with the count. For screen reader users, the live region must announce the zero-result state: "Showing 0 of 200 rows." Silence after a filter action is indistinguishable from a bug.</p>
+  </div>
+
+  <div class="risk">
+    <p><strong>Too many columns forcing horizontal scroll.</strong> A table with twelve columns on a 740-pixel-wide article layout forces horizontal scrolling, which breaks the viewer's spatial model. They can no longer see the row label and the value they are reading at the same time. If horizontal scroll is unavoidable, freeze the first column with <code>position: sticky; left: 0</code> so the row identifier stays visible. Better yet, rethink the column set. A table trying to show every attribute of every row often means the designer has not decided which attributes matter for the viewer's task. Pare the columns to the five or six that serve the primary question, and offer a "show more columns" control for the rest.</p>
+  </div>
+
+  <footer class="footer">
+    <p>Part of <a href="https://github.com/enjalot/moonshine">Moonshine</a>, a project for interactive technical explanations. Based on the <a href="https://github.com/kaidrumm/d3-power-tools">d3-power-tools</a> data-table skill.</p>
+  </footer>
+
+</div>
+
+<script>
+(function() {
+
+  // ── Dataset: 30 fictional companies, 5 columns ──
+
+  const rng = d3.randomLcg(7);
+  const sectors = ['Tech', 'Finance', 'Health', 'Energy', 'Retail'];
+  const sectorColors = {
+    Tech:    '#2563eb',
+    Finance: '#e45c3a',
+    Health:  '#16a34a',
+    Energy:  '#9333ea',
+    Retail:  '#ca8a04',
+  };
+
+  const prefixes = [
+    'Apex', 'Nova', 'Crest', 'Bolt', 'Lumen', 'Tidal', 'Forge',
+    'Alder', 'Quill', 'Ember', 'Atlas', 'Drift', 'Vertex', 'Zephyr',
+    'Arbor', 'Cirrus', 'Onyx', 'Prism', 'Helix', 'Ridge', 'Nimbus',
+    'Flux', 'Beacon', 'Stratos', 'Cobalt', 'Axle', 'Lunar', 'Cortex',
+    'Birch', 'Slate'
+  ];
+  const suffixes = ['Corp', 'Inc', 'Ltd', 'Group', 'Co', 'Labs'];
+
+  const data = prefixes.map((prefix, i) => {
+    const sector = sectors[i % sectors.length];
+    const baseRev = 20 + rng() * 280;
+    const baseEmp = 50 + rng() * 950;
+    const noise = 0.7 + rng() * 0.6;
+    return {
+      id: i,
+      company: prefix + ' ' + suffixes[Math.floor(rng() * suffixes.length)],
+      sector,
+      revenue: Math.round(baseRev * 10) / 10,
+      employees: Math.round(baseEmp * noise),
+      growth: Math.round((rng() * 40 - 8) * 10) / 10,
+    };
+  });
+
+  // ── Column spec ──
+
+  const columns = [
+    { key: 'company',   label: 'Company',        type: 'string', format: d => d },
+    { key: 'sector',    label: 'Sector',          type: 'string', format: d => d },
+    { key: 'revenue',   label: 'Revenue ($M)',    type: 'number', format: d3.format(',.1f'), cls: 'num' },
+    { key: 'employees', label: 'Employees',       type: 'number', format: d3.format(','),    cls: 'num' },
+    { key: 'growth',    label: 'Growth (%)',       type: 'number', format: d3.format('+.1f'), cls: 'num' },
+  ];
+
+  // ── Shared state ──
+
+  let hoveredId = null;
+  let sortKey = 'revenue';
+  let sortDir = -1; // -1 = descending
+  let filterText = '';
+  let currentView = 'both';
+
+  function getFiltered() {
+    if (!filterText) return data;
+    const q = filterText.toLowerCase();
+    return data.filter(d =>
+      columns.some(col => String(d[col.key]).toLowerCase().includes(q))
+    );
+  }
+
+  function getSorted(arr) {
+    const col = columns.find(c => c.key === sortKey);
+    const copy = [...arr];
+    if (col.type === 'number') {
+      copy.sort((a, b) => d3.ascending(a[sortKey], b[sortKey]) * sortDir);
+    } else {
+      copy.sort((a, b) => d3.ascending(
+        String(a[sortKey]).toLowerCase(),
+        String(b[sortKey]).toLowerCase()
+      ) * sortDir);
+    }
+    return copy;
+  }
+
+  // ── View toggle ──
+
+  const chartPanel = document.getElementById('chart-panel');
+  const tablePanel = document.getElementById('table-panel');
+  const splitContainer = document.getElementById('split-container');
+
+  function applyView(view) {
+    currentView = view;
+    document.querySelectorAll('[data-view]').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.view === view);
+    });
+    if (view === 'both') {
+      chartPanel.style.display = '';
+      tablePanel.style.display = '';
+      chartPanel.style.flex = '0 0 300px';
+      tablePanel.style.flex = '1';
+      splitContainer.style.flexDirection = '';
+    } else if (view === 'chart') {
+      chartPanel.style.display = '';
+      tablePanel.style.display = 'none';
+      chartPanel.style.flex = '1';
+    } else {
+      chartPanel.style.display = 'none';
+      tablePanel.style.display = '';
+      tablePanel.style.flex = '1';
+    }
+    if (view !== 'table') drawScatter();
+  }
+
+  document.querySelectorAll('[data-view]').forEach(btn => {
+    btn.addEventListener('click', () => applyView(btn.dataset.view));
+  });
+
+  // ── Scatter plot ──
+
+  const scatterContainer = d3.select('#scatter-container');
+
+  function drawScatter() {
+    scatterContainer.selectAll('*').remove();
+    const containerW = chartPanel.getBoundingClientRect().width;
+    const fullW = Math.max(260, Math.min(containerW, 400));
+    const margin = { top: 14, right: 16, bottom: 40, left: 48 };
+    const w = fullW - margin.left - margin.right;
+    const h = 320;
+
+    const svg = scatterContainer.append('svg')
+      .attr('width', fullW)
+      .attr('height', h + margin.top + margin.bottom);
+
+    const g = svg.append('g')
+      .attr('transform', `translate(${margin.left},${margin.top})`);
+
+    const visibleData = getFiltered();
+    const visibleIds = new Set(visibleData.map(d => d.id));
+
+    const x = d3.scaleLinear()
+      .domain([0, d3.max(data, d => d.revenue) * 1.08])
+      .range([0, w]);
+    const y = d3.scaleLinear()
+      .domain([0, d3.max(data, d => d.employees) * 1.08])
+      .range([h, 0]);
+
+    // Axes
+    g.append('g')
+      .attr('transform', `translate(0,${h})`)
+      .call(d3.axisBottom(x).ticks(5).tickFormat(d3.format(',.0f')))
+      .call(g => g.select('.domain').attr('stroke', 'var(--border)'))
+      .call(g => g.selectAll('.tick line').attr('stroke', 'var(--border)'))
+      .call(g => g.selectAll('text').attr('fill', 'var(--text-2)').style('font-size', '10px'));
+
+    g.append('text')
+      .attr('x', w / 2).attr('y', h + 34)
+      .attr('text-anchor', 'middle')
+      .attr('font-size', '11px').attr('fill', 'var(--text-2)')
+      .text('Revenue ($M)');
+
+    g.append('g')
+      .call(d3.axisLeft(y).ticks(5).tickFormat(d3.format(',.0f')))
+      .call(g => g.select('.domain').attr('stroke', 'var(--border)'))
+      .call(g => g.selectAll('.tick line').attr('stroke', 'var(--border)'))
+      .call(g => g.selectAll('text').attr('fill', 'var(--text-2)').style('font-size', '10px'));
+
+    g.append('text')
+      .attr('transform', 'rotate(-90)')
+      .attr('x', -h / 2).attr('y', -36)
+      .attr('text-anchor', 'middle')
+      .attr('font-size', '11px').attr('fill', 'var(--text-2)')
+      .text('Employees');
+
+    // Ghost dots for filtered-out points
+    g.append('g').selectAll('circle')
+      .data(data.filter(d => !visibleIds.has(d.id)))
+      .join('circle')
+        .attr('cx', d => x(d.revenue))
+        .attr('cy', d => y(d.employees))
+        .attr('r', 4)
+        .attr('fill', 'var(--ghost)')
+        .attr('opacity', 0.4);
+
+    // Active dots
+    const dots = g.append('g').selectAll('circle')
+      .data(visibleData, d => d.id)
+      .join('circle')
+        .attr('cx', d => x(d.revenue))
+        .attr('cy', d => y(d.employees))
+        .attr('r', 5)
+        .attr('fill', d => sectorColors[d.sector])
+        .attr('opacity', 0.8)
+        .attr('stroke', 'none')
+        .attr('stroke-width', 2);
+
+    // Voronoi hover
+    const delaunay = d3.Delaunay.from(visibleData, d => x(d.revenue), d => y(d.employees));
+
+    g.append('rect')
+      .attr('width', w).attr('height', h)
+      .attr('fill', 'transparent')
+      .style('cursor', 'crosshair')
+      .on('pointermove', function(event) {
+        const [mx, my] = d3.pointer(event);
+        const idx = delaunay.find(mx, my);
+        if (idx !== undefined && idx >= 0) {
+          setHover(visibleData[idx].id);
+        }
+      })
+      .on('pointerleave', function() {
+        setHover(null);
+      });
+
+    // Expose update function
+    scatterContainer._updateHover = function(id) {
+      dots
+        .attr('r', d => d.id === id ? 7 : 5)
+        .attr('stroke', d => d.id === id ? 'var(--text)' : 'none')
+        .attr('opacity', d => d.id === id ? 1 : 0.8);
+    };
+  }
+
+  // ── Table ──
+
+  function renderTableHead() {
+    const thead = d3.select('#table-head');
+    thead.selectAll('*').remove();
+    const tr = thead.append('tr');
+    columns.forEach(col => {
+      const th = tr.append('th')
+        .attr('class', col.cls || null)
+        .attr('tabindex', '0')
+        .attr('role', 'columnheader')
+        .attr('aria-sort', col.key === sortKey
+          ? (sortDir === 1 ? 'ascending' : 'descending')
+          : 'none')
+        .on('click', () => onSort(col.key))
+        .on('keydown', (event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            onSort(col.key);
+          }
+        });
+      th.append('span').text(col.label);
+      th.append('span').attr('class', 'sort-arrow')
+        .text(col.key === sortKey ? (sortDir === 1 ? '\u25B2' : '\u25BC') : '');
+    });
+  }
+
+  function renderTableBody() {
+    const filtered = getFiltered();
+    const sorted = getSorted(filtered);
+
+    // Update status
+    const statusEl = document.getElementById('filter-status');
+    if (filterText) {
+      statusEl.textContent = `Showing ${sorted.length} of ${data.length}`;
+    } else {
+      statusEl.textContent = '';
+    }
+
+    const tbody = d3.select('#table-body');
+    const rows = tbody.selectAll('tr')
+      .data(sorted, d => d.id)
+      .join('tr')
+        .attr('class', 'data-row')
+        .attr('role', 'row')
+        .on('pointerenter', (event, d) => setHover(d.id))
+        .on('pointerleave', () => setHover(null));
+
+    rows.selectAll('td')
+      .data(d => columns.map(col => ({
+        value: d[col.key],
+        formatted: col.format(d[col.key]),
+        cls: col.cls,
+        key: col.key,
+        sector: d.sector,
+      })))
+      .join('td')
+        .attr('class', d => d.cls || null)
+        .html(d => {
+          if (d.key === 'sector') {
+            return `<span class="cat-dot" style="background:${sectorColors[d.value]}"></span>${d.formatted}`;
+          }
+          return d.formatted;
+        });
+
+    // Apply current hover highlight
+    rows.classed('highlighted', d => d.id === hoveredId);
+  }
+
+  function onSort(key) {
+    if (sortKey === key) {
+      sortDir *= -1;
+    } else {
+      sortKey = key;
+      const col = columns.find(c => c.key === key);
+      sortDir = col.type === 'number' ? -1 : 1;
+    }
+    renderTableHead();
+    renderTableBody();
+  }
+
+  // ── Cross-highlighting ──
+
+  function setHover(id) {
+    hoveredId = id;
+
+    // Update table rows
+    d3.select('#table-body').selectAll('tr.data-row')
+      .classed('highlighted', d => d.id === id);
+
+    // Update scatter dots
+    if (scatterContainer._updateHover && currentView !== 'table') {
+      scatterContainer._updateHover(id);
+    }
+  }
+
+  // ── Filter input ──
+
+  const filterInput = document.getElementById('filter-input');
+
+  let filterTimeout;
+  filterInput.addEventListener('input', function() {
+    clearTimeout(filterTimeout);
+    filterTimeout = setTimeout(() => {
+      filterText = filterInput.value.trim();
+      renderTableBody();
+      if (currentView !== 'table') drawScatter();
+    }, 150);
+  });
+
+  // ── Initial render ──
+
+  renderTableHead();
+  renderTableBody();
+  applyView('both');
+
+})();
+</script>
+
+<script>
+// ── Figure 2: Sparkline table ──
+(function() {
+
+  const rng = d3.randomLcg(13);
+  const sectors = ['Tech', 'Finance', 'Health', 'Energy', 'Retail'];
+  const sectorColors = {
+    Tech:    '#2563eb',
+    Finance: '#e45c3a',
+    Health:  '#16a34a',
+    Energy:  '#9333ea',
+    Retail:  '#ca8a04',
+  };
+
+  const names = [
+    'Apex Corp', 'Nova Inc', 'Crest Ltd', 'Bolt Group', 'Lumen Co',
+    'Tidal Labs', 'Forge Inc', 'Alder Group', 'Quill Corp', 'Ember Ltd',
+    'Atlas Co', 'Drift Labs', 'Vertex Inc', 'Zephyr Group', 'Arbor Corp'
+  ];
+
+  // Generate 8 quarters of revenue per company
+  const sparkData = names.map((name, i) => {
+    const sector = sectors[i % sectors.length];
+    const base = 40 + rng() * 200;
+    const trend = (rng() - 0.4) * 8; // slight upward bias
+    const series = d3.range(8).map(q => {
+      const noise = (rng() - 0.5) * base * 0.25;
+      return Math.max(5, Math.round((base + trend * q + noise) * 10) / 10);
+    });
+    return { name, sector, series, latest: series[series.length - 1] };
+  });
+
+  // Shared y scale across all sparklines for magnitude comparison
+  const allValues = sparkData.flatMap(d => d.series);
+  const yExtent = [0, d3.max(allValues) * 1.05];
+
+  const sparkW = 72, sparkH = 18;
+  const fmt = d3.format(',.1f');
+  const pctFmt = d3.format('+.1f');
+
+  const tbody = d3.select('#spark-table-body');
+
+  const rows = tbody.selectAll('tr')
+    .data(sparkData)
+    .join('tr');
+
+  // Company name
+  rows.append('td').text(d => d.name);
+
+  // Sector with color dot
+  rows.append('td').html(d =>
+    `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${sectorColors[d.sector]};margin-right:0.4em;vertical-align:middle;"></span>${d.sector}`
+  );
+
+  // Latest revenue
+  rows.append('td').attr('class', 'num').text(d => fmt(d.latest));
+
+  // Sparkline cell
+  rows.append('td').attr('class', 'spark-cell').each(function(d) {
+    const x = d3.scaleLinear().domain([0, d.series.length - 1]).range([1, sparkW - 1]);
+    const y = d3.scaleLinear().domain(yExtent).range([sparkH - 1, 1]);
+
+    const line = d3.line()
+      .x((v, i) => x(i))
+      .y(v => y(v));
+
+    const pct = ((d.series[d.series.length - 1] - d.series[0]) / d.series[0]) * 100;
+    const trendLabel = Math.abs(pct) < 2 ? 'Flat' :
+      pct > 0 ? `Trending up ${pctFmt(pct)}%` : `Trending down ${pctFmt(pct)}%`;
+
+    const svg = d3.select(this).append('svg')
+      .attr('width', sparkW)
+      .attr('height', sparkH)
+      .attr('role', 'img')
+      .attr('aria-label', `${d.name}: ${trendLabel} over 8 quarters`);
+
+    // Light fill under the line
+    const area = d3.area()
+      .x((v, i) => x(i))
+      .y0(sparkH)
+      .y1(v => y(v));
+
+    svg.append('path')
+      .datum(d.series)
+      .attr('d', area)
+      .attr('fill', sectorColors[d.sector])
+      .attr('opacity', 0.1);
+
+    svg.append('path')
+      .datum(d.series)
+      .attr('d', line)
+      .attr('fill', 'none')
+      .attr('stroke', sectorColors[d.sector])
+      .attr('stroke-width', 1.5);
+
+    // End dot
+    svg.append('circle')
+      .attr('cx', x(d.series.length - 1))
+      .attr('cy', y(d.series[d.series.length - 1]))
+      .attr('r', 2)
+      .attr('fill', sectorColors[d.sector]);
+  });
+
+  // Change column
+  rows.append('td').attr('class', 'num').each(function(d) {
+    const first = d.series[0];
+    const last = d.series[d.series.length - 1];
+    const pct = ((last - first) / first) * 100;
+    const cls = Math.abs(pct) < 2 ? 'trend-flat' : pct > 0 ? 'trend-up' : 'trend-down';
+    d3.select(this)
+      .attr('class', 'num ' + cls)
+      .text(pctFmt(pct) + '%');
+  });
+
+})();
+</script>
+
+</body>
+</html>

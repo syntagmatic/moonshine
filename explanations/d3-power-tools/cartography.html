@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cartography: Every Map Projection Is a Lie</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;500&family=Source+Sans+3:wght@400;600;700&family=Source+Serif+4:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
+<style>
+  :root {
+    --text: #1a1a2e;
+    --text-2: #4a4a6a;
+    --accent: #2563eb;
+    --bg: #fafafa;
+    --fig-bg: white;
+    --border: #e2e2e8;
+  }
+
+  *, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  body {
+    font-family: 'Source Serif 4', Georgia, serif;
+    font-size: 18px;
+    line-height: 1.6;
+    color: var(--text);
+    background: var(--bg);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .container {
+    max-width: 740px;
+    margin: 0 auto;
+    padding: 3rem 1.25rem 4rem;
+  }
+
+  h1, h2, h3 {
+    font-family: 'Source Sans 3', sans-serif;
+  }
+
+  h1 {
+    font-size: 2rem;
+    font-weight: 700;
+    line-height: 1.2;
+    margin-bottom: 0.25rem;
+  }
+
+  .subtitle {
+    font-family: 'Source Sans 3', sans-serif;
+    font-size: 1.05rem;
+    color: var(--text-2);
+    line-height: 1.5;
+    margin-bottom: 2rem;
+  }
+
+  .back-link {
+    font-family: 'Source Sans 3', sans-serif;
+    font-size: 0.9rem;
+    color: var(--accent);
+    text-decoration: none;
+    display: inline-block;
+    margin-bottom: 1.5rem;
+  }
+
+  .back-link:hover {
+    text-decoration: underline;
+  }
+
+  .prose {
+    margin-bottom: 2rem;
+  }
+
+  .prose p {
+    margin-bottom: 1rem;
+  }
+
+  .prose p:last-child {
+    margin-bottom: 0;
+  }
+
+  code {
+    font-family: 'Source Code Pro', monospace;
+    font-size: 0.88em;
+    background: #f0f0f5;
+    padding: 0.15em 0.35em;
+    border-radius: 3px;
+  }
+
+  .figure {
+    background: var(--fig-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 1.25rem;
+    margin-bottom: 2rem;
+  }
+
+  .figure-caption {
+    font-family: 'Source Sans 3', sans-serif;
+    font-size: 0.85rem;
+    color: var(--text-2);
+    margin-top: 0.75rem;
+    line-height: 1.5;
+  }
+
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+  }
+
+  .controls button {
+    font-family: 'Source Sans 3', sans-serif;
+    font-size: 0.88rem;
+    font-weight: 600;
+    padding: 0.4rem 1rem;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--fig-bg);
+    color: var(--text);
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+  }
+
+  .controls button:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .controls button.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+  }
+
+  .toggle-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+
+  .toggle-row label {
+    font-family: 'Source Sans 3', sans-serif;
+    font-size: 0.88rem;
+    color: var(--text-2);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+  }
+
+  .toggle-row input[type="checkbox"] {
+    accent-color: var(--accent);
+  }
+
+  #map-svg {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+
+  .projection-label {
+    font-family: 'Source Sans 3', sans-serif;
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 0.5rem;
+  }
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.65rem;
+    margin-top: 0.75rem;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-family: 'Source Sans 3', sans-serif;
+    font-size: 0.78rem;
+    color: var(--text-2);
+  }
+
+  .legend-swatch {
+    width: 14px;
+    height: 14px;
+    border-radius: 2px;
+    border: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  h2 {
+    font-size: 1.5rem;
+    margin: 2.5rem 0 1rem;
+  }
+
+  h3 {
+    font-size: 1.15rem;
+    margin: 1.75rem 0 0.75rem;
+  }
+
+  /* Insight box */
+  .insight {
+    background: #dbeafe;
+    border-left: 3px solid var(--accent);
+    padding: 1rem 1.25rem;
+    margin: 1.5rem 0;
+    border-radius: 0 4px 4px 0;
+  }
+  .insight p { margin: 0; }
+
+  /* Risk callout (amber) */
+  .risk {
+    background: #fef3c7;
+    border-left: 3px solid #d97706;
+    padding: 1rem 1.25rem;
+    margin: 1.5rem 0;
+    border-radius: 0 4px 4px 0;
+  }
+  .risk p { margin: 0; }
+  .risk p + p { margin-top: 0.5rem; }
+  .risk strong { color: #92400e; }
+  .risk h3 {
+    font-size: 1.1rem;
+    color: #92400e;
+    margin: 0 0 0.75rem;
+  }
+  .risk ul {
+    margin: 0;
+    padding-left: 1.25rem;
+  }
+  .risk li {
+    margin-bottom: 0.5rem;
+    line-height: 1.5;
+  }
+  .risk li:last-child { margin-bottom: 0; }
+
+  /* Classification figure */
+  .class-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+  }
+
+  .class-cell {
+    text-align: center;
+  }
+
+  .class-cell svg {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+
+  .class-label {
+    font-family: 'Source Sans 3', sans-serif;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 0.35rem;
+  }
+
+  /* Zoom figure */
+  #zoom-svg {
+    display: block;
+    width: 100%;
+    height: auto;
+    cursor: pointer;
+  }
+
+  #zoom-svg .country:hover {
+    stroke: var(--accent);
+    stroke-width: 1.5;
+  }
+
+  .zoom-hint {
+    font-family: 'Source Sans 3', sans-serif;
+    font-size: 0.82rem;
+    color: var(--text-2);
+    margin-bottom: 0.5rem;
+  }
+
+  footer {
+    border-top: 1px solid var(--border);
+    padding-top: 1.5rem;
+    margin-top: 2.5rem;
+    font-size: 0.85rem;
+    color: var(--text-2);
+    line-height: 1.6;
+  }
+
+  footer a {
+    color: var(--accent);
+    text-decoration: none;
+  }
+
+  footer a:hover {
+    text-decoration: underline;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <a class="back-link" href="index.html">&larr; All Skills</a>
+
+  <h1>Cartography</h1>
+  <p class="subtitle">Every map projection is a lie about the Earth's shape. The projection you choose determines which lie you tell.</p>
+
+  <div class="prose">
+    <p>The Earth is roughly a sphere. Paper and screens are flat. There is no way to flatten a sphere without tearing, stretching, or compressing it. That is the fundamental problem of cartography, and it means every flat map sacrifices something. Mercator preserves angles but inflates areas near the poles, making Greenland appear the size of Africa. Equal Earth preserves area but bends shapes. Orthographic shows the planet as a globe, hiding half the world. These are not flaws to fix. They are tradeoffs to choose deliberately.</p>
+    <p>The projection you pick should depend on what question the map answers. Showing a choropleth of population density? Use an equal-area projection, because area distortion would lie about magnitude. Making a navigation chart? Mercator's angle preservation matters. Showing the whole planet for general reference? A compromise projection like Natural Earth or Equirectangular trades a little of everything for nothing terrible.</p>
+    <p>D3 makes this choice visible. The same GeoJSON data rendered through <code>d3.geoMercator()</code> versus <code>d3.geoEqualEarth()</code> tells a different story. Toggle between the projections below and watch the Tissot indicatrices: small circles placed at regular intervals across the globe. On a perfect, distortion-free map they would all be identical circles. On a real projection, they stretch into ellipses, revealing exactly where and how the map lies.</p>
+  </div>
+
+  <div class="figure">
+    <div class="projection-label" id="proj-label">Mercator</div>
+    <div class="controls" id="proj-controls">
+      <button class="active" data-proj="mercator">Mercator</button>
+      <button data-proj="equalEarth">Equal Earth</button>
+      <button data-proj="orthographic">Orthographic</button>
+      <button data-proj="equirectangular">Equirectangular</button>
+    </div>
+    <div class="toggle-row">
+      <label><input type="checkbox" id="tissot-toggle" checked> Tissot indicatrices</label>
+      <label><input type="checkbox" id="graticule-toggle" checked> Graticule</label>
+    </div>
+    <svg id="map-svg"></svg>
+    <div class="legend" id="legend"></div>
+    <p class="figure-caption">Countries colored by continent. Tissot indicatrices are circles of equal radius (5 degrees) placed every 30 degrees of longitude and latitude. Where they stretch into tall ellipses, the projection exaggerates north-south distances. Where they widen, it exaggerates east-west. Where they grow, it inflates area.</p>
+  </div>
+
+  <div class="prose">
+    <p>The pipeline behind this map follows a standard D3 pattern. TopoJSON geometry loads from a CDN atlas (pre-simplified, topologically correct, cut at the antimeridian). <code>topojson.feature()</code> converts it to GeoJSON. A projection maps <code>[longitude, latitude]</code> to <code>[x, y]</code> screen coordinates. <code>d3.geoPath()</code> converts projected geometry to SVG path strings. Layer order matters: water and graticule first, then country fills, then borders as a single mesh (drawn once for shared edges, courtesy of topology), then the indicatrices on top.</p>
+  </div>
+
+  <!-- ── TopoJSON Topology Operations ── -->
+
+  <h2>TopoJSON: Topology as Infrastructure</h2>
+
+  <div class="prose">
+    <p>TopoJSON is not just a compression format. It encodes the topological relationships between geographic features -- which boundaries are shared, which regions are adjacent, how shapes nest. This topology enables three operations that GeoJSON cannot support.</p>
+
+    <p><code>topojson.mesh()</code> extracts boundaries as a single MultiLineString. The critical detail is the filter function. With <code>(a, b) => a !== b</code>, you get only internal borders -- the lines where two distinct features share an edge. With <code>(a, b) => a === b</code>, you get the outer boundary. Without a filter, you get everything. This matters visually: internal borders should be thin and light (white or near-white), while the outer boundary should be heavier. Drawing borders as a mesh rather than stroking each polygon individually means shared edges render once instead of twice, avoiding the double-stroke artifacts that make borders appear darker where three countries meet.</p>
+
+    <p><code>topojson.merge()</code> dissolves multiple features into one. Give it a filtered subset of geometries and it produces a single polygon with only the outer boundary, erasing all internal divisions. This is how you build a national outline from state geometries, or Census divisions from counties. The filter is just an array filter on <code>topology.objects.states.geometries</code>. The resulting shape is topologically correct -- no self-intersections, no gaps.</p>
+
+    <p><code>topojson.neighbors()</code> returns an adjacency list: for each geometry, an array of indices of geometries that share a boundary arc. This powers four-color map algorithms (assign colors so no two neighbors share one), region grouping, and spatial analysis. The adjacency is exact, derived from shared arcs, not proximity heuristics.</p>
+  </div>
+
+  <div class="insight">
+    <p>Think of these three operations as a toolkit: <code>mesh()</code> draws lines, <code>merge()</code> erases lines, and <code>neighbors()</code> tells you who touches whom. Together they handle most of the geometric manipulation that mapmakers need without ever touching raw coordinates.</p>
+  </div>
+
+  <!-- ── Choropleth Classification ── -->
+
+  <h2>Classification Changes the Story</h2>
+
+  <div class="prose">
+    <p>A choropleth maps a numeric value to a color for each geographic region. The part that gets the least attention and matters the most is classification: how you divide the continuous range of values into discrete color bins. The same data, mapped through different classification methods, can tell opposite stories.</p>
+
+    <p><strong>Quantile</strong> breaks divide the data so each bin contains roughly the same number of features. This maximizes visual contrast -- you will always see a spread of colors on the map. But it can be misleading: if values cluster tightly, quantile breaks will exaggerate small differences. A country at the 49th percentile and one at the 51st may look like they are in different worlds when the actual difference is trivial.</p>
+
+    <p><strong>Equal interval</strong> (also called quantize) divides the data range into bins of equal width. This is honest about the numeric scale: a bin from 0-20 covers the same range as 20-40. But on skewed data, most features pile into one or two bins. A map of GDP per capita with equal intervals will color most of Africa and South Asia the same shade while reserving several distinct shades for the handful of wealthy nations.</p>
+
+    <p><strong>Natural breaks</strong> (Jenks) finds class boundaries that minimize within-class variance, placing breaks at the gaps in the data. This often produces the most readable map because the bins follow the data's structure rather than imposing a mathematical rule. The cost is computational complexity and the fact that the breaks are data-dependent -- change the dataset slightly and the bins shift.</p>
+
+    <p><strong>Threshold</strong> breaks are set manually at meaningful values. For a poverty rate map, you might place breaks at 5%, 10%, 20%, 40% because those are the policy thresholds that matter. This is the most honest method when domain-meaningful cutoffs exist, because it lets the reader compare each region against a known standard rather than against the distribution of the dataset.</p>
+  </div>
+
+  <div class="prose">
+    <p>The four maps below show the same synthetic GDP-per-capita data classified four different ways. They are intentionally small so you can see all four at once and compare the color distributions. Pay attention to Africa and South Asia in each panel: quantile breaks spread these regions across multiple shades, while equal interval compresses them into one.</p>
+  </div>
+
+  <div class="figure">
+    <div class="class-grid" id="class-grid"></div>
+    <p class="figure-caption">Same data, four classification methods. Quantile maximizes visual spread, equal interval is honest about numeric distance, natural breaks follows the data's clusters, and threshold uses domain-meaningful cutoffs ($10K, $25K, $50K). Notice how quantile makes the map look evenly distributed while equal interval reveals that most values cluster at the low end.</p>
+  </div>
+
+  <!-- ── Bubble Maps vs Choropleth ── -->
+
+  <h2>Bubble Maps vs. Choropleth</h2>
+
+  <div class="prose">
+    <p>Choropleths encode values as color fill over the geographic area of each region. This works well for rates and densities -- values that are already normalized by area. But for absolute quantities (total population, total GDP, number of cases), choropleths have a structural problem: large countries dominate the visual field regardless of their data values. Russia and Canada take up enormous map area, so their color dominates perception even when their values are middling. Meanwhile, Singapore and Luxembourg are invisible dots no matter how extreme their values are.</p>
+
+    <p>Bubble maps solve this by encoding values as circle area positioned at each region's centroid. The geographic shapes remain as a neutral basemap, and the data lives in the proportional symbols. Area perception is less precise than position along an axis, but it decouples the data encoding from the geographic area, which is the whole point. Use <code>d3.scaleSqrt()</code> for the radius -- a linear radius scale would make the largest values appear quadratically larger than they are.</p>
+
+    <p>The practical rule: if your value is already a rate or density, use a choropleth. If it is a count or total, consider a bubble map. If you must show a count as a choropleth, normalize it by area or population first. A raw-count choropleth is almost always a proxy for a population density map, which tells the reader nothing they do not already know.</p>
+  </div>
+
+  <!-- ── Zoom-to-Feature ── -->
+
+  <h2>Zoom to Feature</h2>
+
+  <div class="prose">
+    <p>A world map at static zoom shows every country but lets you examine none of them. Zoom-to-feature fixes this: click a country and the projection smoothly re-centers and re-scales to frame just that feature. Click again (or click the background) to zoom back out to the full view.</p>
+
+    <p>The technique uses <code>projection.fitSize()</code> to compute the scale and translate that would frame a given GeoJSON feature within the viewport, then interpolates from the current projection parameters to the new ones over a transition. For equal-area projections, interpolating scale and translate is sufficient. For the orthographic globe, you also need to interpolate the rotation to center the target country.</p>
+  </div>
+
+  <div class="figure">
+    <p class="zoom-hint">Click any country to zoom in. Click again or click the ocean to reset.</p>
+    <svg id="zoom-svg"></svg>
+    <p class="figure-caption">Zoom-to-feature with smooth projection transition. The projection re-centers and re-scales to frame the clicked country, then interpolates back on the second click. This uses <code>d3.transition</code> to interpolate the projection's scale and translate parameters, re-rendering all paths on each tween frame.</p>
+  </div>
+
+  <!-- ── Globe Versor Rotation ── -->
+
+  <h2>Globe Rotation and Versor Drag</h2>
+
+  <div class="prose">
+    <p>An orthographic projection shows the Earth as a globe, which is visually compelling but hides half the world. Drag rotation lets the viewer spin the globe to see any part. The naive approach -- mapping horizontal drag to longitude and vertical drag to latitude -- works near the equator but breaks at the poles. Dragging left at the north pole should rotate the globe clockwise, not shift it laterally. The two-axis approximation cannot express this.</p>
+
+    <p>The correct solution uses quaternion rotation via the <a href="https://github.com/Fil/versor">versor</a> library. On drag start, record the current projection rotation as a quaternion and the geographic coordinates under the pointer. On each drag event, compute the geographic coordinates under the new pointer position (using the <em>original</em> rotation, not the updated one), then compute the quaternion that rotates from the start point to the current point. Multiply the quaternions and convert back to Euler angles for <code>projection.rotate()</code>. This handles poles, dateline crossings, and roll correctly.</p>
+
+    <p>For the back hemisphere -- the half of the globe hidden behind the front -- a second orthographic projection with <code>clipAngle(180)</code> can render the land at low opacity, giving the viewer spatial context even for the hidden side. This is a visual hint, not a precision tool: the severe distortion at the edges of the back hemisphere means shapes are unreliable, but it helps the viewer understand what is about to rotate into view.</p>
+  </div>
+
+  <!-- ── Canvas Multi-Layer Architecture ── -->
+
+  <h2>Canvas Multi-Layer Architecture</h2>
+
+  <div class="prose">
+    <p>SVG maps hit a performance ceiling around 2,000 to 5,000 path elements. County-level US maps have 3,143 features; world maps at 10m resolution have thousands more. At this scale, Canvas is the practical rendering target. But Canvas lacks the DOM -- no event delegation, no CSS selectors, no built-in hover states. The solution is a multi-layer stack.</p>
+
+    <p>The standard architecture uses four layers, bottom to top. A <strong>tile canvas</strong> for raster basemap tiles (streets, satellite, terrain). A <strong>data canvas</strong> for the choropleth fills and border strokes -- this is where the heavy geometry lives. An <strong>interaction canvas</strong> (hidden, never displayed) that renders each feature with a unique RGB color for hit detection: read the pixel under the mouse, decode the color to a feature index, and you have O(1) hover detection for arbitrarily complex geometries. Finally, an <strong>SVG overlay</strong> for tooltips, legends, labels, and any interactive controls that benefit from DOM events.</p>
+
+    <p>The color-pick trick deserves emphasis. Assign each feature an index, encode it as RGB (<code>r = (i+1) >> 16 & 255, g = (i+1) >> 8 & 255, b = (i+1) & 255</code>), and fill the feature on the hidden canvas with that color. Disable anti-aliasing (<code>imageSmoothingEnabled = false</code>) and do not stroke, because edge blending would create ambiguous intermediate colors. On mousemove, <code>getImageData</code> the single pixel under the cursor, decode the RGB back to an index, and look up the feature. This supports 16.7 million features and is frame-rate independent.</p>
+  </div>
+
+  <!-- ── Geographic Labels ── -->
+
+  <h2>Geographic Labels</h2>
+
+  <div class="prose">
+    <p>Placing text labels on a map is deceptively hard. The obvious approach -- position the label at the feature's centroid -- fails for concave shapes. Florida's centroid falls in the Gulf of Mexico. Chile's centroid lands in the Pacific. Michigan's is in Lake Huron.</p>
+
+    <p>The better approach uses the <strong>pole of inaccessibility</strong>: the point inside the polygon that is farthest from any edge. The <a href="https://github.com/mapbox/polylabel">polylabel</a> algorithm computes this efficiently. It guarantees the label anchor is inside the polygon and maximally distant from boundaries, which usually means it lands in the widest part of the shape -- exactly where a human cartographer would place it. For MultiPolygons, compute polylabel on the largest polygon by projected area.</p>
+
+    <p>Even with good anchor points, labels overlap. At world scale, small European countries are impossible to label without collision. Cartographers handle this with leader lines (a thin line connecting a label outside the polygon to a point inside it), selective labeling (only label the features that matter for the current story), and adaptive font sizing (larger countries get larger text). In D3, force simulation can push labels apart while anchoring them near their geographic targets -- the same technique used for bubble maps, applied to text bounding boxes instead of circles.</p>
+  </div>
+
+  <!-- ── Large Geometry and LOD ── -->
+
+  <h2>Large Geometry and Level of Detail</h2>
+
+  <div class="prose">
+    <p>The world-atlas and us-atlas packages come in two resolutions: 110m (coarse, fast, good for world-scale views) and 10m (detailed, large, good for regional views). At world zoom, 10m resolution draws thousands of coastline vertices that collapse to sub-pixel noise. At country zoom, 110m resolution shows jagged borders and missing islands. The solution is level-of-detail switching: load the coarse geometry first for fast initial render, then lazy-load the detailed geometry when the viewer zooms in past a threshold.</p>
+
+    <p>Client-side simplification via <code>topojson-simplify</code> offers more granularity. The <code>presimplify</code> function annotates each coordinate with an area weight (using Visvalingam's algorithm), and <code>simplify</code> removes coordinates below a threshold. Higher thresholds remove more detail. You can precompute multiple simplification levels and swap between them as zoom changes, trading geometry size for rendering speed.</p>
+
+    <p>The general strategy: at zoom level 1-2 (full world), use 110m. At zoom 3-5 (continent), use 10m or lightly simplified full-resolution. At zoom 6+ (country or region), use full-resolution, lazy-loaded for just the visible area if the full dataset is too large to hold in memory. Viewport culling -- skipping features whose bounding box falls entirely outside the visible area -- is essential at high zoom. Without it, you re-render thousands of features that no pixel of the screen will ever show.</p>
+  </div>
+
+  <!-- ── When This Skill Hurts ── -->
+
+  <div class="risk">
+    <h3>When This Skill Hurts</h3>
+    <ul>
+      <li><strong>Projection misuse.</strong> LLMs default to Mercator because it is the most familiar projection in their training data, even when the skill explicitly recommends Equal Earth for choropleths. Worse, they sometimes use an orthographic (globe) projection for a choropleth where the viewer needs to see all countries at once -- hiding half the data behind the planet. The skill documents projection selection criteria, but LLMs tend to reach for what they have seen most often rather than what the criteria recommend.</li>
+      <li><strong>Choropleth color lies.</strong> The skill covers classification methods, but LLMs frequently default to linear color scales on highly skewed data. A linear scale on population data, for example, will color 90% of the map the lightest shade while a handful of outliers (China, India, the US) get the darkest. The map looks like it has almost no variation. Quantile breaks would spread the colors evenly, but choosing between quantile and linear requires understanding the data distribution -- a judgment call that LLMs often skip.</li>
+      <li><strong>TopoJSON complexity.</strong> The topology operations -- <code>merge()</code>, <code>mesh()</code>, <code>neighbors()</code> -- are powerful but conceptually dense. LLMs frequently produce broken boundaries from incorrect <code>merge()</code> calls: passing the wrong geometry collection, forgetting to filter, or confusing <code>topojson.feature()</code> output (GeoJSON) with topology input (TopoJSON). A bad merge produces an empty shape or a shape that covers the entire globe minus the target, because the winding order inverted.</li>
+      <li><strong>Data join failures.</strong> Matching geographic features to data requires exact ID matching. The world-atlas uses numeric country IDs (ISO 3166-1 numeric); the us-atlas uses FIPS codes. LLMs often generate synthetic data with IDs that do not match the TopoJSON features -- using ISO alpha-2 codes ("US", "FR") when the atlas expects numeric codes ("840", "250"), or generating county FIPS codes that are 4 digits instead of 5. The result is a perfectly rendered map with no data on it: all features colored the fallback gray. The map looks correct at a glance, which makes the bug hard to catch.</li>
+    </ul>
+  </div>
+
+  <footer>
+    <p>Part of the <a href="https://github.com/kaidrumm/moonshine">moonshine</a> project. Explaining the <a href="https://github.com/kaidrumm/d3-power-tools">d3-power-tools</a> cartography skill.</p>
+  </footer>
+
+</div>
+
+<script>
+(async function() {
+
+  // Continent lookup by numeric country ID (from Natural Earth / world-atlas)
+  // Covers all countries in world-atlas 110m. Grouped by UN geoscheme region.
+  const continentById = new Map([
+    // Africa
+    ...[12,24,72,108,120,132,140,148,174,178,180,204,226,231,232,262,266,270,288,324,384,404,426,430,434,450,454,466,478,480,504,508,516,562,566,646,678,686,694,706,710,716,728,729,748,768,788,800,804,834,854,894].map(id => [String(id), "Africa"]),
+    // Asia
+    ...[4,31,48,50,51,64,96,104,116,144,156,162,166,275,356,360,364,368,376,392,398,400,410,414,417,418,422,446,458,462,496,512,524,586,608,634,682,702,760,762,764,784,792,795,860,887].map(id => [String(id), "Asia"]),
+    // Europe
+    ...[8,20,40,56,70,100,112,191,196,203,208,233,234,246,250,276,292,300,336,348,352,372,380,428,438,440,442,470,492,498,499,528,578,616,620,642,643,674,688,703,705,724,744,752,756,807,826,831].map(id => [String(id), "Europe"]),
+    // North America
+    ...[28,44,52,60,76,84,124,170,188,192,214,222,308,312,320,328,332,340,388,474,484,533,558,591,630,659,662,663,670,780,840].map(id => [String(id), "North America"]),
+    // South America
+    ...[32,68,152,218,238,254,328,600,604,740,858,862].map(id => [String(id), "South America"]),
+    // Oceania
+    ...[36,90,184,242,258,296,520,540,548,554,570,580,583,584,585,598,882].map(id => [String(id), "Oceania"]),
+  ]);
+
+  const continentColors = {
+    "Africa":        "#e8a838",
+    "Asia":          "#e05858",
+    "Europe":        "#5b8cd5",
+    "North America": "#6bc26b",
+    "South America": "#9b6bc2",
+    "Oceania":       "#3bbfbf",
+  };
+  const defaultColor = "#ccc";
+
+  function continentColor(id) {
+    const c = continentById.get(String(id));
+    return c ? continentColors[c] : defaultColor;
+  }
+
+  // Layout
+  const width = 700;
+  const height = 420;
+
+  const svg = d3.select("#map-svg")
+    .attr("viewBox", `0 0 ${width} ${height}`)
+    .attr("preserveAspectRatio", "xMidYMid meet");
+
+  // Projections
+  const projections = {
+    mercator: d3.geoMercator().fitSize([width, height], { type: "Sphere" }),
+    equalEarth: d3.geoEqualEarth().fitSize([width, height], { type: "Sphere" }),
+    orthographic: d3.geoOrthographic().fitSize([width, height], { type: "Sphere" }).clipAngle(90),
+    equirectangular: d3.geoEquirectangular().fitSize([width, height], { type: "Sphere" }),
+  };
+
+  const projectionNames = {
+    mercator: "Mercator",
+    equalEarth: "Equal Earth",
+    orthographic: "Orthographic",
+    equirectangular: "Equirectangular",
+  };
+
+  let currentProj = "mercator";
+  let showTissot = true;
+  let showGraticule = true;
+
+  // Load world data
+  const world = await d3.json("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json");
+  const countries = topojson.feature(world, world.objects.countries).features;
+  const borders = topojson.mesh(world, world.objects.countries, (a, b) => a !== b);
+  const land = topojson.feature(world, world.objects.land);
+
+  // Graticule
+  const graticule = d3.geoGraticule().step([30, 30])();
+
+  // Tissot indicatrices: small circles at regular lat/lon intervals
+  function makeTissotCircles() {
+    const circle = d3.geoCircle().radius(5);
+    const circles = [];
+    for (let lon = -180; lon <= 180; lon += 30) {
+      for (let lat = -60; lat <= 60; lat += 30) {
+        circles.push(circle.center([lon, lat])());
+      }
+    }
+    return circles;
+  }
+
+  const tissotCircles = makeTissotCircles();
+
+  // SVG layers (bottom to top)
+  const gSphere = svg.append("g");
+  const gGraticule = svg.append("g");
+  const gCountries = svg.append("g");
+  const gBorders = svg.append("g");
+  const gTissot = svg.append("g");
+
+  // Initial render
+  gSphere.append("path")
+    .datum({ type: "Sphere" })
+    .attr("fill", "#f0f4f8")
+    .attr("stroke", "#bcc5d0")
+    .attr("stroke-width", 0.5);
+
+  gGraticule.append("path")
+    .datum(graticule)
+    .attr("fill", "none")
+    .attr("stroke", "#d5dbe3")
+    .attr("stroke-width", 0.4);
+
+  gCountries.selectAll("path")
+    .data(countries)
+    .join("path")
+    .attr("fill", d => continentColor(d.id))
+    .attr("stroke", "none");
+
+  gBorders.append("path")
+    .datum(borders)
+    .attr("fill", "none")
+    .attr("stroke", "#fff")
+    .attr("stroke-width", 0.5)
+    .attr("stroke-linejoin", "round");
+
+  gTissot.selectAll("path")
+    .data(tissotCircles)
+    .join("path")
+    .attr("fill", "rgba(220, 40, 40, 0.18)")
+    .attr("stroke", "rgba(180, 30, 30, 0.55)")
+    .attr("stroke-width", 0.7);
+
+  function render() {
+    const projection = projections[currentProj];
+    const path = d3.geoPath(projection);
+
+    gSphere.select("path").attr("d", path);
+    gGraticule.select("path").attr("d", path).attr("display", showGraticule ? null : "none");
+
+    gCountries.selectAll("path")
+      .attr("d", path);
+
+    gBorders.select("path").attr("d", path);
+
+    gTissot.selectAll("path")
+      .attr("d", path)
+      .attr("display", showTissot ? null : "none");
+
+    d3.select("#proj-label").text(projectionNames[currentProj]);
+  }
+
+  render();
+
+  // Legend
+  const legendContainer = d3.select("#legend");
+  Object.entries(continentColors).forEach(([name, color]) => {
+    const item = legendContainer.append("span").attr("class", "legend-item");
+    item.append("span").attr("class", "legend-swatch").style("background", color);
+    item.append("span").text(name);
+  });
+
+  // Controls
+  d3.selectAll("#proj-controls button").on("click", function() {
+    const proj = this.dataset.proj;
+    if (proj === currentProj) return;
+    currentProj = proj;
+    d3.selectAll("#proj-controls button").classed("active", false);
+    d3.select(this).classed("active", true);
+    render();
+  });
+
+  d3.select("#tissot-toggle").on("change", function() {
+    showTissot = this.checked;
+    render();
+  });
+
+  d3.select("#graticule-toggle").on("change", function() {
+    showGraticule = this.checked;
+    render();
+  });
+
+  // ── Figure 2: Classification Comparison ──
+
+  // Synthetic GDP per capita keyed by numeric country ID
+  // Seeded random for reproducibility
+  const classRng = (function(seed) {
+    return function() {
+      seed = (seed * 16807) % 2147483647;
+      return (seed - 1) / 2147483646;
+    };
+  })(12345);
+
+  // Generate skewed GDP data (log-normal-ish)
+  const gdpById = new Map();
+  countries.forEach(f => {
+    // Base by continent to create realistic clustering
+    const continent = continentById.get(String(f.id));
+    const base = {
+      "Africa": 2500, "Asia": 12000, "Europe": 35000,
+      "North America": 20000, "South America": 10000, "Oceania": 25000,
+    }[continent] || 5000;
+    const noise = 0.3 + classRng() * 2.5;
+    gdpById.set(f.id, Math.round(base * noise));
+  });
+
+  const gdpValues = Array.from(gdpById.values()).sort(d3.ascending);
+  const gdpExtent = d3.extent(gdpValues);
+
+  // Color scheme: 5-class YlGnBu
+  const classColors = ["#ffffcc", "#a1dab4", "#41b6c4", "#2c7fb8", "#253494"];
+  const nClasses = 5;
+
+  // Classification methods
+  function quantileScale(values, nC) {
+    return d3.scaleQuantile().domain(values).range(classColors);
+  }
+
+  function equalIntervalScale(extent, nC) {
+    return d3.scaleQuantize().domain(extent).range(classColors);
+  }
+
+  function thresholdScale() {
+    return d3.scaleThreshold()
+      .domain([10000, 25000, 50000, 75000])
+      .range(classColors);
+  }
+
+  // Simple natural-breaks approximation (Jenks): iterative k-means on sorted 1D data
+  function jenksBreaks(sortedValues, nC) {
+    if (sortedValues.length < nC) return sortedValues;
+    // Initialize with quantile boundaries
+    const breaks = [];
+    for (let i = 1; i < nC; i++) {
+      breaks.push(d3.quantile(sortedValues, i / nC));
+    }
+    // Iterate: assign to nearest break boundary, recompute break as mean of boundary pairs
+    for (let iter = 0; iter < 20; iter++) {
+      const groups = Array.from({ length: nC }, () => []);
+      for (const v of sortedValues) {
+        let bin = 0;
+        for (let b = 0; b < breaks.length; b++) {
+          if (v >= breaks[b]) bin = b + 1;
+        }
+        groups[bin].push(v);
+      }
+      let changed = false;
+      for (let b = 0; b < breaks.length; b++) {
+        if (groups[b].length && groups[b + 1].length) {
+          const newBreak = (d3.max(groups[b]) + d3.min(groups[b + 1])) / 2;
+          if (Math.abs(newBreak - breaks[b]) > 1) changed = true;
+          breaks[b] = newBreak;
+        }
+      }
+      if (!changed) break;
+    }
+    return breaks;
+  }
+
+  function naturalBreaksScale(sortedValues, nC) {
+    const breaks = jenksBreaks(sortedValues, nC);
+    return d3.scaleThreshold().domain(breaks).range(classColors);
+  }
+
+  const classMethods = [
+    { name: "Quantile", scale: quantileScale(gdpValues, nClasses) },
+    { name: "Equal Interval", scale: equalIntervalScale(gdpExtent, nClasses) },
+    { name: "Natural Breaks", scale: naturalBreaksScale(gdpValues, nClasses) },
+    { name: "Threshold ($10K/$25K/$50K/$75K)", scale: thresholdScale() },
+  ];
+
+  // Draw the 2x2 grid of small maps
+  const classGrid = d3.select("#class-grid");
+  const cw = 330, ch = 200;
+  const classProj = d3.geoEqualEarth().fitSize([cw, ch], { type: "Sphere" });
+  const classPath = d3.geoPath(classProj);
+
+  classMethods.forEach(method => {
+    const cell = classGrid.append("div").attr("class", "class-cell");
+    cell.append("div").attr("class", "class-label").text(method.name);
+    const csvg = cell.append("svg")
+      .attr("viewBox", `0 0 ${cw} ${ch}`)
+      .attr("preserveAspectRatio", "xMidYMid meet");
+
+    // Sphere background
+    csvg.append("path")
+      .datum({ type: "Sphere" })
+      .attr("d", classPath)
+      .attr("fill", "#f0f4f8")
+      .attr("stroke", "#bcc5d0")
+      .attr("stroke-width", 0.3);
+
+    // Countries filled by classification
+    csvg.selectAll("path.country")
+      .data(countries)
+      .join("path")
+      .attr("class", "country")
+      .attr("d", classPath)
+      .attr("fill", d => {
+        const v = gdpById.get(d.id);
+        return v != null ? method.scale(v) : "#eee";
+      })
+      .attr("stroke", "none");
+
+    // Borders
+    csvg.append("path")
+      .datum(borders)
+      .attr("d", classPath)
+      .attr("fill", "none")
+      .attr("stroke", "#fff")
+      .attr("stroke-width", 0.3)
+      .attr("stroke-linejoin", "round");
+  });
+
+  // ── Figure 3: Zoom-to-Feature ──
+
+  const zw = 700, zh = 420;
+  const zoomProj = d3.geoEqualEarth().fitSize([zw, zh], { type: "Sphere" });
+  const zoomPath = d3.geoPath(zoomProj);
+
+  // Store base parameters for reset
+  const baseScale = zoomProj.scale();
+  const baseTranslate = zoomProj.translate().slice();
+
+  const zsvg = d3.select("#zoom-svg")
+    .attr("viewBox", `0 0 ${zw} ${zh}`)
+    .attr("preserveAspectRatio", "xMidYMid meet");
+
+  // Sphere
+  zsvg.append("path")
+    .datum({ type: "Sphere" })
+    .attr("d", zoomPath)
+    .attr("fill", "#f0f4f8")
+    .attr("stroke", "#bcc5d0")
+    .attr("stroke-width", 0.5);
+
+  // Graticule
+  const zGrat = d3.geoGraticule().step([30, 30])();
+  zsvg.append("path")
+    .datum(zGrat)
+    .attr("d", zoomPath)
+    .attr("fill", "none")
+    .attr("stroke", "#e0e4ea")
+    .attr("stroke-width", 0.3);
+
+  // Countries
+  const zCountries = zsvg.selectAll("path.country")
+    .data(countries)
+    .join("path")
+    .attr("class", "country")
+    .attr("d", zoomPath)
+    .attr("fill", d => continentColor(d.id))
+    .attr("stroke", "#fff")
+    .attr("stroke-width", 0.3);
+
+  // Borders
+  const zBorderPath = zsvg.append("path")
+    .datum(borders)
+    .attr("d", zoomPath)
+    .attr("fill", "none")
+    .attr("stroke", "#fff")
+    .attr("stroke-width", 0.5)
+    .attr("stroke-linejoin", "round");
+
+  let zoomedFeature = null;
+
+  function zoomRender() {
+    const p = d3.geoPath(zoomProj);
+    zsvg.selectAll("path").attr("d", p);
+  }
+
+  function zoomTo(feature) {
+    // Compute target scale and translate to fit the feature
+    const tempProj = d3.geoEqualEarth().fitSize([zw * 0.85, zh * 0.85], feature);
+    const targetScale = tempProj.scale();
+    const targetTranslate = tempProj.translate();
+
+    const interp = d3.interpolate(
+      { s: zoomProj.scale(), t: zoomProj.translate().slice() },
+      { s: targetScale, t: [targetTranslate[0] + (zw * 0.075), targetTranslate[1] + (zh * 0.075)] }
+    );
+
+    zsvg.transition()
+      .duration(750)
+      .tween("zoom", () => t => {
+        const v = interp(t);
+        zoomProj.scale(v.s).translate(v.t);
+        zoomRender();
+      });
+  }
+
+  function zoomReset() {
+    const interp = d3.interpolate(
+      { s: zoomProj.scale(), t: zoomProj.translate().slice() },
+      { s: baseScale, t: baseTranslate }
+    );
+
+    zsvg.transition()
+      .duration(750)
+      .tween("zoom", () => t => {
+        const v = interp(t);
+        zoomProj.scale(v.s).translate(v.t);
+        zoomRender();
+      });
+  }
+
+  zCountries.on("click", function(event, d) {
+    event.stopPropagation();
+    if (zoomedFeature === d) {
+      zoomedFeature = null;
+      zCountries.attr("stroke-width", 0.3).attr("stroke", "#fff");
+      zoomReset();
+    } else {
+      zoomedFeature = d;
+      zCountries
+        .attr("stroke-width", f => f === d ? 1.5 : 0.3)
+        .attr("stroke", f => f === d ? "#2563eb" : "#fff");
+      zoomTo(d);
+    }
+  });
+
+  // Click ocean/sphere to reset
+  zsvg.on("click", function() {
+    if (zoomedFeature) {
+      zoomedFeature = null;
+      zCountries.attr("stroke-width", 0.3).attr("stroke", "#fff");
+      zoomReset();
+    }
+  });
+
+})();
+</script>
+</body>
+</html>

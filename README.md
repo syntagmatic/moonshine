@@ -6,6 +6,8 @@
 
 AI tools generate complexity faster than people can consume it. Inspired by [Distill.pub](https://distill.pub), moonshine helps apply distillation to the flood of technical output, turning complex ideas into explorable, visual, interactive articles.
 
+Each explanation is a self-contained HTML file with vanilla JS and D3 v7. No build tools, no frameworks. Open the file in a browser and it works.
+
 ```
 > /shine how gradient descent finds minima
 What is the key insight you want the reader to walk away with?
@@ -15,10 +17,9 @@ What is the key insight you want the reader to walk away with?
 
 **Claude Code (marketplace):**
 ```shell
-# Add the marketplace and install both skills
+# Add the marketplace and install
 /plugin marketplace add enjalot/moonshine
 /plugin install moonshine@moonshine-marketplace
-/plugin install d3-power-tools@moonshine-marketplace
 ```
 
 **Manual install:**
@@ -43,10 +44,10 @@ The `/shine` command guides you through:
 
 1. **Story discovery** Clarify the concept, audience, key insight, and progression of understanding
 2. **Interaction design** Decide where static prose, interactive explorations, linked views, and scroll-driven narrative serve the explanation best
-3. **Project scaffolding** Generate a complete React 18 + Vite + D3 + TypeScript project
+3. **Project scaffolding** Generate a self-contained HTML file with D3 visualizations and moonshine typography
 4. **Iterative building** Start with prose and static figures, add interaction only where it genuinely helps
 
-Moonshine uses [d3-power-tools](https://github.com/syntagmatic/d3-power-tools) for visualization, a collection of specialized D3 skills covering linked views, brushing, force layouts, cartography, and more. Both are available from the same marketplace.
+Moonshine includes a built-in D3 visualization reference (`VISUALS.md`) covering chart types (line, bar, scatter, network, hierarchy, heatmap, distributions), interaction patterns (brushing, scroll-driven narrative, linked views), and the editorial style foundation. No external dependencies needed.
 
 ## Project Structure
 
@@ -54,9 +55,20 @@ Moonshine uses [d3-power-tools](https://github.com/syntagmatic/d3-power-tools) f
 plugins/
 └── moonshine/
     ├── SKILL.md          skill workflow and design principles
+    ├── VISUALS.md        D3 visualization patterns and recipes
     ├── RESEARCH.md       background research and inspiration catalog
     └── commands/
         └── shine.md      /shine command definition
+```
+
+## Output
+
+Each explanation lives in `~/.agent/moonshine/project-name/`:
+
+```
+~/.agent/moonshine/project-name/
+  index.html          # Self-contained explanation
+  data/               # Optional external datasets
 ```
 
 ## Inspirations
