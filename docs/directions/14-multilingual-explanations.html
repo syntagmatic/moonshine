@@ -272,11 +272,82 @@ svg text { font-family: var(--heading-font); }
 }
 .footer a { color: var(--text-2); }
 
+/* Script comparison figure */
+#script-comparison svg text { font-family: var(--heading-font); }
+.script-row { cursor: default; }
+.script-row:hover .script-bg { opacity: 0.12; }
+.script-tooltip {
+  font-family: var(--mono-font);
+  font-size: 0.72rem;
+  pointer-events: none;
+}
+
+/* Locale builder */
+.builder-grid {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 1.25rem;
+  align-items: start;
+}
+.builder-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.builder-field label {
+  display: block;
+  font-family: var(--heading-font);
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-2);
+  margin-bottom: 0.3rem;
+}
+.builder-field select,
+.builder-field input {
+  font-family: var(--mono-font);
+  font-size: 0.82rem;
+  padding: 0.4em 0.6em;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--fig-bg);
+  color: var(--text);
+  width: 100%;
+}
+.builder-field select:focus,
+.builder-field input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-light);
+}
+.builder-chart svg {
+  display: block;
+  width: 100%;
+}
+.builder-chart svg text {
+  font-family: var(--heading-font);
+}
+.builder-spec {
+  background: #1a1a2e;
+  color: #c0c0d8;
+  padding: 0.75rem 1rem;
+  border-radius: 5px;
+  font-family: var(--mono-font);
+  font-size: 0.72rem;
+  line-height: 1.5;
+  overflow-x: auto;
+  margin-top: 1rem;
+  max-height: 180px;
+  grid-column: 1 / -1;
+}
+
 @media (max-width: 640px) {
   .figure-wide { margin-left: 0; margin-right: 0; }
   h1 { font-size: 1.75rem; }
   .locale-controls { gap: 0.4rem; }
   .locale-btn { font-size: 0.75rem; padding: 0.35em 0.7em; }
+  .builder-grid { grid-template-columns: 1fr; }
 }
 </style>
 </head>
@@ -377,6 +448,47 @@ de.<span class="hl-fn">format</span>(<span class="hl-str">"$,.2f"</span>)(<span 
 
 <p>Typography is a different kind of challenge. CJK (Chinese, Japanese, Korean) characters are monospaced by nature, each occupying a roughly square cell. Mixing CJK characters with Latin text in the same label creates uneven spacing unless you account for the different character metrics. Arabic script is cursive and context-dependent: the same letter looks different depending on whether it starts a word, sits in the middle, or ends it. SVG text rendering handles Arabic shaping reasonably well in modern browsers, but you cannot take it for granted. Rendering Arabic text in a <code>&lt;canvas&gt;</code> element, for instance, requires a shaping library like HarfBuzz compiled to WASM.</p>
 
+<h3>CJK text in chart labels</h3>
+
+<p>CJK characters present a specific set of problems that Latin-script developers rarely encounter. The most basic issue is width. A single CJK character occupies roughly the same horizontal space as two Latin characters. When a D3 axis tick label mixes scripts, for example "Q1 2025年" in a Japanese locale, the "Q1 2025" portion and the "年" character follow different width rules. A label-placement algorithm that estimates width by counting characters will consistently miscalculate for mixed-script strings. You need <code>getBBox()</code> on rendered SVG text or <code>measureText()</code> on a canvas context to get the actual pixel width.</p>
+
+<p>Line height poses a parallel problem. CJK characters are taller than Latin lowercase letters and roughly the same height as Latin capitals, but CJK fonts typically request more vertical space for their line boxes. An axis that looks comfortably spaced with English labels can feel cramped with Japanese labels at the same font size. The pragmatic fix is to increase the line-height or reduce the font size slightly when CJK text is present, but doing this automatically requires detecting the script in use, which brings its own complexity.</p>
+
+<p>Vertical text is native to CJK typography. Traditional Japanese and Chinese text reads top to bottom, right to left. CSS supports this through <code>writing-mode: vertical-rl</code>, and SVG has the <code>writing-mode</code> attribute as well, though browser support for vertical SVG text is inconsistent. For chart labels, vertical text is sometimes useful for long category names on a horizontal axis. In a Japanese-localized chart, rotating labels 90 degrees and setting them in a vertical writing mode can feel more natural than the slanted-text hack that English-language D3 charts use for long tick labels.</p>
+
+<p>Ruby annotations add another layer. In Japanese educational text, kanji characters often carry small pronunciation guides (furigana) above them. If a chart title or annotation uses rare kanji, a Japanese reader might expect furigana. SVG does not support the HTML <code>&lt;ruby&gt;</code> element natively. You would need to render the annotation as a secondary <code>&lt;text&gt;</code> element positioned above the base text, with a much smaller font size. This is doable but fiddly, and it is one of those details that a non-Japanese developer would never think to include.</p>
+
+<h3>Bidirectional text mixing</h3>
+
+<p>The hardest text rendering problem in multilingual visualization is not pure RTL or pure LTR. It is mixed-direction text: Arabic or Hebrew prose that contains embedded LTR segments. This happens constantly in technical contexts. An Arabic sentence about a D3 chart might read "استخدم <code>d3.scaleLinear()</code> لإنشاء المحور" where the function name sits left-to-right inside a right-to-left sentence. The Unicode Bidirectional Algorithm (UBA) handles this in HTML by default. In SVG <code>&lt;text&gt;</code> elements, the behavior is less predictable.</p>
+
+<p>The core issue is that SVG text positioning is explicit. You set an x/y coordinate for each text element, and the browser lays out characters from that point. When a BiDi text run contains an embedded LTR segment, the browser must reverse the visual ordering of some character groups while preserving the logical ordering of others. Modern browsers handle this correctly for simple cases, but nested embedding levels (RTL text containing LTR text containing RTL text) can produce garbled output. The practical rule is to test with real mixed-direction strings, not placeholder text.</p>
+
+<p>For chart annotations that mix English technical terms with Arabic prose, the safest approach is to use explicit Unicode direction marks. The characters U+200F (right-to-left mark) and U+200E (left-to-right mark) are invisible but tell the BiDi algorithm where a direction change should occur. Placing an RLM before an Arabic word that follows a Latin technical term, and an LRM after it, prevents the algorithm from making wrong guesses about boundary positions. D3 code that generates annotation text for RTL locales should insert these marks programmatically rather than relying on the author to remember them.</p>
+
+<pre class="code-block"><span class="hl-cmt">// Wrap an LTR technical term for safe embedding in RTL text</span>
+<span class="hl-key">function</span> <span class="hl-fn">embedLTR</span>(term) {
+  <span class="hl-key">const</span> LRM = <span class="hl-str">"\u200E"</span>;   <span class="hl-cmt">// left-to-right mark</span>
+  <span class="hl-key">const</span> RLM = <span class="hl-str">"\u200F"</span>;   <span class="hl-cmt">// right-to-left mark</span>
+  <span class="hl-key">return</span> RLM + LRM + term + LRM + RLM;
+}
+
+<span class="hl-cmt">// Arabic annotation with embedded D3 API reference</span>
+<span class="hl-key">const</span> note = <span class="hl-str">`يستخدم هذا الرسم البياني ${<span class="hl-fn">embedLTR</span>(<span class="hl-str">"d3.scaleLinear()"</span>)} لتحديد المحور`</span>;</pre>
+
+<div class="insight">
+<p>Bidirectional bugs are some of the hardest to catch in review. The text renders. It looks plausible. But a native Arabic or Hebrew reader will immediately see that a parenthesis is on the wrong side, or that a number appears before the word it should follow. Automated BiDi testing tools exist (the Unicode Consortium publishes conformance tests) but they test the algorithm, not the visual result. You need human reviewers for the visual result.</p>
+</div>
+
+<h3>Script comparison: measuring what you render</h3>
+
+<p>Different scripts occupy space in fundamentally different ways. Latin characters are narrow and variable-width. Arabic characters are connected and context-shaped, so a word's width depends on which letters are adjacent. CJK characters are uniformly wide. Devanagari characters hang from a horizontal headstroke (the shirorekha) and combine with vowel marks that sit above, below, or beside the base consonant. These differences mean that a single "sentence" carrying roughly the same semantic content will have completely different bounding boxes in each script. A chart layout that reserves a fixed pixel width for labels will overflow in one script and waste space in another.</p>
+
+<div class="figure figure-wide">
+  <div id="script-comparison"></div>
+  <div class="figure-caption"><span class="figure-label">Figure 2.</span> The phrase "Annual growth rate" in four scripts, rendered at 16px. The colored overlays show the actual bounding box for each string, the baseline position, and the character-level width distribution. Latin and Arabic are comparatively compact; CJK and Devanagari need more horizontal and vertical room respectively. Hover over any script row to see per-character width breakdowns.</div>
+</div>
+
 <h2>Try it: locale-adaptive chart</h2>
 
 <p>Select a locale. The bar chart below shows quarterly revenue data for a fictional company. When you switch locales, everything adapts: number formatting, date labels, axis placement, text direction, currency symbol, and chart flow. The locale specification panel below the chart shows the <code>d3.formatLocale</code> and <code>d3.timeFormatLocale</code> definitions that drive the formatting.</p>
@@ -401,13 +513,41 @@ de.<span class="hl-fn">format</span>(<span class="hl-str">"$,.2f"</span>)(<span 
 
 <p>Making a single chart respond to locale changes, as in the demo above, requires a specific architecture. Content strings must be separated from layout code. Formatting must be parameterized, not hardcoded. Layout direction must be a variable, not an assumption.</p>
 
+<h3>Separating content from layout</h3>
+
+<p>The first principle is physical separation: no human-readable string appears in the rendering code. Every label, title, tooltip, annotation, and aria description lives in a string table keyed by locale. The rendering function receives the string table as a parameter and looks up everything it needs. This sounds obvious, and it is the same principle that web application frameworks have enforced for decades. But D3 code resists it, because D3 code is often written as a single self-contained script where data, layout, and labels are interleaved. The path of least resistance is to write <code>.text("Revenue (USD)")</code> inline and move on. That inline string is a localization debt that compounds with every additional label.</p>
+
+<p>The separation has to extend beyond visible text. Format specifier strings like <code>"$,.2f"</code> are locale-independent in D3 (the <code>$</code> is a placeholder, not a literal dollar sign), but the format specifier itself might need to change between locales. Japanese yen amounts are conventionally displayed as whole numbers without decimal places, while US dollar amounts typically show two decimal places. So the format specifier is part of the locale definition, not just the formatting function. A complete locale object for a D3 chart looks less like a translation file and more like a rendering configuration.</p>
+
+<pre class="code-block"><span class="hl-cmt">// A complete locale definition: formatting + strings + layout</span>
+<span class="hl-key">const</span> locale_de = {
+  <span class="hl-key">direction</span>: <span class="hl-str">"ltr"</span>,
+  <span class="hl-key">numberFormat</span>: { <span class="hl-key">decimal</span>: <span class="hl-str">","</span>, <span class="hl-key">thousands</span>: <span class="hl-str">"."</span>, <span class="hl-key">grouping</span>: [<span class="hl-num">3</span>], <span class="hl-key">currency</span>: [<span class="hl-str">""</span>, <span class="hl-str">" €"</span>] },
+  <span class="hl-key">dateFormat</span>: { <span class="hl-key">months</span>: [<span class="hl-str">"Januar"</span>, <span class="hl-str">"Februar"</span>, ...], ... },
+  <span class="hl-key">formatSpecifiers</span>: { <span class="hl-key">currency</span>: <span class="hl-str">"$,.2f"</span>, <span class="hl-key">percent</span>: <span class="hl-str">",.1%"</span>, <span class="hl-key">integer</span>: <span class="hl-str">",.0f"</span> },
+  <span class="hl-key">strings</span>: { <span class="hl-key">title</span>: <span class="hl-str">"Quartalsumsatz nach Region"</span>, <span class="hl-key">yLabel</span>: <span class="hl-str">"Umsatz"</span>, ... },
+  <span class="hl-key">typography</span>: { <span class="hl-key">labelSize</span>: <span class="hl-num">12</span>, <span class="hl-key">titleSize</span>: <span class="hl-num">16</span>, <span class="hl-key">lineHeight</span>: <span class="hl-num">1.4</span> }
+};</pre>
+
+<p>Notice the <code>typography</code> field. Different scripts need different sizing. A font size that produces readable English labels may be too small for Arabic (whose letterforms have more internal complexity) or too large for CJK (whose characters are information-dense). Treating typography parameters as part of the locale definition, rather than as global constants, lets you tune readability per script without conditional logic scattered through the rendering code.</p>
+
+<h3>Locale objects as rendering configuration</h3>
+
 <p>The pattern has three pieces:</p>
 
 <p><strong>Locale definitions.</strong> Each supported locale gets a definition object containing: the <code>d3.formatLocale</code> spec, the <code>d3.timeFormatLocale</code> spec, a string table for UI labels and titles, and a <code>direction</code> flag (<code>"ltr"</code> or <code>"rtl"</code>). These objects are the single source of truth. Everything else reads from them.</p>
 
+<p>The locale object is not a flat key-value map. It is a structured configuration with sections for number formatting, date formatting, string content, layout direction, and typography. Each section maps to a specific consumer in the rendering pipeline. The number formatting section feeds <code>d3.formatLocale()</code>. The date formatting section feeds <code>d3.timeFormatLocale()</code>. The strings section feeds label placement. The direction flag feeds axis construction, text anchoring, and spatial layout. Keeping these sections distinct within a single object means that adding a new locale requires filling out one template, not touching rendering code.</p>
+
 <p><strong>Parameterized rendering.</strong> The chart drawing function accepts a locale object and derives all its formatting, labeling, and layout from it. No string literals. No hardcoded axis orientation. The scale domain direction, axis generator, text anchor, and label positions are all computed from the locale's direction flag.</p>
 
+<p>In practice, parameterized rendering means the rendering function creates its formatters at the top of each render call, not at module scope. You cannot create <code>d3.formatLocale(spec)</code> once at load time if the locale might change. Each call to <code>renderChart(localeObject)</code> instantiates fresh formatters from the locale's spec, builds scales with direction-appropriate ranges, selects axis generators based on the direction flag, and looks up every string from the locale's string table. The function becomes stateless with respect to locale: give it any valid locale object and it produces the correct output.</p>
+
+<h3>Fallback chains</h3>
+
 <p><strong>Fallback chains.</strong> Not every string needs to be translated for every locale. A fallback chain (try the requested locale, then fall back to a related locale, then to English) allows incremental translation. You can ship a chart that is fully localized for three languages and partially localized for seven more, rather than waiting until every last tooltip is translated before supporting any additional language.</p>
+
+<p>The fallback chain resolves locale codes from most specific to least specific. A request for <code>"pt-BR"</code> (Brazilian Portuguese) first checks for an exact match, then strips the region code and tries <code>"pt"</code> (generic Portuguese), then falls through to the base locale (typically <code>"en-US"</code>), and if all else fails, returns the raw key as a last resort. This four-level chain means you can add partial support for a new locale by providing just the number and date formatting specs (which are small and well-defined) while letting the string table fall through to a related language. Brazilian Portuguese numbers format correctly even before anyone has translated the chart title from European Portuguese.</p>
 
 <pre class="code-block"><span class="hl-cmt">// Fallback chain: try requested locale, then region, then English</span>
 <span class="hl-key">function</span> <span class="hl-fn">getString</span>(key, locale, strings) {
@@ -416,6 +556,31 @@ de.<span class="hl-fn">format</span>(<span class="hl-str">"$,.2f"</span>)(<span 
     || strings[<span class="hl-str">"en-US"</span>][key]
     || key;
 }</pre>
+
+<p>The same fallback logic applies to format specifiers, not just strings. If a locale does not provide a custom format specifier for currency, the system can fall back to a sensible default from the parent locale. The key design decision is that the fallback chain must be explicit and documented. Silent fallbacks are useful for shipping incrementally. Invisible fallbacks that the developer does not know about are a source of bugs. Logging which locale level was actually used for each lookup, at least in development builds, makes fallback behavior visible.</p>
+
+<pre class="code-block"><span class="hl-cmt">// Full fallback with logging for development</span>
+<span class="hl-key">function</span> <span class="hl-fn">resolve</span>(key, locale, table, {log = <span class="hl-key">false</span>} = {}) {
+  <span class="hl-key">const</span> chain = [locale, locale.split(<span class="hl-str">"-"</span>)[<span class="hl-num">0</span>], <span class="hl-str">"en-US"</span>];
+  <span class="hl-key">for</span> (<span class="hl-key">const</span> loc <span class="hl-key">of</span> chain) {
+    <span class="hl-key">if</span> (table[loc]?.[key] !== <span class="hl-key">undefined</span>) {
+      <span class="hl-key">if</span> (log && loc !== locale)
+        console.<span class="hl-fn">warn</span>(<span class="hl-str">`[i18n] "${key}" fell back: ${locale} → ${loc}`</span>);
+      <span class="hl-key">return</span> table[loc][key];
+    }
+  }
+  <span class="hl-key">if</span> (log) console.<span class="hl-fn">warn</span>(<span class="hl-str">`[i18n] "${key}" missing for all locales`</span>);
+  <span class="hl-key">return</span> key;
+}</pre>
+
+<h3>Try it: locale builder</h3>
+
+<p>The demo below inverts the abstraction. Instead of choosing from predefined locales, you define one from scratch. Set the decimal separator, the grouping character, the currency symbol and placement, and the date format. The chart on the right updates in real time, so you can see exactly how each formatting decision affects the visual output. Try building a Swiss locale (apostrophe for grouping, period for decimal), or an Indian locale (mixed grouping pattern of 3 then 2), or invent something entirely fictional.</p>
+
+<div class="figure figure-wide">
+  <div id="locale-builder"></div>
+  <div class="figure-caption"><span class="figure-label">Figure 3.</span> An interactive locale builder. Each control maps to a field in the <code>d3.formatLocale</code> definition object. The chart rerenders on every change. The code panel at the bottom shows the resulting locale definition, ready to copy into a project.</div>
+</div>
 
 <h2>Moonshine connection</h2>
 
@@ -830,6 +995,424 @@ de.<span class="hl-fn">format</span>(<span class="hl-str">"$,.2f"</span>)(<span 
 
   // Initial render
   renderChart(currentLocale);
+
+})();
+</script>
+
+<script>
+// ── FIGURE 2: SCRIPT COMPARISON ──
+(function() {
+
+  const scripts = [
+    {
+      name: 'Latin',
+      text: 'Annual growth rate',
+      color: '#2563eb',
+      baseline: 'alphabetic',
+      note: 'Variable-width, compact'
+    },
+    {
+      name: 'Arabic',
+      text: '\u0645\u0639\u062f\u0644 \u0627\u0644\u0646\u0645\u0648 \u0627\u0644\u0633\u0646\u0648\u064a',
+      color: '#7c3aed',
+      baseline: 'alphabetic',
+      note: 'Cursive, context-shaped'
+    },
+    {
+      name: 'CJK',
+      text: '\u5e74\u9593\u6210\u9577\u7387',
+      color: '#059669',
+      baseline: 'ideographic',
+      note: 'Uniform width, square cells'
+    },
+    {
+      name: 'Devanagari',
+      text: '\u0935\u093e\u0930\u094d\u0937\u093f\u0915 \u0935\u0943\u0926\u094d\u0927\u093f \u0926\u0930',
+      color: '#d97706',
+      baseline: 'hanging',
+      note: 'Headstroke, combining marks'
+    }
+  ];
+
+  const W = 680, H = 340;
+  const margin = { top: 30, right: 20, bottom: 20, left: 90 };
+  const innerW = W - margin.left - margin.right;
+  const innerH = H - margin.top - margin.bottom;
+  const rowH = innerH / scripts.length;
+
+  const svg = d3.select('#script-comparison').append('svg')
+    .attr('viewBox', `0 0 ${W} ${H}`)
+    .attr('preserveAspectRatio', 'xMidYMid meet');
+
+  const g = svg.append('g')
+    .attr('transform', `translate(${margin.left},${margin.top})`);
+
+  // Column header
+  g.append('text')
+    .attr('x', 0).attr('y', -12)
+    .style('font-size', '0.65rem')
+    .style('font-weight', '600')
+    .style('fill', '#4a4a6a')
+    .style('text-transform', 'uppercase')
+    .style('letter-spacing', '0.05em')
+    .text('Script');
+
+  g.append('text')
+    .attr('x', 80).attr('y', -12)
+    .style('font-size', '0.65rem')
+    .style('font-weight', '600')
+    .style('fill', '#4a4a6a')
+    .style('text-transform', 'uppercase')
+    .style('letter-spacing', '0.05em')
+    .text('Rendered text with bounding box');
+
+  scripts.forEach((s, i) => {
+    const rowG = g.append('g')
+      .attr('class', 'script-row')
+      .attr('transform', `translate(0,${i * rowH})`);
+
+    // Background highlight on hover
+    rowG.append('rect')
+      .attr('class', 'script-bg')
+      .attr('x', -margin.left)
+      .attr('y', 0)
+      .attr('width', W)
+      .attr('height', rowH)
+      .attr('fill', s.color)
+      .attr('opacity', 0);
+
+    // Script name label
+    rowG.append('text')
+      .attr('x', 0)
+      .attr('y', rowH * 0.45)
+      .attr('dominant-baseline', 'middle')
+      .style('font-size', '0.82rem')
+      .style('font-weight', '600')
+      .style('fill', '#1a1a2e')
+      .text(s.name);
+
+    // Script note
+    rowG.append('text')
+      .attr('x', 0)
+      .attr('y', rowH * 0.45 + 16)
+      .attr('dominant-baseline', 'middle')
+      .style('font-size', '0.62rem')
+      .style('fill', '#4a4a6a')
+      .text(s.note);
+
+    // The actual text in the target script, rendered at 16px
+    const textEl = rowG.append('text')
+      .attr('x', 80)
+      .attr('y', rowH * 0.45)
+      .attr('dominant-baseline', 'middle')
+      .style('font-size', '16px')
+      .style('fill', '#1a1a2e')
+      .text(s.text);
+
+    // After rendering, measure and draw bounding box
+    // Use a small timeout to let the browser lay out text
+    setTimeout(() => {
+      try {
+        const bbox = textEl.node().getBBox();
+
+        // Bounding box rectangle
+        rowG.insert('rect', 'text:last-of-type')
+          .attr('x', bbox.x)
+          .attr('y', bbox.y)
+          .attr('width', bbox.width)
+          .attr('height', bbox.height)
+          .attr('fill', s.color)
+          .attr('opacity', 0.08)
+          .attr('stroke', s.color)
+          .attr('stroke-width', 1)
+          .attr('stroke-opacity', 0.4)
+          .attr('rx', 2);
+
+        // Baseline indicator line
+        const baselineY = rowH * 0.45;
+        rowG.append('line')
+          .attr('x1', bbox.x)
+          .attr('x2', bbox.x + bbox.width)
+          .attr('y1', baselineY)
+          .attr('y2', baselineY)
+          .attr('stroke', s.color)
+          .attr('stroke-width', 1)
+          .attr('stroke-dasharray', '3,2')
+          .attr('opacity', 0.6);
+
+        // Width annotation
+        rowG.append('text')
+          .attr('x', bbox.x + bbox.width + 8)
+          .attr('y', rowH * 0.45 - 4)
+          .attr('dominant-baseline', 'middle')
+          .style('font-family', 'Source Code Pro, monospace')
+          .style('font-size', '0.62rem')
+          .style('fill', s.color)
+          .text(`${Math.round(bbox.width)}px wide`);
+
+        // Height annotation
+        rowG.append('text')
+          .attr('x', bbox.x + bbox.width + 8)
+          .attr('y', rowH * 0.45 + 10)
+          .attr('dominant-baseline', 'middle')
+          .style('font-family', 'Source Code Pro, monospace')
+          .style('font-size', '0.62rem')
+          .style('fill', '#4a4a6a')
+          .text(`${Math.round(bbox.height)}px tall`);
+
+      } catch(e) { /* getBBox can fail before paint */ }
+    }, 100);
+
+    // Separator line
+    if (i < scripts.length - 1) {
+      rowG.append('line')
+        .attr('x1', -margin.left)
+        .attr('x2', innerW + margin.right)
+        .attr('y1', rowH)
+        .attr('y2', rowH)
+        .attr('stroke', '#e2e2e8')
+        .attr('stroke-width', 1);
+    }
+  });
+
+})();
+</script>
+
+<script>
+// ── FIGURE 3: INTERACTIVE LOCALE BUILDER ──
+(function() {
+
+  const container = d3.select('#locale-builder');
+
+  // Build the HTML structure
+  const grid = container.append('div').attr('class', 'builder-grid');
+
+  // Left: controls
+  const controls = grid.append('div').attr('class', 'builder-controls');
+
+  // Decimal separator
+  const decField = controls.append('div').attr('class', 'builder-field');
+  decField.append('label').text('Decimal separator');
+  const decSelect = decField.append('select').attr('id', 'bldr-decimal');
+  [
+    { val: '.', label: '.  period (en-US, ja-JP)' },
+    { val: ',', label: ',  comma (de-DE, fr-FR, pt-BR)' },
+    { val: '\u066b', label: '\u066b  Arabic decimal separator' }
+  ].forEach(o => decSelect.append('option').attr('value', o.val).text(o.label));
+
+  // Grouping separator
+  const grpField = controls.append('div').attr('class', 'builder-field');
+  grpField.append('label').text('Grouping separator');
+  const grpSelect = grpField.append('select').attr('id', 'bldr-thousands');
+  [
+    { val: ',', label: ',  comma (en-US)' },
+    { val: '.', label: '.  period (de-DE)' },
+    { val: '\u00a0', label: '(space)  thin space (fr-FR)' },
+    { val: "'", label: "\'  apostrophe (de-CH)" },
+    { val: '\u066c', label: '\u066c  Arabic grouping' },
+    { val: '', label: '(none)' }
+  ].forEach(o => grpSelect.append('option').attr('value', o.val).text(o.label));
+
+  // Grouping pattern
+  const patField = controls.append('div').attr('class', 'builder-field');
+  patField.append('label').text('Grouping pattern');
+  const patSelect = patField.append('select').attr('id', 'bldr-grouping');
+  [
+    { val: '3', label: '[3]  Western (1,234,567)' },
+    { val: '3,2', label: '[3, 2, 2, ...]  Indian (12,34,567)' }
+  ].forEach(o => patSelect.append('option').attr('value', o.val).text(o.label));
+
+  // Currency symbol
+  const curField = controls.append('div').attr('class', 'builder-field');
+  curField.append('label').text('Currency symbol');
+  const curSelect = curField.append('select').attr('id', 'bldr-currency');
+  [
+    { val: '$,', label: '$  dollar prefix (en-US)' },
+    { val: ',\u00a0\u20ac', label: '\u20ac  euro suffix (de-DE)' },
+    { val: '\u00a5,', label: '\u00a5  yen prefix (ja-JP)' },
+    { val: ',\u00a0\u00a3', label: '\u00a3  pound suffix' },
+    { val: 'R$\u00a0,', label: 'R$  real prefix (pt-BR)' },
+    { val: ',\u00a0CHF', label: 'CHF  franc suffix (de-CH)' }
+  ].forEach(o => curSelect.append('option').attr('value', o.val).text(o.label));
+
+  // Date format
+  const dateField = controls.append('div').attr('class', 'builder-field');
+  dateField.append('label').text('Date format');
+  const dateSelect = dateField.append('select').attr('id', 'bldr-date');
+  [
+    { val: 'M/D/Y', label: 'M/D/YYYY  (en-US)' },
+    { val: 'D.M.Y', label: 'D.M.YYYY  (de-DE)' },
+    { val: 'Y/M/D', label: 'YYYY/M/D  (ja-JP)' },
+    { val: 'D/M/Y', label: 'D/M/YYYY  (ar-SA, pt-BR)' }
+  ].forEach(o => dateSelect.append('option').attr('value', o.val).text(o.label));
+
+  // Right: chart
+  const chartDiv = grid.append('div').attr('class', 'builder-chart');
+  const bW = 400, bH = 280;
+  const bSvg = chartDiv.append('svg')
+    .attr('viewBox', `0 0 ${bW} ${bH}`)
+    .attr('preserveAspectRatio', 'xMidYMid meet');
+
+  // Code spec panel
+  const specPanel = grid.append('div').attr('class', 'builder-spec');
+
+  // Sample data: monthly values
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
+  const monthDates = months.map((_, i) => new Date(2025, i, 15));
+  const values = [184520, 203870, 195340, 221680, 248910, 237450];
+
+  function getLocaleSpec() {
+    const dec = document.getElementById('bldr-decimal').value;
+    const thou = document.getElementById('bldr-thousands').value;
+    const grpRaw = document.getElementById('bldr-grouping').value;
+    const grouping = grpRaw === '3,2'
+      ? [3, 2, 2, 2, 2, 2, 2, 2, 2, 2]
+      : [3];
+    const curRaw = document.getElementById('bldr-currency').value;
+    const curParts = curRaw.split(',');
+    const currency = [curParts[0], curParts[1] || ''];
+    const dateFmt = document.getElementById('bldr-date').value;
+
+    return {
+      decimal: dec,
+      thousands: thou,
+      grouping: grouping,
+      currency: currency,
+      minus: '\u2212',
+      percent: '%',
+      dateFmt: dateFmt
+    };
+  }
+
+  function formatDate(d, fmt) {
+    const m = d.getMonth() + 1;
+    const day = d.getDate();
+    const y = d.getFullYear();
+    return fmt
+      .replace('M', m)
+      .replace('D', day)
+      .replace('Y', y);
+  }
+
+  function renderBuilderChart() {
+    const spec = getLocaleSpec();
+
+    const numLocale = d3.formatLocale({
+      decimal: spec.decimal,
+      thousands: spec.thousands,
+      grouping: spec.grouping,
+      currency: spec.currency,
+      minus: spec.minus,
+      percent: spec.percent
+    });
+    const fmtCurrency = numLocale.format('$,.0f');
+    const fmtNumber = numLocale.format(',.0f');
+
+    bSvg.selectAll('*').remove();
+
+    const margin = { top: 36, right: 16, bottom: 40, left: 64 };
+    const iW = bW - margin.left - margin.right;
+    const iH = bH - margin.top - margin.bottom;
+
+    const g = bSvg.append('g')
+      .attr('transform', `translate(${margin.left},${margin.top})`);
+
+    // Title
+    g.append('text')
+      .attr('x', 0).attr('y', -16)
+      .style('font-size', '0.82rem')
+      .style('font-weight', '700')
+      .style('fill', '#1a1a2e')
+      .text('Monthly Revenue');
+
+    // Scales
+    const x = d3.scaleBand()
+      .domain(d3.range(months.length))
+      .range([0, iW])
+      .padding(0.3);
+
+    const y = d3.scaleLinear()
+      .domain([0, d3.max(values) * 1.15])
+      .range([iH, 0]);
+
+    // Grid
+    g.selectAll('.grid-line')
+      .data(y.ticks(5))
+      .join('line')
+        .attr('x1', 0).attr('x2', iW)
+        .attr('y1', d => y(d)).attr('y2', d => y(d))
+        .attr('stroke', '#e2e2e8')
+        .attr('stroke-dasharray', '3,3');
+
+    // Bars
+    g.selectAll('.bar')
+      .data(values)
+      .join('rect')
+        .attr('x', (d, i) => x(i))
+        .attr('width', x.bandwidth())
+        .attr('y', d => y(d))
+        .attr('height', d => iH - y(d))
+        .attr('fill', '#2563eb')
+        .attr('rx', 2)
+      .append('title')
+        .text(d => fmtCurrency(d));
+
+    // X axis: dates formatted per user's choice
+    g.append('g')
+      .attr('transform', `translate(0,${iH})`)
+      .call(d3.axisBottom(x).tickFormat(i => formatDate(monthDates[i], spec.dateFmt)))
+      .selectAll('text')
+        .style('font-size', '0.62rem')
+        .style('fill', '#4a4a6a');
+
+    // Y axis: numbers formatted per user's locale
+    g.append('g')
+      .call(d3.axisLeft(y).ticks(5).tickFormat(d => fmtCurrency(d)))
+      .selectAll('text')
+        .style('font-size', '0.62rem')
+        .style('fill', '#4a4a6a');
+
+    // Sample value callout on the tallest bar
+    const maxI = values.indexOf(d3.max(values));
+    g.append('text')
+      .attr('x', x(maxI) + x.bandwidth() / 2)
+      .attr('y', y(values[maxI]) - 6)
+      .attr('text-anchor', 'middle')
+      .style('font-size', '0.68rem')
+      .style('font-weight', '600')
+      .style('fill', '#2563eb')
+      .text(fmtCurrency(values[maxI]));
+
+    // Update spec panel
+    const grpStr = spec.grouping.length > 1
+      ? `[${spec.grouping.slice(0, 3).join(', ')}, ...]`
+      : `[${spec.grouping[0]}]`;
+    const curStr = `["${spec.currency[0]}", "${spec.currency[1]}"]`;
+    specPanel.text(
+      `// Your custom d3.formatLocale definition\n` +
+      `{\n` +
+      `  decimal: "${spec.decimal}",\n` +
+      `  thousands: "${spec.thousands}",\n` +
+      `  grouping: ${grpStr},\n` +
+      `  currency: ${curStr},\n` +
+      `  minus: "\u2212",\n` +
+      `  percent: "%"\n` +
+      `}\n\n` +
+      `// Date format pattern: "${spec.dateFmt}"\n\n` +
+      `// Sample formatted values:\n` +
+      `// ${fmtNumber(1234567)} (plain number)\n` +
+      `// ${fmtCurrency(248910)} (currency)\n` +
+      `// ${formatDate(new Date(2025, 4, 15), spec.dateFmt)} (date)`
+    );
+  }
+
+  // Listen for changes on all builder controls
+  ['bldr-decimal', 'bldr-thousands', 'bldr-grouping', 'bldr-currency', 'bldr-date'].forEach(id => {
+    document.getElementById(id).addEventListener('change', renderBuilderChart);
+  });
+
+  // Initial render
+  renderBuilderChart();
 
 })();
 </script>

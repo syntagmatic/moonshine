@@ -317,6 +317,106 @@ input[type="range"]::-webkit-slider-thumb {
   padding: 0 0.35rem;
 }
 
+/* Query builder figure */
+.qb-interaction-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  font-family: var(--heading-font);
+  font-size: 0.85rem;
+  color: var(--text-2);
+}
+.qb-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3em 0.7em;
+  border-radius: 4px;
+  font-family: var(--heading-font);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s, box-shadow 0.15s;
+  user-select: none;
+}
+.qb-chip:hover { box-shadow: 0 1px 4px rgba(0,0,0,0.12); }
+.qb-chip.inactive { opacity: 0.35; }
+.qb-chip .qb-x {
+  font-size: 0.7rem;
+  opacity: 0.6;
+  margin-left: 0.2em;
+}
+.qb-chip:hover .qb-x { opacity: 1; }
+.qb-clause-connector {
+  font-family: var(--mono-font);
+  font-size: 0.75rem;
+  color: #7cb3ff;
+  font-weight: 600;
+  padding: 0 0.2em;
+}
+
+/* Format comparison bars */
+.fc-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+  font-family: var(--heading-font);
+  font-size: 0.8rem;
+}
+.fc-label {
+  min-width: 5em;
+  font-weight: 600;
+  color: var(--text);
+  text-align: right;
+}
+.fc-bar-track {
+  flex: 1;
+  height: 16px;
+  background: #f1f1f5;
+  border-radius: 3px;
+  overflow: hidden;
+  position: relative;
+}
+.fc-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.4s ease;
+  position: relative;
+}
+.fc-bar-value {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-family: var(--mono-font);
+  font-size: 0.7rem;
+  color: #fff;
+  white-space: nowrap;
+}
+.fc-bar-value-outside {
+  position: relative;
+  font-family: var(--mono-font);
+  font-size: 0.72rem;
+  color: var(--text-2);
+  min-width: 5em;
+  text-align: left;
+}
+.fc-group-label {
+  font-family: var(--heading-font);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0.75rem 0 0.35rem;
+}
+.fc-group-label:first-child { margin-top: 0; }
+.fc-metric-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
 /* SVG text defaults */
 svg text { font-family: var(--heading-font); }
 
@@ -497,7 +597,120 @@ byYear.filterRange([<span class="hl-str">2010</span>, <span class="hl-str">2020<
     <p>Crossfilter is a specialized engine for a specific interaction pattern. DuckDB is a general-purpose analytical engine that happens to support that pattern. The choice depends on whether your queries will stay simple or grow complex. For a moonshine explanation that starts with basic filters and evolves toward multi-table analysis, DuckDB's generality is the safer bet.</p>
   </div>
 
+  <!-- ─── Query Composition Pattern ─── -->
+  <h3>The Query Composition Pattern</h3>
+
+  <p>The real power of SQL-backed cross-filtering is not any single WHERE clause. It is how multiple clauses compose. When the user brushes a time range in chart A, that interaction produces a clause: <code>WHERE year BETWEEN 2012 AND 2018</code>. When the user clicks a category in chart B, that produces a second clause: <code>AND region = 'Northeast'</code>. When the user adjusts a threshold slider in chart C, that produces a third: <code>AND population > 50000</code>. All three clauses are ANDed together into a single query. Each chart's interaction contributes one fragment. The query engine receives the composed whole.</p>
+
+  <p>This composition is algebraic. Each interaction maps to exactly one clause. Adding an interaction appends a clause. Removing it (clearing the brush, deselecting the category) removes the clause. The interaction state of the entire dashboard is fully described by the set of active clauses. There is no hidden state, no bitmap index that accumulates side effects across filter operations. The query is the state.</p>
+
+  <p>In code, this means maintaining a dictionary of active clauses keyed by the originating chart. When any chart's interaction changes, the system rebuilds the WHERE clause by joining all active entries with AND, constructs the full query, and sends it to DuckDB. Each chart then re-queries with the shared WHERE clause but its own GROUP BY and SELECT. The brush chart groups by time. The bar chart groups by region. The scatter plot groups by nothing (it wants raw rows from the filtered subset). Same WHERE, different projections.</p>
+
+  <pre class="code-block"><span class="hl-cmt">// Clause dictionary: each chart owns one entry</span>
+<span class="hl-key">const</span> clauses = <span class="hl-key">new</span> Map();
+
+<span class="hl-cmt">// Brush in time chart sets a range clause</span>
+clauses.set(<span class="hl-str">"timeChart"</span>, <span class="hl-str">`year BETWEEN ${y0} AND ${y1}`</span>);
+
+<span class="hl-cmt">// Click in category chart sets an equality clause</span>
+clauses.set(<span class="hl-str">"categoryChart"</span>, <span class="hl-str">`region = '${region}'`</span>);
+
+<span class="hl-cmt">// Compose: join all active clauses with AND</span>
+<span class="hl-key">const</span> where = clauses.size
+  ? <span class="hl-str">`WHERE `</span> + [...clauses.values()].join(<span class="hl-str">` AND `</span>)
+  : <span class="hl-str">``</span>;
+
+<span class="hl-cmt">// Each chart queries with the shared WHERE but its own projection</span>
+<span class="hl-key">const</span> barResult = <span class="hl-key">await</span> db.query(
+  <span class="hl-str">`SELECT region, AVG(value) as avg FROM data ${where} GROUP BY region`</span>
+);
+<span class="hl-key">const</span> lineResult = <span class="hl-key">await</span> db.query(
+  <span class="hl-str">`SELECT year, SUM(value) as total FROM data ${where} GROUP BY year`</span>
+);</pre>
+
+  <p>This pattern scales cleanly to any number of linked charts. Adding a tenth chart means adding one more clause source. The composition logic does not change. And because each query is independent, they can be sent to DuckDB in parallel. On a multi-core machine, DuckDB will execute them concurrently, which means the wall-clock time for updating ten charts is not ten times the single-query time. It is closer to one or two times, depending on how many cores are available and how much data each query touches.</p>
+
+  <p>The figure below demonstrates this composition. Each interaction adds or removes a clause. The live SQL display at the bottom shows the composed query in real time. Toggle the interactions on and off to see how the query assembles and simplifies.</p>
+
+  <div class="figure figure-wide" id="query-builder-figure">
+    <div style="margin-bottom: 1rem;">
+      <div class="qb-interaction-row">
+        <span style="min-width: 6em; font-weight: 600;">Time range:</span>
+        <div id="qb-brush-container" style="flex: 1;"></div>
+      </div>
+      <div class="qb-interaction-row">
+        <span style="min-width: 6em; font-weight: 600;">Category:</span>
+        <div id="qb-category-chips"></div>
+      </div>
+      <div class="qb-interaction-row">
+        <span style="min-width: 6em; font-weight: 600;">Threshold:</span>
+        <div style="display: flex; align-items: center; gap: 0.5rem; flex: 1;">
+          <label style="font-size: 0.8rem;">min value</label>
+          <input type="range" id="qb-threshold-slider" min="0" max="80" step="5" value="0" style="width: 140px;">
+          <span id="qb-threshold-label" style="font-family: var(--mono-font); font-size: 0.82rem; min-width: 2.5em;">0</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="display: flex; gap: 0.4rem; flex-wrap: wrap; align-items: center; margin-bottom: 0.75rem; min-height: 2em;" id="qb-clause-display"></div>
+
+    <div class="sql-panel" id="qb-sql-panel">
+      <div class="sql-label">Composed query</div>
+      <div id="qb-sql-text"></div>
+    </div>
+
+    <div id="qb-result-container"></div>
+
+    <p class="figure-caption"><span class="figure-label">Figure 3.</span> Query composition in action. Brush the time axis to add a WHERE clause. Click a category chip to add an AND clause. Raise the threshold slider to add another. The live SQL display shows how independent interactions compose into a single query. Click an active chip to deactivate it.</p>
+  </div>
+
   <p>In practice, the latency difference matters most during brush-drag, when the user is continuously moving a handle and expects the other charts to update in real time. At 60fps the frame budget is 16ms. Crossfilter can comfortably filter and re-aggregate within that budget for datasets up to several million rows. DuckDB-WASM typically takes 10-50ms for the same operation on 1M rows, which means you feel a slight lag during fast dragging. The mitigation is straightforward: debounce the query (fire at most every 50ms during drag, then fire a final query on brush-end) and use progressive refinement (show a fast approximate result immediately, replace it with the exact result when the query completes).</p>
+
+  <!-- ─── Progressive Refinement ─── -->
+  <h3>Progressive Refinement</h3>
+
+  <p>Progressive refinement is the strategy of running two queries in response to a single interaction: a fast approximate query that returns immediately, and a precise query that runs in the background and replaces the approximation when it finishes. The user sees an instant response (the approximation) and a refined response (the exact result) a moment later. If the approximation is close to the exact answer, the refinement is nearly invisible. If the two differ, the chart smoothly transitions from approximate to exact.</p>
+
+  <p>DuckDB supports this natively through its <code>SAMPLE</code> clause. A query like <code>SELECT region, AVG(value) FROM data TABLESAMPLE 10 PERCENT WHERE year BETWEEN 2010 AND 2020 GROUP BY region</code> touches one tenth of the rows and returns in one tenth of the time. The result is statistically noisy but structurally correct: the same columns, the same grouping, the same sort order. D3 can render it with the same code that renders the exact result. When the exact query completes, the bars shift slightly to their true positions. The user perceives responsiveness, not inaccuracy.</p>
+
+  <p>The implementation pattern has three moving parts. First, a query queue that tracks which query is in flight and which is pending. Second, a version counter that prevents stale results from overwriting fresh ones (if the user moves the brush again before the precise query returns, the stale precise result should be discarded). Third, a visual indicator that distinguishes approximate from exact results, something subtle like a slight desaturation or a thin pulsing border that resolves when the exact result arrives.</p>
+
+  <pre class="code-block"><span class="hl-cmt">// Progressive refinement pattern</span>
+<span class="hl-key">let</span> queryVersion = 0;
+
+<span class="hl-key">async function</span> <span class="hl-fn">progressiveQuery</span>(where) {
+  <span class="hl-key">const</span> version = ++queryVersion;
+
+  <span class="hl-cmt">// Phase 1: fast approximate result (10% sample)</span>
+  <span class="hl-key">const</span> approx = <span class="hl-key">await</span> db.query(<span class="hl-str">`
+    SELECT region, AVG(value) as avg_val
+    FROM data TABLESAMPLE 10 PERCENT
+    ${where}
+    GROUP BY region ORDER BY avg_val DESC
+  `</span>);
+
+  <span class="hl-key">if</span> (queryVersion !== version) <span class="hl-key">return</span>; <span class="hl-cmt">// stale</span>
+  renderBars(approx, { approximate: <span class="hl-key">true</span> });
+
+  <span class="hl-cmt">// Phase 2: precise result (full scan, background)</span>
+  <span class="hl-key">const</span> exact = <span class="hl-key">await</span> db.query(<span class="hl-str">`
+    SELECT region, AVG(value) as avg_val
+    FROM data
+    ${where}
+    GROUP BY region ORDER BY avg_val DESC
+  `</span>);
+
+  <span class="hl-key">if</span> (queryVersion !== version) <span class="hl-key">return</span>; <span class="hl-cmt">// stale</span>
+  renderBars(exact, { approximate: <span class="hl-key">false</span> });
+}</pre>
+
+  <p>The key subtlety is the version check. Between the approximate and exact queries, the user may have moved the brush again, which increments the version. If the exact result arrives after the version has changed, it belongs to an outdated interaction and must be thrown away. Without this guard, results from overlapping queries arrive out of order and the chart flickers between states that no longer correspond to the current brush position.</p>
+
+  <p>For datasets under 500K rows, progressive refinement is unnecessary. DuckDB returns the exact result fast enough. For datasets above 5M rows, it is essential: the exact query may take 100ms or more, and the user should not wait that long for visual feedback during a brush drag. The 500K-to-5M range is where the strategy transitions from "nice to have" to "required," and the crossover depends on query complexity. A simple GROUP BY on one column is faster than a multi-table JOIN with window functions.</p>
+
+  <div class="insight">
+    <p>Progressive refinement turns latency from a binary problem (fast enough or not fast enough) into a gradient. The approximate result sets a floor on perceived responsiveness. The exact result sets a ceiling on accuracy. As long as the floor is under 16ms and the ceiling arrives within a few hundred milliseconds, the user experiences the chart as both responsive and precise.</p>
+  </div>
 
   <!-- ─── Scaling Comparison Demo ─── -->
   <h2>The Scaling Curves</h2>
@@ -507,19 +720,29 @@ byYear.filterRange([<span class="hl-str">2010</span>, <span class="hl-str">2020<
   <div class="figure figure-wide" id="scaling-figure">
     <div id="scaling-chart"></div>
     <div class="comparison-legend" id="scaling-legend"></div>
-    <p class="figure-caption"><span class="figure-label">Figure 3.</span> Simulated query latency vs. dataset size for three approaches. DuckDB's columnar advantage becomes decisive above 100K rows. Below 10K, all three are effectively instant.</p>
+    <p class="figure-caption"><span class="figure-label">Figure 4.</span> Simulated query latency vs. dataset size for three approaches. DuckDB's columnar advantage becomes decisive above 100K rows. Below 10K, all three are effectively instant.</p>
   </div>
 
   <p>The crossover point is around 10K-50K rows, depending on the complexity of the aggregation. Below 10K rows, <code>d3.rollup</code> is the right tool: no external dependency, no WASM overhead, and the code reads naturally as part of the D3 pipeline. Above 50K rows, the SQL approach starts paying off. Above 500K rows, it is not optional; it is necessary.</p>
 
-  <!-- ─── Parquet ─── -->
-  <h2>Parquet: The Right Format for the Browser</h2>
+  <!-- ─── Data Formats ─── -->
+  <h2>Choosing a Format: Parquet, CSV, and Arrow</h2>
 
-  <p>CSV is the lingua franca of tabular data, but it is a terrible format for large-scale browser analysis. It is row-major (you must parse every column even if you only need two), uncompressed (a 100-column dataset with 1M rows can easily be 500MB), and untyped (every value is a string that must be parsed on load).</p>
+  <p>Three formats compete for the role of "data delivery layer" in browser-based SQL analysis. Each makes a different tradeoff between file size, parse overhead, and runtime memory. The right choice depends on dataset size, query patterns, and how much complexity the author is willing to take on.</p>
 
-  <p>Parquet is the opposite. It is columnar: each column is stored separately, so a query that touches 3 of 100 columns reads only 3% of the data. It is compressed: Snappy or Zstandard compression typically achieves 3-10x reduction. It is typed: integers are stored as integers, not as strings that must be parsed. And it supports range requests: an HTTP server can serve individual column chunks without sending the whole file, which means DuckDB-WASM can begin querying before the full file has downloaded.</p>
+  <h3>CSV: Simple and Universal</h3>
+
+  <p>CSV is the lingua franca of tabular data, but it is a terrible format for large-scale browser analysis. It is row-major (you must parse every column even if you only need two), uncompressed (a 100-column dataset with 1M rows can easily be 500MB), and untyped (every value is a string that must be parsed on load). For small datasets, none of this matters. Fetching a 200KB CSV, parsing it with <code>d3.csv</code>, and passing the array to <code>d3.rollup</code> is the simplest possible pipeline. No WASM decoder, no special tooling, no build step. For moonshine explanations with under 10K rows, CSV remains the right default.</p>
+
+  <p>The trouble starts at scale. Parsing a 50MB CSV in the browser takes seconds. The parser must allocate a JavaScript string for every cell, then convert numeric strings to numbers. This creates millions of small objects that pressure the garbage collector. And because CSV is row-major, DuckDB-WASM cannot skip columns during ingest. It must read the entire file before it can execute the first query. There is no partial loading, no range-request trick. You download the whole thing or nothing.</p>
+
+  <h3>Parquet: Small and Columnar</h3>
+
+  <p>Parquet is the opposite of CSV. It is columnar: each column is stored separately, so a query that touches 3 of 100 columns reads only 3% of the data. It is compressed: Snappy or Zstandard compression typically achieves 3-10x reduction. It is typed: integers are stored as integers, not as strings that must be parsed. And it supports range requests: an HTTP server can serve individual column chunks without sending the whole file, which means DuckDB-WASM can begin querying before the full file has downloaded.</p>
 
   <p>A 500MB CSV becomes a 50MB Parquet file. DuckDB-WASM can begin executing queries against it after loading just the metadata footer (a few kilobytes) and the relevant column chunks (a few megabytes). The user sees results while the rest of the file is still downloading.</p>
+
+  <p>The cost is complexity. Parquet is a binary format. You cannot open it in a text editor, cannot debug it with <code>console.log</code>, cannot generate it with a shell script. Producing a Parquet file requires a library (Python's <code>pyarrow</code>, DuckDB's <code>COPY ... TO ... (FORMAT PARQUET)</code>, or a Node.js tool). And reading it in the browser requires a WASM decoder, which means the 10MB DuckDB-WASM binary must be loaded before the first byte of data can be interpreted. For large datasets this overhead is trivial compared to the savings. For small datasets it is the dominant cost.</p>
 
   <pre class="code-block"><span class="hl-cmt">// Loading a remote Parquet file</span>
 <span class="hl-key">await</span> db.registerFileURL(
@@ -540,6 +763,32 @@ byYear.filterRange([<span class="hl-str">2010</span>, <span class="hl-str">2020<
 
   <div class="insight">
     <p>Parquet's columnar layout means the network transfer is proportional to query complexity, not dataset size. A query that aggregates two columns from a 100-column, 10M-row file transfers the same amount as a query on the same two columns from a 10K-row file (plus metadata overhead). This makes "big data in the browser" feasible without big bandwidth.</p>
+  </div>
+
+  <h3>Arrow IPC: Zero-Copy but Bulky</h3>
+
+  <p>Apache Arrow IPC (the <code>.arrow</code> file format) sits between CSV and Parquet. Like Parquet, it is columnar and typed. Unlike Parquet, it is not compressed. The data is stored in Arrow's in-memory columnar layout, which means there is no decoding step. DuckDB-WASM can register an Arrow buffer and begin querying immediately, with zero deserialization cost. The bytes on disk are the bytes in memory.</p>
+
+  <p>This zero-copy property makes Arrow the fastest format for time-to-first-query after the file has arrived. There is no parse step and no decompression step. The engine just maps the buffer and starts scanning. For workflows where the data is fetched once and queried many times (a dashboard that loads at startup and runs queries for the rest of the session), Arrow's front-loaded network cost is repaid by its zero per-query overhead.</p>
+
+  <p>But the tradeoff is file size. Because Arrow stores uncompressed columnar data, it is typically 2-5x larger than Parquet and only modestly smaller than CSV (sometimes larger, if the CSV has high string entropy). A dataset that is 50MB as Parquet might be 150MB as Arrow and 500MB as CSV. For browser delivery over a network, this size difference is often disqualifying. The user waits longer for the download, and the browser must hold the entire uncompressed buffer in memory.</p>
+
+  <p>Arrow makes the most sense when the data is already local (loaded from IndexedDB, generated by a previous computation, or transferred from a Web Worker), when network transfer is not the bottleneck, or when the dataset is small enough that the size difference is negligible. For remote data delivery to a browser, Parquet almost always wins.</p>
+
+  <h3>The Decision Matrix</h3>
+
+  <p>The choice reduces to three questions. How large is the dataset? How complex are the queries? And how much tooling is the author willing to set up?</p>
+
+  <p>Under 10K rows, use CSV. The simplicity is unbeatable and the performance is identical. From 10K to 100K rows, CSV still works but starts to feel slow on load. Parquet saves network time but requires a WASM decoder. The break-even point depends on column count: a 5-column dataset gains little from Parquet's columnar skipping, while a 100-column dataset gains enormously. Above 100K rows, Parquet is the clear winner for network delivery. Arrow enters the picture only for local-first workflows or when zero deserialization latency matters more than transfer size.</p>
+
+  <div class="figure figure-wide" id="format-comparison-figure">
+    <div class="fc-metric-tabs">
+      <button class="toggle-btn active" id="fc-tab-size" onclick="window._fcSwitchMetric('size')">File size</button>
+      <button class="toggle-btn" id="fc-tab-load" onclick="window._fcSwitchMetric('load')">Load time</button>
+      <button class="toggle-btn" id="fc-tab-memory" onclick="window._fcSwitchMetric('memory')">Memory usage</button>
+    </div>
+    <div id="fc-bars-container"></div>
+    <p class="figure-caption"><span class="figure-label">Figure 5.</span> Format comparison across dataset sizes. File size measures bytes transferred over the network. Load time measures the interval from fetch start to first-query-ready. Memory usage measures the resident footprint after loading. Parquet wins on size, Arrow wins on load-to-query latency for local data, and CSV wins on nothing except simplicity. Toggle the tabs to compare metrics.</p>
   </div>
 
   <!-- ─── What D3 Still Does ─── -->
@@ -887,7 +1136,7 @@ byYear.filterRange([<span class="hl-str">2010</span>, <span class="hl-str">2020<
 
 
   // ═══════════════════════════════════════════════════
-  // Figure 3: Scaling comparison chart
+  // Figure 4: Scaling comparison chart
   // ═══════════════════════════════════════════════════
   (function scalingChart() {
     const margin = { top: 20, right: 30, bottom: 45, left: 60 };
@@ -1048,6 +1297,429 @@ byYear.filterRange([<span class="hl-str">2010</span>, <span class="hl-str">2020<
         .style("background", eng.dash !== "none" ? "none" : eng.color);
       item.append("span").text(eng.label);
     });
+  })();
+
+
+  // ═══════════════════════════════════════════════════
+  // Figure 4: Query builder / composition visualization
+  // ═══════════════════════════════════════════════════
+  (function queryBuilderFigure() {
+    const qbRegions = ["Northeast", "Southeast", "Midwest", "Southwest", "West"];
+    const qbColors = {
+      "Northeast": "#2563eb",
+      "Southeast": "#7c3aed",
+      "Midwest": "#0891b2",
+      "Southwest": "#059669",
+      "West": "#d97706"
+    };
+
+    // State
+    let brushRange = null; // [yearMin, yearMax] or null
+    let selectedCategory = null; // region name or null
+    let thresholdValue = 0;
+
+    // ── Mini brush ──
+    const bMargin = { left: 10, right: 10, top: 2, bottom: 18 };
+    const bWidth = 440, bHeight = 36;
+    const bInnerW = bWidth - bMargin.left - bMargin.right;
+    const bInnerH = bHeight - bMargin.top - bMargin.bottom;
+
+    const bSvg = d3.select("#qb-brush-container")
+      .append("svg")
+      .attr("viewBox", `0 0 ${bWidth} ${bHeight}`)
+      .attr("width", "100%")
+      .attr("height", bHeight)
+      .style("display", "block");
+
+    const bG = bSvg.append("g")
+      .attr("transform", `translate(${bMargin.left},${bMargin.top})`);
+
+    const bX = d3.scaleLinear().domain([2000, 2024]).range([0, bInnerW]);
+
+    bG.append("g")
+      .attr("transform", `translate(0,${bInnerH})`)
+      .call(d3.axisBottom(bX).ticks(5).tickFormat(d3.format("d")))
+      .call(g => g.select(".domain").attr("stroke", "#ccc"))
+      .call(g => g.selectAll(".tick line").attr("stroke", "#ccc"))
+      .selectAll("text")
+      .attr("fill", "#4a4a6a")
+      .style("font-size", "9px");
+
+    const qbBrush = d3.brushX()
+      .extent([[0, 0], [bInnerW, bInnerH]])
+      .on("brush end", function(event) {
+        if (!event.selection) {
+          brushRange = null;
+        } else {
+          const [x0, x1] = event.selection;
+          brushRange = [Math.round(bX.invert(x0)), Math.round(bX.invert(x1))];
+        }
+        updateQueryBuilder();
+      });
+
+    const bBrushEl = bG.append("g")
+      .call(qbBrush)
+      .call(qbBrush.move, [bX(2008), bX(2018)]);
+
+    bBrushEl.selectAll(".selection")
+      .attr("fill", "#2563eb")
+      .attr("fill-opacity", 0.18)
+      .attr("stroke", "#2563eb")
+      .attr("stroke-width", 1.5);
+
+    brushRange = [2008, 2018];
+
+    // ── Category chips ──
+    const chipContainer = d3.select("#qb-category-chips");
+    qbRegions.forEach(r => {
+      const chip = chipContainer.append("span")
+        .attr("class", "qb-chip inactive")
+        .style("background", qbColors[r] + "22")
+        .style("color", qbColors[r])
+        .style("border", `1px solid ${qbColors[r]}44`)
+        .datum(r)
+        .on("click", function(event, d) {
+          if (selectedCategory === d) {
+            selectedCategory = null;
+          } else {
+            selectedCategory = d;
+          }
+          updateChipStates();
+          updateQueryBuilder();
+        });
+      chip.append("span").text(r);
+      chip.append("span").attr("class", "qb-x").text("\u00d7");
+    });
+
+    function updateChipStates() {
+      chipContainer.selectAll(".qb-chip")
+        .classed("inactive", d => selectedCategory !== null && selectedCategory !== d)
+        .style("opacity", d => {
+          if (selectedCategory === null) return 0.55;
+          return selectedCategory === d ? 1 : 0.3;
+        })
+        .style("border-color", d => {
+          if (selectedCategory === d) return qbColors[d];
+          return qbColors[d] + "44";
+        });
+    }
+    updateChipStates();
+
+    // ── Threshold slider ──
+    const threshSlider = document.getElementById("qb-threshold-slider");
+    const threshLabel = document.getElementById("qb-threshold-label");
+    threshSlider.addEventListener("input", function() {
+      thresholdValue = +this.value;
+      threshLabel.textContent = thresholdValue;
+      updateQueryBuilder();
+    });
+
+    // ── Result bar chart ──
+    const rMargin = { top: 6, right: 16, bottom: 4, left: 80 };
+    const rWidth = 680, rHeight = 155;
+    const rInnerW = rWidth - rMargin.left - rMargin.right;
+    const rInnerH = rHeight - rMargin.top - rMargin.bottom;
+
+    const rSvg = d3.select("#qb-result-container")
+      .append("svg")
+      .attr("viewBox", `0 0 ${rWidth} ${rHeight}`)
+      .attr("width", "100%")
+      .style("display", "block");
+
+    const rG = rSvg.append("g")
+      .attr("transform", `translate(${rMargin.left},${rMargin.top})`);
+
+    const rY = d3.scaleBand().range([0, rInnerH]).padding(0.25);
+    const rX = d3.scaleLinear().range([0, rInnerW]);
+
+    const rYAxisG = rG.append("g");
+    const rBarsG = rG.append("g");
+    const rLabelsG = rG.append("g");
+
+    function updateResultChart(data) {
+      rY.domain(data.map(d => d.region));
+      rX.domain([0, d3.max(data, d => d.avg_val) * 1.15 || 1]).nice();
+
+      rYAxisG.transition().duration(250)
+        .call(d3.axisLeft(rY).tickSize(0).tickPadding(6))
+        .call(g => g.select(".domain").remove())
+        .selectAll("text")
+        .attr("fill", "#4a4a6a")
+        .style("font-size", "10px");
+
+      rBarsG.selectAll("rect")
+        .data(data, d => d.region)
+        .join(
+          enter => enter.append("rect")
+            .attr("y", d => rY(d.region))
+            .attr("x", 0)
+            .attr("height", rY.bandwidth())
+            .attr("width", 0)
+            .attr("fill", d => qbColors[d.region] || "#999")
+            .attr("rx", 2)
+            .call(e => e.transition().duration(300).attr("width", d => rX(d.avg_val))),
+          update => update
+            .call(u => u.transition().duration(250)
+              .attr("y", d => rY(d.region))
+              .attr("width", d => rX(d.avg_val))),
+          exit => exit.transition().duration(150).attr("width", 0).remove()
+        );
+
+      rLabelsG.selectAll("text")
+        .data(data, d => d.region)
+        .join(
+          enter => enter.append("text")
+            .attr("y", d => rY(d.region) + rY.bandwidth() / 2)
+            .attr("x", d => rX(d.avg_val) + 5)
+            .attr("dy", "0.35em")
+            .attr("fill", "#4a4a6a")
+            .style("font-size", "9px")
+            .text(d => d.avg_val.toFixed(1)),
+          update => update
+            .call(u => u.transition().duration(250)
+              .attr("y", d => rY(d.region) + rY.bandwidth() / 2)
+              .attr("x", d => rX(d.avg_val) + 5)
+              .text(d => d.avg_val.toFixed(1))),
+          exit => exit.remove()
+        );
+    }
+
+    // ── Compose and render ──
+    function updateQueryBuilder() {
+      const clauses = [];
+      const clauseDisplay = [];
+
+      // Time range clause
+      if (brushRange) {
+        clauses.push(`year BETWEEN ${brushRange[0]} AND ${brushRange[1]}`);
+        clauseDisplay.push({
+          text: `year BETWEEN ${brushRange[0]} AND ${brushRange[1]}`,
+          color: "#2563eb",
+          bg: "#dbeafe"
+        });
+      }
+
+      // Category clause
+      if (selectedCategory) {
+        clauses.push(`region = '${selectedCategory}'`);
+        clauseDisplay.push({
+          text: `region = '${selectedCategory}'`,
+          color: qbColors[selectedCategory],
+          bg: qbColors[selectedCategory] + "22"
+        });
+      }
+
+      // Threshold clause
+      if (thresholdValue > 0) {
+        clauses.push(`value > ${thresholdValue}`);
+        clauseDisplay.push({
+          text: `value > ${thresholdValue}`,
+          color: "#92400e",
+          bg: "#fef3c7"
+        });
+      }
+
+      // Render clause pills
+      const clauseEl = d3.select("#qb-clause-display");
+      clauseEl.selectAll("*").remove();
+
+      if (clauseDisplay.length === 0) {
+        clauseEl.append("span")
+          .style("font-family", "var(--heading-font)")
+          .style("font-size", "0.8rem")
+          .style("color", "var(--text-2)")
+          .style("font-style", "italic")
+          .text("No active filters (all rows returned)");
+      } else {
+        clauseDisplay.forEach((c, i) => {
+          if (i === 0) {
+            clauseEl.append("span")
+              .attr("class", "qb-clause-connector")
+              .text("WHERE");
+          } else {
+            clauseEl.append("span")
+              .attr("class", "qb-clause-connector")
+              .text("AND");
+          }
+          clauseEl.append("span")
+            .style("font-family", "var(--mono-font)")
+            .style("font-size", "0.78rem")
+            .style("padding", "0.2em 0.5em")
+            .style("border-radius", "3px")
+            .style("background", c.bg)
+            .style("color", c.color)
+            .style("font-weight", "600")
+            .text(c.text);
+        });
+      }
+
+      // Render SQL
+      const whereSQL = clauses.length
+        ? "\n<span class=\"sql-keyword\">WHERE</span> " + clauses.map(c => `<span class="sql-param">${c}</span>`).join("\n  <span class=\"sql-keyword\">AND</span> ")
+        : "";
+
+      document.getElementById("qb-sql-text").innerHTML =
+        `<span class="sql-keyword">SELECT</span> region, <span class="sql-function">AVG</span>(value) <span class="sql-keyword">AS</span> avg_val, <span class="sql-function">COUNT</span>(*) <span class="sql-keyword">AS</span> n\n` +
+        `<span class="sql-keyword">FROM</span> data` + whereSQL + `\n` +
+        `<span class="sql-keyword">GROUP BY</span> region\n` +
+        `<span class="sql-keyword">ORDER BY</span> avg_val <span class="sql-keyword">DESC</span>`;
+
+      // Simulate query result
+      let result = qbRegions.map(region => {
+        const filteredYears = brushRange
+          ? years.filter(y => y >= brushRange[0] && y <= brushRange[1])
+          : years;
+        const values = filteredYears.map(y => baseValues[region][y]);
+        const avg = d3.mean(values) || 0;
+        return { region, avg_val: avg };
+      });
+
+      if (selectedCategory) {
+        result = result.filter(d => d.region === selectedCategory);
+      }
+
+      if (thresholdValue > 0) {
+        result = result.filter(d => d.avg_val > thresholdValue);
+      }
+
+      result.sort((a, b) => b.avg_val - a.avg_val);
+      updateResultChart(result);
+    }
+
+    // Initial render
+    updateQueryBuilder();
+  })();
+
+
+  // ═══════════════════════════════════════════════════
+  // Figure 5: Format comparison (CSV vs Parquet vs Arrow)
+  // ═══════════════════════════════════════════════════
+  (function formatComparisonFigure() {
+    // Simulated data for format comparison
+    // Values are approximate but representative of real-world measurements
+    const formats = [
+      { id: "csv",     label: "CSV",     color: "#dc2626" },
+      { id: "parquet", label: "Parquet", color: "#7c3aed" },
+      { id: "arrow",   label: "Arrow",   color: "#0891b2" }
+    ];
+
+    const rowCounts = [
+      { rows: 10000,   label: "10K rows" },
+      { rows: 100000,  label: "100K rows" },
+      { rows: 1000000, label: "1M rows" }
+    ];
+
+    // Simulated metrics (50-column dataset with mixed types)
+    // file size in MB
+    const sizeData = {
+      csv:     [0.8, 8, 80],
+      parquet: [0.12, 1.1, 9.5],
+      arrow:   [0.45, 4.5, 45]
+    };
+
+    // load time in ms (network + parse/decode)
+    const loadData = {
+      csv:     [120, 850, 7200],
+      parquet: [280, 420, 1400],
+      arrow:   [95, 680, 5800]
+    };
+
+    // memory usage in MB (resident after loading into engine)
+    const memoryData = {
+      csv:     [2.5, 25, 250],
+      parquet: [1.8, 16, 140],
+      arrow:   [3.2, 32, 320]
+    };
+
+    const allMetrics = {
+      size:   { data: sizeData,   unit: "MB",  label: "File size" },
+      load:   { data: loadData,   unit: "ms",  label: "Load time" },
+      memory: { data: memoryData, unit: "MB",  label: "Memory" }
+    };
+
+    let currentMetric = "size";
+
+    function renderBars(metric) {
+      const container = document.getElementById("fc-bars-container");
+      container.innerHTML = "";
+
+      const mData = allMetrics[metric].data;
+      const unit = allMetrics[metric].unit;
+
+      // Find max across all groups for consistent scale
+      let maxVal = 0;
+      formats.forEach(f => {
+        mData[f.id].forEach(v => { if (v > maxVal) maxVal = v; });
+      });
+
+      rowCounts.forEach((rc, gi) => {
+        const groupLabel = document.createElement("div");
+        groupLabel.className = "fc-group-label";
+        groupLabel.textContent = rc.label;
+        container.appendChild(groupLabel);
+
+        formats.forEach(f => {
+          const val = mData[f.id][gi];
+          const pct = Math.max(2, (val / maxVal) * 100);
+
+          const row = document.createElement("div");
+          row.className = "fc-row";
+
+          const label = document.createElement("div");
+          label.className = "fc-label";
+          label.textContent = f.label;
+          label.style.color = f.color;
+
+          const track = document.createElement("div");
+          track.className = "fc-bar-track";
+
+          const fill = document.createElement("div");
+          fill.className = "fc-bar-fill";
+          fill.style.background = f.color;
+          fill.style.width = "0%";
+
+          const valLabel = document.createElement("div");
+          valLabel.className = "fc-bar-value-outside";
+
+          // Format the value
+          let displayVal;
+          if (val >= 1000 && unit === "ms") {
+            displayVal = (val / 1000).toFixed(1) + "s";
+          } else if (val >= 100) {
+            displayVal = Math.round(val) + " " + unit;
+          } else if (val >= 10) {
+            displayVal = val.toFixed(1) + " " + unit;
+          } else {
+            displayVal = val.toFixed(2) + " " + unit;
+          }
+          valLabel.textContent = displayVal;
+
+          track.appendChild(fill);
+          row.appendChild(label);
+          row.appendChild(track);
+          row.appendChild(valLabel);
+          container.appendChild(row);
+
+          // Animate
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              fill.style.width = pct + "%";
+            });
+          });
+        });
+      });
+    }
+
+    window._fcSwitchMetric = function(metric) {
+      currentMetric = metric;
+      ["size", "load", "memory"].forEach(m => {
+        document.getElementById("fc-tab-" + m).classList.toggle("active", m === metric);
+      });
+      renderBars(metric);
+    };
+
+    // Initial render
+    renderBars("size");
   })();
 
 })();

@@ -258,6 +258,22 @@ pre.code-block .hl-cmt { color: #606080; }
 /* SVG text defaults */
 svg text { font-family: var(--heading-font); }
 
+/* Awareness ghost brush */
+.ghost-brush {
+  fill-opacity: 0.08;
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+}
+/* Latency timeline bars */
+.latency-bar {
+  rx: 3;
+  ry: 3;
+}
+.divergence-band {
+  fill: #fbbf24;
+  fill-opacity: 0.12;
+}
+
 /* Footer */
 .footer {
   margin-top: 4rem;
@@ -445,6 +461,39 @@ svg.on(<span class="hl-str">"mousemove"</span>, event => {
 
   <p>Cursor updates are high-frequency (every mouse move) but low-priority. Dropping frames is fine. Throttling to 15-20 updates per second is sufficient for smooth awareness without saturating the channel. And unlike parameter changes, cursor positions never conflict: each user owns their own cursor. No CRDT needed.</p>
 
+  <!-- ─── Awareness Beyond Cursors ─── -->
+  <h2>The Awareness Layer</h2>
+
+  <p>Cursors are the most visible form of awareness, but they are not the only one. A full awareness layer communicates not just <em>where</em> each person is, but <em>what they are doing</em>. In a collaborative visualization, that means several distinct signals layered on top of the shared chart.</p>
+
+  <p><strong>Selection highlights.</strong> When Alice clicks a set of data points (or lassoes a region), those points should glow with Alice's color on every other client. Not as a shared filter that changes the view for everyone, but as a lightweight overlay that says "Alice is looking at these." Bob sees Alice's selection rendered as a soft blue halo around the points. His own selection, if he makes one, appears in his own color. Multiple selections coexist without interfering. This is the visualization equivalent of highlighting text in a shared document: it conveys focus without claiming ownership.</p>
+
+  <p><strong>Brush and interaction echoes.</strong> Brushing is the core interaction in exploratory visualization. When Alice drags a brush across the scatter plot, the brush extent is shareable state. But rather than applying Alice's brush to Bob's view (which would be disorienting if Bob is mid-brush himself), the system can render Alice's brush as a ghost rectangle in her color, translucent and non-interactive. Bob sees the region Alice is exploring without having his own view hijacked. He can brush a different region simultaneously, and both ghost rectangles coexist. The insight box below the chart can show intersection statistics: "Alice's brush: 12 points. Bob's brush: 8 points. Overlap: 3 points."</p>
+
+  <p><strong>Activity indicators.</strong> A small line of text beside each user's badge: "Alice is brushing the scatter plot." "Bob is adjusting the time range slider." "Carol is idle." These are generated automatically from the event stream. Every dispatched event carries a human-readable description. The indicator shows the most recent one, fading to "idle" after a few seconds of inactivity. This is cheap to implement (it is just a text label updated on each event) and surprisingly powerful for remote collaboration, because it answers the question "what is the other person doing right now?" without requiring you to find their cursor on the chart.</p>
+
+  <p><strong>Viewport and scroll awareness.</strong> In a scrollable explanation with multiple charts, knowing which chart the other person is currently viewing is itself valuable information. A small minimap or section indicator can show "Alice is viewing Section 3: Temporal Patterns" while Bob is still on Section 1. This prevents the common remote-collaboration failure mode where two people are talking about different parts of the document without realizing it.</p>
+
+  <p><strong>Presence indicators on controls.</strong> When Alice is actively dragging a slider, a small colored ring can appear around that slider's thumb, visible to all clients. This serves two purposes: it tells Bob that the parameter is being actively adjusted (so he should not grab the same slider), and it attributes the change to a person. Without the indicator, the slider just moves on its own and Bob has no idea why. With the indicator, Bob sees "Alice is adjusting point size" and understands.</p>
+
+  <p>All of these signals share a common structure. They are per-user, ephemeral, non-conflicting, and loss-tolerant. Each user owns their own awareness state. If a cursor update is dropped, the next one corrects it. If a selection highlight arrives 100ms late, it is still useful. None of these signals need CRDTs or OT because they are not shared mutable state; they are per-user broadcasts that other clients render as read-only overlays.</p>
+
+  <div class="insight">
+    <p>Awareness state is fundamentally different from document state. Document state (parameters, filters, annotations) must converge across clients. Awareness state (cursors, selections, activity labels) is per-user and ephemeral. The network requirements are opposite: document state needs reliability and ordering; awareness state needs low latency and tolerates loss.</p>
+  </div>
+
+  <!-- ─── Figure 4: Awareness Layer ─── -->
+  <div class="figure figure-wide" id="awareness-figure">
+    <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 0.75rem; flex-wrap: wrap;">
+      <span class="user-badge user-a"><span class="status-dot status-ok"></span> Alice</span>
+      <span id="alice-activity" style="font-family: var(--heading-font); font-size: 0.82rem; color: var(--text-2);">brushing scatter plot</span>
+      <span style="margin-left: 0.5rem;" class="user-badge user-b"><span class="status-dot status-ok"></span> Bob</span>
+      <span id="bob-activity" style="font-family: var(--heading-font); font-size: 0.82rem; color: var(--text-2);">selecting points</span>
+    </div>
+    <div id="awareness-container"></div>
+    <p class="figure-caption"><span class="figure-label">Figure 3.</span> The awareness layer in action. Alice's cursor and brush extent appear in blue. Bob's cursor and selected points appear in pink. Activity labels above the chart describe what each person is doing. Multiple selections and brushes coexist without interfering.</p>
+  </div>
+
   <!-- ─── The Moonshine Connection ─── -->
   <h2>Why This Matters for Explanations</h2>
 
@@ -486,6 +535,61 @@ svg.on(<span class="hl-str">"mousemove"</span>, event => {
   <p><strong>Local-first with sync</strong> means each client applies changes immediately to its own state, then sends the change to peers. This is optimistic: you see your own changes instantly, and conflicts are resolved after the fact. CRDTs make this work because they guarantee convergence regardless of message ordering. The cost is occasional visual "jumps" when a remote change arrives that conflicts with a local one.</p>
 
   <p>For visualization parameters, local-first is the right choice. The user drags a slider and sees the chart update immediately. The remote user sees it 80ms later. Nobody notices. The parameter is a single scalar, so LWW convergence is trivially correct. Server-authoritative makes more sense for authoring state (code edits, annotation text) where conflict resolution needs to be precise and ordered.</p>
+
+  <h3>The space between the extremes</h3>
+
+  <p>Most real systems do not sit at either pole. They live somewhere in the middle, and the position depends on which piece of state you are talking about. A single collaborative visualization might use server-authoritative ordering for annotation text (where character-level interleaving matters), local-first with LWW for parameter values (where scalar overwriting is fine), and a completely independent peer-to-peer channel for cursor positions (where ordering does not matter at all and packets can be dropped without consequence).</p>
+
+  <p>The choice becomes concrete when you think about what the user perceives. A server-authoritative slider has a round-trip delay before the thumb tracks the finger. At 20ms this is imperceptible. At 80ms it feels heavy, like dragging through syrup. At 200ms (a realistic number for a server on the other side of the continent) the slider becomes unusable for continuous dragging, though it still works for discrete clicks. Local-first eliminates this entirely for the person dragging, but creates a different perceptual artifact for the observer: they see the slider jump to a new position after a delay, without the smooth intermediate frames.</p>
+
+  <p>Eventual consistency also introduces a subtlety that is easy to miss. When two users both drag the same slider at the same time, each sees their own value instantly and the other's value on a delay. For a brief window, the two clients disagree. If the slider controls something visually prominent, like the number of bins in a histogram, the two users are literally looking at different charts and do not realize it. The convergence guarantee says they will eventually agree, but "eventually" might be 200ms, and during that window any conversation about the chart is based on a misunderstanding.</p>
+
+  <p>This is the fundamental tension. Local-first gives you responsiveness at the cost of transient divergence. Server-authoritative gives you guaranteed agreement at the cost of latency. For visualization, where the whole point is that two people are looking at the same thing, transient divergence is a real problem, not a theoretical one. The pragmatic answer is to use local-first for everything and accept divergence as a visual fact, but to make divergence visible. Show a small indicator when the local state is unconfirmed. Flash the slider when a remote update overrides a local one. Make the reconciliation moment legible rather than trying to hide it.</p>
+
+  <div class="insight">
+    <p>The latency question is not "which architecture?" but "which architecture for which state?" Cursor positions need zero consistency. Parameter values need eventual consistency. Annotation text needs strong consistency. A single collaborative session uses all three.</p>
+  </div>
+
+  <!-- ─── Figure 3: Latency Impact ─── -->
+  <div class="figure figure-wide" id="latency-figure">
+    <div class="controls" style="margin-bottom: 0.75rem;">
+      <span style="font-weight: 600;">Alice latency:</span>
+      <input type="range" id="alice-latency-slider" min="10" max="300" step="10" value="20" style="width: 110px;">
+      <span id="alice-latency-val" style="font-family: var(--mono-font); min-width: 42px; text-align: right;">20ms</span>
+      <span style="margin-left: 0.75rem; font-weight: 600;">Bob latency:</span>
+      <input type="range" id="bob-latency-slider" min="10" max="300" step="10" value="150" style="width: 110px;">
+      <span id="bob-latency-val" style="font-family: var(--mono-font); min-width: 42px; text-align: right;">150ms</span>
+      <span style="flex: 1;"></span>
+      <button class="toggle-btn" id="latency-trigger-btn" style="background: var(--accent); color: white; border-color: var(--accent);">Both edit now</button>
+    </div>
+    <div id="latency-container"></div>
+    <div class="event-log" id="latency-log"></div>
+    <p class="figure-caption"><span class="figure-label">Figure 4.</span> Two users change the same parameter with different network delays. Each side applies its own edit immediately (local-first), then receives the other's edit after a delay. Adjust the latency sliders to see how longer round-trips widen the divergence window. Click "Both edit now" to trigger simultaneous edits and watch state diverge and reconcile.</p>
+  </div>
+
+  <!-- ─── OT vs CRDT for SVG State ─── -->
+  <h2>OT vs CRDT for SVG State</h2>
+
+  <p>The conflict resolution section above frames OT and CRDTs as alternatives. For visualization state specifically, the choice is more nuanced because SVG documents have a structure that fits neither model perfectly.</p>
+
+  <p>Consider what a collaborative SVG editing session actually produces. Two users are working on the same chart. Alice adds an annotation arrow pointing at an outlier. Bob reorders the legend items. Alice changes the stroke-dasharray on a trend line. Bob edits the text of an axis title. Each of these operations touches a different part of the SVG tree, but they all modify the same document.</p>
+
+  <p>CRDTs work well for state that is independent and commutative. Two LWW registers for two different parameters will converge correctly regardless of ordering. But SVG has ordered children. If Alice inserts a new <code>&lt;g&gt;</code> element at position 3 and Bob inserts one at position 3, a naive LWW register for "the child list" will drop one of them. You need a sequence CRDT (like RGA or LSEQ) that can merge concurrent insertions into an ordered list. This is the same problem that collaborative text editors solve for character sequences, applied to DOM nodes.</p>
+
+  <p>OT handles ordered insertions naturally because it was designed for exactly this case. An "insert at position 3" operation from Alice gets transformed against Bob's "insert at position 3" to become "insert at position 4" (or 3, depending on tiebreaking). The result is deterministic and preserves both insertions. But OT requires a central server to establish a total ordering of operations. In a local-first architecture, there is no central server by definition.</p>
+
+  <p>The practical resolution for viewer collaboration is to sidestep the problem entirely. If the SVG structure is fixed (the author defined it) and only parameter values change, the SVG tree never gets concurrent structural edits. LWW registers for each parameter are sufficient. The OT-vs-CRDT question only becomes urgent when users can add or reorder elements, which is authoring collaboration, the harder mode that we are deliberately deferring.</p>
+
+  <p>For the small slice of viewer collaboration that does involve structural changes (adding annotations, dropping pins on a map, drawing freehand highlights), a pragmatic middle ground exists. Treat each user's annotations as an independent layer. Alice's annotations live in her own <code>&lt;g class="annotations-alice"&gt;</code>. Bob's in his. No structural conflicts are possible because each layer has a single owner. The layers are visually composited on every client, but structurally they never interfere. This is the same model that Figma uses for simultaneous object creation, and it works because most collaborative actions are additive rather than mutually exclusive.</p>
+
+  <div class="risk">
+    <h3>When the simple model breaks</h3>
+    <ul>
+      <li><strong>Shared annotation editing.</strong> If Alice and Bob can both edit the same annotation's text, you need a text CRDT (Yjs, Automerge) for that specific string. One register per annotation body, resolved at the character level.</li>
+      <li><strong>Z-ordering disputes.</strong> If two users both try to "bring to front" different elements, you need an ordered-set CRDT or a server-authoritative z-index. LWW on z-index produces visual glitches where elements swap depth unpredictably.</li>
+      <li><strong>Deletion conflicts.</strong> Alice edits an annotation that Bob simultaneously deletes. The CRDT must decide whether to resurrect the deleted element with Alice's edits or to let the delete win. Neither answer is obviously correct. Most systems let the delete win and surface a tombstone notification.</li>
+    </ul>
+  </div>
 
   <!-- ─── Footer ─── -->
   <div class="footer">
@@ -815,6 +919,490 @@ function createLogger(containerId) {
   });
 
   log("system", "ready", "click 'Trigger conflict' to simulate simultaneous edits");
+})();
+
+// ═══════════════════════════════════════════════════════════════
+// Figure 3: Latency Impact - Divergence and Reconciliation
+// ═══════════════════════════════════════════════════════════════
+(function() {
+  const margin = { top: 30, right: 30, bottom: 50, left: 70 };
+  const width = 680;
+  const height = 320;
+  const iw = width - margin.left - margin.right;
+  const ih = height - margin.top - margin.bottom;
+  const log = createLogger("latency-log");
+
+  let aliceLatency = 20;
+  let bobLatency = 150;
+
+  const aliceSlider = document.getElementById("alice-latency-slider");
+  const aliceVal = document.getElementById("alice-latency-val");
+  const bobSlider = document.getElementById("bob-latency-slider");
+  const bobVal = document.getElementById("bob-latency-val");
+  const triggerBtn = document.getElementById("latency-trigger-btn");
+
+  aliceSlider.addEventListener("input", function() {
+    aliceLatency = +this.value;
+    aliceVal.textContent = aliceLatency + "ms";
+  });
+  bobSlider.addEventListener("input", function() {
+    bobLatency = +this.value;
+    bobVal.textContent = bobLatency + "ms";
+  });
+
+  const svg = d3.select("#latency-container")
+    .append("svg")
+    .attr("viewBox", `0 0 ${width} ${height}`)
+    .attr("width", "100%")
+    .attr("style", "display: block; max-width: 100%;");
+
+  const g = svg.append("g")
+    .attr("transform", `translate(${margin.left},${margin.top})`);
+
+  // X axis: time in ms
+  const xScale = d3.scaleLinear().domain([0, 800]).range([0, iw]);
+  // Y axis: parameter value
+  const yScale = d3.scaleLinear().domain([0, 12]).range([ih, 0]);
+
+  const xAxis = g.append("g")
+    .attr("transform", `translate(0,${ih})`)
+    .call(d3.axisBottom(xScale).ticks(8).tickFormat(d => d + "ms"));
+  xAxis.selectAll("text").style("font-size", "11px");
+
+  g.append("g")
+    .call(d3.axisLeft(yScale).ticks(6))
+    .selectAll("text").style("font-size", "11px");
+
+  // Axis labels
+  g.append("text")
+    .attr("x", iw / 2).attr("y", ih + 40)
+    .attr("text-anchor", "middle")
+    .style("font-size", "12px").style("fill", "#4a4a6a")
+    .text("Time");
+  g.append("text")
+    .attr("transform", "rotate(-90)")
+    .attr("x", -ih / 2).attr("y", -50)
+    .attr("text-anchor", "middle")
+    .style("font-size", "12px").style("fill", "#4a4a6a")
+    .text("Point size parameter");
+
+  // Divergence band
+  const divBand = g.append("rect")
+    .attr("class", "divergence-band")
+    .attr("x", 0).attr("y", 0)
+    .attr("width", 0).attr("height", ih)
+    .attr("opacity", 0);
+
+  // Divergence label
+  const divLabel = g.append("text")
+    .attr("text-anchor", "middle")
+    .style("font-size", "11px")
+    .style("fill", "#d97706")
+    .style("font-weight", "600")
+    .attr("opacity", 0);
+
+  // Alice's perceived value line
+  const aliceLine = d3.line().x(d => xScale(d.t)).y(d => yScale(d.v)).curve(d3.curveStepAfter);
+  const bobLine = d3.line().x(d => xScale(d.t)).y(d => yScale(d.v)).curve(d3.curveStepAfter);
+
+  const alicePath = g.append("path")
+    .attr("fill", "none").attr("stroke", "#2563eb").attr("stroke-width", 2.5);
+  const bobPath = g.append("path")
+    .attr("fill", "none").attr("stroke", "#db2777").attr("stroke-width", 2.5);
+
+  // Alice dot markers
+  const aliceDot = g.append("circle").attr("r", 5).attr("fill", "#2563eb").attr("opacity", 0);
+  const bobDot = g.append("circle").attr("r", 5).attr("fill", "#db2777").attr("opacity", 0);
+
+  // Legend
+  const leg = g.append("g").attr("transform", `translate(${iw - 130}, 0)`);
+  leg.append("line").attr("x1", 0).attr("x2", 18).attr("y1", 0).attr("y2", 0)
+    .attr("stroke", "#2563eb").attr("stroke-width", 2.5);
+  leg.append("text").attr("x", 24).attr("y", 4).text("Alice sees")
+    .style("font-size", "11px").style("fill", "#2563eb").style("font-weight", "600");
+  leg.append("line").attr("x1", 0).attr("x2", 18).attr("y1", 18).attr("y2", 18)
+    .attr("stroke", "#db2777").attr("stroke-width", 2.5);
+  leg.append("text").attr("x", 24).attr("y", 22).text("Bob sees")
+    .style("font-size", "11px").style("fill", "#db2777").style("font-weight", "600");
+
+  // Event markers group
+  const eventsG = g.append("g");
+
+  let running = false;
+
+  function runScenario() {
+    if (running) return;
+    running = true;
+    triggerBtn.style.opacity = "0.5";
+
+    // Clear previous
+    alicePath.attr("d", null);
+    bobPath.attr("d", null);
+    aliceDot.attr("opacity", 0);
+    bobDot.attr("opacity", 0);
+    divBand.attr("opacity", 0);
+    divLabel.attr("opacity", 0);
+    eventsG.selectAll("*").remove();
+
+    // Scenario: both start at value 5
+    // At t=0, Alice sets value to 8. At t=0, Bob sets value to 4.
+    // Alice sees her own change instantly. She sees Bob's change after bobLatency ms.
+    // Bob sees his own change instantly. He sees Alice's change after aliceLatency ms (from Alice's side) + network.
+    // For simplicity: Alice's edit reaches Bob after aliceLatency, Bob's edit reaches Alice after bobLatency.
+
+    const initial = 5;
+    const aliceEdit = 8;
+    const bobEdit = 4;
+
+    // Alice's perceived timeline
+    const aliceData = [
+      { t: 0, v: initial },
+      { t: 1, v: aliceEdit },           // Alice sees her own edit instantly
+      { t: bobLatency, v: aliceEdit },   // Just before Bob's arrives
+      { t: bobLatency + 1, v: bobEdit }, // Bob's edit arrives, LWW: Bob wins (later arrival)
+      { t: 800, v: bobEdit }
+    ];
+
+    // Bob's perceived timeline
+    const bobData = [
+      { t: 0, v: initial },
+      { t: 1, v: bobEdit },               // Bob sees his own edit instantly
+      { t: aliceLatency, v: bobEdit },     // Just before Alice's arrives
+      { t: aliceLatency + 1, v: bobEdit }, // Alice's edit arrives but Bob's is later, LWW: Bob wins
+      { t: 800, v: bobEdit }
+    ];
+
+    // The divergence window: from t=1 until max(aliceLatency, bobLatency)
+    const divStart = 1;
+    const divEnd = Math.max(aliceLatency, bobLatency) + 1;
+
+    log("system", "scenario.start", `Alice edits to ${aliceEdit}, Bob edits to ${bobEdit} at the same moment`);
+    log("alice", "local.apply", `pointSize = ${aliceEdit} (instant)`);
+    log("bob", "local.apply", `pointSize = ${bobEdit} (instant)`);
+
+    // Animate the build-up
+    const dur = 2000;
+
+    // Draw divergence band
+    divBand
+      .attr("x", xScale(divStart))
+      .attr("width", xScale(divEnd) - xScale(divStart))
+      .attr("opacity", 0)
+      .transition().delay(200).duration(400)
+      .attr("opacity", 1);
+
+    divLabel
+      .attr("x", xScale((divStart + divEnd) / 2))
+      .attr("y", -8)
+      .text("divergence: " + Math.round(divEnd - divStart) + "ms")
+      .attr("opacity", 0)
+      .transition().delay(300).duration(400)
+      .attr("opacity", 1);
+
+    // Animate Alice line
+    alicePath.attr("d", aliceLine(aliceData));
+    const aliceLen = alicePath.node().getTotalLength();
+    alicePath
+      .attr("stroke-dasharray", aliceLen)
+      .attr("stroke-dashoffset", aliceLen)
+      .transition().duration(dur).ease(d3.easeLinear)
+      .attr("stroke-dashoffset", 0);
+
+    // Animate Bob line
+    bobPath.attr("d", bobLine(bobData));
+    const bobLen = bobPath.node().getTotalLength();
+    bobPath
+      .attr("stroke-dasharray", bobLen)
+      .attr("stroke-dashoffset", bobLen)
+      .transition().duration(dur).ease(d3.easeLinear)
+      .attr("stroke-dashoffset", 0);
+
+    // Event marker: Alice's edit arrives at Bob
+    setTimeout(() => {
+      log("ws", "deliver", `Alice's edit reaches Bob after ${aliceLatency}ms`);
+      log("bob", "lww.resolve", `Bob's own edit wins (later local timestamp)`);
+      eventsG.append("line")
+        .attr("x1", xScale(aliceLatency)).attr("x2", xScale(aliceLatency))
+        .attr("y1", 0).attr("y2", ih)
+        .attr("stroke", "#2563eb").attr("stroke-width", 1).attr("stroke-dasharray", "3 3")
+        .attr("opacity", 0)
+        .transition().duration(300).attr("opacity", 0.5);
+      eventsG.append("text")
+        .attr("x", xScale(aliceLatency) + 4).attr("y", ih - 8)
+        .text("Alice's edit arrives at Bob")
+        .style("font-size", "9px").style("fill", "#2563eb")
+        .attr("opacity", 0)
+        .transition().duration(300).attr("opacity", 0.8);
+    }, dur * (aliceLatency / 800));
+
+    // Event marker: Bob's edit arrives at Alice
+    setTimeout(() => {
+      log("ws", "deliver", `Bob's edit reaches Alice after ${bobLatency}ms`);
+      log("alice", "lww.resolve", `Bob's edit wins (later timestamp), pointSize jumps to ${bobEdit}`);
+      eventsG.append("line")
+        .attr("x1", xScale(bobLatency)).attr("x2", xScale(bobLatency))
+        .attr("y1", 0).attr("y2", ih)
+        .attr("stroke", "#db2777").attr("stroke-width", 1).attr("stroke-dasharray", "3 3")
+        .attr("opacity", 0)
+        .transition().duration(300).attr("opacity", 0.5);
+      eventsG.append("text")
+        .attr("x", xScale(bobLatency) + 4).attr("y", 16)
+        .text("Bob's edit arrives at Alice")
+        .style("font-size", "9px").style("fill", "#db2777")
+        .attr("opacity", 0)
+        .transition().duration(300).attr("opacity", 0.8);
+    }, dur * (bobLatency / 800));
+
+    // Show final dots
+    setTimeout(() => {
+      aliceDot
+        .attr("cx", xScale(800)).attr("cy", yScale(bobEdit))
+        .attr("opacity", 0)
+        .transition().duration(300).attr("opacity", 1);
+      bobDot
+        .attr("cx", xScale(800)).attr("cy", yScale(bobEdit))
+        .attr("opacity", 0)
+        .transition().duration(300).attr("opacity", 1);
+      log("system", "converged", `both clients agree: pointSize = ${bobEdit}`);
+      running = false;
+      triggerBtn.style.opacity = "1";
+    }, dur + 200);
+  }
+
+  triggerBtn.addEventListener("click", runScenario);
+
+  // Draw initial resting state
+  const initData = [{ t: 0, v: 5 }, { t: 800, v: 5 }];
+  alicePath.attr("d", aliceLine(initData));
+  bobPath.attr("d", bobLine(initData));
+
+  log("system", "ready", "adjust latencies and click 'Both edit now' to see divergence");
+})();
+
+// ═══════════════════════════════════════════════════════════════
+// Figure 4: Awareness Layer - Cursors, Selections, Brushes
+// ═══════════════════════════════════════════════════════════════
+(function() {
+  const margin = { top: 20, right: 20, bottom: 40, left: 50 };
+  const width = 680;
+  const height = 400;
+  const iw = width - margin.left - margin.right;
+  const ih = height - margin.top - margin.bottom;
+
+  // Generate data
+  const rng = d3.randomLcg(99);
+  const randNorm = d3.randomNormal.source(rng);
+  const randX = randNorm(50, 20);
+  const randY = randNorm(50, 16);
+  const data = d3.range(40).map(i => ({
+    id: i,
+    x: Math.max(2, Math.min(98, randX())),
+    y: Math.max(2, Math.min(98, randY())),
+    cat: ["A", "B", "C"][i % 3]
+  }));
+
+  const svg = d3.select("#awareness-container")
+    .append("svg")
+    .attr("viewBox", `0 0 ${width} ${height}`)
+    .attr("width", "100%")
+    .attr("style", "display: block; max-width: 100%;");
+
+  const g = svg.append("g")
+    .attr("transform", `translate(${margin.left},${margin.top})`);
+
+  const xScale = d3.scaleLinear().domain([0, 100]).range([0, iw]);
+  const yScale = d3.scaleLinear().domain([0, 100]).range([ih, 0]);
+
+  // Axes
+  g.append("g")
+    .attr("transform", `translate(0,${ih})`)
+    .call(d3.axisBottom(xScale).ticks(6))
+    .selectAll("text").style("font-size", "11px");
+  g.append("g")
+    .call(d3.axisLeft(yScale).ticks(6))
+    .selectAll("text").style("font-size", "11px");
+
+  g.append("text")
+    .attr("x", iw / 2).attr("y", ih + 34)
+    .attr("text-anchor", "middle")
+    .style("font-size", "12px").style("fill", "#4a4a6a")
+    .text("Variable X");
+  g.append("text")
+    .attr("transform", "rotate(-90)")
+    .attr("x", -ih / 2).attr("y", -38)
+    .attr("text-anchor", "middle")
+    .style("font-size", "12px").style("fill", "#4a4a6a")
+    .text("Variable Y");
+
+  const colorMap = { A: "#2563eb", B: "#7c3aed", C: "#059669" };
+
+  // Data points
+  const dots = g.selectAll(".dot")
+    .data(data, d => d.id)
+    .join("circle")
+    .attr("class", "dot")
+    .attr("cx", d => xScale(d.x))
+    .attr("cy", d => yScale(d.y))
+    .attr("r", 5)
+    .attr("fill", d => colorMap[d.cat])
+    .attr("opacity", 0.75);
+
+  // ─── Alice's awareness layer: brush extent ───
+  const aliceBrush = g.append("rect")
+    .attr("class", "ghost-brush")
+    .attr("fill", "#2563eb")
+    .attr("stroke", "#2563eb");
+
+  // ─── Bob's awareness layer: selected points (halos) ───
+  const bobHalos = g.append("g");
+
+  // Bob selects a handful of points
+  const bobSelected = data.filter(d => d.x > 55 && d.y > 50 && d.y < 80);
+  bobHalos.selectAll(".halo")
+    .data(bobSelected)
+    .join("circle")
+    .attr("class", "halo")
+    .attr("cx", d => xScale(d.x))
+    .attr("cy", d => yScale(d.y))
+    .attr("r", 12)
+    .attr("fill", "none")
+    .attr("stroke", "#db2777")
+    .attr("stroke-width", 2)
+    .attr("opacity", 0.5);
+
+  // ─── Cursors ───
+  const cursorG = g.append("g");
+
+  // Alice cursor
+  const aliceCursorG = cursorG.append("g");
+  aliceCursorG.append("circle").attr("r", 8).attr("fill", "none")
+    .attr("stroke", "#2563eb").attr("stroke-width", 2);
+  aliceCursorG.append("circle").attr("r", 3).attr("fill", "#2563eb");
+  aliceCursorG.append("text").attr("x", 12).attr("y", 4).text("Alice")
+    .style("font-size", "11px").style("fill", "#2563eb").style("font-weight", "600");
+
+  // Bob cursor
+  const bobCursorG = cursorG.append("g");
+  bobCursorG.append("circle").attr("r", 8).attr("fill", "none")
+    .attr("stroke", "#db2777").attr("stroke-width", 2);
+  bobCursorG.append("circle").attr("r", 3).attr("fill", "#db2777");
+  bobCursorG.append("text").attr("x", 12).attr("y", 4).text("Bob")
+    .style("font-size", "11px").style("fill", "#db2777").style("font-weight", "600");
+
+  // Presence ring on a "slider" indicator
+  const sliderIndicator = g.append("g")
+    .attr("transform", `translate(${iw - 12}, ${ih / 2})`);
+  sliderIndicator.append("rect")
+    .attr("x", -5).attr("y", -30).attr("width", 10).attr("height", 60)
+    .attr("rx", 3).attr("fill", "#e2e2e8");
+  sliderIndicator.append("circle")
+    .attr("r", 7).attr("fill", "#fff").attr("stroke", "#888").attr("stroke-width", 1.5);
+  // Alice's presence ring on slider
+  const presenceRing = sliderIndicator.append("circle")
+    .attr("r", 11).attr("fill", "none").attr("stroke", "#2563eb")
+    .attr("stroke-width", 2).attr("opacity", 0);
+  sliderIndicator.append("text")
+    .attr("x", -40).attr("y", 42).text("size")
+    .style("font-size", "10px").style("fill", "#4a4a6a").attr("text-anchor", "middle")
+    .attr("x", 0);
+
+  // ─── Animate ───
+  let alicePos = { x: 25, y: 65 };
+  let bobPos = { x: 68, y: 62 };
+  let aliceTarget = { x: 35, y: 45 };
+  let bobTarget = { x: 72, y: 55 };
+
+  // Alice brush params
+  let brushCenter = { x: 25, y: 55 };
+  let brushSize = { w: 22, h: 18 };
+  let brushTarget = { x: 35, y: 45 };
+
+  const activities = [
+    "brushing scatter plot",
+    "adjusting point size",
+    "selecting region",
+    "examining outliers",
+    "idle"
+  ];
+  const bobActivities = [
+    "selecting points",
+    "hovering group B",
+    "comparing clusters",
+    "idle",
+    "examining outliers"
+  ];
+
+  const aliceActivityEl = document.getElementById("alice-activity");
+  const bobActivityEl = document.getElementById("bob-activity");
+
+  function lerp(a, b, t) { return a + (b - a) * t; }
+  function pickTarget() {
+    return { x: 10 + Math.random() * 80, y: 10 + Math.random() * 80 };
+  }
+
+  let lastAliceSwitch = 0;
+  let lastBobSwitch = 0;
+  let lastBrushMove = 0;
+
+  function tick(elapsed) {
+    const t = elapsed / 1000;
+
+    // Alice cursor movement
+    const aDist = Math.hypot(aliceTarget.x - alicePos.x, aliceTarget.y - alicePos.y);
+    if (aDist < 2) aliceTarget = pickTarget();
+    alicePos.x = lerp(alicePos.x, aliceTarget.x, 0.018);
+    alicePos.y = lerp(alicePos.y, aliceTarget.y, 0.018);
+    aliceCursorG.attr("transform", `translate(${xScale(alicePos.x)},${yScale(alicePos.y)})`);
+
+    // Bob cursor movement (near his selected points)
+    const bDist = Math.hypot(bobTarget.x - bobPos.x, bobTarget.y - bobPos.y);
+    if (bDist < 2) {
+      bobTarget = {
+        x: 55 + Math.random() * 30,
+        y: 45 + Math.random() * 30
+      };
+    }
+    bobPos.x = lerp(bobPos.x, bobTarget.x, 0.012);
+    bobPos.y = lerp(bobPos.y, bobTarget.y, 0.012);
+    bobCursorG.attr("transform", `translate(${xScale(bobPos.x)},${yScale(bobPos.y)})`);
+
+    // Alice brush drifts
+    if (t - lastBrushMove > 3) {
+      lastBrushMove = t;
+      brushTarget = {
+        x: 15 + Math.random() * 50,
+        y: 20 + Math.random() * 50
+      };
+    }
+    brushCenter.x = lerp(brushCenter.x, brushTarget.x, 0.01);
+    brushCenter.y = lerp(brushCenter.y, brushTarget.y, 0.01);
+
+    const bx = xScale(brushCenter.x - brushSize.w / 2);
+    const by = yScale(brushCenter.y + brushSize.h / 2);
+    const bw = xScale(brushCenter.x + brushSize.w / 2) - bx;
+    const bh = yScale(brushCenter.y - brushSize.h / 2) - by;
+    aliceBrush.attr("x", bx).attr("y", by).attr("width", bw).attr("height", bh);
+
+    // Pulse Bob's halos gently
+    const pulseR = 12 + Math.sin(elapsed / 600) * 2;
+    bobHalos.selectAll(".halo").attr("r", pulseR);
+
+    // Activity label rotation
+    if (t - lastAliceSwitch > 4 + Math.random() * 3) {
+      lastAliceSwitch = t;
+      aliceActivityEl.textContent = activities[Math.floor(Math.random() * activities.length)];
+    }
+    if (t - lastBobSwitch > 5 + Math.random() * 4) {
+      lastBobSwitch = t;
+      bobActivityEl.textContent = bobActivities[Math.floor(Math.random() * bobActivities.length)];
+    }
+
+    // Alice presence ring on slider pulses when she is "adjusting point size"
+    const isAdjusting = aliceActivityEl.textContent === "adjusting point size";
+    presenceRing.attr("opacity", isAdjusting ? 0.5 + 0.3 * Math.sin(elapsed / 300) : 0);
+  }
+
+  d3.timer(tick);
 })();
 </script>
 

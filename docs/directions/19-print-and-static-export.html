@@ -301,10 +301,34 @@ pre.code-block .hl-num { color: #fbbf24; }
   margin-top: 0.3rem;
 }
 
+/* Side-by-side demo panels */
+.side-by-side {
+  display: flex;
+  gap: 1rem;
+}
+.side-by-side .panel {
+  flex: 1;
+  min-width: 0;
+}
+.panel-label {
+  font-family: var(--heading-font);
+  font-size: 0.78rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+  padding: 0.25em 0.6em;
+  border-radius: 3px;
+  display: inline-block;
+}
+.panel-label.correct { background: #d1fae5; color: #065f46; }
+.panel-label.broken  { background: #fee2e2; color: #991b1b; }
+.panel-label.screen-label { background: #dbeafe; color: #1e40af; }
+.panel-label.print-label  { background: #f3e8ff; color: #6b21a8; }
+
 @media (max-width: 600px) {
   .mode-bar { flex-wrap: wrap; }
   .mode-btn { flex: 1 1 50%; border-bottom: 1px solid var(--border); }
   .mode-btn:nth-child(2) { border-right: none; }
+  .side-by-side { flex-direction: column; }
 }
 </style>
 </head>
@@ -368,6 +392,32 @@ pre.code-block .hl-num { color: #fbbf24; }
 
 <p>The second trap is fonts. If your chart uses a web font loaded via Google Fonts, the exported SVG references that font by name. Open the SVG on a machine without that font and the text renders in a fallback. The robust solution is to embed the font as a base64 data URI inside the SVG's <code>&lt;defs&gt;</code> block. This makes the SVG self-contained but significantly larger.</p>
 
+<p>The embedding process works like this. You fetch the font file (the actual <code>.woff2</code> binary), convert it to a base64 string, and inject a <code>@font-face</code> rule into a <code>&lt;style&gt;</code> element inside the SVG's <code>&lt;defs&gt;</code>. The <code>src</code> in that rule points not to a URL but to <code>data:font/woff2;base64,...</code> followed by the encoded bytes. Every font weight and style you use in the chart needs its own <code>@font-face</code> block with its own embedded binary. A single weight of Source Sans 3 runs about 40 KB as woff2, which balloons to roughly 55 KB when base64-encoded. Use two weights (regular and bold) across two families (sans for labels, serif for the caption) and the embedded fonts alone can add 200 KB or more to the SVG file.</p>
+
+<p>The alternative is to not embed and accept font substitution. This is the default when you call <code>svgNode.outerHTML</code> without any font work. The SVG will specify <code>font-family: 'Source Sans 3'</code> and the rendering environment will try to find that font. On a machine without it, the browser or PDF viewer picks a fallback, usually a generic sans-serif or, worse, a serif face with completely different metrics. The labels shift horizontally because the glyph widths differ. A label that fit neatly below an axis tick now overlaps its neighbor. Centered text drifts left or right. The chart looks broken, not because the data is wrong but because the text is set in a font the designer never intended.</p>
+
+<pre class="code-block"><span class="hl-cmt">// Embed a web font as a base64 data URI in the SVG</span>
+<span class="hl-key">async function</span> <span class="hl-fn">embedFont</span>(svgNode, fontUrl, family, weight) {
+  <span class="hl-key">const</span> response = <span class="hl-key">await</span> <span class="hl-fn">fetch</span>(fontUrl);
+  <span class="hl-key">const</span> buffer = <span class="hl-key">await</span> response.<span class="hl-fn">arrayBuffer</span>();
+  <span class="hl-key">const</span> base64 = <span class="hl-fn">btoa</span>(String.<span class="hl-fn">fromCharCode</span>(...<span class="hl-key">new</span> Uint8Array(buffer)));
+  <span class="hl-key">const</span> rule = <span class="hl-str">`
+    @font-face {
+      font-family: '${family}';
+      font-weight: ${weight};
+      src: url(data:font/woff2;base64,${base64}) format('woff2');
+    }`</span>;
+
+  <span class="hl-key">let</span> defs = svgNode.<span class="hl-fn">querySelector</span>(<span class="hl-str">"defs"</span>)
+    || svgNode.<span class="hl-fn">insertBefore</span>(document.<span class="hl-fn">createElementNS</span>(
+         <span class="hl-str">"http://www.w3.org/2000/svg"</span>, <span class="hl-str">"defs"</span>
+       ), svgNode.firstChild);
+  <span class="hl-key">let</span> style = defs.<span class="hl-fn">querySelector</span>(<span class="hl-str">"style"</span>)
+    || defs.<span class="hl-fn">appendChild</span>(document.<span class="hl-fn">createElement</span>(<span class="hl-str">"style"</span>));
+  style.textContent += rule;
+}
+</pre>
+
 <pre class="code-block"><span class="hl-cmt">// Inline computed styles onto SVG elements before export</span>
 <span class="hl-key">function</span> <span class="hl-fn">inlineStyles</span>(svgNode) {
   <span class="hl-key">const</span> elements = svgNode.<span class="hl-fn">querySelectorAll</span>(<span class="hl-str">"*"</span>);
@@ -385,6 +435,11 @@ pre.code-block .hl-num { color: #fbbf24; }
 svg.<span class="hl-fn">setAttribute</span>(<span class="hl-str">"xmlns"</span>, <span class="hl-str">"http://www.w3.org/2000/svg"</span>);
 svg.<span class="hl-fn">setAttribute</span>(<span class="hl-str">"viewBox"</span>, <span class="hl-str">`0 0 ${width} ${height}`</span>);
 <span class="hl-key">const</span> blob = <span class="hl-key">new</span> <span class="hl-fn">Blob</span>([svg.outerHTML], {<span class="hl-key">type</span>: <span class="hl-str">"image/svg+xml"</span>});</pre>
+
+<div class="figure figure-wide">
+  <div class="font-embed-demo" id="font-embed-demo"></div>
+  <div class="figure-caption"><span class="figure-label">Font embedding demo.</span> Left: chart rendered with the intended web font (Source Sans 3). Right: the same SVG opened without the font available, falling back to a default serif. Labels shift position, spacing breaks, and the overall composition drifts. This is what happens when you serialize an SVG without embedding the font binaries as base64 data URIs.</div>
+</div>
 
 <h3>PNG export</h3>
 
@@ -446,7 +501,11 @@ svg.<span class="hl-fn">setAttribute</span>(<span class="hl-str">"viewBox"</span
 
 <p>CSS provides <code>@media print</code> for exactly this purpose. You write styles that activate when the page is printed or exported to PDF via the browser's print dialog. For simple cases, this works: hide the navigation, remove hover underlines, switch to a white background.</p>
 
-<p>For D3 charts, <code>@media print</code> is necessary but insufficient. It can hide tooltip containers and remove cursor styles. It can change background colors and adjust font sizes. But it cannot restructure the SVG. It cannot increase the radius of circles, change the number of axis ticks, add a figure caption that was not in the DOM, or reposition annotations. SVG attributes set through D3 (<code>.attr("r", 4)</code>) are not CSS properties. The media query cannot touch them.</p>
+<p>For D3 charts, <code>@media print</code> is necessary but insufficient. It can hide tooltip containers and remove cursor styles. It can change background colors and adjust font sizes. It can swap a sans-serif body font for a serif face. It can set <code>display: none</code> on any DOM element you want to suppress. These are real and useful capabilities. A well-written <code>@media print</code> block can handle dozens of small adaptations that would be tedious to implement in JavaScript: hiding navigation bars, stripping link underlines, changing background colors to white so the printer does not waste ink, bumping up <code>font-size</code> on axis text to a legible point size.</p>
+
+<p>But CSS operates on CSS properties. It can change <code>fill</code>, <code>stroke</code>, <code>opacity</code>, <code>font-size</code>, <code>display</code>, and <code>visibility</code>. It cannot change SVG attributes set via <code>.attr()</code> in D3. The radius of a circle (<code>r</code>), the coordinates of a line (<code>x1</code>, <code>y1</code>, <code>x2</code>, <code>y2</code>), the <code>d</code> path string of an area or line generator, the <code>transform</code> attribute on a <code>&lt;g&gt;</code> element: these live in the DOM as attributes, not as style properties, and media queries cannot reach them. You cannot use <code>@media print</code> to reduce the number of axis ticks from 8 to 5. You cannot use it to add a figure number that was never in the DOM. You cannot use it to reposition a legend from the upper right to below the chart. You cannot use it to expand abbreviated axis labels ("Pop (M)" to "Population (millions)"). Anything that requires calling a D3 scale, a tick generator, or an axis component is beyond what CSS can do alone.</p>
+
+<p>There is a subtler limitation too. CSS print styles are applied at the moment the browser invokes the print dialog or Playwright calls <code>page.pdf()</code>. They are not previewed in the normal page flow. The author cannot see the print version of the chart without opening the print dialog or using Chrome DevTools to emulate the print media type. This makes iterating on print styles slow and error-prone. You tweak a rule, open the print dialog, squint at the preview, close it, tweak again. Compared to a mode toggle that re-renders the chart live in the browser, it is a painful workflow.</p>
 
 <p>The practical approach is a two-layer strategy. Use <code>@media print</code> for what it can reach: hiding interactive chrome, adjusting colors, switching fonts. Use JavaScript for what CSS cannot reach: a re-render function that takes a mode parameter and draws the chart with medium-appropriate settings.</p>
 
@@ -457,6 +516,10 @@ svg.<span class="hl-fn">setAttribute</span>(<span class="hl-str">"viewBox"</span
   .tooltip, .controls, .hover-hint { <span class="hl-key">display</span>: none; }
   body { <span class="hl-key">background</span>: <span class="hl-str">#fff</span>; }
   .axis text { <span class="hl-key">font-size</span>: <span class="hl-num">10pt</span>; }
+  <span class="hl-cmt">/* Can change fill, stroke, opacity, font properties */</span>
+  .dot { <span class="hl-key">stroke-width</span>: <span class="hl-num">1.5px</span>; }
+  .axis line, .axis path { <span class="hl-key">stroke</span>: <span class="hl-str">#333</span>; }
+  <span class="hl-cmt">/* Cannot change r, cx, cy, d, transform, tick count */</span>
 }
 
 <span class="hl-cmt">// Layer 2: JS re-renders the chart for the medium</span>
@@ -469,6 +532,11 @@ svg.<span class="hl-fn">setAttribute</span>(<span class="hl-str">"viewBox"</span
   }[mode];
   <span class="hl-cmt">// ... re-render with config values</span>
 }</pre>
+
+<div class="figure figure-wide">
+  <div class="print-preview-demo" id="print-preview-demo"></div>
+  <div class="figure-caption"><span class="figure-label">Screen vs. print preview.</span> Left: the chart as it appears in normal browser rendering, with hover states, thin strokes, sans-serif labels, and no figure number. Right: the same chart with print-mode adjustments applied. Hover hint removed, strokes thickened, labels switched to serif at a larger size, figure number and caption added below. The CSS layer handles font switching and hiding interactive chrome. The JavaScript layer handles everything else: thicker radii, fewer ticks, repositioned annotations.</div>
+</div>
 
 <h2>Typography across media</h2>
 
@@ -504,7 +572,17 @@ svg.<span class="hl-fn">setAttribute</span>(<span class="hl-str">"viewBox"</span
 
 <p>A print-safe palette uses higher saturation, avoids the blue-purple ambiguity zone, and ensures that every color pair has sufficient luminance contrast to be distinguishable in grayscale. The chart in the interactive demo above shifts to a higher-contrast palette in print mode for exactly this reason.</p>
 
-<p>For CMYK output (offset printing, not laser), there is a further issue: the RGB gamut and the CMYK gamut do not overlap perfectly. Vivid blues and greens in RGB have no exact CMYK equivalent. A neon blue (#0066ff) on screen might print as a duller, slightly purple version of itself. Professional print workflows handle this with ICC profiles, but those are far outside the scope of a browser-based export tool. The pragmatic answer is to choose colors that are safely inside both gamuts: warm reds, earthy greens, dark blues, and grays.</p>
+<h3>RGB vs. CMYK: the gamut problem</h3>
+
+<p>For CMYK output (offset printing, not laser), there is a deeper issue than contrast. The RGB color space and the CMYK color space do not overlap. They are different shapes in perceptual color space, and each contains colors the other cannot reproduce. Vivid blues, saturated greens, and neon cyans in RGB sit outside the CMYK gamut entirely. A neon blue (#0066ff) on screen prints as a duller, slightly purple version of itself. Bright orange (#ff8800) loses its punch and shifts toward brown. These are not subtle differences. Side by side, the printed version of a chart can look like a faded photocopy of the screen version, even on a well-calibrated offset press.</p>
+
+<p>Professional print workflows handle this with ICC profiles: mathematical descriptions of how a specific device maps color values to physical ink densities. The designer works in a proofing color space (usually Adobe RGB or ProPhoto RGB), assigns an output profile for the target printer, and the color management system handles the conversion. But browser-based export tools know nothing about ICC profiles. The browser works in sRGB. The exported SVG or PNG contains sRGB values. When those values reach a CMYK press, the conversion is handled by whatever RIP (Raster Image Processor) the print shop uses, and the designer has no control over the mapping.</p>
+
+<p>Some palettes survive this translation better than others. Perceptually uniform palettes designed with lightness as the primary varying dimension tend to hold up, because CMYK can reproduce lightness differences more faithfully than hue differences. The viridis palette, which varies primarily along a yellow-to-purple lightness ramp, prints remarkably well. Its colors stay distinguishable in CMYK because the perceptual distances between steps are encoded in lightness, not in saturated hue. Inferno and magma share this property. Cividis, designed specifically for colorblind-safe visualization, also translates cleanly.</p>
+
+<p>Categorical palettes fare worse. The classic red-green-blue-orange-purple approach to distinguishing five categories relies on hue differences at roughly equal saturation. In CMYK, reds shift toward brick, greens shift toward olive, and the perceptual distance between them shrinks. A red-green categorical pair that is easily distinguishable on screen can become ambiguous on paper, both for colorblind and for normally-sighted readers. The orange and red categories merge. The purple and blue categories merge. What was a clear five-way distinction on screen becomes a muddled three-way distinction on paper.</p>
+
+<p>The pragmatic answer is to choose colors that are safely inside both gamuts: warm reds, earthy greens, dark blues, and grays. Avoid relying on saturated hue alone to distinguish categories. Use lightness, shape, and label as redundant channels. And if the chart will be printed, test it on real paper at least once before submission. No amount of software proofing substitutes for holding the printed page under office fluorescent lighting and checking whether the legend still works.</p>
 
 <h2>Automating the pipeline</h2>
 
@@ -981,6 +1059,340 @@ svg.<span class="hl-fn">setAttribute</span>(<span class="hl-str">"viewBox"</span
 
   // ── INITIAL RENDER ──
   renderChart("screen");
+
+  // ── FONT EMBEDDING DEMO ──
+  // Shows the same mini bar chart with correct web font vs. fallback serif
+  (function fontEmbedDemo() {
+    const container = d3.select("#font-embed-demo");
+    if (!container.node()) return;
+
+    const wrapper = container.append("div").attr("class", "side-by-side");
+
+    const labels = ["Brazil", "Germany", "Japan", "Nigeria", "Australia"];
+    const values = [211, 83, 126, 206, 25];
+    const barColor = "#4e79a7";
+
+    function drawMiniChart(parent, fontFamily, labelClass, labelText) {
+      const panel = parent.append("div").attr("class", "panel");
+      panel.append("div").attr("class", "panel-label " + labelClass).text(labelText);
+
+      const w = 300, h = 180;
+      const margin = { top: 8, right: 12, bottom: 28, left: 70 };
+      const iw = w - margin.left - margin.right;
+      const ih = h - margin.top - margin.bottom;
+
+      const svg = panel.append("svg")
+        .attr("width", "100%")
+        .attr("viewBox", [0, 0, w, h])
+        .style("display", "block")
+        .style("background", "#fff")
+        .style("border", "1px solid #e2e2e8")
+        .style("border-radius", "4px");
+
+      const g = svg.append("g")
+        .attr("transform", `translate(${margin.left},${margin.top})`);
+
+      const y = d3.scaleBand()
+        .domain(labels)
+        .range([0, ih])
+        .padding(0.25);
+
+      const x = d3.scaleLinear()
+        .domain([0, 220])
+        .range([0, iw]);
+
+      // Bars
+      g.selectAll("rect")
+        .data(d3.zip(labels, values))
+        .join("rect")
+        .attr("y", d => y(d[0]))
+        .attr("x", 0)
+        .attr("width", d => x(d[1]))
+        .attr("height", y.bandwidth())
+        .attr("fill", barColor)
+        .attr("rx", 2);
+
+      // Value labels
+      g.selectAll("text.val")
+        .data(d3.zip(labels, values))
+        .join("text")
+        .attr("class", "val")
+        .attr("x", d => x(d[1]) + 4)
+        .attr("y", d => y(d[0]) + y.bandwidth() / 2 + 4)
+        .style("font-size", "10px")
+        .style("font-family", fontFamily)
+        .style("fill", "#666")
+        .text(d => d[1] + "M");
+
+      // Y axis labels
+      g.selectAll("text.cat")
+        .data(labels)
+        .join("text")
+        .attr("class", "cat")
+        .attr("x", -6)
+        .attr("y", d => y(d) + y.bandwidth() / 2 + 4)
+        .attr("text-anchor", "end")
+        .style("font-size", "11px")
+        .style("font-family", fontFamily)
+        .style("font-weight", "600")
+        .style("fill", "#333")
+        .text(d => d);
+
+      // X axis label
+      g.append("text")
+        .attr("x", iw / 2)
+        .attr("y", ih + 22)
+        .attr("text-anchor", "middle")
+        .style("font-size", "10px")
+        .style("font-family", fontFamily)
+        .style("fill", "#666")
+        .text("Population (millions)");
+
+      // Baseline
+      g.append("line")
+        .attr("x1", 0).attr("x2", 0)
+        .attr("y1", 0).attr("y2", ih)
+        .attr("stroke", "#ccc");
+    }
+
+    drawMiniChart(wrapper,
+      "'Source Sans 3', system-ui, sans-serif",
+      "correct",
+      "Web font loaded (Source Sans 3)");
+
+    drawMiniChart(wrapper,
+      "'Times New Roman', 'DejaVu Serif', Georgia, serif",
+      "broken",
+      "Font missing (serif fallback)");
+  })();
+
+  // ── PRINT PREVIEW DEMO ──
+  // Side-by-side: screen mode vs. @media print mode
+  (function printPreviewDemo() {
+    const container = d3.select("#print-preview-demo");
+    if (!container.node()) return;
+
+    const wrapper = container.append("div").attr("class", "side-by-side");
+
+    // Small dataset for the mini line chart
+    const years = [2010, 2012, 2014, 2016, 2018, 2020, 2022];
+    const seriesA = [42, 48, 44, 55, 62, 58, 67];
+    const seriesB = [30, 33, 40, 38, 45, 51, 54];
+
+    function drawPreview(parent, opts) {
+      const panel = parent.append("div").attr("class", "panel");
+      panel.append("div")
+        .attr("class", "panel-label " + opts.labelClass)
+        .text(opts.labelText);
+
+      const w = 300, h = 200;
+      const margin = {
+        top: 10,
+        right: 12,
+        bottom: opts.showCaption ? 50 : 30,
+        left: 36
+      };
+      const iw = w - margin.left - margin.right;
+      const ih = h - margin.top - margin.bottom;
+
+      const panelDiv = panel.append("div")
+        .style("position", "relative")
+        .style("background", "#fff")
+        .style("border", "1px solid #e2e2e8")
+        .style("border-radius", "4px")
+        .style("overflow", "hidden");
+
+      const svg = panelDiv.append("svg")
+        .attr("width", "100%")
+        .attr("viewBox", [0, 0, w, h])
+        .style("display", "block");
+
+      const g = svg.append("g")
+        .attr("transform", `translate(${margin.left},${margin.top})`);
+
+      const x = d3.scaleLinear().domain([2010, 2022]).range([0, iw]);
+      const y = d3.scaleLinear().domain([20, 75]).range([ih, 0]);
+
+      // Grid
+      y.ticks(opts.ticks).forEach(t => {
+        g.append("line")
+          .attr("x1", 0).attr("x2", iw)
+          .attr("y1", y(t)).attr("y2", y(t))
+          .attr("stroke", opts.gridColor)
+          .attr("stroke-width", opts.gridWidth);
+      });
+
+      // Axes
+      const xAxis = g.append("g")
+        .attr("transform", `translate(0,${ih})`)
+        .call(d3.axisBottom(x).ticks(opts.ticks).tickFormat(d3.format("d")));
+      xAxis.selectAll("text")
+        .style("font-size", opts.axisFont)
+        .style("font-family", opts.fontFamily)
+        .style("fill", opts.axisColor);
+      xAxis.select(".domain").attr("stroke", opts.axisColor).attr("stroke-opacity", 0.3);
+      xAxis.selectAll(".tick line").attr("stroke", opts.axisColor).attr("stroke-opacity", 0.3);
+
+      const yAxis = g.append("g")
+        .call(d3.axisLeft(y).ticks(opts.ticks));
+      yAxis.selectAll("text")
+        .style("font-size", opts.axisFont)
+        .style("font-family", opts.fontFamily)
+        .style("fill", opts.axisColor);
+      yAxis.select(".domain").attr("stroke", opts.axisColor).attr("stroke-opacity", 0.3);
+      yAxis.selectAll(".tick line").attr("stroke", opts.axisColor).attr("stroke-opacity", 0.3);
+
+      // Lines
+      const line = d3.line().x((d, i) => x(years[i])).y(d => y(d));
+
+      g.append("path")
+        .datum(seriesA)
+        .attr("d", line)
+        .attr("fill", "none")
+        .attr("stroke", opts.colorA)
+        .attr("stroke-width", opts.strokeW);
+
+      g.append("path")
+        .datum(seriesB)
+        .attr("d", line)
+        .attr("fill", "none")
+        .attr("stroke", opts.colorB)
+        .attr("stroke-width", opts.strokeW);
+
+      // Dots on lines
+      [seriesA, seriesB].forEach((series, si) => {
+        const color = si === 0 ? opts.colorA : opts.colorB;
+        g.selectAll(null)
+          .data(series)
+          .join("circle")
+          .attr("cx", (d, i) => x(years[i]))
+          .attr("cy", d => y(d))
+          .attr("r", opts.dotR)
+          .attr("fill", color)
+          .attr("stroke", "#fff")
+          .attr("stroke-width", opts.strokeW * 0.6);
+      });
+
+      // Hover hint (screen only)
+      if (opts.showHover) {
+        g.append("text")
+          .attr("x", iw - 2)
+          .attr("y", 10)
+          .attr("text-anchor", "end")
+          .style("font-size", "8px")
+          .style("font-family", opts.fontFamily)
+          .style("fill", "#aaa")
+          .text("hover for details");
+      }
+
+      // Legend
+      const lx = iw - 70;
+      const legendEntries = [
+        { label: opts.legendA, color: opts.colorA },
+        { label: opts.legendB, color: opts.colorB }
+      ];
+      legendEntries.forEach((e, i) => {
+        const ly = 4 + i * 14;
+        g.append("line")
+          .attr("x1", lx).attr("x2", lx + 14)
+          .attr("y1", ly).attr("y2", ly)
+          .attr("stroke", e.color)
+          .attr("stroke-width", opts.strokeW);
+        g.append("text")
+          .attr("x", lx + 18)
+          .attr("y", ly + 3)
+          .style("font-size", opts.legendFont)
+          .style("font-family", opts.fontFamily)
+          .style("fill", opts.axisColor)
+          .text(e.label);
+      });
+
+      // Axis labels
+      g.append("text")
+        .attr("x", iw / 2).attr("y", ih + 24)
+        .attr("text-anchor", "middle")
+        .style("font-size", opts.labelFont)
+        .style("font-weight", opts.labelWeight)
+        .style("font-family", opts.fontFamily)
+        .style("fill", opts.axisColor)
+        .text("Year");
+
+      g.append("text")
+        .attr("transform", "rotate(-90)")
+        .attr("x", -ih / 2).attr("y", -24)
+        .attr("text-anchor", "middle")
+        .style("font-size", opts.labelFont)
+        .style("font-weight", opts.labelWeight)
+        .style("font-family", opts.fontFamily)
+        .style("fill", opts.axisColor)
+        .text(opts.yLabel);
+
+      // Figure number + caption (print only)
+      if (opts.showCaption) {
+        svg.append("text")
+          .attr("x", margin.left).attr("y", h - 18)
+          .style("font-size", "9px")
+          .style("font-weight", "700")
+          .style("font-family", opts.fontFamily)
+          .style("fill", "#333")
+          .text("Figure 3.");
+        svg.append("text")
+          .attr("x", margin.left + 48).attr("y", h - 18)
+          .style("font-size", "8px")
+          .style("font-family", opts.fontFamily)
+          .style("fill", "#555")
+          .text("Metric A and B over time, 2010-2022.");
+      }
+    }
+
+    // Screen version
+    drawPreview(wrapper, {
+      labelClass: "screen-label",
+      labelText: "Screen mode",
+      fontFamily: "'Source Sans 3', system-ui, sans-serif",
+      axisFont: "9px",
+      labelFont: "10px",
+      legendFont: "8px",
+      labelWeight: "400",
+      axisColor: "#666",
+      gridColor: "#eee",
+      gridWidth: 0.5,
+      strokeW: 1.2,
+      dotR: 3,
+      ticks: 6,
+      colorA: "#4e79a7",
+      colorB: "#e15759",
+      legendA: "Metric A",
+      legendB: "Metric B",
+      yLabel: "Value",
+      showHover: true,
+      showCaption: false
+    });
+
+    // Print version
+    drawPreview(wrapper, {
+      labelClass: "print-label",
+      labelText: "@media print mode",
+      fontFamily: "'Source Serif 4', Georgia, serif",
+      axisFont: "10px",
+      labelFont: "11px",
+      legendFont: "9px",
+      labelWeight: "600",
+      axisColor: "#333",
+      gridColor: "#ccc",
+      gridWidth: 0.8,
+      strokeW: 2,
+      dotR: 4,
+      ticks: 5,
+      colorA: "#2b5a8a",
+      colorB: "#b5302e",
+      legendA: "Metric A",
+      legendB: "Metric B",
+      yLabel: "Value (units)",
+      showHover: false,
+      showCaption: true
+    });
+  })();
 
 })();
 </script>

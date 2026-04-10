@@ -440,6 +440,16 @@ svg text { font-family: var(--heading-font); }
 
   <p>The dual-input design matters. A screenshot alone gives the LLM the same information a human viewer has: the shape of the chart, the visual salience of features, the spatial relationships between elements. But screenshots are lossy. The model cannot reliably read axis labels at small font sizes, or distinguish a value of 47.3 from 48.1. Sending the underlying data alongside the image lets the LLM ground its visual observations in exact values.</p>
 
+  <h3>Why both channels together beat either alone</h3>
+
+  <p>Consider a scatterplot with 200 points. From the screenshot, the LLM can see that there is a dense cluster in the lower-left and a sparse trail toward the upper-right. It can perceive the visual gestalt: the shape, the density gradient, the outliers that sit far from the mass. What it cannot do is tell you that the isolated point at the top-right has coordinates (98.4, 312.7) or that the cluster centroid sits near (23, 41). The screenshot gives spatial intuition. The data gives precision.</p>
+
+  <p>Now flip it. From the data alone, the LLM can compute that point 147 is 4.2 standard deviations from the mean, making it a statistical outlier. It can identify that the series reverses direction at index 15. What it cannot do is tell you whether that outlier is visually prominent or buried behind overplotted neighbors, or whether the trend reversal creates a sharp visible angle or a gentle curve that a reader might not even notice. Statistical significance and visual salience are different things, and they do not always agree.</p>
+
+  <p>The dual-input design exploits their complementarity. The screenshot tells the model what a human reader would actually <em>see</em>. The data tells it what is actually <em>there</em>. An annotation pipeline that only has one channel will produce suggestions that are either visually grounded but numerically vague, or statistically precise but perceptually out of touch. Both channels together yield suggestions that are both accurate and relevant to the reader's visual experience.</p>
+
+  <p>There is a practical reliability benefit too. When the two channels agree, confidence goes up. If the data says there is a spike and the screenshot shows one, that feature is real. When they disagree, it is a signal worth investigating. If the data says "smooth, no outliers" but the screenshot shows a visible bump, the bump might be a rendering artifact, an interpolation quirk, or a real feature at a scale the data summary missed. Disagreement between channels is diagnostic information, not noise.</p>
+
   <p>The output is not an image with arrows drawn on it. It is structured annotation specs: objects with types, positions, text, and priorities. These get fed back to D3, which renders them as proper SVG elements on the existing chart. This keeps the annotations resolution-independent, stylistically consistent, and editable.</p>
 
   <h2>What the LLM can see</h2>
@@ -457,6 +467,43 @@ svg text { font-family: var(--heading-font); }
   <p><strong>Flat periods.</strong> Sustained plateaus or periods of low variance. These are interesting precisely because they contrast with movement elsewhere in the data. "Nothing happened for six months" can be just as notable as a spike, depending on context.</p>
 
   <p><strong>Gaps and discontinuities.</strong> Missing data ranges, sudden jumps between adjacent points. These often signal real-world events (a sensor going offline, a policy change, a pandemic) and benefit from explicit labels.</p>
+
+  <h2>A taxonomy of detectable features</h2>
+
+  <p>The features above are a useful starting list, but they blur an important distinction. Some features are properties of the numbers. Some are properties of the shape. And some require knowing something about the world the numbers describe. These three categories have different detection methods, different failure modes, and different annotation strategies.</p>
+
+  <h3>Statistical features</h3>
+
+  <p>Outliers, trend slopes, inflection points, variance changes. These are computable directly from the data, without looking at the chart at all. A z-score above 3 flags an outlier. A sign change in the first derivative marks an inflection. A Chow test detects structural breaks. Statistical detectors are precise and reproducible. They will always find the same features in the same data, and they can quantify exactly how extreme each feature is.</p>
+
+  <p>Their weakness is relevance. A statistical outlier is not necessarily an interesting one. A data point that sits 3.1 standard deviations from the mean might be a measurement error, a rounding artifact, or the most important event in the dataset. The z-score cannot tell you which. Statistical features are the easiest to detect and the hardest to interpret.</p>
+
+  <h3>Structural features</h3>
+
+  <p>Clusters, gaps, periodicity, symmetry, density gradients. These describe the shape and organization of the data. A cluster is not a property of any single point; it is a property of how points relate to each other. Periodicity is not a property of any single value; it is a pattern that emerges across the series. These features live at a higher level of abstraction than statistical features.</p>
+
+  <p>An LLM working from a screenshot is often better at structural features than a statistical detector, because structural features are fundamentally visual. Humans see clusters, gaps, and periodic patterns instantly. The LLM, trained on millions of images, inherits some of that perceptual ability. It can say "there are two distinct groups in this scatterplot" or "the time series has a repeating weekly pattern" without needing to run a clustering algorithm or compute an autocorrelation function.</p>
+
+  <h3>Domain-specific features</h3>
+
+  <p>These are the features that require context beyond the data itself. A spike in web traffic on Black Friday is not just a statistical outlier; it is an expected seasonal event. A drop in air quality readings in a city might coincide with a factory closure that the model knows about from its training data. A plateau in a clinical trial outcome might signal a dosage ceiling, something you would only recognize if you understood the therapeutic context.</p>
+
+  <p>Domain-specific features are where LLMs have a genuine advantage over statistical methods. The model can say "this spike coincides with a holiday" or "this pattern is consistent with a supply chain disruption" because it has absorbed enough world knowledge to make those connections. Statistical detectors cannot. They see the numbers but not the world the numbers describe.</p>
+
+  <p>The risk is confabulation. The model might invent a plausible-sounding domain explanation for a pattern that is actually random noise. "This dip corresponds to the start of summer vacation" sounds authoritative, but if the data is synthetic or the dates are wrong, the explanation is fiction dressed as insight. Domain-specific annotations need the most aggressive human review.</p>
+
+  <div class="insight">
+    <p><strong>The union principle.</strong> Statistical detectors and LLM analysis find overlapping but distinct feature sets. Statistical methods catch everything above a numeric threshold; they are exhaustive within their criteria. LLMs catch contextual and structural features that no threshold can express; they are creative where statistics are rigid. The richest annotation set comes from taking the union of both and letting the human author curate the result.</p>
+  </div>
+
+  <h2>Feature detection: statistical vs. contextual</h2>
+
+  <p>To make the taxonomy concrete, consider a time series with both kinds of features present. Some are statistically flagrant: a point far above the z-score threshold that any outlier detector would catch. Others are contextually notable: a moderate value that happens to fall on a meaningful date, or a subtle pattern that only makes sense with outside knowledge. The chart below shows the same data analyzed by both methods. The statistical detector (orange) finds outliers and threshold crossings. The LLM (blue) finds those plus contextual features. The union row shows what you get when you combine them.</p>
+
+  <div class="figure figure-wide">
+    <div id="feature-comparison-chart"></div>
+    <div class="figure-caption"><span class="figure-label">Figure 2.</span> Feature detection comparison on a 30-point time series. Orange markers show features a statistical detector finds (z-score outliers, threshold crossings). Blue markers show features the LLM identifies (contextual anomalies, structural patterns). The bottom row shows the union. Neither method alone finds everything worth annotating.</div>
+  </div>
 
   <h2>The annotation spec</h2>
 
@@ -515,7 +562,7 @@ svg text { font-family: var(--heading-font); }
       <strong>Too many annotations.</strong> More than 3 callouts risk cluttering the chart. Consider keeping only the most important.
     </div>
     <div class="suggestion-cards" id="suggestionCards"></div>
-    <div class="figure-caption"><span class="figure-label">Figure 2.</span> A simulated AI annotation workflow. The LLM suggestions are pre-computed here, but the interaction model matches what a real integration would feel like: suggestions arrive, you curate, the chart updates.</div>
+    <div class="figure-caption"><span class="figure-label">Figure 3.</span> A simulated AI annotation workflow. The LLM suggestions are pre-computed here, but the interaction model matches what a real integration would feel like: suggestions arrive, you curate, the chart updates.</div>
   </div>
 
   <h2>What LLMs struggle with</h2>
@@ -591,6 +638,38 @@ svg text { font-family: var(--heading-font); }
       <li><strong>Describing the obvious.</strong> "Sales increased" on a line that visibly goes up. "This is the highest point" on the tallest bar. Annotations that add no information beyond what the chart already communicates. The prompt should explicitly instruct the model to add context the reader would not get from looking at the chart alone.</li>
       <li><strong>The editorial judgment gap.</strong> The LLM does not know that the spike in August was caused by a bug in the tracking code, or that the flat period in Q2 was during a leadership transition. Domain context shapes what is worth annotating, and the model does not have it unless you provide it. Annotations without editorial judgment are factually correct but narratively hollow.</li>
       <li><strong>Audience mismatch.</strong> An annotation that explains what a moving average is might be perfect for a general audience and insulting to a data science team. The model defaults to a generic middle ground that serves nobody well. Specifying the audience in the prompt helps but does not solve this fully.</li>
+    </ul>
+  </div>
+
+  <h2>The confidence calibration problem</h2>
+
+  <p>The annotation spec includes a <code>confidence</code> field, and it seems like a natural tool for filtering: keep the high-confidence suggestions, discard the low-confidence ones. In practice, this is less straightforward than it sounds.</p>
+
+  <p>LLM confidence scores are not probabilities. When the model says <code>"confidence": 0.92</code>, it is not reporting a 92% chance that the annotation is correct. It is producing a number that reflects some combination of its internal certainty, the salience of the feature, and whatever patterns it learned during training about when to output high numbers. The confidence score is a signal, but its relationship to actual annotation quality is empirical, not mathematical.</p>
+
+  <p>The failure mode is overconfidence. Models tend to produce high confidence scores across the board, because their training rewards decisive-sounding output. A model might emit 0.88 for a genuinely important spike and 0.85 for a trivial observation about the starting value. The 0.03 gap between those scores does not reliably separate good suggestions from mediocre ones. In many cases, the confidence distribution is compressed into a narrow band near the top, offering little discriminative power.</p>
+
+  <p>The opposite failure also occurs. An LLM might assign low confidence to a domain-specific insight ("this dip coincides with a regulatory change") because the connection feels uncertain to the model, even though a human expert would recognize it instantly as the most important feature on the chart. Low confidence does not mean low value. It sometimes means the model is uncertain about something it should not be expected to know.</p>
+
+  <h3>Validating confidence empirically</h3>
+
+  <p>The only way to know whether confidence scores are useful is to check them against outcomes. Take 20 or 50 suggested annotations, record their confidence scores, then have a human evaluator judge each one: is this annotation correct, relevant, and well-phrased? Plot the confidence against the human judgment. If the resulting scatter shows a clear upward trend (high confidence correlates with high quality), the scores are worth using as a filter. If the scatter is flat or noisy, the scores are decoration.</p>
+
+  <p>The chart below shows a simulated version of this calibration exercise. Twenty annotation suggestions are plotted by the model's confidence (horizontal axis) versus whether a human reviewer judged the annotation as correct and useful (vertical axis). The diagonal line represents perfect calibration: a model that says 0.8 confidence would be right 80% of the time. In practice, most LLMs land above the diagonal in the high-confidence region (they say 0.9 but are right 70%) and below it in the low-confidence region (they say 0.4 but are right 50%).</p>
+
+  <div class="figure figure-wide">
+    <div id="confidence-calibration-chart"></div>
+    <div class="figure-caption"><span class="figure-label">Figure 4.</span> Confidence calibration for 20 simulated annotation suggestions. Each dot is one suggestion, positioned by the model's stated confidence (x) and whether a human judged it correct (y). The diagonal represents perfect calibration. Points above the diagonal indicate overconfidence. The shaded band highlights the zone where most LLM suggestions cluster: high stated confidence, mixed actual accuracy.</div>
+  </div>
+
+  <p>A well-calibrated confidence score would be genuinely useful. You could set a threshold at 0.75 and trust that most suggestions above it are good. With a poorly calibrated score, the threshold is arbitrary and the filtering is unreliable. The calibration chart is the diagnostic tool that tells you which regime you are in.</p>
+
+  <div class="risk">
+    <h3>Confidence as a crutch</h3>
+    <ul>
+      <li><strong>Threshold illusion.</strong> Setting a confidence cutoff at 0.8 feels principled but is meaningless if 90% of suggestions score above 0.8. The threshold only helps if the confidence distribution actually separates good from bad.</li>
+      <li><strong>Anchoring effect.</strong> When a suggestion arrives with "95% confidence," the human reviewer is primed to accept it. High confidence scores can undermine the curation model by making the author defer to the model instead of exercising independent judgment.</li>
+      <li><strong>Recalibration drift.</strong> Even if you calibrate the scores against human judgments once, the calibration may shift as you change prompts, switch models, or apply the system to different chart types. Calibration is not a one-time exercise.</li>
     </ul>
   </div>
 
@@ -1016,6 +1095,407 @@ svg text { font-family: var(--heading-font); }
       buildCards();
     }, 1800);
   });
+
+})();
+</script>
+
+<!-- Figure 2: Feature Detection Comparison -->
+<script>
+(function() {
+  const margin = { top: 24, right: 24, bottom: 56, left: 50 };
+  const width = 680;
+  const height = 420;
+  const innerW = width - margin.left - margin.right;
+  const innerH = height - margin.top - margin.bottom;
+
+  // 30-point time series with known features
+  const rng = d3.randomNormal.source(d3.randomLcg(17))(0, 6);
+  const data = d3.range(30).map(i => {
+    let base = 50 + i * 1.5 + rng();
+    if (i === 7) base = 112;       // large spike (statistical + contextual)
+    if (i === 14) base = 98;       // moderate spike (contextual: holiday)
+    if (i === 22) base = 105;      // moderate spike (contextual: event)
+    if (i >= 18 && i <= 20) base = 40 + rng(); // dip cluster
+    return { index: i, value: Math.round(Math.max(20, base) * 10) / 10 };
+  });
+
+  // Statistical features: z-score outliers (|z| > 1.8) and threshold crossings
+  const mean = d3.mean(data, d => d.value);
+  const std = Math.sqrt(d3.mean(data, d => (d.value - mean) ** 2));
+  const statThreshold = 1.8;
+  const statFeatures = data
+    .filter(d => Math.abs(d.value - mean) > statThreshold * std)
+    .map(d => ({ index: d.index, value: d.value, reason: `z = ${((d.value - mean) / std).toFixed(1)}` }));
+
+  // LLM features: includes statistical + contextual
+  const llmFeatures = [
+    { index: 7, value: data[7].value, reason: 'Spike, largest in series' },
+    { index: 14, value: data[14].value, reason: 'Holiday weekend effect' },
+    { index: 22, value: data[22].value, reason: 'Product launch day' },
+    { index: 18, value: data[18].value, reason: 'Start of seasonal dip' },
+    { index: 20, value: data[20].value, reason: 'Dip recovery begins' },
+    { index: 29, value: data[29].value, reason: 'Upward trend accelerating' }
+  ];
+  // Add any stat features the LLM also catches
+  statFeatures.forEach(sf => {
+    if (!llmFeatures.some(lf => lf.index === sf.index)) {
+      llmFeatures.push({ index: sf.index, value: sf.value, reason: sf.reason + ' (statistical)' });
+    }
+  });
+
+  // Layout: top area is the time series, bottom area is three rows (stat, LLM, union)
+  const chartH = innerH * 0.55;
+  const rowAreaTop = chartH + 40;
+  const rowH = (innerH - rowAreaTop) / 3;
+
+  const x = d3.scaleLinear().domain([0, 29]).range([0, innerW]);
+  const y = d3.scaleLinear()
+    .domain([0, d3.max(data, d => d.value) * 1.15])
+    .nice()
+    .range([chartH, 0]);
+
+  const svg = d3.select('#feature-comparison-chart')
+    .append('svg')
+    .attr('viewBox', `0 0 ${width} ${height}`)
+    .attr('width', '100%')
+    .attr('preserveAspectRatio', 'xMidYMid meet');
+
+  const g = svg.append('g')
+    .attr('transform', `translate(${margin.left},${margin.top})`);
+
+  // Axes
+  g.append('g')
+    .attr('transform', `translate(0,${chartH})`)
+    .call(d3.axisBottom(x).ticks(10).tickFormat(d => `Day ${d + 1}`))
+    .call(g => g.select('.domain').attr('stroke', '#ccc'))
+    .call(g => g.selectAll('.tick line').attr('stroke', '#ddd'))
+    .call(g => g.selectAll('text').attr('fill', '#666').style('font-size', '9px'));
+
+  g.append('g')
+    .call(d3.axisLeft(y).ticks(5))
+    .call(g => g.select('.domain').remove())
+    .call(g => g.selectAll('.tick line')
+      .attr('x2', innerW).attr('stroke', '#eee').attr('stroke-dasharray', '2,2'))
+    .call(g => g.selectAll('text').attr('fill', '#666').style('font-size', '9px'));
+
+  // Area + line
+  g.append('path')
+    .datum(data)
+    .attr('fill', '#f1f5f9')
+    .attr('d', d3.area()
+      .x(d => x(d.index))
+      .y0(chartH)
+      .y1(d => y(d.value))
+      .curve(d3.curveMonotoneX));
+
+  g.append('path')
+    .datum(data)
+    .attr('fill', 'none')
+    .attr('stroke', '#94a3b8')
+    .attr('stroke-width', 1.5)
+    .attr('d', d3.line()
+      .x(d => x(d.index))
+      .y(d => y(d.value))
+      .curve(d3.curveMonotoneX));
+
+  // Dots
+  g.selectAll('.base-dot')
+    .data(data)
+    .join('circle')
+    .attr('cx', d => x(d.index))
+    .attr('cy', d => y(d.value))
+    .attr('r', 2)
+    .attr('fill', '#94a3b8');
+
+  // Highlight stat features on chart (orange rings)
+  g.selectAll('.stat-ring')
+    .data(statFeatures)
+    .join('circle')
+    .attr('cx', d => x(d.index))
+    .attr('cy', d => y(d.value))
+    .attr('r', 6)
+    .attr('fill', 'none')
+    .attr('stroke', '#ea580c')
+    .attr('stroke-width', 1.5);
+
+  // Highlight LLM-only features on chart (blue rings)
+  const llmOnly = llmFeatures.filter(lf => !statFeatures.some(sf => sf.index === lf.index));
+  g.selectAll('.llm-ring')
+    .data(llmOnly)
+    .join('circle')
+    .attr('cx', d => x(d.index))
+    .attr('cy', d => y(d.value))
+    .attr('r', 6)
+    .attr('fill', 'none')
+    .attr('stroke', '#2563eb')
+    .attr('stroke-width', 1.5);
+
+  // Features found by both (purple rings)
+  const bothFeatures = llmFeatures.filter(lf => statFeatures.some(sf => sf.index === lf.index));
+  g.selectAll('.both-ring')
+    .data(bothFeatures)
+    .join('circle')
+    .attr('cx', d => x(d.index))
+    .attr('cy', d => y(d.value))
+    .attr('r', 6)
+    .attr('fill', 'none')
+    .attr('stroke', '#7c3aed')
+    .attr('stroke-width', 2);
+
+  // --- Comparison rows ---
+  const rows = [
+    { label: 'Statistical', color: '#ea580c', features: statFeatures },
+    { label: 'LLM', color: '#2563eb', features: llmFeatures },
+    { label: 'Union', color: '#7c3aed', features: [...new Map([...statFeatures, ...llmFeatures].map(f => [f.index, f])).values()] }
+  ];
+
+  rows.forEach((row, ri) => {
+    const ry = rowAreaTop + ri * rowH;
+
+    // Row label
+    g.append('text')
+      .attr('x', -8)
+      .attr('y', ry + rowH / 2 + 3)
+      .attr('text-anchor', 'end')
+      .attr('font-size', '10px')
+      .attr('font-weight', '600')
+      .attr('fill', row.color)
+      .text(row.label);
+
+    // Row baseline
+    g.append('line')
+      .attr('x1', 0).attr('y1', ry + rowH / 2)
+      .attr('x2', innerW).attr('y2', ry + rowH / 2)
+      .attr('stroke', '#eee')
+      .attr('stroke-width', 1);
+
+    // Feature markers
+    g.selectAll(`.row-mark-${ri}`)
+      .data(row.features)
+      .join('circle')
+      .attr('cx', d => x(d.index))
+      .attr('cy', ry + rowH / 2)
+      .attr('r', 5)
+      .attr('fill', row.color)
+      .attr('opacity', 0.85);
+
+    // Count label
+    g.append('text')
+      .attr('x', innerW + 6)
+      .attr('y', ry + rowH / 2 + 3)
+      .attr('font-size', '9px')
+      .attr('fill', '#666')
+      .text(row.features.length);
+  });
+
+  // Separator line between chart and rows
+  g.append('line')
+    .attr('x1', 0).attr('y1', rowAreaTop - 16)
+    .attr('x2', innerW).attr('y2', rowAreaTop - 16)
+    .attr('stroke', '#ddd')
+    .attr('stroke-width', 0.5);
+
+})();
+</script>
+
+<!-- Figure 4: Confidence Calibration Chart -->
+<script>
+(function() {
+  const margin = { top: 24, right: 24, bottom: 48, left: 52 };
+  const width = 680;
+  const height = 400;
+  const innerW = width - margin.left - margin.right;
+  const innerH = height - margin.top - margin.bottom;
+
+  // 20 simulated annotations: {confidence, correctness}
+  // Designed to show overconfidence pattern: high confidence does not always mean correct
+  const rng = d3.randomUniform.source(d3.randomLcg(31));
+  const annotations = [
+    { id: 1,  conf: 0.95, correct: 1.0, label: 'Peak identification' },
+    { id: 2,  conf: 0.93, correct: 0.6, label: 'Trend slope claim' },
+    { id: 3,  conf: 0.91, correct: 1.0, label: 'Outlier flagged' },
+    { id: 4,  conf: 0.89, correct: 0.8, label: 'Crossover point' },
+    { id: 5,  conf: 0.88, correct: 0.4, label: 'Causal attribution' },
+    { id: 6,  conf: 0.86, correct: 1.0, label: 'Local minimum' },
+    { id: 7,  conf: 0.85, correct: 0.3, label: 'Seasonal pattern' },
+    { id: 8,  conf: 0.83, correct: 0.9, label: 'Flat period noted' },
+    { id: 9,  conf: 0.82, correct: 0.7, label: 'Reference line' },
+    { id: 10, conf: 0.80, correct: 0.5, label: 'Audience callout' },
+    { id: 11, conf: 0.78, correct: 1.0, label: 'Gap identified' },
+    { id: 12, conf: 0.75, correct: 0.8, label: 'Threshold crossing' },
+    { id: 13, conf: 0.72, correct: 0.2, label: 'Domain explanation' },
+    { id: 14, conf: 0.68, correct: 0.9, label: 'Variance change' },
+    { id: 15, conf: 0.65, correct: 0.6, label: 'Cluster boundary' },
+    { id: 16, conf: 0.60, correct: 0.7, label: 'Periodicity claim' },
+    { id: 17, conf: 0.55, correct: 0.5, label: 'Starting value' },
+    { id: 18, conf: 0.50, correct: 0.8, label: 'Subtle trend shift' },
+    { id: 19, conf: 0.45, correct: 0.4, label: 'Noisy region' },
+    { id: 20, conf: 0.40, correct: 0.6, label: 'Tail observation' }
+  ];
+
+  const x = d3.scaleLinear().domain([0.3, 1.0]).range([0, innerW]);
+  const y = d3.scaleLinear().domain([0, 1.0]).range([innerH, 0]);
+
+  const svg = d3.select('#confidence-calibration-chart')
+    .append('svg')
+    .attr('viewBox', `0 0 ${width} ${height}`)
+    .attr('width', '100%')
+    .attr('preserveAspectRatio', 'xMidYMid meet');
+
+  const g = svg.append('g')
+    .attr('transform', `translate(${margin.left},${margin.top})`);
+
+  // Overconfidence band (shaded region above diagonal, in high-confidence zone)
+  g.append('polygon')
+    .attr('points', [
+      [x(0.7), y(0.7)],
+      [x(1.0), y(1.0)],
+      [x(1.0), y(0.5)],
+      [x(0.7), y(0.35)]
+    ].map(p => p.join(',')).join(' '))
+    .attr('fill', '#fef3c7')
+    .attr('opacity', 0.6);
+
+  g.append('text')
+    .attr('x', x(0.92))
+    .attr('y', y(0.62))
+    .attr('text-anchor', 'middle')
+    .attr('font-size', '9px')
+    .attr('fill', '#92400e')
+    .attr('font-weight', '600')
+    .text('Overconfidence zone');
+
+  // Perfect calibration diagonal
+  g.append('line')
+    .attr('x1', x(0.3)).attr('y1', y(0.3))
+    .attr('x2', x(1.0)).attr('y2', y(1.0))
+    .attr('stroke', '#94a3b8')
+    .attr('stroke-width', 1)
+    .attr('stroke-dasharray', '6,3');
+
+  g.append('text')
+    .attr('x', x(0.48))
+    .attr('y', y(0.52))
+    .attr('font-size', '8px')
+    .attr('fill', '#94a3b8')
+    .attr('transform', `rotate(-38, ${x(0.48)}, ${y(0.52)})`)
+    .text('Perfect calibration');
+
+  // Axes
+  g.append('g')
+    .attr('transform', `translate(0,${innerH})`)
+    .call(d3.axisBottom(x).ticks(8).tickFormat(d3.format('.0%')))
+    .call(g => g.select('.domain').attr('stroke', '#ccc'))
+    .call(g => g.selectAll('.tick line').attr('stroke', '#ddd'))
+    .call(g => g.selectAll('text').attr('fill', '#666').style('font-size', '10px'));
+
+  g.append('text')
+    .attr('x', innerW / 2)
+    .attr('y', innerH + 38)
+    .attr('text-anchor', 'middle')
+    .attr('font-size', '11px')
+    .attr('fill', '#4a4a6a')
+    .text('Model stated confidence');
+
+  g.append('g')
+    .call(d3.axisLeft(y).ticks(5).tickFormat(d3.format('.0%')))
+    .call(g => g.select('.domain').remove())
+    .call(g => g.selectAll('.tick line')
+      .attr('x2', innerW).attr('stroke', '#eee').attr('stroke-dasharray', '2,2'))
+    .call(g => g.selectAll('text').attr('fill', '#666').style('font-size', '10px'));
+
+  g.append('text')
+    .attr('transform', `rotate(-90)`)
+    .attr('x', -innerH / 2)
+    .attr('y', -40)
+    .attr('text-anchor', 'middle')
+    .attr('font-size', '11px')
+    .attr('fill', '#4a4a6a')
+    .text('Human-judged correctness');
+
+  // Grid
+  g.append('g')
+    .selectAll('line')
+    .data(y.ticks(5))
+    .join('line')
+    .attr('x1', 0).attr('x2', innerW)
+    .attr('y1', d => y(d)).attr('y2', d => y(d))
+    .attr('stroke', '#f1f1f5')
+    .attr('stroke-width', 0.5);
+
+  // Data points
+  const dots = g.selectAll('.cal-dot')
+    .data(annotations)
+    .join('g')
+    .attr('transform', d => `translate(${x(d.conf)},${y(d.correct)})`);
+
+  dots.append('circle')
+    .attr('r', 5)
+    .attr('fill', d => {
+      // Color by relationship to diagonal: above = well-calibrated or underconfident, below = overconfident
+      if (d.correct >= d.conf - 0.05) return '#2563eb';
+      return '#ea580c';
+    })
+    .attr('opacity', 0.75)
+    .attr('stroke', '#fff')
+    .attr('stroke-width', 1);
+
+  // Tooltip on hover
+  const tooltip = d3.select('#confidence-calibration-chart')
+    .append('div')
+    .style('position', 'absolute')
+    .style('background', '#1a1a2e')
+    .style('color', '#fff')
+    .style('font-family', 'var(--heading-font)')
+    .style('font-size', '0.75rem')
+    .style('padding', '0.35rem 0.6rem')
+    .style('border-radius', '4px')
+    .style('pointer-events', 'none')
+    .style('opacity', 0)
+    .style('white-space', 'nowrap')
+    .style('z-index', 50);
+
+  // Make the container relative for tooltip positioning
+  d3.select('#confidence-calibration-chart').style('position', 'relative');
+
+  dots.on('mouseenter', function(event, d) {
+    d3.select(this).select('circle').attr('r', 7).attr('opacity', 1);
+    tooltip
+      .html(`<strong>${d.label}</strong><br>Confidence: ${Math.round(d.conf * 100)}% / Correct: ${Math.round(d.correct * 100)}%`)
+      .style('opacity', 1);
+  })
+  .on('mousemove', function(event) {
+    const rect = d3.select('#confidence-calibration-chart').node().getBoundingClientRect();
+    tooltip
+      .style('left', (event.clientX - rect.left + 12) + 'px')
+      .style('top', (event.clientY - rect.top - 10) + 'px');
+  })
+  .on('mouseleave', function() {
+    d3.select(this).select('circle').attr('r', 5).attr('opacity', 0.75);
+    tooltip.style('opacity', 0);
+  });
+
+  // LOESS-style trend line (simple moving average of correctness by confidence)
+  const sorted = [...annotations].sort((a, b) => a.conf - b.conf);
+  const windowSize = 5;
+  const trend = sorted.map((d, i) => {
+    const start = Math.max(0, i - Math.floor(windowSize / 2));
+    const end = Math.min(sorted.length, i + Math.ceil(windowSize / 2));
+    const slice = sorted.slice(start, end);
+    return { conf: d.conf, correct: d3.mean(slice, s => s.correct) };
+  });
+
+  g.append('path')
+    .datum(trend)
+    .attr('fill', 'none')
+    .attr('stroke', '#2563eb')
+    .attr('stroke-width', 1.5)
+    .attr('stroke-dasharray', '4,3')
+    .attr('opacity', 0.6)
+    .attr('d', d3.line()
+      .x(d => x(d.conf))
+      .y(d => y(d.correct))
+      .curve(d3.curveBasis));
 
 })();
 </script>
