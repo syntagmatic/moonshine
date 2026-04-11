@@ -1,0 +1,1457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sorting Networks: Parallel Comparison Creates Order</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;500&family=Source+Sans+3:wght@400;600;700&family=Source+Serif+4:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --article-width: 740px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem;
+  --line-height: 1.6;
+  --text: #1a1a2e;
+  --text-2: #4a4a6a;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --bg: #fafafa;
+  --fig-bg: #ffffff;
+  --border: #e2e2e8;
+}
+body { font-family: var(--body-font); font-size: var(--body-size);
+  line-height: var(--line-height); color: var(--text); background: var(--bg);
+  -webkit-font-smoothing: antialiased; }
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
+h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+h3 { font-size: 1.15rem; margin: 2rem 0 0.75rem; }
+p { margin: 0 0 1rem; }
+a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+a:hover { color: #1d4ed8; }
+.header { padding: 4rem 0 2rem; border-bottom: 1px solid var(--border); margin-bottom: 2.5rem; }
+.header .back { font-family: var(--heading-font); font-size: 0.85rem; display: inline-block; margin-bottom: 1.5rem; }
+.header .subtitle { font-family: var(--heading-font); font-size: 1.15rem; color: var(--text-2); margin-bottom: 0; max-width: 580px; }
+.figure { margin: 2rem 0; padding: 1.5rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.figure svg { display: block; width: 100%; border-radius: 3px; overflow: visible; }
+.figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; line-height: 1.4; }
+.figure-label { font-weight: 600; color: var(--text); }
+.insight { background: var(--accent-light); border-left: 3px solid var(--accent); padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 4px 4px 0; }
+.insight p { margin: 0; }
+.insight p + p { margin-top: 0.75rem; }
+.controls { display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-end; margin-top: 1rem; font-family: var(--heading-font); font-size: 0.85rem; }
+.control-group { display: flex; flex-direction: column; gap: 0.25rem; }
+.control-group label { color: var(--text-2); font-weight: 600; }
+.control-group .slider-row { display: flex; align-items: center; gap: 0.5rem; }
+.control-group input[type="range"] { width: 120px; accent-color: var(--accent); }
+.control-group .val { font-family: var(--mono-font); font-variant-numeric: tabular-nums;
+  min-width: 2.5em; text-align: right; color: var(--text); }
+.btn { font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600;
+  padding: 0.45rem 1.1rem; border-radius: 5px; border: 1px solid var(--border);
+  background: var(--fig-bg); color: var(--text); cursor: pointer;
+  transition: background 0.15s, border-color 0.15s; user-select: none; }
+.btn:hover { border-color: var(--accent); background: var(--accent-light); }
+.btn.active { border-color: var(--accent); background: var(--accent); color: white; }
+.btn-group { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+.stat-row { display: flex; gap: 1.5rem; margin-top: 0.75rem; font-family: var(--heading-font); font-size: 0.85rem; flex-wrap: wrap; }
+.stat-row .stat { display: flex; gap: 0.35rem; align-items: baseline; }
+.stat-row .stat-label { color: var(--text-2); font-weight: 600; }
+.stat-row .stat-val { font-family: var(--mono-font); font-variant-numeric: tabular-nums; color: var(--text); }
+svg text { font-family: var(--heading-font); }
+
+.wire-label { font-family: var(--mono-font); font-size: 14px; font-weight: 500; }
+.comparator-line { stroke: var(--accent); stroke-width: 2.5; }
+.comparator-dot { fill: var(--accent); }
+.wire-line { stroke: var(--text); stroke-width: 1.5; fill: none; }
+.value-circle { stroke-width: 1.5; }
+.value-text { font-family: var(--mono-font); font-size: 12px; text-anchor: middle;
+  dominant-baseline: central; pointer-events: none; }
+.swap-arrow { fill: var(--accent); font-family: var(--heading-font); font-size: 11px; }
+
+.builder-zone { cursor: crosshair; }
+.ghost-comp { opacity: 0.3; pointer-events: none; }
+.result-badge { font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600;
+  padding: 0.3rem 0.8rem; border-radius: 4px; display: inline-block; margin-top: 0.5rem; }
+.result-pass { background: #d1fae5; color: #065f46; }
+.result-fail { background: #fee2e2; color: #991b1b; }
+.result-partial { background: #fef3c7; color: #92400e; }
+
+select { font-family: var(--heading-font); font-size: 0.85rem; padding: 0.35rem 0.5rem;
+  border: 1px solid var(--border); border-radius: 4px; background: var(--fig-bg);
+  color: var(--text); cursor: pointer; }
+
+@media (prefers-reduced-motion: reduce) {
+  .figure svg { outline: 2px dashed var(--border); outline-offset: -2px; }
+}
+@media (max-width: 600px) {
+  h1 { font-size: 1.75rem; }
+  .controls { gap: 0.6rem; }
+  .control-group input[type="range"] { width: 80px; }
+}
+</style>
+</head>
+<body>
+<div class="article">
+
+<div class="header">
+  <a href="index.html" class="back">&larr; Emergence</a>
+  <h1>Sorting Networks</h1>
+  <p class="subtitle">A fixed wiring of compare-and-swap operations sorts any input, and the optimal network for a given size is still an open problem.</p>
+</div>
+
+<p>
+A sorting network is a fixed sequence of pairwise comparisons. Each comparison takes
+two elements and puts the smaller one on top. When the comparisons are wired correctly,
+any permutation comes out sorted. The network does not adapt to the input. The same
+wires handle every case. Order emerges from structure, not intelligence.
+</p>
+
+<p>
+Unlike the sorting algorithms you learn in a CS class (quicksort, mergesort), a sorting
+network has no branches and no conditionals. It cannot look at the data and decide what
+to do next. Every comparison is hardwired in advance. This makes sorting networks
+natural candidates for hardware implementation and parallel processing, because many
+comparisons can happen at the same time.
+</p>
+
+<h2>1. Compare and Swap</h2>
+
+<p>
+The fundamental operation is the comparator. It connects two wires. Values arrive on
+both wires. If they are out of order, the comparator swaps them. If they are already
+in order, nothing happens. Click "Randomize" below to put new values on the wires and
+watch the comparator do its work.
+</p>
+
+<div class="figure" id="fig-single-comp">
+  <svg id="svg-single-comp"></svg>
+  <div class="controls">
+    <button class="btn" id="btn-single-randomize">Randomize</button>
+  </div>
+  <p class="figure-caption"><span class="figure-label">Figure 1.</span> A single comparator connects two wires. When the top value is larger than the bottom, it swaps them. The smaller value always ends up on top.</p>
+</div>
+
+<p>
+One comparator can only handle two elements. But chain several together and they can
+sort more. Below is a network of three comparators that sorts any permutation of
+three elements. The first two comparators work on different pairs, and the final one
+cleans up whatever is left. Click "Randomize" to try different inputs.
+</p>
+
+<div class="figure" id="fig-three-sort">
+  <svg id="svg-three-sort"></svg>
+  <div class="controls">
+    <button class="btn" id="btn-three-randomize">Randomize</button>
+  </div>
+  <p class="figure-caption"><span class="figure-label">Figure 2.</span> A 3-element sorting network. Three comparators are enough to sort any arrangement of three values. Values flow from left to right, swapping at each comparator when out of order.</p>
+</div>
+
+<h2>2. Classic Networks</h2>
+
+<p>
+For larger inputs, sorting networks get more complex, but the principle stays the same.
+Below are well-known networks for different sizes. Notice the parallel structure: in
+each vertical "layer," multiple comparators fire simultaneously. This parallelism is
+what makes sorting networks fast in hardware.
+</p>
+
+<p>
+Select a network size, then click "Run" to feed a random permutation through it.
+Values flow from left to right, and comparators swap them as they pass. Adjust the
+speed to watch the process in detail or let it run fast.
+</p>
+
+<div class="figure" id="fig-classic">
+  <svg id="svg-classic"></svg>
+  <div class="controls">
+    <div class="control-group">
+      <label>Size</label>
+      <select id="select-classic-size">
+        <option value="4">4 elements</option>
+        <option value="6">6 elements</option>
+        <option value="8" selected>8 elements</option>
+        <option value="16">16 elements</option>
+      </select>
+    </div>
+    <div class="control-group">
+      <label>Speed</label>
+      <div class="slider-row">
+        <input type="range" id="slider-speed" min="1" max="10" step="1" value="5">
+        <span class="val" id="val-speed">5</span>
+      </div>
+    </div>
+    <button class="btn" id="btn-classic-run">Run</button>
+    <button class="btn" id="btn-classic-randomize">New input</button>
+  </div>
+  <div class="stat-row">
+    <div class="stat"><span class="stat-label">Comparators</span> <span class="stat-val" id="stat-comps">0</span></div>
+    <div class="stat"><span class="stat-label">Parallel layers</span> <span class="stat-val" id="stat-layers">0</span></div>
+    <div class="stat"><span class="stat-label">Layer</span> <span class="stat-val" id="stat-current-layer">-</span></div>
+  </div>
+  <p class="figure-caption"><span class="figure-label">Figure 3.</span> Classic sorting networks. Horizontal lines are wires, vertical connectors are comparators. Values flow left to right. Comparators in the same layer execute in parallel.</p>
+</div>
+
+<h2>3. Building Your Own</h2>
+
+<p>
+Now try designing a sorting network yourself. Click between two wires to place a
+comparator. The network will be tested against all permutations (for small n) or
+random samples (for larger n). Can you sort all inputs? The challenge: the optimal
+5-element network uses exactly 9 comparators. Can you match that?
+</p>
+
+<div class="figure" id="fig-builder">
+  <svg id="svg-builder"></svg>
+  <div class="controls">
+    <div class="control-group">
+      <label>Wires</label>
+      <select id="select-builder-size">
+        <option value="3">3</option>
+        <option value="4">4</option>
+        <option value="5" selected>5</option>
+        <option value="6">6</option>
+      </select>
+    </div>
+    <button class="btn" id="btn-builder-test">Test</button>
+    <button class="btn" id="btn-builder-undo">Undo</button>
+    <button class="btn" id="btn-builder-clear">Clear</button>
+  </div>
+  <div class="stat-row" id="builder-stats">
+    <div class="stat"><span class="stat-label">Comparators</span> <span class="stat-val" id="stat-builder-comps">0</span></div>
+    <div class="stat"><span class="stat-label">Tested</span> <span class="stat-val" id="stat-builder-tested">-</span></div>
+  </div>
+  <div id="builder-result"></div>
+  <p class="figure-caption"><span class="figure-label">Figure 4.</span> Click between wires to add comparators. Press "Test" to check if your network sorts all permutations. The failing input, if any, is highlighted in red.</p>
+</div>
+
+<div class="insight">
+<p>
+Finding the optimal sorting network (fewest comparators) for a given number of inputs
+is an open problem for n&nbsp;>&nbsp;12. The answer for n&nbsp;=&nbsp;25 is unknown.
+This is one of the simplest questions in computer science that remains unsolved.
+The known optima for small sizes: n=1 needs 0, n=2 needs 1, n=3 needs 3, n=4 needs 5,
+n=5 needs 9, n=6 needs 12. Each was proven by exhaustive search or careful argument.
+Beyond n=12, we only have upper bounds.
+</p>
+</div>
+
+</div><!-- .article -->
+
+<script>
+/* ================================================================
+   Shared utilities
+   ================================================================ */
+var REDUCED = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+function shuffle(arr) {
+  var a = arr.slice();
+  for (var i = a.length - 1; i > 0; i--) {
+    var j = Math.floor(Math.random() * (i + 1));
+    var t = a[i]; a[i] = a[j]; a[j] = t;
+  }
+  return a;
+}
+
+function isSorted(arr) {
+  for (var i = 1; i < arr.length; i++) {
+    if (arr[i] < arr[i - 1]) return false;
+  }
+  return true;
+}
+
+function permutations(n) {
+  var result = [];
+  var arr = [];
+  for (var i = 0; i < n; i++) arr.push(i + 1);
+  function generate(k, a) {
+    if (k === 1) { result.push(a.slice()); return; }
+    for (var i = 0; i < k; i++) {
+      generate(k - 1, a);
+      if (k % 2 === 0) { var t = a[i]; a[i] = a[k-1]; a[k-1] = t; }
+      else { var t2 = a[0]; a[0] = a[k-1]; a[k-1] = t2; }
+    }
+  }
+  generate(n, arr);
+  return result;
+}
+
+/* Apply a network (array of [i,j] comparators) to an array */
+function applyNetwork(network, input) {
+  var arr = input.slice();
+  for (var c = 0; c < network.length; c++) {
+    var lo = network[c][0], hi = network[c][1];
+    if (arr[lo] > arr[hi]) {
+      var t = arr[lo]; arr[lo] = arr[hi]; arr[hi] = t;
+    }
+  }
+  return arr;
+}
+
+/* Assign comparators into parallel layers */
+function layerize(network, n) {
+  var layers = [];
+  var wireReady = new Array(n).fill(0); /* earliest layer each wire is free */
+  for (var c = 0; c < network.length; c++) {
+    var lo = network[c][0], hi = network[c][1];
+    var layer = Math.max(wireReady[lo], wireReady[hi]);
+    if (!layers[layer]) layers[layer] = [];
+    layers[layer].push([lo, hi]);
+    wireReady[lo] = layer + 1;
+    wireReady[hi] = layer + 1;
+  }
+  return layers;
+}
+
+/* Color scale for values */
+function valColor(v, n) {
+  return d3.interpolateViridis(0.15 + 0.7 * (v - 1) / Math.max(1, n - 1));
+}
+
+function textColorForBg(hex) {
+  var c = d3.color(hex);
+  if (!c) return "#fff";
+  var lum = 0.299 * c.r + 0.587 * c.g + 0.114 * c.b;
+  return lum > 140 ? "#1a1a2e" : "#ffffff";
+}
+
+
+/* ================================================================
+   Section 1: Single Comparator
+   ================================================================ */
+(function() {
+  "use strict";
+
+  var svgEl = document.getElementById("svg-single-comp");
+  var btnRand = document.getElementById("btn-single-randomize");
+  var container = document.getElementById("fig-single-comp");
+
+  var values = [7, 3];
+  var animating = false;
+
+  function getWidth() {
+    return container.getBoundingClientRect().width - 48;
+  }
+
+  function draw(animate) {
+    var W = getWidth();
+    var H = 120;
+    var svg = d3.select(svgEl).attr("viewBox", "0 0 " + W + " " + H);
+    svg.selectAll("*").remove();
+
+    var wireY = [35, 85];
+    var padL = 70, padR = 70;
+    var compX = W / 2;
+
+    /* Wires */
+    svg.selectAll(".wire")
+      .data(wireY)
+      .enter().append("line")
+      .attr("class", "wire-line")
+      .attr("x1", padL).attr("x2", W - padR)
+      .attr("y1", function(d) { return d; })
+      .attr("y2", function(d) { return d; });
+
+    /* Comparator */
+    svg.append("line")
+      .attr("class", "comparator-line")
+      .attr("x1", compX).attr("x2", compX)
+      .attr("y1", wireY[0]).attr("y2", wireY[1]);
+    svg.selectAll(".comp-dot")
+      .data(wireY)
+      .enter().append("circle")
+      .attr("class", "comparator-dot")
+      .attr("cx", compX)
+      .attr("cy", function(d) { return d; })
+      .attr("r", 5);
+
+    var needsSwap = values[0] > values[1];
+    var outVals = needsSwap ? [values[1], values[0]] : [values[0], values[1]];
+
+    /* Labels: "before" */
+    svg.selectAll(".label-before")
+      .data(values)
+      .enter().append("text")
+      .attr("class", "wire-label")
+      .attr("x", padL - 10)
+      .attr("y", function(d, i) { return wireY[i]; })
+      .attr("text-anchor", "end")
+      .attr("dominant-baseline", "central")
+      .text(function(d) { return d; });
+
+    /* Labels: "after" */
+    svg.selectAll(".label-after")
+      .data(outVals)
+      .enter().append("text")
+      .attr("class", "wire-label")
+      .attr("x", W - padR + 10)
+      .attr("y", function(d, i) { return wireY[i]; })
+      .attr("text-anchor", "start")
+      .attr("dominant-baseline", "central")
+      .text(function(d) { return d; })
+      .attr("fill-opacity", animate ? 0 : 1);
+
+    /* Value circles flowing through */
+    var r = 16;
+    var startX = padL + 30;
+    var endX = W - padR - 30;
+
+    var circData = [
+      { val: values[0], startY: wireY[0], endY: needsSwap ? wireY[1] : wireY[0] },
+      { val: values[1], startY: wireY[1], endY: needsSwap ? wireY[0] : wireY[1] }
+    ];
+
+    var gCirc = svg.selectAll(".val-g")
+      .data(circData)
+      .enter().append("g")
+      .attr("transform", function(d) { return "translate(" + startX + "," + d.startY + ")"; });
+
+    gCirc.append("circle")
+      .attr("class", "value-circle")
+      .attr("r", r)
+      .attr("fill", function(d) { return valColor(d.val, 9); })
+      .attr("stroke", function(d) { return d3.color(valColor(d.val, 9)).darker(0.5); });
+
+    gCirc.append("text")
+      .attr("class", "value-text")
+      .attr("fill", function(d) { return textColorForBg(valColor(d.val, 9)); })
+      .text(function(d) { return d.val; });
+
+    if (animate && !REDUCED) {
+      var dur = 500;
+      /* Phase 1: move to comparator */
+      gCirc.transition().duration(dur).ease(d3.easeLinear)
+        .attr("transform", function(d) { return "translate(" + compX + "," + d.startY + ")"; })
+        .on("end", function() {
+          /* Phase 2: swap vertically */
+          gCirc.transition().duration(needsSwap ? 400 : 0).ease(d3.easeCubicInOut)
+            .attr("transform", function(d) { return "translate(" + compX + "," + d.endY + ")"; })
+            .on("end", function() {
+              /* Phase 3: move to end */
+              gCirc.transition().duration(dur).ease(d3.easeLinear)
+                .attr("transform", function(d) { return "translate(" + endX + "," + d.endY + ")"; });
+              svg.selectAll(".label-after")
+                .transition().delay(dur * 0.5).duration(200)
+                .attr("fill-opacity", 1);
+            });
+        });
+
+      /* Swap indicator */
+      if (needsSwap) {
+        svg.append("text")
+          .attr("class", "swap-arrow")
+          .attr("x", compX + 20)
+          .attr("y", wireY[0] + (wireY[1] - wireY[0]) / 2)
+          .attr("text-anchor", "start")
+          .attr("dominant-baseline", "central")
+          .attr("fill", "var(--accent)")
+          .attr("fill-opacity", 0)
+          .text("swap!")
+          .transition().delay(dur + 100).duration(200)
+          .attr("fill-opacity", 1)
+          .transition().delay(800).duration(300)
+          .attr("fill-opacity", 0)
+          .remove();
+      }
+    } else {
+      gCirc.attr("transform", function(d) { return "translate(" + endX + "," + d.endY + ")"; });
+    }
+
+    animating = false;
+  }
+
+  btnRand.addEventListener("click", function() {
+    if (animating) return;
+    animating = true;
+    values = [Math.floor(Math.random() * 9) + 1, Math.floor(Math.random() * 9) + 1];
+    while (values[0] === values[1]) values[1] = Math.floor(Math.random() * 9) + 1;
+    draw(true);
+  });
+
+  draw(false);
+
+  var ro = new ResizeObserver(function() { if (!animating) draw(false); });
+  ro.observe(container);
+})();
+
+
+/* ================================================================
+   Section 1b: Three-element sorting network
+   ================================================================ */
+(function() {
+  "use strict";
+
+  var svgEl = document.getElementById("svg-three-sort");
+  var btnRand = document.getElementById("btn-three-randomize");
+  var container = document.getElementById("fig-three-sort");
+
+  /* Network for 3 elements: compare (0,1), (0,2), (1,2) */
+  var network = [[0, 1], [0, 2], [1, 2]];
+  var n = 3;
+  var values = shuffle([1, 2, 3]);
+  var animating = false;
+
+  function getWidth() {
+    return container.getBoundingClientRect().width - 48;
+  }
+
+  function draw(animate) {
+    var W = getWidth();
+    var wireGap = 40;
+    var H = 40 + wireGap * (n - 1) + 40;
+    var svg = d3.select(svgEl).attr("viewBox", "0 0 " + W + " " + H);
+    svg.selectAll("*").remove();
+
+    var padL = 55, padR = 55;
+    var wireLen = W - padL - padR;
+    var layers = layerize(network, n);
+    var layerSpacing = wireLen / (layers.length + 1);
+    var wireY = [];
+    for (var i = 0; i < n; i++) wireY.push(40 + i * wireGap);
+
+    /* Wires */
+    svg.selectAll(".wire")
+      .data(wireY)
+      .enter().append("line")
+      .attr("class", "wire-line")
+      .attr("x1", padL).attr("x2", W - padR)
+      .attr("y1", function(d) { return d; })
+      .attr("y2", function(d) { return d; });
+
+    /* Comparators */
+    layers.forEach(function(layer, li) {
+      var cx = padL + (li + 1) * layerSpacing;
+      layer.forEach(function(comp) {
+        svg.append("line")
+          .attr("class", "comparator-line")
+          .attr("x1", cx).attr("x2", cx)
+          .attr("y1", wireY[comp[0]]).attr("y2", wireY[comp[1]]);
+        svg.append("circle")
+          .attr("class", "comparator-dot")
+          .attr("cx", cx).attr("cy", wireY[comp[0]]).attr("r", 4);
+        svg.append("circle")
+          .attr("class", "comparator-dot")
+          .attr("cx", cx).attr("cy", wireY[comp[1]]).attr("r", 4);
+      });
+    });
+
+    /* Compute intermediate states */
+    var states = [values.slice()];
+    var curr = values.slice();
+    layers.forEach(function(layer) {
+      layer.forEach(function(comp) {
+        if (curr[comp[0]] > curr[comp[1]]) {
+          var t = curr[comp[0]];
+          curr[comp[0]] = curr[comp[1]];
+          curr[comp[1]] = t;
+        }
+      });
+      states.push(curr.slice());
+    });
+
+    /* Input labels */
+    svg.selectAll(".label-in")
+      .data(values)
+      .enter().append("text")
+      .attr("class", "wire-label")
+      .attr("x", padL - 10)
+      .attr("y", function(d, i) { return wireY[i]; })
+      .attr("text-anchor", "end")
+      .attr("dominant-baseline", "central")
+      .text(function(d) { return d; });
+
+    /* Output labels */
+    var finalState = states[states.length - 1];
+    svg.selectAll(".label-out")
+      .data(finalState)
+      .enter().append("text")
+      .attr("class", "wire-label")
+      .attr("x", W - padR + 10)
+      .attr("y", function(d, i) { return wireY[i]; })
+      .attr("text-anchor", "start")
+      .attr("dominant-baseline", "central")
+      .text(function(d) { return d; })
+      .attr("fill-opacity", animate ? 0 : 1);
+
+    /* Animate value circles through the network */
+    var r = 14;
+    var startX = padL + 20;
+    var currentPositions = [];
+    for (var k = 0; k < n; k++) {
+      currentPositions.push({ wire: k, val: values[k] });
+    }
+
+    var gCirc = svg.selectAll(".val-g")
+      .data(currentPositions)
+      .enter().append("g")
+      .attr("transform", function(d) { return "translate(" + startX + "," + wireY[d.wire] + ")"; });
+
+    gCirc.append("circle")
+      .attr("class", "value-circle")
+      .attr("r", r)
+      .attr("fill", function(d) { return valColor(d.val, n); })
+      .attr("stroke", function(d) { return d3.color(valColor(d.val, n)).darker(0.5); });
+
+    gCirc.append("text")
+      .attr("class", "value-text")
+      .attr("fill", function(d) { return textColorForBg(valColor(d.val, n)); })
+      .text(function(d) { return d.val; });
+
+    if (animate && !REDUCED) {
+      /* Build a mapping: which value (by original index) is on which wire after each layer */
+      var dur = 350;
+      /* Track which original index is on which wire */
+      var posMap = []; /* posMap[origIdx] = currentWire */
+      for (var idx = 0; idx < n; idx++) posMap.push(idx);
+
+      function animateLayer(li) {
+        if (li >= layers.length) {
+          /* Move to end */
+          var endX = W - padR - 20;
+          gCirc.transition().duration(dur).ease(d3.easeLinear)
+            .attr("transform", function(d, i) {
+              return "translate(" + endX + "," + wireY[posMap[i]] + ")";
+            });
+          svg.selectAll(".label-out")
+            .transition().delay(dur * 0.5).duration(200)
+            .attr("fill-opacity", 1);
+          return;
+        }
+
+        var cx = padL + (li + 1) * layerSpacing;
+        var layer = layers[li];
+
+        /* Move all circles to layer x position */
+        gCirc.transition().duration(dur).ease(d3.easeLinear)
+          .attr("transform", function(d, i) {
+            return "translate(" + cx + "," + wireY[posMap[i]] + ")";
+          })
+          .on("end", function(d, i) {
+            if (i !== 0) return;
+            /* Now do the swaps */
+            var swapsNeeded = false;
+            /* Figure out what values are on what wires */
+            var wireToOrig = new Array(n);
+            for (var q = 0; q < n; q++) wireToOrig[posMap[q]] = q;
+
+            layer.forEach(function(comp) {
+              var origA = wireToOrig[comp[0]];
+              var origB = wireToOrig[comp[1]];
+              var valA = currentPositions[origA].val;
+              var valB = currentPositions[origB].val;
+              if (valA > valB) {
+                swapsNeeded = true;
+                posMap[origA] = comp[1];
+                posMap[origB] = comp[0];
+                wireToOrig[comp[0]] = origB;
+                wireToOrig[comp[1]] = origA;
+              }
+            });
+
+            gCirc.transition().duration(swapsNeeded ? 300 : 0).ease(d3.easeCubicInOut)
+              .attr("transform", function(d, idx) {
+                return "translate(" + cx + "," + wireY[posMap[idx]] + ")";
+              })
+              .on("end", function(d, idx2) {
+                if (idx2 !== 0) return;
+                animateLayer(li + 1);
+              });
+          });
+      }
+
+      animateLayer(0);
+    } else {
+      /* Static final position */
+      /* Figure out where each original value ended up */
+      var finalPos = new Array(n);
+      var tempArr = values.slice();
+      var origIdx = [];
+      for (var m = 0; m < n; m++) origIdx.push(m);
+      network.forEach(function(comp) {
+        if (tempArr[comp[0]] > tempArr[comp[1]]) {
+          var tv = tempArr[comp[0]]; tempArr[comp[0]] = tempArr[comp[1]]; tempArr[comp[1]] = tv;
+          var ti = origIdx[comp[0]]; origIdx[comp[0]] = origIdx[comp[1]]; origIdx[comp[1]] = ti;
+        }
+      });
+      for (var m2 = 0; m2 < n; m2++) finalPos[origIdx[m2]] = m2;
+
+      var endX2 = W - padR - 20;
+      gCirc.attr("transform", function(d, i) {
+        return "translate(" + endX2 + "," + wireY[finalPos[i]] + ")";
+      });
+    }
+
+    animating = false;
+  }
+
+  btnRand.addEventListener("click", function() {
+    if (animating) return;
+    animating = true;
+    values = shuffle([1, 2, 3]);
+    draw(true);
+  });
+
+  draw(false);
+
+  var ro = new ResizeObserver(function() { if (!animating) draw(false); });
+  ro.observe(container);
+})();
+
+
+/* ================================================================
+   Section 2: Classic Networks
+   ================================================================ */
+(function() {
+  "use strict";
+
+  var svgEl = document.getElementById("svg-classic");
+  var selSize = document.getElementById("select-classic-size");
+  var sliderSpeed = document.getElementById("slider-speed");
+  var valSpeed = document.getElementById("val-speed");
+  var btnRun = document.getElementById("btn-classic-run");
+  var btnRand = document.getElementById("btn-classic-randomize");
+  var statComps = document.getElementById("stat-comps");
+  var statLayers = document.getElementById("stat-layers");
+  var statCurLayer = document.getElementById("stat-current-layer");
+  var container = document.getElementById("fig-classic");
+
+  /* Known optimal/good sorting networks */
+  var NETWORKS = {
+    4: [[0,1],[2,3],[0,2],[1,3],[1,2]],
+    6: [[0,1],[2,3],[4,5],[0,2],[1,4],[3,5],[0,1],[2,3],[4,5],[1,2],[3,4],[2,3]],
+    8: [
+      [0,1],[2,3],[4,5],[6,7],
+      [0,2],[1,3],[4,6],[5,7],
+      [1,2],[5,6],[0,4],[3,7],
+      [1,5],[2,6],
+      [1,4],[3,6],
+      [2,4],[3,5],
+      [3,4]
+    ],
+    16: [
+      [0,1],[2,3],[4,5],[6,7],[8,9],[10,11],[12,13],[14,15],
+      [0,2],[1,3],[4,6],[5,7],[8,10],[9,11],[12,14],[13,15],
+      [0,4],[1,5],[2,6],[3,7],[8,12],[9,13],[10,14],[11,15],
+      [0,8],[1,9],[2,10],[3,11],[4,12],[5,13],[6,14],[7,15],
+      [5,10],[6,9],[3,12],[13,14],[7,11],[1,2],[4,8],
+      [1,4],[7,13],[2,8],[11,14],
+      [2,4],[5,6],[9,10],[11,13],[3,8],[7,12],
+      [6,8],[10,12],[3,5],[7,9],
+      [3,4],[5,6],[7,8],[9,10],[11,12],
+      [6,7],[8,9]
+    ]
+  };
+
+  var currentSize = 8;
+  var inputValues = [];
+  var animating = false;
+  var animationId = null;
+
+  function makeInput(n) {
+    var arr = [];
+    for (var i = 0; i < n; i++) arr.push(i + 1);
+    return shuffle(arr);
+  }
+
+  function getWidth() {
+    return container.getBoundingClientRect().width - 48;
+  }
+
+  function cancelAnim() {
+    if (animationId) { cancelAnimationFrame(animationId); animationId = null; }
+    animating = false;
+  }
+
+  function drawStatic() {
+    cancelAnim();
+    var n = currentSize;
+    var net = NETWORKS[n];
+    var layers = layerize(net, n);
+
+    statComps.textContent = net.length;
+    statLayers.textContent = layers.length;
+    statCurLayer.textContent = "-";
+
+    var W = getWidth();
+    var wireGap = n <= 8 ? 32 : 22;
+    var padT = 30, padB = 30, padL = 40, padR = 40;
+    var H = padT + wireGap * (n - 1) + padB;
+    var svg = d3.select(svgEl).attr("viewBox", "0 0 " + W + " " + H);
+    svg.selectAll("*").remove();
+
+    var wireLen = W - padL - padR;
+    var layerSpacing = wireLen / (layers.length + 1);
+
+    var wireY = [];
+    for (var i = 0; i < n; i++) wireY.push(padT + i * wireGap);
+
+    /* Wires */
+    svg.selectAll(".wire")
+      .data(wireY)
+      .enter().append("line")
+      .attr("class", "wire-line")
+      .attr("x1", padL).attr("x2", W - padR)
+      .attr("y1", function(d) { return d; })
+      .attr("y2", function(d) { return d; });
+
+    /* Comparators grouped by layer, color-coded */
+    var layerColorScale = d3.scaleOrdinal(d3.schemeTableau10);
+
+    layers.forEach(function(layer, li) {
+      var cx = padL + (li + 1) * layerSpacing;
+      var col = layerColorScale(li);
+      layer.forEach(function(comp) {
+        svg.append("line")
+          .attr("class", "comparator-line")
+          .attr("x1", cx).attr("x2", cx)
+          .attr("y1", wireY[comp[0]]).attr("y2", wireY[comp[1]])
+          .attr("stroke", col).attr("stroke-width", 2);
+        svg.append("circle")
+          .attr("class", "comparator-dot")
+          .attr("cx", cx).attr("cy", wireY[comp[0]]).attr("r", n <= 8 ? 4 : 3)
+          .attr("fill", col);
+        svg.append("circle")
+          .attr("class", "comparator-dot")
+          .attr("cx", cx).attr("cy", wireY[comp[1]]).attr("r", n <= 8 ? 4 : 3)
+          .attr("fill", col);
+      });
+    });
+
+    /* Input labels */
+    svg.selectAll(".label-in")
+      .data(inputValues)
+      .enter().append("text")
+      .attr("class", "wire-label")
+      .attr("x", padL - 8)
+      .attr("y", function(d, i) { return wireY[i]; })
+      .attr("text-anchor", "end")
+      .attr("dominant-baseline", "central")
+      .attr("font-size", n <= 8 ? 13 : 10)
+      .text(function(d) { return d; });
+
+    /* Output labels */
+    var output = applyNetwork(net, inputValues);
+    svg.selectAll(".label-out")
+      .data(output)
+      .enter().append("text")
+      .attr("class", "wire-label")
+      .attr("x", W - padR + 8)
+      .attr("y", function(d, i) { return wireY[i]; })
+      .attr("text-anchor", "start")
+      .attr("dominant-baseline", "central")
+      .attr("font-size", n <= 8 ? 13 : 10)
+      .text(function(d) { return d; });
+
+    return { svg: svg, W: W, H: H, wireY: wireY, layers: layers, padL: padL, padR: padR, layerSpacing: layerSpacing, wireGap: wireGap };
+  }
+
+  function animateRun() {
+    if (animating) { cancelAnim(); return; }
+    animating = true;
+
+    var n = currentSize;
+    var net = NETWORKS[n];
+    var layers = layerize(net, n);
+
+    var info = drawStatic();
+    var svg = info.svg;
+    var wireY = info.wireY;
+    var padL = info.padL;
+    var padR = info.padR;
+    var W = info.W;
+    var layerSpacing = info.layerSpacing;
+
+    /* Remove static output labels */
+    svg.selectAll(".label-out").remove();
+
+    var speed = parseInt(sliderSpeed.value);
+    var baseDur = Math.max(60, 500 - speed * 40);
+
+    var r = n <= 8 ? 12 : 8;
+    var startX = padL + 15;
+
+    /* posMap[origIdx] = current wire */
+    var posMap = [];
+    var circData = [];
+    for (var i = 0; i < n; i++) {
+      posMap.push(i);
+      circData.push({ val: inputValues[i], origIdx: i });
+    }
+
+    var gCirc = svg.selectAll(".val-g")
+      .data(circData)
+      .enter().append("g")
+      .attr("transform", function(d, i) { return "translate(" + startX + "," + wireY[i] + ")"; });
+
+    gCirc.append("circle")
+      .attr("class", "value-circle")
+      .attr("r", r)
+      .attr("fill", function(d) { return valColor(d.val, n); })
+      .attr("stroke", function(d) { return d3.color(valColor(d.val, n)).darker(0.5); });
+
+    if (n <= 8) {
+      gCirc.append("text")
+        .attr("class", "value-text")
+        .attr("fill", function(d) { return textColorForBg(valColor(d.val, n)); })
+        .attr("font-size", n <= 8 ? 11 : 9)
+        .text(function(d) { return d.val; });
+    }
+
+    function doLayer(li) {
+      if (li >= layers.length) {
+        statCurLayer.textContent = "done";
+        var endX = W - padR - 15;
+        gCirc.transition().duration(baseDur).ease(d3.easeLinear)
+          .attr("transform", function(d, i) {
+            return "translate(" + endX + "," + wireY[posMap[i]] + ")";
+          })
+          .on("end", function(d, i) {
+            if (i !== 0) return;
+            /* Show output labels */
+            var output = applyNetwork(net, inputValues);
+            svg.selectAll(".label-out-anim")
+              .data(output)
+              .enter().append("text")
+              .attr("class", "wire-label")
+              .attr("x", W - padR + 8)
+              .attr("y", function(dd, ii) { return wireY[ii]; })
+              .attr("text-anchor", "start")
+              .attr("dominant-baseline", "central")
+              .attr("font-size", n <= 8 ? 13 : 10)
+              .text(function(dd) { return dd; })
+              .attr("fill-opacity", 0)
+              .transition().duration(200)
+              .attr("fill-opacity", 1);
+            animating = false;
+          });
+        return;
+      }
+
+      statCurLayer.textContent = (li + 1) + " / " + layers.length;
+      var layer = layers[li];
+      var cx = padL + (li + 1) * layerSpacing;
+
+      /* Move circles to this layer */
+      gCirc.transition().duration(baseDur).ease(d3.easeLinear)
+        .attr("transform", function(d, i) {
+          return "translate(" + cx + "," + wireY[posMap[i]] + ")";
+        })
+        .on("end", function(d, i) {
+          if (i !== 0) return;
+
+          /* Compute swaps */
+          var wireToOrig = new Array(n);
+          for (var q = 0; q < n; q++) wireToOrig[posMap[q]] = q;
+
+          var anySwap = false;
+          layer.forEach(function(comp) {
+            var origA = wireToOrig[comp[0]];
+            var origB = wireToOrig[comp[1]];
+            var valA = circData[origA].val;
+            var valB = circData[origB].val;
+            if (valA > valB) {
+              anySwap = true;
+              posMap[origA] = comp[1];
+              posMap[origB] = comp[0];
+              wireToOrig[comp[0]] = origB;
+              wireToOrig[comp[1]] = origA;
+            }
+          });
+
+          gCirc.transition().duration(anySwap ? Math.max(100, baseDur * 0.6) : 0)
+            .ease(d3.easeCubicInOut)
+            .attr("transform", function(d2, i2) {
+              return "translate(" + cx + "," + wireY[posMap[i2]] + ")";
+            })
+            .on("end", function(d2, i2) {
+              if (i2 !== 0) return;
+              doLayer(li + 1);
+            });
+        });
+    }
+
+    if (REDUCED) {
+      /* Skip animation, show final state */
+      var output = applyNetwork(net, inputValues);
+      var endXr = W - padR - 15;
+      /* Figure out final positions */
+      var tempArr = inputValues.slice();
+      var origIdxMap = [];
+      for (var j = 0; j < n; j++) origIdxMap.push(j);
+      net.forEach(function(comp) {
+        if (tempArr[comp[0]] > tempArr[comp[1]]) {
+          var tv = tempArr[comp[0]]; tempArr[comp[0]] = tempArr[comp[1]]; tempArr[comp[1]] = tv;
+          var ti = origIdxMap[comp[0]]; origIdxMap[comp[0]] = origIdxMap[comp[1]]; origIdxMap[comp[1]] = ti;
+        }
+      });
+      var finalPos = new Array(n);
+      for (var j2 = 0; j2 < n; j2++) finalPos[origIdxMap[j2]] = j2;
+      gCirc.attr("transform", function(d, i) {
+        return "translate(" + endXr + "," + wireY[finalPos[i]] + ")";
+      });
+      svg.selectAll(".label-out-anim")
+        .data(output)
+        .enter().append("text")
+        .attr("class", "wire-label")
+        .attr("x", W - padR + 8)
+        .attr("y", function(dd, ii) { return wireY[ii]; })
+        .attr("text-anchor", "start")
+        .attr("dominant-baseline", "central")
+        .attr("font-size", n <= 8 ? 13 : 10)
+        .text(function(dd) { return dd; });
+      animating = false;
+    } else {
+      doLayer(0);
+    }
+  }
+
+  function init() {
+    currentSize = parseInt(selSize.value);
+    inputValues = makeInput(currentSize);
+    drawStatic();
+  }
+
+  selSize.addEventListener("change", function() {
+    cancelAnim();
+    init();
+  });
+
+  sliderSpeed.addEventListener("input", function() {
+    valSpeed.textContent = this.value;
+  });
+
+  btnRun.addEventListener("click", function() {
+    animateRun();
+  });
+
+  btnRand.addEventListener("click", function() {
+    cancelAnim();
+    inputValues = makeInput(currentSize);
+    drawStatic();
+  });
+
+  init();
+
+  var ro = new ResizeObserver(function() { if (!animating) drawStatic(); });
+  ro.observe(container);
+})();
+
+
+/* ================================================================
+   Section 3: Build Your Own Network
+   ================================================================ */
+(function() {
+  "use strict";
+
+  var svgEl = document.getElementById("svg-builder");
+  var selSize = document.getElementById("select-builder-size");
+  var btnTest = document.getElementById("btn-builder-test");
+  var btnUndo = document.getElementById("btn-builder-undo");
+  var btnClear = document.getElementById("btn-builder-clear");
+  var statComps = document.getElementById("stat-builder-comps");
+  var statTested = document.getElementById("stat-builder-tested");
+  var resultDiv = document.getElementById("builder-result");
+  var container = document.getElementById("fig-builder");
+
+  var n = 5;
+  var network = []; /* array of [lo, hi] */
+  var ghostComp = null;
+
+  /* Known optimal comparator counts */
+  var OPTIMAL = { 3: 3, 4: 5, 5: 9, 6: 12 };
+
+  function getWidth() {
+    return container.getBoundingClientRect().width - 48;
+  }
+
+  function draw() {
+    var W = getWidth();
+    var wireGap = 40;
+    var padT = 30, padB = 30, padL = 30, padR = 30;
+    var H = padT + wireGap * (n - 1) + padB;
+    var svg = d3.select(svgEl).attr("viewBox", "0 0 " + W + " " + H);
+    svg.selectAll("*").remove();
+
+    var wireY = [];
+    for (var i = 0; i < n; i++) wireY.push(padT + i * wireGap);
+
+    /* Clickable background */
+    svg.append("rect")
+      .attr("class", "builder-zone")
+      .attr("x", padL).attr("y", 0)
+      .attr("width", W - padL - padR).attr("height", H)
+      .attr("fill", "transparent");
+
+    /* Wires */
+    svg.selectAll(".wire")
+      .data(wireY)
+      .enter().append("line")
+      .attr("class", "wire-line")
+      .attr("x1", padL).attr("x2", W - padR)
+      .attr("y1", function(d) { return d; })
+      .attr("y2", function(d) { return d; });
+
+    /* Wire labels */
+    svg.selectAll(".wire-idx")
+      .data(wireY)
+      .enter().append("text")
+      .attr("class", "wire-label")
+      .attr("x", padL - 10)
+      .attr("y", function(d) { return d; })
+      .attr("text-anchor", "end")
+      .attr("dominant-baseline", "central")
+      .attr("font-size", 11)
+      .attr("fill", "var(--text-2)")
+      .text(function(d, i) { return i + 1; });
+
+    /* Place comparators evenly */
+    if (network.length > 0) {
+      var compSpacing = (W - padL - padR) / (network.length + 1);
+      network.forEach(function(comp, ci) {
+        var cx = padL + (ci + 1) * compSpacing;
+        svg.append("line")
+          .attr("class", "comparator-line")
+          .attr("x1", cx).attr("x2", cx)
+          .attr("y1", wireY[comp[0]]).attr("y2", wireY[comp[1]]);
+        svg.append("circle")
+          .attr("class", "comparator-dot")
+          .attr("cx", cx).attr("cy", wireY[comp[0]]).attr("r", 4);
+        svg.append("circle")
+          .attr("class", "comparator-dot")
+          .attr("cx", cx).attr("cy", wireY[comp[1]]).attr("r", 4);
+      });
+    }
+
+    /* Ghost comparator (preview on hover) */
+    var ghostLine = svg.append("line")
+      .attr("class", "comparator-line ghost-comp")
+      .attr("x1", 0).attr("x2", 0).attr("y1", 0).attr("y2", 0)
+      .style("display", "none");
+    var ghostDotA = svg.append("circle")
+      .attr("class", "comparator-dot ghost-comp")
+      .attr("r", 4).style("display", "none");
+    var ghostDotB = svg.append("circle")
+      .attr("class", "comparator-dot ghost-comp")
+      .attr("r", 4).style("display", "none");
+
+    /* Click and hover handling */
+    var firstWire = null;
+
+    svg.on("mousemove", function(event) {
+      var pt = d3.pointer(event, svg.node());
+      var mx = pt[0], my = pt[1];
+
+      if (mx < padL || mx > W - padR) {
+        ghostLine.style("display", "none");
+        ghostDotA.style("display", "none");
+        ghostDotB.style("display", "none");
+        return;
+      }
+
+      /* Find nearest wire */
+      var nearestWire = 0;
+      var minDist = Infinity;
+      for (var i = 0; i < n; i++) {
+        var d = Math.abs(my - wireY[i]);
+        if (d < minDist) { minDist = d; nearestWire = i; }
+      }
+
+      if (firstWire !== null && firstWire !== nearestWire) {
+        var lo = Math.min(firstWire, nearestWire);
+        var hi = Math.max(firstWire, nearestWire);
+        ghostLine.attr("x1", mx).attr("x2", mx)
+          .attr("y1", wireY[lo]).attr("y2", wireY[hi])
+          .style("display", null);
+        ghostDotA.attr("cx", mx).attr("cy", wireY[lo]).style("display", null);
+        ghostDotB.attr("cx", mx).attr("cy", wireY[hi]).style("display", null);
+      } else if (firstWire === null && minDist < wireGap * 0.6) {
+        /* Show dot on nearest wire */
+        ghostDotA.attr("cx", mx).attr("cy", wireY[nearestWire]).style("display", null);
+        ghostLine.style("display", "none");
+        ghostDotB.style("display", "none");
+      } else {
+        ghostLine.style("display", "none");
+        ghostDotA.style("display", "none");
+        ghostDotB.style("display", "none");
+      }
+    });
+
+    svg.on("click", function(event) {
+      var pt = d3.pointer(event, svg.node());
+      var mx = pt[0], my = pt[1];
+
+      if (mx < padL || mx > W - padR) return;
+
+      /* Find nearest wire */
+      var nearestWire = 0;
+      var minDist = Infinity;
+      for (var i = 0; i < n; i++) {
+        var d = Math.abs(my - wireY[i]);
+        if (d < minDist) { minDist = d; nearestWire = i; }
+      }
+
+      if (minDist > wireGap * 0.6) return;
+
+      if (firstWire === null) {
+        firstWire = nearestWire;
+      } else if (firstWire !== nearestWire) {
+        var lo = Math.min(firstWire, nearestWire);
+        var hi = Math.max(firstWire, nearestWire);
+        network.push([lo, hi]);
+        firstWire = null;
+        resultDiv.innerHTML = "";
+        statTested.textContent = "-";
+        draw();
+      } else {
+        firstWire = null;
+      }
+    });
+
+    svg.on("mouseleave", function() {
+      ghostLine.style("display", "none");
+      ghostDotA.style("display", "none");
+      ghostDotB.style("display", "none");
+    });
+
+    statComps.textContent = network.length;
+  }
+
+  function testNetwork() {
+    var totalPerms, testedPerms, failPerm;
+    var allSorted = true;
+    var sortedCount = 0;
+
+    if (n <= 6) {
+      /* Test all permutations */
+      var perms = permutations(n);
+      totalPerms = perms.length;
+      testedPerms = totalPerms;
+      failPerm = null;
+      for (var i = 0; i < perms.length; i++) {
+        var result = applyNetwork(network, perms[i]);
+        if (isSorted(result)) {
+          sortedCount++;
+        } else if (!failPerm) {
+          failPerm = perms[i];
+          allSorted = false;
+        } else {
+          allSorted = false;
+        }
+      }
+    } else {
+      /* Random sample */
+      totalPerms = "many";
+      testedPerms = 5000;
+      for (var j = 0; j < 5000; j++) {
+        var arr = [];
+        for (var k = 0; k < n; k++) arr.push(k + 1);
+        arr = shuffle(arr);
+        var res = applyNetwork(network, arr);
+        if (isSorted(res)) {
+          sortedCount++;
+        } else if (!failPerm) {
+          failPerm = arr;
+          allSorted = false;
+        } else {
+          allSorted = false;
+        }
+      }
+    }
+
+    statTested.textContent = sortedCount + " / " + testedPerms;
+
+    if (allSorted && sortedCount === testedPerms) {
+      var opt = OPTIMAL[n];
+      var badge = '<span class="result-badge result-pass">All permutations sorted!</span>';
+      if (opt && network.length <= opt) {
+        badge += ' <span class="result-badge result-pass">Optimal (' + opt + ' comparators)!</span>';
+      } else if (opt && network.length <= opt + 2) {
+        badge += ' <span class="result-badge result-partial">Close to optimal (' + opt + ' is the minimum)</span>';
+      } else if (opt) {
+        badge += ' <span class="result-badge result-partial">Optimal is ' + opt + ' comparators</span>';
+      }
+      resultDiv.innerHTML = badge;
+    } else {
+      var failStr = failPerm ? " First failing input: [" + failPerm.join(", ") + "]" : "";
+      resultDiv.innerHTML = '<span class="result-badge result-fail">' +
+        sortedCount + ' of ' + testedPerms + ' sorted.' + failStr + '</span>';
+
+      /* Animate the failing permutation through the network if we have one */
+      if (failPerm) {
+        animateFailure(failPerm);
+      }
+    }
+  }
+
+  function animateFailure(perm) {
+    if (REDUCED) return;
+    if (network.length === 0) return;
+
+    var W = getWidth();
+    var wireGap = 40;
+    var padT = 30, padB = 30, padL = 30, padR = 30;
+    var wireY = [];
+    for (var i = 0; i < n; i++) wireY.push(padT + i * wireGap);
+
+    var svg = d3.select(svgEl);
+    /* Remove old value circles */
+    svg.selectAll(".val-g").remove();
+
+    var compSpacing = (W - padL - padR) / (network.length + 1);
+    var r = 12;
+    var startX = padL + 10;
+
+    var posMap = [];
+    var circData = [];
+    for (var i2 = 0; i2 < n; i2++) {
+      posMap.push(i2);
+      circData.push({ val: perm[i2], origIdx: i2 });
+    }
+
+    var gCirc = svg.selectAll(".val-g")
+      .data(circData)
+      .enter().append("g")
+      .attr("class", "val-g")
+      .attr("transform", function(d, i) { return "translate(" + startX + "," + wireY[i] + ")"; });
+
+    gCirc.append("circle")
+      .attr("class", "value-circle")
+      .attr("r", r)
+      .attr("fill", function(d) { return valColor(d.val, n); })
+      .attr("stroke", function(d) { return d3.color(valColor(d.val, n)).darker(0.5); });
+
+    gCirc.append("text")
+      .attr("class", "value-text")
+      .attr("fill", function(d) { return textColorForBg(valColor(d.val, n)); })
+      .text(function(d) { return d.val; });
+
+    /* Animate through each comparator */
+    function doComp(ci) {
+      if (ci >= network.length) {
+        /* Move to end, color unsorted ones red */
+        var endX = W - padR - 10;
+        gCirc.transition().duration(200).ease(d3.easeLinear)
+          .attr("transform", function(d, i) {
+            return "translate(" + endX + "," + wireY[posMap[i]] + ")";
+          })
+          .on("end", function() {
+            /* Check which are out of order */
+            var finalArr = new Array(n);
+            for (var q = 0; q < n; q++) finalArr[posMap[q]] = circData[q].val;
+            gCirc.select("circle").transition().duration(300)
+              .attr("stroke", function(d, i) {
+                var wire = posMap[i];
+                var ok = true;
+                if (wire > 0) {
+                  var prevOrig = null;
+                  for (var q2 = 0; q2 < n; q2++) { if (posMap[q2] === wire - 1) prevOrig = q2; }
+                  if (prevOrig !== null && circData[prevOrig].val > d.val) ok = false;
+                }
+                if (wire < n - 1) {
+                  var nextOrig = null;
+                  for (var q3 = 0; q3 < n; q3++) { if (posMap[q3] === wire + 1) nextOrig = q3; }
+                  if (nextOrig !== null && d.val > circData[nextOrig].val) ok = false;
+                }
+                return ok ? d3.color(valColor(d.val, n)).darker(0.5) : "#dc2626";
+              })
+              .attr("stroke-width", function(d, i) {
+                var wire = posMap[i];
+                var ok = true;
+                if (wire > 0) {
+                  var prevOrig = null;
+                  for (var q2 = 0; q2 < n; q2++) { if (posMap[q2] === wire - 1) prevOrig = q2; }
+                  if (prevOrig !== null && circData[prevOrig].val > d.val) ok = false;
+                }
+                if (wire < n - 1) {
+                  var nextOrig = null;
+                  for (var q3 = 0; q3 < n; q3++) { if (posMap[q3] === wire + 1) nextOrig = q3; }
+                  if (nextOrig !== null && d.val > circData[nextOrig].val) ok = false;
+                }
+                return ok ? 1.5 : 3;
+              });
+          });
+        return;
+      }
+
+      var cx = padL + (ci + 1) * compSpacing;
+      var comp = network[ci];
+
+      gCirc.transition().duration(150).ease(d3.easeLinear)
+        .attr("transform", function(d, i) {
+          return "translate(" + cx + "," + wireY[posMap[i]] + ")";
+        })
+        .on("end", function(d, i) {
+          if (i !== 0) return;
+
+          var wireToOrig = new Array(n);
+          for (var q = 0; q < n; q++) wireToOrig[posMap[q]] = q;
+
+          var origA = wireToOrig[comp[0]];
+          var origB = wireToOrig[comp[1]];
+          if (origA === undefined || origB === undefined) {
+            doComp(ci + 1);
+            return;
+          }
+          var valA = circData[origA].val;
+          var valB = circData[origB].val;
+          var didSwap = false;
+          if (valA > valB) {
+            didSwap = true;
+            posMap[origA] = comp[1];
+            posMap[origB] = comp[0];
+          }
+
+          gCirc.transition().duration(didSwap ? 150 : 0).ease(d3.easeCubicInOut)
+            .attr("transform", function(d2, i2) {
+              return "translate(" + cx + "," + wireY[posMap[i2]] + ")";
+            })
+            .on("end", function(d2, i2) {
+              if (i2 !== 0) return;
+              doComp(ci + 1);
+            });
+        });
+    }
+
+    doComp(0);
+  }
+
+  selSize.addEventListener("change", function() {
+    n = parseInt(this.value);
+    network = [];
+    resultDiv.innerHTML = "";
+    statTested.textContent = "-";
+    draw();
+  });
+
+  btnTest.addEventListener("click", testNetwork);
+
+  btnUndo.addEventListener("click", function() {
+    if (network.length > 0) {
+      network.pop();
+      resultDiv.innerHTML = "";
+      statTested.textContent = "-";
+      draw();
+    }
+  });
+
+  btnClear.addEventListener("click", function() {
+    network = [];
+    resultDiv.innerHTML = "";
+    statTested.textContent = "-";
+    draw();
+  });
+
+  draw();
+
+  var ro = new ResizeObserver(function() { draw(); });
+  ro.observe(container);
+})();
+</script>
+</body>
+</html>

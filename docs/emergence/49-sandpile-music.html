@@ -1,0 +1,1206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sandpile Music: Sonification of Avalanche Cascades</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;500&family=Source+Sans+3:wght@400;600;700&family=Source+Serif+4:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --article-width: 740px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem;
+  --line-height: 1.6;
+  --text: #1a1a2e;
+  --text-2: #4a4a6a;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --bg: #fafafa;
+  --fig-bg: #ffffff;
+  --border: #e2e2e8;
+}
+body { font-family: var(--body-font); font-size: var(--body-size);
+  line-height: var(--line-height); color: var(--text); background: var(--bg);
+  -webkit-font-smoothing: antialiased; }
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
+h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+h3 { font-size: 1.15rem; margin: 2rem 0 0.75rem; }
+p { margin: 0 0 1rem; }
+a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+a:hover { color: #1d4ed8; }
+.header { padding: 4rem 0 2rem; border-bottom: 1px solid var(--border); margin-bottom: 2.5rem; }
+.header .back { font-family: var(--heading-font); font-size: 0.85rem; display: inline-block; margin-bottom: 1.5rem; }
+.header .subtitle { font-family: var(--heading-font); font-size: 1.15rem; color: var(--text-2); margin-bottom: 0; max-width: 580px; }
+.figure { margin: 2rem 0; padding: 1.5rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.figure canvas { display: block; cursor: crosshair; image-rendering: pixelated; border-radius: 3px; }
+.figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; line-height: 1.4; }
+.figure-label { font-weight: 600; color: var(--text); }
+.insight { background: var(--accent-light); border-left: 3px solid var(--accent); padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 4px 4px 0; }
+.insight p { margin: 0; }
+.insight p + p { margin-top: 0.75rem; }
+.controls { display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-end; margin-top: 1rem; font-family: var(--heading-font); font-size: 0.85rem; }
+.control-group { display: flex; flex-direction: column; gap: 0.25rem; }
+.control-group label { color: var(--text-2); font-weight: 600; }
+.control-group input[type="range"] { width: 110px; accent-color: var(--accent); }
+.control-group .val { font-family: var(--mono-font); font-variant-numeric: tabular-nums;
+  min-width: 2.5em; text-align: right; color: var(--text); }
+.control-group .slider-row { display: flex; align-items: center; gap: 0.5rem; }
+.btn { font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600;
+  padding: 0.45rem 1.1rem; border-radius: 5px; border: 1px solid var(--border);
+  background: var(--fig-bg); color: var(--text); cursor: pointer;
+  transition: background 0.15s, border-color 0.15s; user-select: none; }
+.btn:hover { border-color: var(--accent); background: var(--accent-light); }
+.btn.active { border-color: var(--accent); background: var(--accent); color: white; }
+.click-hint { font-family: var(--heading-font); font-size: 0.8rem; color: var(--text-2);
+  text-align: center; margin-top: 0.5rem; font-style: italic; }
+.stats-row { display: flex; gap: 2rem; flex-wrap: wrap; margin-top: 0.75rem;
+  font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); }
+.stats-row .stat-val { font-family: var(--mono-font); font-weight: 500; color: var(--text);
+  font-variant-numeric: tabular-nums; }
+.chart-pair { display: flex; gap: 1rem; flex-wrap: wrap; margin-top: 0.5rem; }
+.chart-pair > div { flex: 1; min-width: 280px; }
+.timbre-group { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+.timbre-group .btn { padding: 0.3rem 0.75rem; font-size: 0.8rem; }
+svg text { font-family: var(--heading-font); }
+.composition-bar { width: 100%; height: 6px; background: var(--border); border-radius: 3px;
+  margin-top: 0.75rem; overflow: hidden; }
+.composition-bar .fill { height: 100%; width: 0%; background: var(--accent);
+  border-radius: 3px; transition: width 0.1s linear; }
+
+@media (prefers-reduced-motion: reduce) {
+  .figure canvas { outline: 2px dashed var(--border); outline-offset: -2px; }
+}
+@media (max-width: 600px) {
+  h1 { font-size: 1.75rem; }
+  .controls { gap: 0.6rem; }
+  .control-group input[type="range"] { width: 80px; }
+  .stats-row { gap: 1rem; }
+  .chart-pair { flex-direction: column; }
+}
+</style>
+</head>
+<body>
+<div class="article">
+
+<div class="header">
+  <a href="index.html" class="back">&larr; Emergence</a>
+  <h1>Sandpile Music</h1>
+  <p class="subtitle">Listen to self-organized criticality. Each grain triggers a sound, and avalanches become cascading rhythms.</p>
+</div>
+
+<p>
+The sandpile model from <a href="08-sandpile.html">explainer 08</a> produces avalanches
+with a power-law size distribution. Most drops trigger nothing or a small toppling.
+Occasionally one grain sets off a massive cascade. The interesting question: what does
+this sound like?
+</p>
+
+<p>
+When you map avalanche sizes to pitch and duration, the sandpile's statistics become
+audible. Small avalanches are quick, high-pitched clicks. Large avalanches are deep
+rumbles that linger. The overall rhythm has no repeating pattern, but it has a
+recognizable texture. The power spectrum follows 1/f, which sits exactly between
+the randomness of white noise and the predictability of a periodic beat.
+</p>
+
+<h2>Grains as Notes</h2>
+
+<p>
+Below is a 60&times;60 sandpile. Every grain dropped produces a tone. The pitch maps to
+avalanche size: a drop that does nothing plays a high click, while a large avalanche
+that topples hundreds of cells plays a low, longer tone. Enable audio to hear the
+characteristic SOC texture: mostly quick high plinks with occasional deep rumbles.
+</p>
+
+<div class="figure" id="fig-sandpile">
+  <canvas id="sandpile-canvas"></canvas>
+  <div class="controls">
+    <div class="control-group">
+      <button class="btn" id="btn-audio">Enable Audio</button>
+    </div>
+    <div class="control-group">
+      <button class="btn" id="btn-auto">Auto-drop</button>
+    </div>
+    <div class="control-group">
+      <label>Drop rate</label>
+      <div class="slider-row">
+        <input type="range" id="speed-slider" min="1" max="20" value="3">
+        <span class="val" id="speed-val">3</span>
+      </div>
+    </div>
+    <div class="control-group">
+      <button class="btn" id="btn-reset">Reset</button>
+    </div>
+  </div>
+  <div class="stats-row">
+    <div>Grains: <span class="stat-val" id="stat-drops">0</span></div>
+    <div>Topplings: <span class="stat-val" id="stat-topplings">0</span></div>
+    <div>Largest: <span class="stat-val" id="stat-largest">0</span></div>
+  </div>
+  <p class="click-hint">Click on the grid to drop a grain, or use Auto-drop</p>
+</div>
+
+<p>
+Notice the rhythm. In the early phase, when the grid is filling and most drops do nothing,
+the sound is a steady stream of high plinks at roughly equal intervals. Once the pile
+reaches criticality and avalanches begin, the texture shifts. Silences between the deep
+tones are punctuated by clusters of rapid clicks. The pattern never repeats, but it never
+sounds fully random either. That is the audible signature of 1/f noise.
+</p>
+
+<h2>The Rhythm of Criticality</h2>
+
+<p>
+To confirm the 1/f character, we can record a sequence of avalanche sizes and look at
+the power spectrum. Click the button below to run 1,000 drops on a fresh pile, then view
+the resulting time series alongside its frequency spectrum.
+</p>
+
+<div class="figure" id="fig-spectrum">
+  <div class="controls" style="margin-top:0; margin-bottom:0.75rem;">
+    <div class="control-group">
+      <button class="btn" id="btn-record">Record 1,000 Drops</button>
+    </div>
+    <div class="control-group">
+      <button class="btn" id="btn-compare-white">White Noise</button>
+    </div>
+    <div class="control-group">
+      <button class="btn" id="btn-compare-periodic">Periodic</button>
+    </div>
+  </div>
+  <div class="chart-pair">
+    <div>
+      <svg id="svg-timeseries" style="display:block; width:100%;"></svg>
+      <p class="figure-caption">
+        <span class="figure-label">Time series.</span>
+        Avalanche size for each successive grain drop.
+      </p>
+    </div>
+    <div>
+      <svg id="svg-spectrum" style="display:block; width:100%;"></svg>
+      <p class="figure-caption">
+        <span class="figure-label">Power spectrum.</span>
+        Log-log plot. A slope of &minus;1 indicates 1/f noise.
+      </p>
+    </div>
+  </div>
+</div>
+
+<p>
+The white noise comparison has a flat spectrum: all frequencies carry equal power.
+The periodic signal has a single dominant peak. The sandpile's spectrum slopes
+downward at roughly &minus;1, meaning low frequencies carry more power than high
+frequencies, but not overwhelmingly so. This 1/f slope is the spectral fingerprint
+of self-organized criticality.
+</p>
+
+<h2>Play With the Mapping</h2>
+
+<p>
+The sonification mapping is a choice, not a law of nature. Different mappings
+produce different musical textures. Adjust the parameters below to change how
+avalanche sizes translate into sound. Then use Composition Mode to record
+30 seconds of sandpile music that you can replay.
+</p>
+
+<div class="figure" id="fig-compose">
+  <div class="controls" style="margin-top:0;">
+    <div class="control-group">
+      <label>Min pitch (Hz)</label>
+      <div class="slider-row">
+        <input type="range" id="pitch-lo" min="60" max="300" value="80">
+        <span class="val" id="pitch-lo-val">80</span>
+      </div>
+    </div>
+    <div class="control-group">
+      <label>Max pitch (Hz)</label>
+      <div class="slider-row">
+        <input type="range" id="pitch-hi" min="400" max="2000" value="1200">
+        <span class="val" id="pitch-hi-val">1200</span>
+      </div>
+    </div>
+    <div class="control-group">
+      <label>Decay (s)</label>
+      <div class="slider-row">
+        <input type="range" id="decay-slider" min="1" max="20" value="6">
+        <span class="val" id="decay-val">0.30</span>
+      </div>
+    </div>
+    <div class="control-group">
+      <label>Volume</label>
+      <div class="slider-row">
+        <input type="range" id="vol-slider" min="0" max="100" value="40">
+        <span class="val" id="vol-val">40%</span>
+      </div>
+    </div>
+  </div>
+  <div class="controls" style="margin-top:0.75rem;">
+    <div class="control-group">
+      <label>Timbre</label>
+      <div class="timbre-group">
+        <button class="btn active" data-wave="sine">Sine</button>
+        <button class="btn" data-wave="triangle">Triangle</button>
+        <button class="btn" data-wave="sawtooth">Sawtooth</button>
+      </div>
+    </div>
+  </div>
+  <div class="controls" style="margin-top:0.75rem;">
+    <div class="control-group">
+      <button class="btn" id="btn-compose">Composition Mode (30s)</button>
+    </div>
+    <div class="control-group">
+      <button class="btn" id="btn-replay" style="display:none;">Replay</button>
+    </div>
+  </div>
+  <div class="composition-bar" id="comp-bar" style="display:none;">
+    <div class="fill" id="comp-fill"></div>
+  </div>
+  <p class="figure-caption" id="comp-status"></p>
+</div>
+
+<p>
+Try setting the timbre to sawtooth and widening the pitch range. The result can sound
+like an alien percussion ensemble. With sine waves and a narrow range, it resembles
+raindrops on a roof. The deep rumbles of large avalanches give the sandpile a natural
+sense of dynamics that synthetic music usually has to work hard to achieve.
+</p>
+
+<div class="insight">
+  <p>
+  1/f noise, also called pink noise, is ubiquitous: in music (the tempo fluctuations
+  of human performers), in the flow of the Nile river, in the flicker of a candle
+  flame, and in the electrical activity of the brain. The sandpile model produces it
+  naturally. Some researchers believe 1/f noise is a signature of self-organized
+  criticality in the underlying system.
+  </p>
+</div>
+
+</div><!-- .article -->
+
+<!-- ══════════════════════════════════════════════════════════════════════
+     Section 1: Sandpile Simulation + Sonification
+     ══════════════════════════════════════════════════════════════════════ -->
+<script>
+(function () {
+  'use strict';
+
+  var REDUCED_MOTION = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ── Grid ──────────────────────────────────────────────────────────── */
+  var N = 60;
+  var grid = new Int16Array(N * N);
+  var totalDrops = 0;
+  var totalTopplings = 0;
+  var largestAvalanche = 0;
+  var autoRunning = false;
+  var autoRAF = null;
+  var speed = 3;
+  var avalancheSizes = [];
+
+  var COLORS = [
+    [235, 235, 240],
+    [174, 194, 228],
+    [80,  115, 190],
+    [24,  42,  110]
+  ];
+
+  /* ── DOM ────────────────────────────────────────────────────────────── */
+  var canvas = document.getElementById('sandpile-canvas');
+  var ctx = canvas.getContext('2d');
+  var figEl = document.getElementById('fig-sandpile');
+  var btnAudio = document.getElementById('btn-audio');
+  var btnAuto = document.getElementById('btn-auto');
+  var btnReset = document.getElementById('btn-reset');
+  var speedSlider = document.getElementById('speed-slider');
+  var speedVal = document.getElementById('speed-val');
+  var statDrops = document.getElementById('stat-drops');
+  var statTopplings = document.getElementById('stat-topplings');
+  var statLargest = document.getElementById('stat-largest');
+
+  /* ── Canvas sizing ─────────────────────────────────────────────────── */
+  var cellSize = 1;
+  var imageData;
+
+  function sizeCanvas() {
+    var w = figEl.clientWidth - 48;
+    cellSize = Math.max(2, Math.floor(w / N));
+    var px = cellSize * N;
+    canvas.width = px;
+    canvas.height = px;
+    canvas.style.width = px + 'px';
+    canvas.style.height = px + 'px';
+    imageData = ctx.createImageData(px, px);
+    drawGrid();
+  }
+
+  var ro = new ResizeObserver(function () { sizeCanvas(); });
+  ro.observe(figEl);
+  sizeCanvas();
+
+  /* ── Rendering ─────────────────────────────────────────────────────── */
+  function drawGrid() {
+    var px = cellSize * N;
+    var data = imageData.data;
+    var r, c, val, color, dy, dx, py, pxc, idx;
+    for (r = 0; r < N; r++) {
+      for (c = 0; c < N; c++) {
+        val = grid[r * N + c];
+        if (val < 0) val = 0;
+        color = val > 3 ? COLORS[3] : COLORS[val];
+        for (dy = 0; dy < cellSize; dy++) {
+          py = r * cellSize + dy;
+          for (dx = 0; dx < cellSize; dx++) {
+            pxc = c * cellSize + dx;
+            idx = (py * px + pxc) * 4;
+            data[idx]     = color[0];
+            data[idx + 1] = color[1];
+            data[idx + 2] = color[2];
+            data[idx + 3] = 255;
+          }
+        }
+      }
+    }
+    ctx.putImageData(imageData, 0, 0);
+  }
+
+  /* ── Toppling (BFS) ────────────────────────────────────────────────── */
+  function dropAndRelax(row, col) {
+    if (row < 0 || row >= N || col < 0 || col >= N) return 0;
+    grid[row * N + col]++;
+    totalDrops++;
+
+    var topplings = 0;
+    var queue = [];
+    var startIdx = row * N + col;
+    if (grid[startIdx] >= 4) queue.push(startIdx);
+
+    var head = 0;
+    while (head < queue.length) {
+      var idx = queue[head++];
+      while (grid[idx] >= 4) {
+        grid[idx] -= 4;
+        topplings++;
+        var rr = (idx / N) | 0;
+        var cc = idx % N;
+        if (rr > 0)     { grid[idx - N]++; if (grid[idx - N] >= 4) queue.push(idx - N); }
+        if (rr < N - 1) { grid[idx + N]++; if (grid[idx + N] >= 4) queue.push(idx + N); }
+        if (cc > 0)     { grid[idx - 1]++; if (grid[idx - 1] >= 4) queue.push(idx - 1); }
+        if (cc < N - 1) { grid[idx + 1]++; if (grid[idx + 1] >= 4) queue.push(idx + 1); }
+      }
+    }
+
+    totalTopplings += topplings;
+    if (topplings > largestAvalanche) largestAvalanche = topplings;
+    avalancheSizes.push(topplings);
+    return topplings;
+  }
+
+  function updateStats() {
+    statDrops.textContent = totalDrops.toLocaleString();
+    statTopplings.textContent = totalTopplings.toLocaleString();
+    statLargest.textContent = largestAvalanche.toLocaleString();
+  }
+
+  /* ── Web Audio ─────────────────────────────────────────────────────── */
+  var audioCtx = null;
+  var audioEnabled = false;
+  var masterGain = null;
+
+  function initAudio() {
+    if (audioCtx) return;
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    masterGain = audioCtx.createGain();
+    masterGain.gain.value = 0.4;
+    masterGain.connect(audioCtx.destination);
+  }
+
+  function getSettings() {
+    return window._sandpileAudioSettings || {
+      pitchLo: 80,
+      pitchHi: 1200,
+      decay: 0.30,
+      volume: 0.4,
+      waveform: 'sine'
+    };
+  }
+
+  function playTone(avalancheSize) {
+    if (!audioEnabled || !audioCtx) return;
+    var s = getSettings();
+    masterGain.gain.value = s.volume;
+
+    // Map avalanche size to pitch: 0 topplings -> high pitch, large -> low pitch
+    // Use log mapping for better perceptual spread
+    var maxSize = 200;
+    var t = Math.min(avalancheSize, maxSize) / maxSize;
+    var freq = s.pitchHi * Math.pow(s.pitchLo / s.pitchHi, t);
+
+    // Duration scales with avalanche size
+    var baseDur = Math.max(s.decay, 0.02);
+    var dur = baseDur * (1 + t * 2);
+
+    var now = audioCtx.currentTime;
+    var osc = audioCtx.createOscillator();
+    var env = audioCtx.createGain();
+
+    osc.type = s.waveform;
+    osc.frequency.value = freq;
+    env.gain.setValueAtTime(0.6, now);
+    env.gain.exponentialRampToValueAtTime(0.001, now + dur);
+
+    osc.connect(env);
+    env.connect(masterGain);
+    osc.start(now);
+    osc.stop(now + dur + 0.01);
+  }
+
+  btnAudio.addEventListener('click', function () {
+    if (!audioEnabled) {
+      initAudio();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      audioEnabled = true;
+      btnAudio.classList.add('active');
+      btnAudio.textContent = 'Audio On';
+    } else {
+      audioEnabled = false;
+      btnAudio.classList.remove('active');
+      btnAudio.textContent = 'Enable Audio';
+    }
+  });
+
+  /* ── Click to drop ─────────────────────────────────────────────────── */
+  canvas.addEventListener('click', function (e) {
+    var rect = canvas.getBoundingClientRect();
+    var scaleX = canvas.width / rect.width;
+    var scaleY = canvas.height / rect.height;
+    var col = Math.floor((e.clientX - rect.left) * scaleX / cellSize);
+    var row = Math.floor((e.clientY - rect.top) * scaleY / cellSize);
+    col = Math.max(0, Math.min(N - 1, col));
+    row = Math.max(0, Math.min(N - 1, row));
+    var size = dropAndRelax(row, col);
+    drawGrid();
+    updateStats();
+    playTone(size);
+  });
+
+  /* ── Auto-drop ─────────────────────────────────────────────────────── */
+  function startAuto() {
+    autoRunning = true;
+    btnAuto.classList.add('active');
+    btnAuto.textContent = 'Pause';
+    if (REDUCED_MOTION) {
+      for (var i = 0; i < 200; i++) {
+        dropAndRelax(Math.floor(Math.random() * N), Math.floor(Math.random() * N));
+      }
+      drawGrid();
+      updateStats();
+      stopAuto();
+    } else {
+      autoStep();
+    }
+  }
+
+  function stopAuto() {
+    autoRunning = false;
+    if (autoRAF) cancelAnimationFrame(autoRAF);
+    autoRAF = null;
+    btnAuto.classList.remove('active');
+    btnAuto.textContent = 'Auto-drop';
+  }
+
+  function autoStep() {
+    if (!autoRunning) return;
+    for (var i = 0; i < speed; i++) {
+      var size = dropAndRelax(
+        Math.floor(Math.random() * N),
+        Math.floor(Math.random() * N)
+      );
+      playTone(size);
+    }
+    drawGrid();
+    updateStats();
+    autoRAF = requestAnimationFrame(autoStep);
+  }
+
+  btnAuto.addEventListener('click', function () {
+    if (autoRunning) stopAuto(); else startAuto();
+  });
+
+  speedSlider.addEventListener('input', function () {
+    speed = parseInt(this.value, 10);
+    speedVal.textContent = speed;
+  });
+
+  /* ── Reset ─────────────────────────────────────────────────────────── */
+  btnReset.addEventListener('click', function () {
+    stopAuto();
+    grid.fill(0);
+    totalDrops = 0;
+    totalTopplings = 0;
+    largestAvalanche = 0;
+    avalancheSizes.length = 0;
+    updateStats();
+    drawGrid();
+  });
+
+  /* ── Expose for other sections ─────────────────────────────────────── */
+  window._sandpile = {
+    getAvalancheSizes: function () { return avalancheSizes; },
+    getGrid: function () { return grid; },
+    getN: function () { return N; },
+    dropAndRelax: dropAndRelax,
+    drawGrid: drawGrid,
+    playTone: playTone,
+    isAudioEnabled: function () { return audioEnabled; },
+    getAudioCtx: function () { return audioCtx; },
+    getMasterGain: function () { return masterGain; },
+    initAudio: initAudio
+  };
+
+  drawGrid();
+  updateStats();
+})();
+</script>
+
+<!-- ══════════════════════════════════════════════════════════════════════
+     Section 2: Rhythm of Criticality (Time Series + FFT)
+     ══════════════════════════════════════════════════════════════════════ -->
+<script>
+(function () {
+  'use strict';
+
+  /* ── DOM ────────────────────────────────────────────────────────────── */
+  var figEl = document.getElementById('fig-spectrum');
+  var btnRecord = document.getElementById('btn-record');
+  var btnWhite = document.getElementById('btn-compare-white');
+  var btnPeriodic = document.getElementById('btn-compare-periodic');
+  var svgTS = d3.select('#svg-timeseries');
+  var svgSpec = d3.select('#svg-spectrum');
+
+  var margin = { top: 12, right: 16, bottom: 40, left: 48 };
+  var chartW = 0;
+  var chartH = 0;
+
+  /* ── Sizing ────────────────────────────────────────────────────────── */
+  function getChartDims() {
+    var figW = figEl.clientWidth - 48;
+    var pairW = Math.floor((figW - 16) / 2);
+    if (figW < 580) pairW = figW;
+    var w = Math.max(200, pairW) - margin.left - margin.right;
+    var h = Math.max(120, Math.min(w * 0.6, 200)) - margin.top - margin.bottom;
+    return { w: w, h: h, total: w + margin.left + margin.right, totalH: h + margin.top + margin.bottom };
+  }
+
+  /* ── Simple FFT (radix-2 DIT) ──────────────────────────────────────── */
+  function fft(re, im) {
+    var n = re.length;
+    if (n <= 1) return;
+    // Bit-reversal permutation
+    var j = 0;
+    for (var i = 1; i < n; i++) {
+      var bit = n >> 1;
+      while (j & bit) { j ^= bit; bit >>= 1; }
+      j ^= bit;
+      if (i < j) {
+        var tmp = re[i]; re[i] = re[j]; re[j] = tmp;
+        tmp = im[i]; im[i] = im[j]; im[j] = tmp;
+      }
+    }
+    // Cooley-Tukey
+    for (var len = 2; len <= n; len *= 2) {
+      var ang = -2 * Math.PI / len;
+      var wRe = Math.cos(ang);
+      var wIm = Math.sin(ang);
+      for (var i = 0; i < n; i += len) {
+        var curRe = 1, curIm = 0;
+        for (var k = 0; k < len / 2; k++) {
+          var uRe = re[i + k], uIm = im[i + k];
+          var vRe = re[i + k + len / 2] * curRe - im[i + k + len / 2] * curIm;
+          var vIm = re[i + k + len / 2] * curIm + im[i + k + len / 2] * curRe;
+          re[i + k] = uRe + vRe;
+          im[i + k] = uIm + vIm;
+          re[i + k + len / 2] = uRe - vRe;
+          im[i + k + len / 2] = uIm - vIm;
+          var newCurRe = curRe * wRe - curIm * wIm;
+          curIm = curRe * wIm + curIm * wRe;
+          curRe = newCurRe;
+        }
+      }
+    }
+  }
+
+  function powerSpectrum(signal) {
+    // Pad to next power of 2
+    var n = 1;
+    while (n < signal.length) n *= 2;
+    var re = new Float64Array(n);
+    var im = new Float64Array(n);
+    // Remove mean
+    var mean = 0;
+    for (var i = 0; i < signal.length; i++) mean += signal[i];
+    mean /= signal.length;
+    for (var i = 0; i < signal.length; i++) re[i] = signal[i] - mean;
+    fft(re, im);
+    // Power = |F(k)|^2, only first half
+    var half = n / 2;
+    var power = new Float64Array(half);
+    for (var i = 1; i < half; i++) {
+      power[i] = re[i] * re[i] + im[i] * im[i];
+    }
+    return power;
+  }
+
+  /* ── Generate sandpile data ────────────────────────────────────────── */
+  function runSandpile(nDrops) {
+    var M = 60;
+    var g = new Int16Array(M * M);
+    var sizes = new Float64Array(nDrops);
+
+    for (var d = 0; d < nDrops; d++) {
+      var row = Math.floor(Math.random() * M);
+      var col = Math.floor(Math.random() * M);
+      g[row * M + col]++;
+      var topplings = 0;
+      var queue = [];
+      var startIdx = row * M + col;
+      if (g[startIdx] >= 4) queue.push(startIdx);
+      var head = 0;
+      while (head < queue.length) {
+        var idx = queue[head++];
+        while (g[idx] >= 4) {
+          g[idx] -= 4;
+          topplings++;
+          var rr = (idx / M) | 0;
+          var cc = idx % M;
+          if (rr > 0)     { g[idx - M]++; if (g[idx - M] >= 4) queue.push(idx - M); }
+          if (rr < M - 1) { g[idx + M]++; if (g[idx + M] >= 4) queue.push(idx + M); }
+          if (cc > 0)     { g[idx - 1]++; if (g[idx - 1] >= 4) queue.push(idx - 1); }
+          if (cc < M - 1) { g[idx + 1]++; if (g[idx + 1] >= 4) queue.push(idx + 1); }
+        }
+      }
+      sizes[d] = topplings;
+    }
+    return sizes;
+  }
+
+  function generateWhiteNoise(n) {
+    var out = new Float64Array(n);
+    for (var i = 0; i < n; i++) out[i] = Math.random() * 100;
+    return out;
+  }
+
+  function generatePeriodic(n) {
+    var out = new Float64Array(n);
+    var period = 20;
+    for (var i = 0; i < n; i++) {
+      out[i] = 50 + 40 * Math.sin(2 * Math.PI * i / period);
+    }
+    return out;
+  }
+
+  /* ── Plotting ──────────────────────────────────────────────────────── */
+  function drawTimeSeries(container, data, color, label) {
+    var dim = getChartDims();
+    chartW = dim.w; chartH = dim.h;
+    container.selectAll('*').remove();
+    container.attr('width', dim.total).attr('height', dim.totalH);
+
+    var g = container.append('g')
+      .attr('transform', 'translate(' + margin.left + ',' + margin.top + ')');
+
+    var x = d3.scaleLinear().domain([0, data.length - 1]).range([0, chartW]);
+    var yMax = d3.max(data) || 1;
+    var y = d3.scaleLinear().domain([0, yMax]).range([chartH, 0]);
+
+    g.append('g').attr('transform', 'translate(0,' + chartH + ')')
+      .call(d3.axisBottom(x).ticks(5).tickFormat(d3.format('d')))
+      .selectAll('text').attr('font-size', '0.7rem');
+
+    g.append('g')
+      .call(d3.axisLeft(y).ticks(4).tickFormat(d3.format('d')))
+      .selectAll('text').attr('font-size', '0.7rem');
+
+    g.append('text').attr('x', chartW / 2).attr('y', chartH + 32)
+      .attr('text-anchor', 'middle').attr('font-size', '0.72rem').attr('fill', '#4a4a6a')
+      .text('Drop index');
+
+    g.append('text').attr('transform', 'rotate(-90)')
+      .attr('x', -chartH / 2).attr('y', -36)
+      .attr('text-anchor', 'middle').attr('font-size', '0.72rem').attr('fill', '#4a4a6a')
+      .text('Avalanche size');
+
+    // Subsample if too many points
+    var step = Math.max(1, Math.floor(data.length / 500));
+    var pts = [];
+    for (var i = 0; i < data.length; i += step) {
+      pts.push({ x: i, y: data[i] });
+    }
+
+    var line = d3.line()
+      .x(function (d) { return x(d.x); })
+      .y(function (d) { return y(d.y); });
+
+    g.append('path').datum(pts)
+      .attr('fill', 'none')
+      .attr('stroke', color)
+      .attr('stroke-width', 1)
+      .attr('d', line);
+
+    if (label) {
+      g.append('text').attr('x', chartW - 4).attr('y', 12)
+        .attr('text-anchor', 'end').attr('font-size', '0.72rem')
+        .attr('font-weight', 600).attr('fill', color)
+        .text(label);
+    }
+  }
+
+  function drawSpectrum(container, data, color, label) {
+    var dim = getChartDims();
+    chartW = dim.w; chartH = dim.h;
+    container.selectAll('*').remove();
+    container.attr('width', dim.total).attr('height', dim.totalH);
+
+    var g = container.append('g')
+      .attr('transform', 'translate(' + margin.left + ',' + margin.top + ')');
+
+    var ps = powerSpectrum(data);
+    // Build log-log data, skip DC (index 0) and very low bins
+    var pts = [];
+    for (var i = 2; i < ps.length; i++) {
+      if (ps[i] > 0) pts.push({ freq: i, power: ps[i] });
+    }
+    if (pts.length === 0) return;
+
+    var x = d3.scaleLog()
+      .domain([d3.min(pts, function (d) { return d.freq; }),
+               d3.max(pts, function (d) { return d.freq; })])
+      .range([0, chartW]);
+
+    var y = d3.scaleLog()
+      .domain([d3.min(pts, function (d) { return d.power; }) * 0.5,
+               d3.max(pts, function (d) { return d.power; }) * 2])
+      .range([chartH, 0]);
+
+    g.append('g').attr('transform', 'translate(0,' + chartH + ')')
+      .call(d3.axisBottom(x).ticks(4, '~s'))
+      .selectAll('text').attr('font-size', '0.7rem');
+
+    g.append('g')
+      .call(d3.axisLeft(y).ticks(3, '~s'))
+      .selectAll('text').attr('font-size', '0.7rem');
+
+    g.append('text').attr('x', chartW / 2).attr('y', chartH + 32)
+      .attr('text-anchor', 'middle').attr('font-size', '0.72rem').attr('fill', '#4a4a6a')
+      .text('Frequency (log)');
+
+    g.append('text').attr('transform', 'rotate(-90)')
+      .attr('x', -chartH / 2).attr('y', -36)
+      .attr('text-anchor', 'middle').attr('font-size', '0.72rem').attr('fill', '#4a4a6a')
+      .text('Power (log)');
+
+    // Bin the spectrum for smoother display (logarithmic binning)
+    var nBins = 40;
+    var logMin = Math.log(2);
+    var logMax = Math.log(ps.length - 1);
+    var binStep = (logMax - logMin) / nBins;
+    var binned = [];
+    for (var b = 0; b < nBins; b++) {
+      var lo = Math.exp(logMin + b * binStep);
+      var hi = Math.exp(logMin + (b + 1) * binStep);
+      var sum = 0, count = 0;
+      for (var i = 0; i < pts.length; i++) {
+        if (pts[i].freq >= lo && pts[i].freq < hi) {
+          sum += pts[i].power;
+          count++;
+        }
+      }
+      if (count > 0) {
+        binned.push({ freq: (lo + hi) / 2, power: sum / count });
+      }
+    }
+
+    // Draw binned points
+    g.selectAll('.dot').data(binned).enter()
+      .append('circle')
+      .attr('cx', function (d) { return x(d.freq); })
+      .attr('cy', function (d) { return y(d.power); })
+      .attr('r', 2.5)
+      .attr('fill', color)
+      .attr('opacity', 0.7);
+
+    // Fit a line in log-log space
+    if (binned.length > 3) {
+      var sx = 0, sy = 0, sxx = 0, sxy = 0, n = binned.length;
+      for (var i = 0; i < n; i++) {
+        var lx = Math.log(binned[i].freq);
+        var ly = Math.log(binned[i].power);
+        sx += lx; sy += ly; sxx += lx * lx; sxy += lx * ly;
+      }
+      var slope = (n * sxy - sx * sy) / (n * sxx - sx * sx);
+      var intercept = (sy - slope * sx) / n;
+
+      var x1 = binned[0].freq;
+      var x2 = binned[n - 1].freq;
+      var y1 = Math.exp(intercept + slope * Math.log(x1));
+      var y2 = Math.exp(intercept + slope * Math.log(x2));
+
+      g.append('line')
+        .attr('x1', x(x1)).attr('y1', y(y1))
+        .attr('x2', x(x2)).attr('y2', y(y2))
+        .attr('stroke', '#e74c3c')
+        .attr('stroke-width', 1.5)
+        .attr('stroke-dasharray', '5,3')
+        .attr('opacity', 0.7);
+
+      // Slope label
+      g.append('text')
+        .attr('x', x(x2) - 4).attr('y', y(y2) - 8)
+        .attr('text-anchor', 'end').attr('font-size', '0.7rem')
+        .attr('fill', '#e74c3c').attr('font-weight', 600)
+        .text('slope ' + slope.toFixed(2));
+    }
+
+    if (label) {
+      g.append('text').attr('x', chartW - 4).attr('y', 12)
+        .attr('text-anchor', 'end').attr('font-size', '0.72rem')
+        .attr('font-weight', 600).attr('fill', color)
+        .text(label);
+    }
+  }
+
+  /* ── State for current display ───────────────────────────────────── */
+  var currentData = null;
+  var currentColor = '#2563eb';
+  var currentLabel = 'Sandpile';
+
+  function showData(data, color, label) {
+    currentData = data;
+    currentColor = color;
+    currentLabel = label;
+    drawTimeSeries(svgTS, data, color, label);
+    drawSpectrum(svgSpec, data, color, label);
+  }
+
+  /* ── Button handlers ───────────────────────────────────────────────── */
+  function clearActiveBtn() {
+    btnRecord.classList.remove('active');
+    btnWhite.classList.remove('active');
+    btnPeriodic.classList.remove('active');
+  }
+
+  btnRecord.addEventListener('click', function () {
+    clearActiveBtn();
+    btnRecord.classList.add('active');
+    showData(runSandpile(1000), '#2563eb', 'Sandpile');
+  });
+
+  btnWhite.addEventListener('click', function () {
+    clearActiveBtn();
+    btnWhite.classList.add('active');
+    showData(generateWhiteNoise(1000), '#e67e22', 'White noise');
+  });
+
+  btnPeriodic.addEventListener('click', function () {
+    clearActiveBtn();
+    btnPeriodic.classList.add('active');
+    showData(generatePeriodic(1000), '#27ae60', 'Periodic');
+  });
+
+  /* ── Responsive ────────────────────────────────────────────────────── */
+  var specRo = new ResizeObserver(function () {
+    if (currentData) {
+      drawTimeSeries(svgTS, currentData, currentColor, currentLabel);
+      drawSpectrum(svgSpec, currentData, currentColor, currentLabel);
+    }
+  });
+  specRo.observe(figEl);
+
+  // Draw initial sandpile data on load
+  showData(runSandpile(1000), '#2563eb', 'Sandpile');
+  btnRecord.classList.add('active');
+})();
+</script>
+
+<!-- ══════════════════════════════════════════════════════════════════════
+     Section 3: Play With the Mapping + Composition Mode
+     ══════════════════════════════════════════════════════════════════════ -->
+<script>
+(function () {
+  'use strict';
+
+  /* ── DOM ────────────────────────────────────────────────────────────── */
+  var pitchLoSlider = document.getElementById('pitch-lo');
+  var pitchLoVal = document.getElementById('pitch-lo-val');
+  var pitchHiSlider = document.getElementById('pitch-hi');
+  var pitchHiVal = document.getElementById('pitch-hi-val');
+  var decaySlider = document.getElementById('decay-slider');
+  var decayVal = document.getElementById('decay-val');
+  var volSlider = document.getElementById('vol-slider');
+  var volVal = document.getElementById('vol-val');
+  var timbreBtns = document.querySelectorAll('[data-wave]');
+  var btnCompose = document.getElementById('btn-compose');
+  var btnReplay = document.getElementById('btn-replay');
+  var compBar = document.getElementById('comp-bar');
+  var compFill = document.getElementById('comp-fill');
+  var compStatus = document.getElementById('comp-status');
+
+  var currentWaveform = 'sine';
+
+  /* ── Shared settings object ────────────────────────────────────────── */
+  window._sandpileAudioSettings = {
+    pitchLo: 80,
+    pitchHi: 1200,
+    decay: 0.30,
+    volume: 0.4,
+    waveform: 'sine'
+  };
+
+  function updateSettings() {
+    var s = window._sandpileAudioSettings;
+    s.pitchLo = parseInt(pitchLoSlider.value, 10);
+    s.pitchHi = parseInt(pitchHiSlider.value, 10);
+    s.decay = parseInt(decaySlider.value, 10) / 20;
+    s.volume = parseInt(volSlider.value, 10) / 100;
+    s.waveform = currentWaveform;
+  }
+
+  pitchLoSlider.addEventListener('input', function () {
+    pitchLoVal.textContent = this.value;
+    updateSettings();
+  });
+  pitchHiSlider.addEventListener('input', function () {
+    pitchHiVal.textContent = this.value;
+    updateSettings();
+  });
+  decaySlider.addEventListener('input', function () {
+    decayVal.textContent = (parseInt(this.value, 10) / 20).toFixed(2);
+    updateSettings();
+  });
+  volSlider.addEventListener('input', function () {
+    volVal.textContent = this.value + '%';
+    updateSettings();
+  });
+
+  timbreBtns.forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      timbreBtns.forEach(function (b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+      currentWaveform = btn.getAttribute('data-wave');
+      updateSettings();
+    });
+  });
+
+  /* ── Composition Mode ──────────────────────────────────────────────── */
+  var composing = false;
+  var recordedAudioBuffer = null;
+
+  // Offline composition: runs the sandpile, schedules tones into an OfflineAudioContext
+  function startComposition() {
+    if (composing) return;
+    composing = true;
+    btnCompose.classList.add('active');
+    btnCompose.textContent = 'Recording...';
+    compBar.style.display = 'block';
+    compFill.style.width = '0%';
+    compStatus.textContent = 'Simulating sandpile and rendering audio...';
+    btnReplay.style.display = 'none';
+
+    var s = window._sandpileAudioSettings;
+    var duration = 30; // seconds
+    var sampleRate = 44100;
+    var totalSamples = duration * sampleRate;
+
+    // First, run the sandpile simulation to collect avalanche sizes
+    var M = 60;
+    var g = new Int16Array(M * M);
+    // Pre-fill to criticality
+    var warmup = 3000;
+    for (var w = 0; w < warmup; w++) {
+      var wr = Math.floor(Math.random() * M);
+      var wc = Math.floor(Math.random() * M);
+      g[wr * M + wc]++;
+      var q = [];
+      var si = wr * M + wc;
+      if (g[si] >= 4) q.push(si);
+      var h = 0;
+      while (h < q.length) {
+        var idx = q[h++];
+        while (g[idx] >= 4) {
+          g[idx] -= 4;
+          var rr = (idx / M) | 0, cc = idx % M;
+          if (rr > 0)     { g[idx - M]++; if (g[idx - M] >= 4) q.push(idx - M); }
+          if (rr < M - 1) { g[idx + M]++; if (g[idx + M] >= 4) q.push(idx + M); }
+          if (cc > 0)     { g[idx - 1]++; if (g[idx - 1] >= 4) q.push(idx - 1); }
+          if (cc < M - 1) { g[idx + 1]++; if (g[idx + 1] >= 4) q.push(idx + 1); }
+        }
+      }
+    }
+
+    // Now collect drops for composition
+    var dropsPerSec = 8;
+    var totalDrops = duration * dropsPerSec;
+    var events = []; // { time, size }
+
+    for (var d = 0; d < totalDrops; d++) {
+      var row = Math.floor(Math.random() * M);
+      var col = Math.floor(Math.random() * M);
+      g[row * M + col]++;
+      var topplings = 0;
+      var queue = [];
+      var startIdx = row * M + col;
+      if (g[startIdx] >= 4) queue.push(startIdx);
+      var head = 0;
+      while (head < queue.length) {
+        var idx = queue[head++];
+        while (g[idx] >= 4) {
+          g[idx] -= 4;
+          topplings++;
+          var rr = (idx / M) | 0, cc = idx % M;
+          if (rr > 0)     { g[idx - M]++; if (g[idx - M] >= 4) queue.push(idx - M); }
+          if (rr < M - 1) { g[idx + M]++; if (g[idx + M] >= 4) queue.push(idx + M); }
+          if (cc > 0)     { g[idx - 1]++; if (g[idx - 1] >= 4) queue.push(idx - 1); }
+          if (cc < M - 1) { g[idx + 1]++; if (g[idx + 1] >= 4) queue.push(idx + 1); }
+        }
+      }
+      events.push({ time: d / dropsPerSec, size: topplings });
+    }
+
+    compFill.style.width = '30%';
+
+    // Use setTimeout so the browser can repaint the progress bar
+    setTimeout(function () { renderOffline(events, s, duration, sampleRate, totalSamples); }, 50);
+  }
+
+  function renderOffline(events, s, duration, sampleRate, totalSamples) {
+    // Render into OfflineAudioContext
+    var offline;
+    try {
+      offline = new OfflineAudioContext(1, totalSamples, sampleRate);
+    } catch (e) {
+      composing = false;
+      btnCompose.classList.remove('active');
+      btnCompose.textContent = 'Composition Mode (30s)';
+      compBar.style.display = 'none';
+      compStatus.textContent = 'OfflineAudioContext not supported in this browser.';
+      return;
+    }
+    var offMaster = offline.createGain();
+    offMaster.gain.value = s.volume;
+    offMaster.connect(offline.destination);
+
+    var maxSize = 200;
+    for (var i = 0; i < events.length; i++) {
+      var ev = events[i];
+      var t = Math.min(ev.size, maxSize) / maxSize;
+      var freq = s.pitchHi * Math.pow(s.pitchLo / s.pitchHi, t);
+      var baseDur = s.decay;
+      var dur = baseDur * (1 + t * 2);
+      var startTime = ev.time;
+
+      if (startTime + dur > duration) dur = duration - startTime;
+      if (dur < 0.01) continue;
+
+      var osc = offline.createOscillator();
+      var env = offline.createGain();
+      osc.type = s.waveform;
+      osc.frequency.value = freq;
+      env.gain.setValueAtTime(0.6, startTime);
+      env.gain.exponentialRampToValueAtTime(0.001, startTime + dur);
+      osc.connect(env);
+      env.connect(offMaster);
+      osc.start(startTime);
+      osc.stop(startTime + dur + 0.01);
+    }
+
+    compFill.style.width = '60%';
+
+    offline.startRendering().then(function (buffer) {
+      recordedAudioBuffer = buffer;
+      composing = false;
+      btnCompose.classList.remove('active');
+      btnCompose.textContent = 'Composition Mode (30s)';
+      compFill.style.width = '100%';
+      compStatus.textContent = 'Done. ' + events.length + ' grain drops rendered into 30 seconds of audio.';
+      btnReplay.style.display = 'inline-block';
+
+      setTimeout(function () {
+        compBar.style.display = 'none';
+      }, 1500);
+    }).catch(function (err) {
+      composing = false;
+      btnCompose.classList.remove('active');
+      btnCompose.textContent = 'Composition Mode (30s)';
+      compBar.style.display = 'none';
+      compStatus.textContent = 'Error rendering audio.';
+    });
+  }
+
+  var replaySource = null;
+
+  function replayComposition() {
+    if (!recordedAudioBuffer) return;
+
+    // Stop any currently playing replay
+    if (replaySource) {
+      try { replaySource.stop(); } catch (e) {}
+      replaySource = null;
+    }
+
+    var sp = window._sandpile;
+    sp.initAudio();
+    var audioCtx = sp.getAudioCtx();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+
+    replaySource = audioCtx.createBufferSource();
+    replaySource.buffer = recordedAudioBuffer;
+    replaySource.connect(audioCtx.destination);
+    replaySource.start();
+
+    btnReplay.classList.add('active');
+    btnReplay.textContent = 'Playing...';
+    compStatus.textContent = 'Playing 30-second composition...';
+
+    replaySource.onended = function () {
+      btnReplay.classList.remove('active');
+      btnReplay.textContent = 'Replay';
+      compStatus.textContent = 'Playback finished. Click Replay to hear it again.';
+      replaySource = null;
+    };
+  }
+
+  btnCompose.addEventListener('click', function () {
+    // Ensure audio context exists
+    var sp = window._sandpile;
+    sp.initAudio();
+    var audioCtx = sp.getAudioCtx();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    startComposition();
+  });
+
+  btnReplay.addEventListener('click', function () {
+    if (btnReplay.classList.contains('active')) {
+      // Stop playback
+      if (replaySource) {
+        try { replaySource.stop(); } catch (e) {}
+        replaySource = null;
+      }
+      btnReplay.classList.remove('active');
+      btnReplay.textContent = 'Replay';
+      compStatus.textContent = 'Playback stopped.';
+    } else {
+      replayComposition();
+    }
+  });
+})();
+</script>
+
+</body>
+</html>

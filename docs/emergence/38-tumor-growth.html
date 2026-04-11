@@ -1,0 +1,973 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tumor Growth: Competition for Nutrients</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;500&family=Source+Sans+3:wght@400;600;700&family=Source+Serif+4:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --article-width: 740px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem;
+  --line-height: 1.6;
+  --text: #1a1a2e;
+  --text-2: #4a4a6a;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --bg: #fafafa;
+  --fig-bg: #ffffff;
+  --border: #e2e2e8;
+}
+body { font-family: var(--body-font); font-size: var(--body-size);
+  line-height: var(--line-height); color: var(--text); background: var(--bg);
+  -webkit-font-smoothing: antialiased; }
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
+h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+h3 { font-size: 1.15rem; margin: 2rem 0 0.75rem; }
+p { margin: 0 0 1rem; }
+a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+a:hover { color: #1d4ed8; }
+.header { padding: 4rem 0 2rem; border-bottom: 1px solid var(--border); margin-bottom: 2.5rem; }
+.header .back { font-family: var(--heading-font); font-size: 0.85rem; display: inline-block; margin-bottom: 1.5rem; }
+.header .subtitle { font-family: var(--heading-font); font-size: 1.15rem; color: var(--text-2); margin-bottom: 0; max-width: 580px; }
+.figure { margin: 2rem 0; padding: 1.5rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.figure canvas { display: block; width: 100%; image-rendering: pixelated; border-radius: 3px; }
+.figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; line-height: 1.4; }
+.figure-label { font-weight: 600; color: var(--text); }
+.insight { background: var(--accent-light); border-left: 3px solid var(--accent); padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 4px 4px 0; }
+.insight p { margin: 0; }
+.insight p + p { margin-top: 0.75rem; }
+.controls { display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-end; margin-top: 1rem; font-family: var(--heading-font); font-size: 0.85rem; }
+.control-group { display: flex; flex-direction: column; gap: 0.25rem; }
+.control-group label { color: var(--text-2); font-weight: 600; }
+.control-group .slider-row { display: flex; align-items: center; gap: 0.5rem; }
+.control-group input[type="range"] { width: 120px; accent-color: var(--accent); }
+.control-group .val { font-family: var(--mono-font); font-variant-numeric: tabular-nums;
+  min-width: 2.5em; text-align: right; color: var(--text); }
+.btn { font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600;
+  padding: 0.45rem 1.1rem; border-radius: 5px; border: 1px solid var(--border);
+  background: var(--fig-bg); color: var(--text); cursor: pointer;
+  transition: background 0.15s, border-color 0.15s; user-select: none; }
+.btn:hover { border-color: var(--accent); background: var(--accent-light); }
+.btn.active { border-color: var(--accent); background: var(--accent); color: white; }
+.stat-row { display: flex; gap: 1.5rem; margin-top: 0.75rem; font-family: var(--heading-font); font-size: 0.85rem; }
+.stat-row .stat { display: flex; gap: 0.35rem; align-items: baseline; }
+.stat-row .stat-label { color: var(--text-2); font-weight: 600; }
+.stat-row .stat-val { font-family: var(--mono-font); font-variant-numeric: tabular-nums; color: var(--text); }
+svg text { font-family: var(--heading-font); }
+
+.side-by-side { display: flex; gap: 1rem; }
+.side-by-side .side-panel { flex: 1; min-width: 0; }
+.side-by-side .side-panel canvas { width: 100%; }
+.side-label { font-family: var(--heading-font); font-size: 0.8rem; font-weight: 600;
+  color: var(--text-2); text-align: center; margin-top: 0.5rem; }
+
+@media (prefers-reduced-motion: reduce) {
+  .figure canvas { outline: 2px dashed var(--border); outline-offset: -2px; }
+}
+@media (max-width: 600px) {
+  h1 { font-size: 1.75rem; }
+  .controls { gap: 0.6rem; }
+  .control-group input[type="range"] { width: 80px; }
+  .side-by-side { flex-direction: column; }
+}
+</style>
+</head>
+<body>
+<div class="article">
+
+<div class="header">
+  <a href="index.html" class="back">&larr; Emergence</a>
+  <h1>Tumor Growth</h1>
+  <p class="subtitle">Cancer cells compete for oxygen, and the shape of the tumor emerges from this competition.</p>
+</div>
+
+<p>
+A tumor begins as a small cluster of cells that have lost the normal brakes on
+division. They divide. They crowd together. And immediately they face a problem:
+nutrients, especially oxygen, can only reach the cells at the surface. The interior
+is starved.
+</p>
+
+<p>
+This sets up a competition. Cells near the edge have access to oxygen and divide.
+Cells in the core are suffocated and die. The tumor does not grow as a solid mass.
+It grows as an expanding shell, driven outward by a nutrient gradient that penalizes
+depth and rewards exposure.
+</p>
+
+<h2>1. Growth at the Edge</h2>
+
+<p>
+The simulation below models a cluster of tumor cells on a grid. Oxygen diffuses
+inward from the surrounding tissue (the boundary). Cells at the surface sit in an
+oxygen-rich zone and can divide into adjacent empty space. Cells buried deep in the
+interior receive almost no oxygen and eventually die. The result is a growing ring:
+a viable rim of proliferating cells surrounding a necrotic core.
+</p>
+
+<p>
+The background heatmap shows the oxygen concentration field. Bright regions are
+oxygen-rich. Dark regions are depleted. Watch how the tumor hollows itself out as
+it grows. The living shell stays thin because oxygen cannot penetrate far into
+dense tissue.
+</p>
+
+<div class="figure" id="fig-growth">
+  <canvas id="canvas-growth"></canvas>
+  <div class="stat-row">
+    <div class="stat">
+      <span class="stat-label">Living cells:</span>
+      <span class="stat-val" id="stat-living">0</span>
+    </div>
+    <div class="stat">
+      <span class="stat-label">Necrotic:</span>
+      <span class="stat-val" id="stat-necrotic">0</span>
+    </div>
+    <div class="stat">
+      <span class="stat-label">Step:</span>
+      <span class="stat-val" id="stat-step">0</span>
+    </div>
+  </div>
+  <div class="controls">
+    <div class="control-group">
+      <label>Growth rate</label>
+      <div class="slider-row">
+        <input type="range" id="growth-slider" min="0.01" max="0.15" step="0.01" value="0.06">
+        <span class="val" id="growth-val">0.06</span>
+      </div>
+    </div>
+    <div class="control-group">
+      <label>O&#8322; consumption</label>
+      <div class="slider-row">
+        <input type="range" id="diffusion-slider" min="0.02" max="0.5" step="0.02" value="0.10">
+        <span class="val" id="diffusion-val">0.10</span>
+      </div>
+    </div>
+    <button class="btn" id="pause-growth">Pause</button>
+    <button class="btn" id="reset-growth">Reset</button>
+  </div>
+  <p class="figure-caption"><span class="figure-label">Figure 1.</span> Tumor cells (purple) grow at the edge where oxygen (heatmap) is available. Interior cells die (dark gray) once starved. The growth rate controls division probability. Higher oxygen consumption means cells use up oxygen faster, thinning the viable rim.</p>
+</div>
+
+<p>
+The shape stays roughly circular at first. Oxygen diffuses symmetrically, so all
+parts of the surface grow at similar rates. But this symmetry is fragile. Any small
+irregularity on the surface changes the local nutrient supply, and that change
+feeds back into the growth pattern.
+</p>
+
+<h2>2. The Instability</h2>
+
+<p>
+A perfectly circular tumor front is unstable. Imagine a small bump on the surface.
+That bump protrudes into the surrounding tissue, where oxygen concentration is
+higher. It receives more nutrient than the flat parts of the surface. So it divides
+faster. The bump grows. It becomes a finger. The finger itself develops bumps. Those
+bumps become branches.
+</p>
+
+<p>
+This is the Mullins-Sekerka instability, the same mechanism behind the branching of
+snowflakes and the fingering of viscous fluids. A smooth interface amplifies
+perturbations because protruding regions have better access to the diffusing field.
+</p>
+
+<p>
+Below, two tumors grow side by side. The left one starts from a nearly smooth circle.
+The right one starts from a circle with random noise on its surface. Watch how the
+noisy tumor develops fingers faster. The smooth tumor eventually fingers too, but it
+takes longer because the initial perturbations are smaller and grow from numerical noise
+alone.
+</p>
+
+<div class="figure" id="fig-instability">
+  <div class="side-by-side">
+    <div class="side-panel">
+      <canvas id="canvas-smooth"></canvas>
+      <div class="side-label">Smooth start</div>
+    </div>
+    <div class="side-panel">
+      <canvas id="canvas-noisy"></canvas>
+      <div class="side-label">Noisy start</div>
+    </div>
+  </div>
+  <div class="stat-row">
+    <div class="stat">
+      <span class="stat-label">Left cells:</span>
+      <span class="stat-val" id="stat-smooth">0</span>
+    </div>
+    <div class="stat">
+      <span class="stat-label">Right cells:</span>
+      <span class="stat-val" id="stat-noisy">0</span>
+    </div>
+  </div>
+  <div class="controls">
+    <div class="control-group">
+      <label>Noise amplitude</label>
+      <div class="slider-row">
+        <input type="range" id="noise-slider" min="0" max="8" step="1" value="4">
+        <span class="val" id="noise-val">4</span>
+      </div>
+    </div>
+    <button class="btn" id="reset-instability">Reset</button>
+  </div>
+  <p class="figure-caption"><span class="figure-label">Figure 2.</span> Left: smooth initial circle. Right: noisy circle (noise amplitude controls the roughness). Both develop branching morphology, but the noisy tumor fingers earlier because its bumps protrude further into oxygen-rich territory.</p>
+</div>
+
+<p>
+The instability is not a defect. It is a mathematical consequence of diffusion-limited
+growth. Any interface that advances by consuming a diffusing field will develop fingers.
+The tumor does not "choose" to branch. Branching is what happens when growth is
+controlled by a gradient.
+</p>
+
+<h2>3. Angiogenesis</h2>
+
+<p>
+A tumor growing by diffusion alone hits a ceiling. Once it exceeds about one millimeter
+in diameter, the interior is so far from external oxygen that no amount of surface
+growth can sustain the mass. The tumor needs a new supply line. It needs blood vessels.
+</p>
+
+<p>
+Real tumors solve this by secreting vascular endothelial growth factor (VEGF), a
+chemical signal that diffuses outward from the hypoxic core. Nearby blood vessels
+detect VEGF and sprout new capillaries that grow toward the tumor. When these vessels
+reach the tumor, they deliver oxygen directly to the interior, relieving the nutrient
+bottleneck and allowing a new burst of growth.
+</p>
+
+<p>
+Toggle angiogenesis on in the simulation below. Red lines represent vessel sprouts
+growing toward the tumor along the VEGF gradient. Where vessels penetrate the tumor,
+the local nutrient supply jumps and growth accelerates. The result is faster, more
+irregular expansion. The tumor no longer grows as a uniform shell. It bulges outward
+wherever vessels feed it.
+</p>
+
+<div class="figure" id="fig-angiogenesis">
+  <canvas id="canvas-angio"></canvas>
+  <div class="stat-row">
+    <div class="stat">
+      <span class="stat-label">Living cells:</span>
+      <span class="stat-val" id="stat-angio-living">0</span>
+    </div>
+    <div class="stat">
+      <span class="stat-label">Vessels:</span>
+      <span class="stat-val" id="stat-vessels">0</span>
+    </div>
+    <div class="stat">
+      <span class="stat-label">Step:</span>
+      <span class="stat-val" id="stat-angio-step">0</span>
+    </div>
+  </div>
+  <div class="controls">
+    <button class="btn" id="toggle-angio">Angiogenesis: OFF</button>
+    <button class="btn" id="pause-angio">Pause</button>
+    <button class="btn" id="reset-angio">Reset</button>
+  </div>
+  <p class="figure-caption"><span class="figure-label">Figure 3.</span> Toggle angiogenesis to add blood vessel sprouts (red) that grow toward the tumor. Vessels deliver oxygen deep into the mass, boosting local growth. Vascularized tumors grow faster and develop more complex, irregular shapes.</p>
+</div>
+
+<div class="insight">
+<p>
+This nutrient-driven instability is the same Mullins-Sekerka instability that governs
+crystal growth and viscous fingering. The tumor does not "decide" to branch. Branching
+is a physical consequence of diffusion-limited growth at a moving interface.
+</p>
+</div>
+
+</div><!-- .article -->
+
+<script>
+(function() {
+  "use strict";
+
+  var reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  /* ---------------------------------------------------------------
+     Shared grid utilities
+  --------------------------------------------------------------- */
+
+  var DIRS = [[1,0],[-1,0],[0,1],[0,-1]];
+
+  function idx(x, y, S) { return y * S + x; }
+
+  function inBounds(x, y, S) {
+    return x >= 0 && x < S && y >= 0 && y < S;
+  }
+
+  /* Diffuse nutrient field on grid. Cells occupied by tumor consume oxygen.
+     Boundary condition: edges of grid have concentration = 1.0 (external supply).
+     Vessel sites also supply oxygen at concentration = 1.0.
+     Uses Jacobi iteration for the screened Laplace equation:
+       D * laplacian(c) = k * c  inside tumor
+     where k/D controls the penetration depth. The consumption parameter
+     sets k: higher values mean oxygen is consumed faster and the viable
+     rim is thinner.
+     Caller provides both buffers (nutrient and tmp) to avoid per-frame allocation.
+     Result is always written back into the nutrient buffer (first argument). */
+  function diffuseNutrient(nutrient, tmp, tumor, S, consumption, vesselGrid, iters) {
+    // consumption enters as: c_new = (1/(4+k)) * (sum_neighbors) for tumor
+    //                         c_new = (1/4) * sum_neighbors       for empty
+    // where k = consumption. This gives exponential decay with penetration ~ sqrt(1/k).
+    var invDenom = 1.0 / (4.0 + consumption);
+    var src = nutrient, dst = tmp;
+    for (var iter = 0; iter < iters; iter++) {
+      for (var y = 0; y < S; y++) {
+        for (var x = 0; x < S; x++) {
+          var i = idx(x, y, S);
+          // boundary: fixed at 1.0
+          if (x === 0 || x === S - 1 || y === 0 || y === S - 1) {
+            dst[i] = 1.0;
+            continue;
+          }
+          // vessel sites supply oxygen
+          if (vesselGrid && vesselGrid[i] > 0) {
+            dst[i] = 1.0;
+            continue;
+          }
+          // Laplacian average of neighbors
+          var sum = src[idx(x-1,y,S)] + src[idx(x+1,y,S)]
+                  + src[idx(x,y-1,S)] + src[idx(x,y+1,S)];
+          // living tumor cells consume oxygen proportional to concentration
+          if (tumor[i] === 1) {
+            dst[i] = sum * invDenom;
+          } else {
+            dst[i] = sum * 0.25;
+          }
+        }
+      }
+      // swap src and dst for next iteration
+      var swap = src;
+      src = dst;
+      dst = swap;
+    }
+    // if result ended up in tmp (odd iteration count), copy back to nutrient
+    if (iters % 2 === 1) {
+      for (var j = 0; j < S * S; j++) nutrient[j] = tmp[j];
+    }
+    // result is now in nutrient buffer
+  }
+
+  /* Render tumor grid + nutrient heatmap onto canvas.
+     tumor values: 0 = empty, 1 = living, 2 = necrotic
+     Nutrient shown as background blue-white heatmap. */
+  function renderTumor(ctx, tumor, nutrient, S, imgData, vesselGrid) {
+    var data = imgData.data;
+    for (var i = 0, px = 0; i < S * S; i++, px += 4) {
+      var n = nutrient[i];
+      if (tumor[i] === 1) {
+        // living cell: purple, brighter at high nutrient
+        var bright = 0.5 + 0.5 * n;
+        data[px]     = (100 * bright) | 0;
+        data[px + 1] = (20 * bright) | 0;
+        data[px + 2] = (140 * bright) | 0;
+        data[px + 3] = 255;
+      } else if (tumor[i] === 2) {
+        // necrotic cell: dark gray
+        data[px]     = 50;
+        data[px + 1] = 45;
+        data[px + 2] = 55;
+        data[px + 3] = 255;
+      } else {
+        // empty: nutrient heatmap (dark blue to bright cyan-white)
+        var t = n;
+        data[px]     = (10 + 60 * t) | 0;
+        data[px + 1] = (15 + 120 * t) | 0;
+        data[px + 2] = (40 + 180 * t) | 0;
+        data[px + 3] = 255;
+      }
+    }
+    // draw vessels directly into image data (faster than fillRect calls)
+    if (vesselGrid) {
+      for (var vi = 0, vpx = 0; vi < S * S; vi++, vpx += 4) {
+        if (vesselGrid[vi] > 0 && tumor[vi] !== 1) {
+          data[vpx]     = 220;
+          data[vpx + 1] = 50;
+          data[vpx + 2] = 50;
+          data[vpx + 3] = 255;
+        } else if (vesselGrid[vi] > 0 && tumor[vi] === 1) {
+          // vessel inside tumor: tint the purple cell reddish
+          data[vpx]     = Math.min(255, data[vpx] + 80);
+          data[vpx + 1] = data[vpx + 1];
+          data[vpx + 2] = Math.max(0, data[vpx + 2] - 40);
+        }
+      }
+    }
+    ctx.putImageData(imgData, 0, 0);
+  }
+
+  /* Create initial circular tumor.
+     noiseAmp controls perturbation of radius. */
+  function initCircle(tumor, S, cx, cy, radius, noiseAmp) {
+    // generate angular noise
+    var nAngles = 64;
+    var radNoise = new Float32Array(nAngles);
+    for (var a = 0; a < nAngles; a++) {
+      radNoise[a] = (Math.random() - 0.5) * 2 * noiseAmp;
+    }
+
+    for (var y = 0; y < S; y++) {
+      for (var x = 0; x < S; x++) {
+        var dx = x - cx, dy = y - cy;
+        var dist = Math.sqrt(dx * dx + dy * dy);
+        var angle = Math.atan2(dy, dx);
+        if (angle < 0) angle += 2 * Math.PI;
+        // interpolate noise
+        var ai = angle / (2 * Math.PI) * nAngles;
+        var a0 = Math.floor(ai) % nAngles;
+        var a1 = (a0 + 1) % nAngles;
+        var frac = ai - Math.floor(ai);
+        var noise = radNoise[a0] * (1 - frac) + radNoise[a1] * frac;
+        if (dist < radius + noise) {
+          tumor[idx(x, y, S)] = 1;
+        }
+      }
+    }
+  }
+
+  /* Count living and necrotic cells */
+  function countCells(tumor, S) {
+    var living = 0, necrotic = 0;
+    for (var i = 0; i < S * S; i++) {
+      if (tumor[i] === 1) living++;
+      else if (tumor[i] === 2) necrotic++;
+    }
+    return { living: living, necrotic: necrotic };
+  }
+
+  /* One growth step:
+     - living cells with low nutrient become necrotic
+     - living cells on the surface (adjacent to empty) may divide
+       with probability proportional to local nutrient */
+  function growthStep(tumor, nutrient, S, growthRate) {
+    var newTumor = new Uint8Array(S * S);
+    for (var i = 0; i < S * S; i++) newTumor[i] = tumor[i];
+
+    // collect surface cells and starving cells
+    for (var y = 1; y < S - 1; y++) {
+      for (var x = 1; x < S - 1; x++) {
+        var i = idx(x, y, S);
+        if (tumor[i] !== 1) continue;
+
+        var n = nutrient[i];
+        // necrosis: low nutrient kills
+        if (n < 0.08) {
+          newTumor[i] = 2;
+          continue;
+        }
+
+        // proliferation: surface cells with enough nutrient divide
+        var hasEmpty = false;
+        var emptyNeighbors = [];
+        for (var d = 0; d < 4; d++) {
+          var nx = x + DIRS[d][0], ny = y + DIRS[d][1];
+          if (inBounds(nx, ny, S) && tumor[idx(nx, ny, S)] === 0) {
+            hasEmpty = true;
+            emptyNeighbors.push([nx, ny]);
+          }
+        }
+        if (hasEmpty && Math.random() < growthRate * n) {
+          // divide into a random empty neighbor
+          var target = emptyNeighbors[Math.floor(Math.random() * emptyNeighbors.length)];
+          newTumor[idx(target[0], target[1], S)] = 1;
+        }
+      }
+    }
+
+    // copy back
+    for (var j = 0; j < S * S; j++) tumor[j] = newTumor[j];
+  }
+
+  /* ---------------------------------------------------------------
+     Section 1: Growth at the Edge
+  --------------------------------------------------------------- */
+  (function() {
+    var S = 201;
+    var cx = S >> 1, cy = S >> 1;
+    var tumor, nutrient, nutTmp;
+    var paused = false;
+    var animId = null;
+    var stepCount = 0;
+
+    var canvasEl = document.getElementById("canvas-growth");
+    canvasEl.width = S;
+    canvasEl.height = S;
+    var ctx = canvasEl.getContext("2d");
+    var imgData = ctx.createImageData(S, S);
+
+    var growthSlider = document.getElementById("growth-slider");
+    var growthVal = document.getElementById("growth-val");
+    var diffSlider = document.getElementById("diffusion-slider");
+    var diffVal = document.getElementById("diffusion-val");
+    var statLiving = document.getElementById("stat-living");
+    var statNecrotic = document.getElementById("stat-necrotic");
+    var statStep = document.getElementById("stat-step");
+
+    function init() {
+      tumor = new Uint8Array(S * S);
+      nutrient = new Float32Array(S * S);
+      nutTmp = new Float32Array(S * S);
+      stepCount = 0;
+      // fill nutrient to 1 everywhere
+      for (var i = 0; i < S * S; i++) nutrient[i] = 1.0;
+      // initial small circle, no noise for section 1
+      initCircle(tumor, S, cx, cy, 8, 0);
+      // equilibrate nutrient
+      var diff = parseFloat(diffSlider.value);
+      diffuseNutrient(nutrient, nutTmp, tumor, S, diff, null, 60);
+      draw();
+      updateStats();
+    }
+
+    function updateStats() {
+      var c = countCells(tumor, S);
+      statLiving.textContent = c.living;
+      statNecrotic.textContent = c.necrotic;
+      statStep.textContent = stepCount;
+    }
+
+    function draw() {
+      renderTumor(ctx, tumor, nutrient, S, imgData, null);
+    }
+
+    function step() {
+      var diff = parseFloat(diffSlider.value);
+      var growth = parseFloat(growthSlider.value);
+      diffuseNutrient(nutrient, nutTmp, tumor, S, diff, null, 16);
+      growthStep(tumor, nutrient, S, growth);
+      stepCount++;
+    }
+
+    function loop() {
+      if (!paused) {
+        step();
+        draw();
+        updateStats();
+      }
+      animId = requestAnimationFrame(loop);
+    }
+
+    growthSlider.addEventListener("input", function() {
+      growthVal.textContent = parseFloat(growthSlider.value).toFixed(2);
+    });
+    diffSlider.addEventListener("input", function() {
+      diffVal.textContent = parseFloat(diffSlider.value).toFixed(2);
+    });
+
+    document.getElementById("pause-growth").addEventListener("click", function() {
+      paused = !paused;
+      this.textContent = paused ? "Play" : "Pause";
+      if (paused) this.classList.add("active");
+      else this.classList.remove("active");
+    });
+
+    document.getElementById("reset-growth").addEventListener("click", function() {
+      if (animId) cancelAnimationFrame(animId);
+      animId = null;
+      paused = false;
+      document.getElementById("pause-growth").textContent = "Pause";
+      document.getElementById("pause-growth").classList.remove("active");
+      init();
+      if (!reducedMotion) loop();
+    });
+
+    new ResizeObserver(function() {
+      canvasEl.width = S;
+      canvasEl.height = S;
+      ctx = canvasEl.getContext("2d");
+      imgData = ctx.createImageData(S, S);
+      draw();
+    }).observe(document.getElementById("fig-growth"));
+
+    init();
+    if (!reducedMotion) {
+      loop();
+    } else {
+      for (var i = 0; i < 120; i++) step();
+      draw();
+      updateStats();
+    }
+  })();
+
+  /* ---------------------------------------------------------------
+     Section 2: The Instability (side-by-side)
+  --------------------------------------------------------------- */
+  (function() {
+    var S = 181;
+    var cx = S >> 1, cy = S >> 1;
+    var RADIUS = 12;
+    var DIFF = 0.10;
+    var GROWTH = 0.07;
+
+    var tumorL, tumorR, nutrientL, nutrientR, nutTmpL, nutTmpR;
+    var animId = null;
+    var paused = false;
+
+    var canvasL = document.getElementById("canvas-smooth");
+    canvasL.width = S; canvasL.height = S;
+    var ctxL = canvasL.getContext("2d");
+    var imgL = ctxL.createImageData(S, S);
+
+    var canvasR = document.getElementById("canvas-noisy");
+    canvasR.width = S; canvasR.height = S;
+    var ctxR = canvasR.getContext("2d");
+    var imgR = ctxR.createImageData(S, S);
+
+    var noiseSlider = document.getElementById("noise-slider");
+    var noiseVal = document.getElementById("noise-val");
+    var statSmooth = document.getElementById("stat-smooth");
+    var statNoisy = document.getElementById("stat-noisy");
+
+    function init() {
+      tumorL = new Uint8Array(S * S);
+      tumorR = new Uint8Array(S * S);
+      nutrientL = new Float32Array(S * S);
+      nutrientR = new Float32Array(S * S);
+      nutTmpL = new Float32Array(S * S);
+      nutTmpR = new Float32Array(S * S);
+      for (var i = 0; i < S * S; i++) {
+        nutrientL[i] = 1.0;
+        nutrientR[i] = 1.0;
+      }
+
+      // Left: smooth circle
+      initCircle(tumorL, S, cx, cy, RADIUS, 0);
+
+      // Right: noisy circle
+      var amp = parseInt(noiseSlider.value, 10);
+      initCircle(tumorR, S, cx, cy, RADIUS, amp);
+
+      diffuseNutrient(nutrientL, nutTmpL, tumorL, S, DIFF, null, 60);
+      diffuseNutrient(nutrientR, nutTmpR, tumorR, S, DIFF, null, 60);
+      draw();
+      updateStats();
+    }
+
+    function updateStats() {
+      statSmooth.textContent = countCells(tumorL, S).living;
+      statNoisy.textContent = countCells(tumorR, S).living;
+    }
+
+    function draw() {
+      renderTumor(ctxL, tumorL, nutrientL, S, imgL, null);
+      renderTumor(ctxR, tumorR, nutrientR, S, imgR, null);
+    }
+
+    function step() {
+      diffuseNutrient(nutrientL, nutTmpL, tumorL, S, DIFF, null, 16);
+      diffuseNutrient(nutrientR, nutTmpR, tumorR, S, DIFF, null, 16);
+      growthStep(tumorL, nutrientL, S, GROWTH);
+      growthStep(tumorR, nutrientR, S, GROWTH);
+    }
+
+    function loop() {
+      if (!paused) {
+        step();
+        draw();
+        updateStats();
+      }
+      animId = requestAnimationFrame(loop);
+    }
+
+    noiseSlider.addEventListener("input", function() {
+      noiseVal.textContent = noiseSlider.value;
+    });
+
+    document.getElementById("reset-instability").addEventListener("click", function() {
+      if (animId) cancelAnimationFrame(animId);
+      animId = null;
+      paused = false;
+      init();
+      if (!reducedMotion) loop();
+    });
+
+    new ResizeObserver(function() {
+      canvasL.width = S; canvasL.height = S;
+      ctxL = canvasL.getContext("2d");
+      imgL = ctxL.createImageData(S, S);
+      canvasR.width = S; canvasR.height = S;
+      ctxR = canvasR.getContext("2d");
+      imgR = ctxR.createImageData(S, S);
+      draw();
+    }).observe(document.getElementById("fig-instability"));
+
+    init();
+    if (!reducedMotion) {
+      loop();
+    } else {
+      for (var i = 0; i < 150; i++) step();
+      draw();
+      updateStats();
+    }
+  })();
+
+  /* ---------------------------------------------------------------
+     Section 3: Angiogenesis
+  --------------------------------------------------------------- */
+  (function() {
+    var S = 221;
+    var cx = S >> 1, cy = S >> 1;
+    var tumor, nutrient, nutTmp, vesselGrid, vessels;
+    var angioEnabled = false;
+    var paused = false;
+    var animId = null;
+    var stepCount = 0;
+    var DIFF = 0.10;
+    var GROWTH = 0.06;
+
+    var canvasEl = document.getElementById("canvas-angio");
+    canvasEl.width = S; canvasEl.height = S;
+    var ctx = canvasEl.getContext("2d");
+    var imgData = ctx.createImageData(S, S);
+
+    var statLiving = document.getElementById("stat-angio-living");
+    var statVessels = document.getElementById("stat-vessels");
+    var statStep = document.getElementById("stat-angio-step");
+
+    /* A vessel sprout is a growing tip that follows the VEGF gradient
+       (VEGF is highest near hypoxic tumor cells). We model VEGF as
+       inversely related to nutrient near tumor cells. */
+
+    /* Compute a simple VEGF field: high where tumor cells are starving.
+       We reuse the nutrient field: VEGF = max(0, (1 - nutrient)) for tumor cells,
+       then diffuse it outward a few steps. */
+    function computeVEGF(nutrient, tumor, S) {
+      var vegf = new Float32Array(S * S);
+      // source: hypoxic tumor cells produce VEGF
+      for (var i = 0; i < S * S; i++) {
+        if (tumor[i] === 1 && nutrient[i] < 0.4) {
+          vegf[i] = 1.0 - nutrient[i];
+        } else if (tumor[i] === 2) {
+          vegf[i] = 0.5; // necrotic cells still release some
+        }
+      }
+      // diffuse VEGF outward
+      var tmp = new Float32Array(S * S);
+      for (var iter = 0; iter < 12; iter++) {
+        for (var y = 1; y < S - 1; y++) {
+          for (var x = 1; x < S - 1; x++) {
+            var j = idx(x, y, S);
+            tmp[j] = vegf[j] * 0.5 + 0.125 * (
+              vegf[idx(x-1,y,S)] + vegf[idx(x+1,y,S)] +
+              vegf[idx(x,y-1,S)] + vegf[idx(x,y+1,S)]
+            );
+          }
+        }
+        var sw = vegf; vegf = tmp; tmp = sw;
+      }
+      return vegf;
+    }
+
+    /* Spawn vessel sprouts from the boundary edges.
+       Sprouts start at the edge and grow inward. */
+    function spawnVessels(vegf, S) {
+      var newVessels = [];
+      // spawn from each edge with some probability
+      var spawnChance = 0.015;
+      // top edge
+      for (var x = 10; x < S - 10; x += 5) {
+        if (vegf[idx(x, 2, S)] > 0.02 && Math.random() < spawnChance) {
+          newVessels.push({ x: x, y: 0 });
+        }
+      }
+      // bottom edge
+      for (var x = 10; x < S - 10; x += 5) {
+        if (vegf[idx(x, S - 3, S)] > 0.02 && Math.random() < spawnChance) {
+          newVessels.push({ x: x, y: S - 1 });
+        }
+      }
+      // left edge
+      for (var y = 10; y < S - 10; y += 5) {
+        if (vegf[idx(2, y, S)] > 0.02 && Math.random() < spawnChance) {
+          newVessels.push({ x: 0, y: y });
+        }
+      }
+      // right edge
+      for (var y = 10; y < S - 10; y += 5) {
+        if (vegf[idx(S - 3, y, S)] > 0.02 && Math.random() < spawnChance) {
+          newVessels.push({ x: S - 1, y: y });
+        }
+      }
+      return newVessels;
+    }
+
+    /* Grow vessel tips one step toward higher VEGF.
+       Uses biased random walk: pick direction with highest VEGF + some noise. */
+    function growVessels(vessels, vegf, vesselGrid, tumor, S) {
+      for (var v = vessels.length - 1; v >= 0; v--) {
+        var tip = vessels[v];
+        // mark current position
+        if (inBounds(tip.x, tip.y, S)) {
+          vesselGrid[idx(tip.x, tip.y, S)] = 1;
+        }
+
+        // find best direction (highest VEGF)
+        var bestDir = null;
+        var bestVal = -1;
+        // shuffle directions for tie-breaking
+        var dirs = DIRS.slice();
+        for (var d = dirs.length - 1; d > 0; d--) {
+          var j = Math.floor(Math.random() * (d + 1));
+          var tmp = dirs[d]; dirs[d] = dirs[j]; dirs[j] = tmp;
+        }
+        for (var d = 0; d < 4; d++) {
+          var nx = tip.x + dirs[d][0];
+          var ny = tip.y + dirs[d][1];
+          if (!inBounds(nx, ny, S)) continue;
+          var ni = idx(nx, ny, S);
+          // avoid going where there is already a vessel
+          if (vesselGrid[ni] > 0) continue;
+          var val = vegf[ni] + Math.random() * 0.05;
+          if (val > bestVal) {
+            bestVal = val;
+            bestDir = dirs[d];
+          }
+        }
+
+        if (bestDir) {
+          tip.x += bestDir[0];
+          tip.y += bestDir[1];
+          // if tip enters tumor or goes out of bounds, stop growing
+          if (!inBounds(tip.x, tip.y, S)) {
+            vessels.splice(v, 1);
+            continue;
+          }
+          vesselGrid[idx(tip.x, tip.y, S)] = 1;
+          // if deep inside tumor, stop
+          if (tumor[idx(tip.x, tip.y, S)] === 1) {
+            // mark a small radius as vascularized
+            for (var dy = -2; dy <= 2; dy++) {
+              for (var dx = -2; dx <= 2; dx++) {
+                var px = tip.x + dx, py = tip.y + dy;
+                if (inBounds(px, py, S)) {
+                  vesselGrid[idx(px, py, S)] = 1;
+                }
+              }
+            }
+            // keep going for a bit inside the tumor
+            if (Math.random() < 0.3) {
+              vessels.splice(v, 1);
+            }
+          }
+        } else {
+          vessels.splice(v, 1);
+        }
+      }
+    }
+
+    function init() {
+      tumor = new Uint8Array(S * S);
+      nutrient = new Float32Array(S * S);
+      nutTmp = new Float32Array(S * S);
+      vesselGrid = new Uint8Array(S * S);
+      vessels = [];
+      stepCount = 0;
+
+      for (var i = 0; i < S * S; i++) nutrient[i] = 1.0;
+      initCircle(tumor, S, cx, cy, 10, 2);
+      diffuseNutrient(nutrient, nutTmp, tumor, S, DIFF, null, 60);
+      draw();
+      updateStats();
+    }
+
+    function updateStats() {
+      var c = countCells(tumor, S);
+      statLiving.textContent = c.living;
+      var vc = 0;
+      for (var i = 0; i < S * S; i++) if (vesselGrid[i] > 0) vc++;
+      statVessels.textContent = vc;
+      statStep.textContent = stepCount;
+    }
+
+    function draw() {
+      renderTumor(ctx, tumor, nutrient, S, imgData, angioEnabled ? vesselGrid : null);
+    }
+
+    function step() {
+      var vg = angioEnabled ? vesselGrid : null;
+      diffuseNutrient(nutrient, nutTmp, tumor, S, DIFF, vg, 16);
+      growthStep(tumor, nutrient, S, GROWTH);
+      stepCount++;
+
+      // vessel dynamics every 3 steps
+      if (angioEnabled && stepCount % 3 === 0) {
+        var vegf = computeVEGF(nutrient, tumor, S);
+        // spawn new sprouts
+        if (vessels.length < 60) {
+          var newV = spawnVessels(vegf, S);
+          for (var k = 0; k < newV.length; k++) vessels.push(newV[k]);
+        }
+        // grow existing vessels
+        growVessels(vessels, vegf, vesselGrid, tumor, S);
+      }
+    }
+
+    function loop() {
+      if (!paused) {
+        step();
+        draw();
+        if (stepCount % 5 === 0) updateStats();
+      }
+      animId = requestAnimationFrame(loop);
+    }
+
+    document.getElementById("toggle-angio").addEventListener("click", function() {
+      angioEnabled = !angioEnabled;
+      this.textContent = angioEnabled ? "Angiogenesis: ON" : "Angiogenesis: OFF";
+      if (angioEnabled) this.classList.add("active");
+      else this.classList.remove("active");
+    });
+
+    document.getElementById("pause-angio").addEventListener("click", function() {
+      paused = !paused;
+      this.textContent = paused ? "Play" : "Pause";
+      if (paused) this.classList.add("active");
+      else this.classList.remove("active");
+    });
+
+    document.getElementById("reset-angio").addEventListener("click", function() {
+      if (animId) cancelAnimationFrame(animId);
+      animId = null;
+      paused = false;
+      angioEnabled = false;
+      document.getElementById("pause-angio").textContent = "Pause";
+      document.getElementById("pause-angio").classList.remove("active");
+      document.getElementById("toggle-angio").textContent = "Angiogenesis: OFF";
+      document.getElementById("toggle-angio").classList.remove("active");
+      init();
+      if (!reducedMotion) loop();
+    });
+
+    new ResizeObserver(function() {
+      canvasEl.width = S; canvasEl.height = S;
+      ctx = canvasEl.getContext("2d");
+      imgData = ctx.createImageData(S, S);
+      draw();
+    }).observe(document.getElementById("fig-angiogenesis"));
+
+    init();
+    if (!reducedMotion) {
+      loop();
+    } else {
+      for (var i = 0; i < 120; i++) step();
+      draw();
+      updateStats();
+    }
+  })();
+
+})();
+</script>
+</body>
+</html>

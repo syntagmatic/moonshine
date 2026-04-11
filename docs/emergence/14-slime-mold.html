@@ -1,0 +1,1144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Slime Mold: Distributed Optimization Without a Brain</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;500&family=Source+Sans+3:wght@400;600;700&family=Source+Serif+4:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --article-width: 740px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem;
+  --line-height: 1.6;
+  --text: #1a1a2e;
+  --text-2: #4a4a6a;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --bg: #fafafa;
+  --fig-bg: #ffffff;
+  --border: #e2e2e8;
+}
+body { font-family: var(--body-font); font-size: var(--body-size);
+  line-height: var(--line-height); color: var(--text); background: var(--bg);
+  -webkit-font-smoothing: antialiased; }
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
+h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+h3 { font-size: 1.15rem; margin: 2rem 0 0.75rem; }
+p { margin: 0 0 1rem; }
+a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+a:hover { color: #1d4ed8; }
+.header { padding: 4rem 0 2rem; border-bottom: 1px solid var(--border); margin-bottom: 2.5rem; }
+.header .back { font-family: var(--heading-font); font-size: 0.85rem; display: inline-block; margin-bottom: 1.5rem; }
+.header .subtitle { font-family: var(--heading-font); font-size: 1.15rem; color: var(--text-2); margin-bottom: 0; max-width: 580px; }
+.figure { margin: 2rem 0; padding: 1.5rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.figure canvas { display: block; width: 100%; border-radius: 3px; }
+.figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; line-height: 1.4; }
+.figure-label { font-weight: 600; color: var(--text); }
+.insight { background: var(--accent-light); border-left: 3px solid var(--accent); padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 4px 4px 0; }
+.insight p { margin: 0; }
+.insight p + p { margin-top: 0.75rem; }
+.controls { display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-end; margin-top: 1rem; font-family: var(--heading-font); font-size: 0.85rem; }
+.control-group { display: flex; flex-direction: column; gap: 0.25rem; }
+.control-group label { color: var(--text-2); font-weight: 600; }
+.control-group .slider-row { display: flex; align-items: center; gap: 0.5rem; }
+.control-group input[type="range"] { width: 120px; accent-color: var(--accent); }
+.control-group .val { font-family: var(--mono-font); font-variant-numeric: tabular-nums;
+  min-width: 2.5em; text-align: right; color: var(--text); }
+.btn { font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600;
+  padding: 0.45rem 1.1rem; border-radius: 5px; border: 1px solid var(--border);
+  background: var(--fig-bg); color: var(--text); cursor: pointer;
+  transition: background 0.15s, border-color 0.15s; user-select: none; }
+.btn:hover { border-color: var(--accent); background: var(--accent-light); }
+.btn.active { border-color: var(--accent); background: var(--accent); color: white; }
+.stat-row { display: flex; gap: 1.5rem; margin-top: 0.75rem; font-family: var(--heading-font); font-size: 0.85rem; }
+.stat-row .stat { display: flex; gap: 0.35rem; align-items: baseline; }
+.stat-row .stat-label { color: var(--text-2); font-weight: 600; }
+.stat-row .stat-val { font-family: var(--mono-font); font-variant-numeric: tabular-nums; color: var(--text); }
+.click-hint { font-family: var(--heading-font); font-size: 0.8rem; color: var(--text-2);
+  text-align: center; margin-top: 0.5rem; font-style: italic; }
+svg text { font-family: var(--heading-font); }
+
+.overlay-svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+.canvas-wrap { position: relative; }
+
+@media (prefers-reduced-motion: reduce) {
+  .figure canvas { outline: 2px dashed var(--border); outline-offset: -2px; }
+}
+@media (max-width: 600px) {
+  h1 { font-size: 1.75rem; }
+  .controls { gap: 0.6rem; }
+  .control-group input[type="range"] { width: 80px; }
+}
+</style>
+</head>
+<body>
+<div class="article">
+
+<div class="header">
+  <a href="index.html" class="back">&larr; Emergence</a>
+  <h1>Slime Mold</h1>
+  <p class="subtitle">A single-celled organism that solves mazes, designs efficient networks, and approximates the Tokyo rail system</p>
+</div>
+
+<p>
+Physarum polycephalum is not smart. It has no brain. It has no neurons. It is a
+single-celled organism, a plasmodial slime mold that oozes across the forest floor
+looking for food. Yet it solves optimization problems that would impress an engineer.
+</p>
+
+<p>
+The trick is simple. The organism extends tubes in all directions, exploring its
+environment. When a tube connects two food sources, flow through that tube increases.
+Increased flow makes the tube thicker. Tubes that carry no useful flow shrink and
+disappear. After a few hours, what remains is a near-optimal transport network.
+No planning. No memory. Just local feedback between flow and structure.
+</p>
+
+<h2>1. Growth and Exploration</h2>
+
+<p>
+The simulation below models Physarum using thousands of tiny agents. Each agent
+deposits a chemical trail, senses the trail concentration ahead of it, and turns
+toward higher concentrations. This is the same logic as the real organism's
+cytoplasmic streaming. The agents do not communicate directly. They read and write
+a shared chemical field.
+</p>
+
+<p>
+The result is branching, vein-like patterns that look strikingly biological. Adjust
+the parameters to see how they change the network's character. High sensor angle
+makes agents spread out. Low decay keeps trails visible longer, producing thicker
+veins. Play with the sliders and watch the morphology shift.
+</p>
+
+<div class="figure" id="fig-growth">
+  <canvas id="canvas-growth"></canvas>
+  <div class="stat-row">
+    <div class="stat">
+      <span class="stat-label">Agents:</span>
+      <span class="stat-val" id="stat-agents">0</span>
+    </div>
+    <div class="stat">
+      <span class="stat-label">Frame:</span>
+      <span class="stat-val" id="stat-frame">0</span>
+    </div>
+  </div>
+  <div class="controls">
+    <div class="control-group">
+      <label>Sensor angle</label>
+      <div class="slider-row">
+        <input type="range" id="sensor-angle" min="10" max="80" step="1" value="30">
+        <span class="val" id="sensor-angle-val">30&deg;</span>
+      </div>
+    </div>
+    <div class="control-group">
+      <label>Sensor distance</label>
+      <div class="slider-row">
+        <input type="range" id="sensor-dist" min="3" max="20" step="1" value="9">
+        <span class="val" id="sensor-dist-val">9</span>
+      </div>
+    </div>
+    <div class="control-group">
+      <label>Turn rate</label>
+      <div class="slider-row">
+        <input type="range" id="turn-rate" min="10" max="80" step="1" value="45">
+        <span class="val" id="turn-rate-val">45&deg;</span>
+      </div>
+    </div>
+    <div class="control-group">
+      <label>Deposit</label>
+      <div class="slider-row">
+        <input type="range" id="deposit-amt" min="1" max="20" step="1" value="5">
+        <span class="val" id="deposit-amt-val">5</span>
+      </div>
+    </div>
+    <div class="control-group">
+      <label>Decay</label>
+      <div class="slider-row">
+        <input type="range" id="decay-rate" min="0.80" max="0.99" step="0.01" value="0.95">
+        <span class="val" id="decay-rate-val">0.95</span>
+      </div>
+    </div>
+    <button class="btn" id="reset-growth">Reset</button>
+  </div>
+  <p class="figure-caption"><span class="figure-label">Figure 1.</span> Physarum agent model. Thousands of agents deposit trail, sense ahead, and turn toward stronger concentrations. The collective self-organizes into vein-like transport networks with no central control.</p>
+</div>
+
+<p>
+Notice the patterns. Thin tendrils reach outward from the main mass. Where two
+tendrils meet, they merge and thicken. The network prunes itself continuously.
+Trails that receive no fresh deposit fade away. Trails that carry traffic
+get reinforced. This is the same principle that shapes real Physarum tubes.
+</p>
+
+<h2>2. Solving a Maze</h2>
+
+<p>
+A famous experiment by Toshiyuki Nakagaki in 2000 placed Physarum in a small maze
+with food at the entrance and exit. The slime mold initially spread throughout the
+entire maze, filling every corridor. Then something remarkable happened. The
+organism withdrew from dead ends and redundant paths, leaving behind a single tube
+connecting the two food sources along the shortest route.
+</p>
+
+<p>
+The simulation below lets you recreate this. Draw walls to build a maze, then click
+to place two food sources. The slime agents will initially fill all available space.
+Then watch the network simplify. Tubes connecting food along efficient routes get
+reinforced. Everything else fades. The shortest path emerges without any pathfinding
+algorithm.
+</p>
+
+<div class="figure" id="fig-maze">
+  <canvas id="canvas-maze"></canvas>
+  <div class="stat-row">
+    <div class="stat">
+      <span class="stat-label">Phase:</span>
+      <span class="stat-val" id="stat-maze-phase">Draw walls</span>
+    </div>
+    <div class="stat">
+      <span class="stat-label">Food sources:</span>
+      <span class="stat-val" id="stat-maze-food">0</span>
+    </div>
+  </div>
+  <div class="controls">
+    <button class="btn active" id="mode-wall">Draw walls</button>
+    <button class="btn" id="mode-food">Place food</button>
+    <button class="btn" id="start-maze">Start</button>
+    <button class="btn" id="reset-maze">Reset</button>
+  </div>
+  <p class="click-hint">Draw walls by clicking and dragging. Switch to "Place food" and click two locations.</p>
+  <p class="figure-caption"><span class="figure-label">Figure 2.</span> Build a maze and place food at two points. The slime fills available space, then prunes back to the shortest path. No graph search. Just reinforcement and decay.</p>
+</div>
+
+<p>
+The mechanism is flow-based optimization. Chemical concentration accumulates
+near food sources. Agents near food deposit more trail. This creates a gradient
+that pulls nearby agents toward the food. Agents that happen to travel between
+the two food sources reinforce the connecting path. Agents trapped in dead ends
+receive no gradient signal and their trails decay. The maze solves itself.
+</p>
+
+<h2>3. Network Design</h2>
+
+<p>
+Optimization gets more interesting with more than two targets. Place several food
+sources on the canvas below and the slime mold will grow to connect them all.
+The network it builds is not the minimum spanning tree. It is something more
+interesting: a compromise between total length and fault tolerance.
+</p>
+
+<p>
+A minimum spanning tree connects all nodes with the least total wire, but cutting
+any single edge disconnects the network. The slime mold often adds a few extra
+connections, creating cycles that keep the network connected even if one tube fails.
+Toggle the MST overlay to compare.
+</p>
+
+<div class="figure" id="fig-network">
+  <div class="canvas-wrap">
+    <canvas id="canvas-network"></canvas>
+    <svg id="svg-overlay" class="overlay-svg"></svg>
+  </div>
+  <div class="stat-row">
+    <div class="stat">
+      <span class="stat-label">Cities:</span>
+      <span class="stat-val" id="stat-net-cities">0</span>
+    </div>
+    <div class="stat">
+      <span class="stat-label">Slime edges:</span>
+      <span class="stat-val" id="stat-net-edges">0</span>
+    </div>
+    <div class="stat">
+      <span class="stat-label">MST edges:</span>
+      <span class="stat-val" id="stat-net-mst">0</span>
+    </div>
+  </div>
+  <div class="controls">
+    <button class="btn" id="toggle-mst">Show MST</button>
+    <button class="btn" id="start-network">Start</button>
+    <button class="btn" id="reset-network">Reset</button>
+  </div>
+  <p class="click-hint">Click to place 5-8 food sources (cities), then press Start.</p>
+  <p class="figure-caption"><span class="figure-label">Figure 3.</span> Place cities and let the slime mold connect them. Toggle the MST overlay (blue lines) to compare. The slime's network often includes redundant edges for robustness.</p>
+</div>
+
+<p>
+The slime is not computing a spanning tree. It does not know graph theory. But the
+physics of its growth naturally produce a trade-off. Short paths carry more flow.
+More flow thickens tubes. But flow also distributes across parallel paths for
+redundancy. The result is a network that a transport engineer might design on
+purpose, arrived at through nothing but local tube dynamics.
+</p>
+
+<div class="insight">
+<p>
+In 2010, researchers placed oat flakes at locations matching Tokyo's major rail
+stations. The slime mold produced a network strikingly similar to the actual Tokyo
+rail system, achieving comparable efficiency and fault tolerance. A brainless
+organism, given the same constraints, converged on the same solution as decades
+of human engineering.
+</p>
+</div>
+
+</div><!-- .article -->
+
+<script>
+/* ================================================================
+   Section 1: Growth and Exploration — Physarum agent model
+   ================================================================ */
+(function() {
+  "use strict";
+
+  var reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  var canvas = document.getElementById("canvas-growth");
+  var ctx = canvas.getContext("2d");
+  var W, H, trail, agents, frameCount, animId;
+
+  /* Parameters (read from sliders each frame) */
+  var params = {
+    sensorAngle: 30,
+    sensorDist: 9,
+    turnRate: 45,
+    depositAmt: 5,
+    decayRate: 0.95,
+    agentCount: 3000,
+    speed: 1
+  };
+
+  function readSliders() {
+    params.sensorAngle = +document.getElementById("sensor-angle").value;
+    params.sensorDist = +document.getElementById("sensor-dist").value;
+    params.turnRate = +document.getElementById("turn-rate").value;
+    params.depositAmt = +document.getElementById("deposit-amt").value;
+    params.decayRate = +document.getElementById("decay-rate").value;
+  }
+
+  function bindSlider(id, valId, suffix) {
+    var sl = document.getElementById(id);
+    var vl = document.getElementById(valId);
+    sl.addEventListener("input", function() {
+      vl.textContent = sl.value + (suffix || "");
+      readSliders();
+    });
+  }
+
+  bindSlider("sensor-angle", "sensor-angle-val", "\u00b0");
+  bindSlider("sensor-dist", "sensor-dist-val", "");
+  bindSlider("turn-rate", "turn-rate-val", "\u00b0");
+  bindSlider("deposit-amt", "deposit-amt-val", "");
+  bindSlider("decay-rate", "decay-rate-val", "");
+
+  function deg2rad(d) { return d * Math.PI / 180; }
+
+  function initSim() {
+    var dpr = window.devicePixelRatio || 1;
+    var rect = canvas.parentElement.getBoundingClientRect();
+    W = Math.round(rect.width * 0.5);
+    H = Math.round(W * 0.75);
+    canvas.width = W;
+    canvas.height = H;
+    canvas.style.width = "100%";
+    canvas.style.aspectRatio = (W / H).toFixed(4);
+
+    trail = new Float32Array(W * H);
+    agents = [];
+    frameCount = 0;
+
+    var cx = W / 2, cy = H / 2;
+    var radius = Math.min(W, H) * 0.2;
+    for (var i = 0; i < params.agentCount; i++) {
+      var angle = Math.random() * Math.PI * 2;
+      var r = Math.random() * radius;
+      agents.push({
+        x: cx + Math.cos(angle) * r,
+        y: cy + Math.sin(angle) * r,
+        heading: Math.random() * Math.PI * 2
+      });
+    }
+  }
+
+  function sense(agent, angleOffset) {
+    var sa = deg2rad(params.sensorAngle);
+    var sd = params.sensorDist;
+    var dir = agent.heading + angleOffset * sa;
+    var sx = Math.round(agent.x + Math.cos(dir) * sd);
+    var sy = Math.round(agent.y + Math.sin(dir) * sd);
+    if (sx < 0 || sx >= W || sy < 0 || sy >= H) return 0;
+    return trail[sy * W + sx];
+  }
+
+  function stepAgents() {
+    var tr = deg2rad(params.turnRate);
+    var dep = params.depositAmt;
+    for (var i = 0; i < agents.length; i++) {
+      var a = agents[i];
+
+      /* Sense left, center, right */
+      var sL = sense(a, -1);
+      var sC = sense(a, 0);
+      var sR = sense(a, 1);
+
+      /* Turn toward strongest */
+      if (sC >= sL && sC >= sR) {
+        /* stay straight */
+      } else if (sL > sR) {
+        a.heading -= tr;
+      } else if (sR > sL) {
+        a.heading += tr;
+      } else {
+        a.heading += (Math.random() < 0.5 ? -1 : 1) * tr;
+      }
+
+      /* Move */
+      var nx = a.x + Math.cos(a.heading) * params.speed;
+      var ny = a.y + Math.sin(a.heading) * params.speed;
+
+      /* Bounce off walls */
+      if (nx < 0 || nx >= W || ny < 0 || ny >= H) {
+        a.heading = Math.random() * Math.PI * 2;
+        nx = Math.max(0, Math.min(W - 1, nx));
+        ny = Math.max(0, Math.min(H - 1, ny));
+      }
+
+      a.x = nx;
+      a.y = ny;
+
+      /* Deposit */
+      var ix = Math.round(a.x);
+      var iy = Math.round(a.y);
+      if (ix >= 0 && ix < W && iy >= 0 && iy < H) {
+        trail[iy * W + ix] = Math.min(trail[iy * W + ix] + dep, 255);
+      }
+    }
+  }
+
+  function diffuseAndDecay() {
+    var next = new Float32Array(W * H);
+    var decay = params.decayRate;
+    for (var y = 1; y < H - 1; y++) {
+      for (var x = 1; x < W - 1; x++) {
+        var idx = y * W + x;
+        /* 3x3 mean blur */
+        var sum = trail[idx - W - 1] + trail[idx - W] + trail[idx - W + 1]
+                + trail[idx - 1]     + trail[idx]     + trail[idx + 1]
+                + trail[idx + W - 1] + trail[idx + W] + trail[idx + W + 1];
+        next[idx] = (sum / 9) * decay;
+      }
+    }
+    trail = next;
+  }
+
+  function render() {
+    var imgData = ctx.createImageData(W, H);
+    var data = imgData.data;
+    for (var i = 0; i < W * H; i++) {
+      var v = Math.min(trail[i] * 3, 255);
+      var off = i * 4;
+      /* Yellow-green on dark background */
+      data[off]     = Math.round(v * 0.75);  /* R */
+      data[off + 1] = Math.round(v * 0.9);   /* G */
+      data[off + 2] = Math.round(v * 0.2);   /* B */
+      data[off + 3] = 255;
+    }
+    ctx.putImageData(imgData, 0, 0);
+  }
+
+  function update() {
+    stepAgents();
+    diffuseAndDecay();
+    render();
+    frameCount++;
+    document.getElementById("stat-agents").textContent = agents.length;
+    document.getElementById("stat-frame").textContent = frameCount;
+  }
+
+  function loop() {
+    if (reducedMotion) { update(); return; }
+    update();
+    animId = requestAnimationFrame(loop);
+  }
+
+  function reset() {
+    if (animId) cancelAnimationFrame(animId);
+    readSliders();
+    initSim();
+    render();
+    frameCount = 0;
+    loop();
+  }
+
+  document.getElementById("reset-growth").addEventListener("click", reset);
+
+  var ro = new ResizeObserver(function() {
+    reset();
+  });
+  ro.observe(canvas.parentElement);
+
+  reset();
+})();
+
+/* ================================================================
+   Section 2: Solving a Maze — wall drawing + Physarum pathfinding
+   ================================================================ */
+(function() {
+  "use strict";
+
+  var reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  var canvas = document.getElementById("canvas-maze");
+  var ctx = canvas.getContext("2d");
+  var W, H, trail, walls, agents, food, mode, running, animId;
+  var WALL = 1;
+  var BRUSH_SIZE = 8;
+
+  function initSim() {
+    var rect = canvas.parentElement.getBoundingClientRect();
+    W = Math.round(rect.width * 0.5);
+    H = Math.round(W * 0.75);
+    canvas.width = W;
+    canvas.height = H;
+    canvas.style.width = "100%";
+    canvas.style.aspectRatio = (W / H).toFixed(4);
+
+    trail = new Float32Array(W * H);
+    walls = new Uint8Array(W * H);
+    agents = [];
+    food = [];
+    mode = "wall";
+    running = false;
+
+    updateModeButtons();
+    document.getElementById("stat-maze-phase").textContent = "Draw walls";
+    document.getElementById("stat-maze-food").textContent = "0";
+  }
+
+  function updateModeButtons() {
+    document.getElementById("mode-wall").classList.toggle("active", mode === "wall");
+    document.getElementById("mode-food").classList.toggle("active", mode === "food");
+  }
+
+  document.getElementById("mode-wall").addEventListener("click", function() {
+    if (running) return;
+    mode = "wall";
+    updateModeButtons();
+  });
+
+  document.getElementById("mode-food").addEventListener("click", function() {
+    if (running) return;
+    mode = "food";
+    updateModeButtons();
+  });
+
+  /* Drawing walls */
+  var drawing = false;
+
+  function canvasCoords(e) {
+    var rect = canvas.getBoundingClientRect();
+    var scaleX = W / rect.width;
+    var scaleY = H / rect.height;
+    var clientX, clientY;
+    if (e.touches) {
+      clientX = e.touches[0].clientX;
+      clientY = e.touches[0].clientY;
+    } else {
+      clientX = e.clientX;
+      clientY = e.clientY;
+    }
+    return {
+      x: Math.round((clientX - rect.left) * scaleX),
+      y: Math.round((clientY - rect.top) * scaleY)
+    };
+  }
+
+  function paintWall(cx, cy) {
+    var half = Math.floor(BRUSH_SIZE / 2);
+    for (var dy = -half; dy <= half; dy++) {
+      for (var dx = -half; dx <= half; dx++) {
+        var wx = cx + dx, wy = cy + dy;
+        if (wx >= 0 && wx < W && wy >= 0 && wy < H) {
+          walls[wy * W + wx] = WALL;
+        }
+      }
+    }
+  }
+
+  function placeFood(cx, cy) {
+    if (food.length >= 2) return;
+    food.push({ x: cx, y: cy, radius: 12 });
+    document.getElementById("stat-maze-food").textContent = food.length;
+  }
+
+  canvas.addEventListener("mousedown", function(e) {
+    if (running) return;
+    var p = canvasCoords(e);
+    if (mode === "wall") {
+      drawing = true;
+      paintWall(p.x, p.y);
+      renderMaze();
+    } else if (mode === "food") {
+      placeFood(p.x, p.y);
+      renderMaze();
+    }
+  });
+
+  canvas.addEventListener("mousemove", function(e) {
+    if (!drawing || running) return;
+    var p = canvasCoords(e);
+    paintWall(p.x, p.y);
+    renderMaze();
+  });
+
+  canvas.addEventListener("mouseup", function() { drawing = false; });
+  canvas.addEventListener("mouseleave", function() { drawing = false; });
+
+  /* Touch support */
+  canvas.addEventListener("touchstart", function(e) {
+    e.preventDefault();
+    if (running) return;
+    var p = canvasCoords(e);
+    if (mode === "wall") {
+      drawing = true;
+      paintWall(p.x, p.y);
+      renderMaze();
+    } else if (mode === "food") {
+      placeFood(p.x, p.y);
+      renderMaze();
+    }
+  }, { passive: false });
+
+  canvas.addEventListener("touchmove", function(e) {
+    e.preventDefault();
+    if (!drawing || running) return;
+    var p = canvasCoords(e);
+    paintWall(p.x, p.y);
+    renderMaze();
+  }, { passive: false });
+
+  canvas.addEventListener("touchend", function() { drawing = false; });
+
+  function spawnAgents() {
+    agents = [];
+    var count = 2000;
+    /* Spawn agents from food source regions */
+    for (var i = 0; i < count; i++) {
+      var src = food[i % food.length];
+      var angle = Math.random() * Math.PI * 2;
+      var r = Math.random() * src.radius * 2;
+      var ax = src.x + Math.cos(angle) * r;
+      var ay = src.y + Math.sin(angle) * r;
+      ax = Math.max(0, Math.min(W - 1, ax));
+      ay = Math.max(0, Math.min(H - 1, ay));
+      if (walls[Math.round(ay) * W + Math.round(ax)] === WALL) continue;
+      agents.push({
+        x: ax, y: ay,
+        heading: Math.random() * Math.PI * 2
+      });
+    }
+  }
+
+  function mazeStepAgents() {
+    var sensorAngle = 30 * Math.PI / 180;
+    var sensorDist = 7;
+    var turnRate = 45 * Math.PI / 180;
+    var deposit = 5;
+
+    for (var i = 0; i < agents.length; i++) {
+      var a = agents[i];
+
+      /* Boost trail near food */
+      for (var f = 0; f < food.length; f++) {
+        var dx = a.x - food[f].x, dy = a.y - food[f].y;
+        if (dx * dx + dy * dy < food[f].radius * food[f].radius * 4) {
+          var idx = Math.round(a.y) * W + Math.round(a.x);
+          if (idx >= 0 && idx < W * H) trail[idx] = Math.min(trail[idx] + 15, 255);
+        }
+      }
+
+      /* Sense */
+      var sL = mazeSense(a, -sensorAngle, sensorDist);
+      var sC = mazeSense(a, 0, sensorDist);
+      var sR = mazeSense(a, sensorAngle, sensorDist);
+
+      if (sC >= sL && sC >= sR) {
+        /* straight */
+      } else if (sL > sR) {
+        a.heading -= turnRate;
+      } else if (sR > sL) {
+        a.heading += turnRate;
+      } else {
+        a.heading += (Math.random() < 0.5 ? -1 : 1) * turnRate;
+      }
+
+      var nx = a.x + Math.cos(a.heading);
+      var ny = a.y + Math.sin(a.heading);
+
+      /* Bounce off walls and boundaries */
+      var ix = Math.round(nx), iy = Math.round(ny);
+      if (ix < 0 || ix >= W || iy < 0 || iy >= H || walls[iy * W + ix] === WALL) {
+        a.heading = Math.random() * Math.PI * 2;
+      } else {
+        a.x = nx;
+        a.y = ny;
+        var didx = iy * W + ix;
+        trail[didx] = Math.min(trail[didx] + deposit, 255);
+      }
+    }
+  }
+
+  function mazeSense(agent, angleOffset, dist) {
+    var dir = agent.heading + angleOffset;
+    var sx = Math.round(agent.x + Math.cos(dir) * dist);
+    var sy = Math.round(agent.y + Math.sin(dir) * dist);
+    if (sx < 0 || sx >= W || sy < 0 || sy >= H) return 0;
+    if (walls[sy * W + sx] === WALL) return -10;
+    return trail[sy * W + sx];
+  }
+
+  function mazeDiffuseAndDecay() {
+    var next = new Float32Array(W * H);
+    var decay = 0.94;
+    for (var y = 1; y < H - 1; y++) {
+      for (var x = 1; x < W - 1; x++) {
+        if (walls[y * W + x] === WALL) continue;
+        var idx = y * W + x;
+        var sum = 0, count = 0;
+        for (var dy = -1; dy <= 1; dy++) {
+          for (var dx = -1; dx <= 1; dx++) {
+            var ni = (y + dy) * W + (x + dx);
+            if (walls[ni] !== WALL) {
+              sum += trail[ni];
+              count++;
+            }
+          }
+        }
+        next[idx] = (count > 0 ? sum / count : 0) * decay;
+      }
+    }
+    trail = next;
+  }
+
+  function renderMaze() {
+    var imgData = ctx.createImageData(W, H);
+    var data = imgData.data;
+
+    for (var i = 0; i < W * H; i++) {
+      var off = i * 4;
+      if (walls[i] === WALL) {
+        data[off] = 60; data[off + 1] = 60; data[off + 2] = 80; data[off + 3] = 255;
+      } else {
+        var v = Math.min(trail[i] * 3, 255);
+        data[off]     = Math.round(v * 0.75);
+        data[off + 1] = Math.round(v * 0.9);
+        data[off + 2] = Math.round(v * 0.2);
+        data[off + 3] = 255;
+      }
+    }
+    ctx.putImageData(imgData, 0, 0);
+
+    /* Draw food sources */
+    for (var f = 0; f < food.length; f++) {
+      ctx.beginPath();
+      ctx.arc(food[f].x, food[f].y, food[f].radius, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(255, 100, 50, 0.8)";
+      ctx.fill();
+      ctx.strokeStyle = "rgba(255, 200, 150, 0.9)";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+  }
+
+  function mazeLoop() {
+    if (!running) return;
+    mazeStepAgents();
+    mazeDiffuseAndDecay();
+    renderMaze();
+    if (!reducedMotion) {
+      animId = requestAnimationFrame(mazeLoop);
+    }
+  }
+
+  document.getElementById("start-maze").addEventListener("click", function() {
+    if (food.length < 2) {
+      document.getElementById("stat-maze-phase").textContent = "Place 2 food sources first";
+      return;
+    }
+    if (running) return;
+    running = true;
+    document.getElementById("stat-maze-phase").textContent = "Running";
+    spawnAgents();
+    mazeLoop();
+  });
+
+  document.getElementById("reset-maze").addEventListener("click", function() {
+    running = false;
+    if (animId) cancelAnimationFrame(animId);
+    initSim();
+    renderMaze();
+  });
+
+  function resetMaze() {
+    running = false;
+    if (animId) cancelAnimationFrame(animId);
+    initSim();
+    renderMaze();
+  }
+
+  var ro = new ResizeObserver(function() {
+    resetMaze();
+  });
+  ro.observe(canvas.parentElement);
+
+  initSim();
+  renderMaze();
+})();
+
+/* ================================================================
+   Section 3: Network Design — multi-food + MST comparison
+   ================================================================ */
+(function() {
+  "use strict";
+
+  var reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  var canvas = document.getElementById("canvas-network");
+  var ctx = canvas.getContext("2d");
+  var svgOverlay = document.getElementById("svg-overlay");
+  var W, H, trail, agents, cities, running, animId, showMST;
+
+  function initSim() {
+    var rect = canvas.parentElement.getBoundingClientRect();
+    W = Math.round(rect.width * 0.5);
+    H = Math.round(W * 0.75);
+    canvas.width = W;
+    canvas.height = H;
+    canvas.style.width = "100%";
+    canvas.style.aspectRatio = (W / H).toFixed(4);
+
+    svgOverlay.setAttribute("viewBox", "0 0 " + W + " " + H);
+
+    trail = new Float32Array(W * H);
+    agents = [];
+    cities = [];
+    running = false;
+    showMST = false;
+
+    document.getElementById("toggle-mst").classList.remove("active");
+    document.getElementById("toggle-mst").textContent = "Show MST";
+    updateStats();
+    clearSVG();
+  }
+
+  function clearSVG() {
+    while (svgOverlay.firstChild) svgOverlay.removeChild(svgOverlay.firstChild);
+  }
+
+  function updateStats() {
+    document.getElementById("stat-net-cities").textContent = cities.length;
+    document.getElementById("stat-net-edges").textContent = countSlimeEdges();
+    document.getElementById("stat-net-mst").textContent = cities.length > 1 ? cities.length - 1 : 0;
+  }
+
+  /* Click to place cities */
+  canvas.addEventListener("click", function(e) {
+    if (running) return;
+    if (cities.length >= 8) return;
+    var rect = canvas.getBoundingClientRect();
+    var scaleX = W / rect.width;
+    var scaleY = H / rect.height;
+    var cx = Math.round((e.clientX - rect.left) * scaleX);
+    var cy = Math.round((e.clientY - rect.top) * scaleY);
+
+    /* Keep away from edges */
+    cx = Math.max(20, Math.min(W - 20, cx));
+    cy = Math.max(20, Math.min(H - 20, cy));
+
+    cities.push({ x: cx, y: cy });
+    updateStats();
+    renderNetwork();
+  });
+
+  function spawnAgents() {
+    agents = [];
+    var perCity = Math.round(2500 / cities.length);
+    for (var c = 0; c < cities.length; c++) {
+      for (var i = 0; i < perCity; i++) {
+        var angle = Math.random() * Math.PI * 2;
+        var r = Math.random() * 15;
+        agents.push({
+          x: cities[c].x + Math.cos(angle) * r,
+          y: cities[c].y + Math.sin(angle) * r,
+          heading: Math.random() * Math.PI * 2
+        });
+      }
+    }
+  }
+
+  function netSense(agent, angleOffset) {
+    var sensorAngle = 25 * Math.PI / 180;
+    var sensorDist = 9;
+    var dir = agent.heading + angleOffset * sensorAngle;
+    var sx = Math.round(agent.x + Math.cos(dir) * sensorDist);
+    var sy = Math.round(agent.y + Math.sin(dir) * sensorDist);
+    if (sx < 0 || sx >= W || sy < 0 || sy >= H) return 0;
+    return trail[sy * W + sx];
+  }
+
+  function netStepAgents() {
+    var turnRate = 40 * Math.PI / 180;
+    var deposit = 5;
+
+    for (var i = 0; i < agents.length; i++) {
+      var a = agents[i];
+
+      /* Boost near cities */
+      for (var c = 0; c < cities.length; c++) {
+        var dx = a.x - cities[c].x, dy = a.y - cities[c].y;
+        if (dx * dx + dy * dy < 20 * 20) {
+          var idx = Math.round(a.y) * W + Math.round(a.x);
+          if (idx >= 0 && idx < W * H) trail[idx] = Math.min(trail[idx] + 20, 255);
+        }
+      }
+
+      var sL = netSense(a, -1);
+      var sC = netSense(a, 0);
+      var sR = netSense(a, 1);
+
+      if (sC >= sL && sC >= sR) {
+        /* straight */
+      } else if (sL > sR) {
+        a.heading -= turnRate;
+      } else if (sR > sL) {
+        a.heading += turnRate;
+      } else {
+        a.heading += (Math.random() < 0.5 ? -1 : 1) * turnRate;
+      }
+
+      var nx = a.x + Math.cos(a.heading);
+      var ny = a.y + Math.sin(a.heading);
+
+      if (nx < 0 || nx >= W || ny < 0 || ny >= H) {
+        a.heading = Math.random() * Math.PI * 2;
+      } else {
+        a.x = nx;
+        a.y = ny;
+        var ix = Math.round(nx), iy = Math.round(ny);
+        var didx = iy * W + ix;
+        trail[didx] = Math.min(trail[didx] + deposit, 255);
+      }
+    }
+  }
+
+  function netDiffuseAndDecay() {
+    var next = new Float32Array(W * H);
+    var decay = 0.93;
+    for (var y = 1; y < H - 1; y++) {
+      for (var x = 1; x < W - 1; x++) {
+        var idx = y * W + x;
+        var sum = trail[idx - W - 1] + trail[idx - W] + trail[idx - W + 1]
+                + trail[idx - 1]     + trail[idx]     + trail[idx + 1]
+                + trail[idx + W - 1] + trail[idx + W] + trail[idx + W + 1];
+        next[idx] = (sum / 9) * decay;
+      }
+    }
+    trail = next;
+  }
+
+  /* Compute MST using Prim's algorithm */
+  function computeMST() {
+    if (cities.length < 2) return [];
+    var n = cities.length;
+    var inMST = new Array(n).fill(false);
+    var minEdge = new Array(n).fill(Infinity);
+    var parent = new Array(n).fill(-1);
+    var edges = [];
+
+    minEdge[0] = 0;
+    for (var iter = 0; iter < n; iter++) {
+      /* Find closest non-MST vertex */
+      var u = -1;
+      for (var v = 0; v < n; v++) {
+        if (!inMST[v] && (u === -1 || minEdge[v] < minEdge[u])) u = v;
+      }
+      inMST[u] = true;
+      if (parent[u] !== -1) {
+        edges.push([parent[u], u]);
+      }
+      /* Update distances */
+      for (var v = 0; v < n; v++) {
+        if (inMST[v]) continue;
+        var dx = cities[u].x - cities[v].x;
+        var dy = cities[u].y - cities[v].y;
+        var d = Math.sqrt(dx * dx + dy * dy);
+        if (d < minEdge[v]) {
+          minEdge[v] = d;
+          parent[v] = u;
+        }
+      }
+    }
+    return edges;
+  }
+
+  function drawMST() {
+    clearSVG();
+    if (!showMST || cities.length < 2) return;
+    var edges = computeMST();
+    var ns = "http://www.w3.org/2000/svg";
+    for (var i = 0; i < edges.length; i++) {
+      var a = cities[edges[i][0]], b = cities[edges[i][1]];
+      var line = document.createElementNS(ns, "line");
+      line.setAttribute("x1", a.x);
+      line.setAttribute("y1", a.y);
+      line.setAttribute("x2", b.x);
+      line.setAttribute("y2", b.y);
+      line.setAttribute("stroke", "#2563eb");
+      line.setAttribute("stroke-width", "2.5");
+      line.setAttribute("stroke-dasharray", "6,4");
+      line.setAttribute("opacity", "0.8");
+      svgOverlay.appendChild(line);
+    }
+  }
+
+  /* Count slime edges: pairs of cities with strong trail between them */
+  function countSlimeEdges() {
+    if (cities.length < 2 || !running) return 0;
+    var count = 0;
+    var threshold = 3;
+    for (var i = 0; i < cities.length; i++) {
+      for (var j = i + 1; j < cities.length; j++) {
+        if (hasTrailBetween(cities[i], cities[j], threshold)) count++;
+      }
+    }
+    return count;
+  }
+
+  function hasTrailBetween(a, b, threshold) {
+    var dx = b.x - a.x, dy = b.y - a.y;
+    var len = Math.sqrt(dx * dx + dy * dy);
+    var steps = Math.round(len / 3);
+    if (steps < 2) return true;
+    var connected = 0;
+    for (var s = 1; s < steps; s++) {
+      var t = s / steps;
+      var px = Math.round(a.x + dx * t);
+      var py = Math.round(a.y + dy * t);
+      if (px >= 0 && px < W && py >= 0 && py < H) {
+        /* Check in a small radius */
+        var maxVal = 0;
+        for (var oy = -3; oy <= 3; oy++) {
+          for (var ox = -3; ox <= 3; ox++) {
+            var cx = px + ox, cy = py + oy;
+            if (cx >= 0 && cx < W && cy >= 0 && cy < H) {
+              var v = trail[cy * W + cx];
+              if (v > maxVal) maxVal = v;
+            }
+          }
+        }
+        if (maxVal >= threshold) connected++;
+      }
+    }
+    return connected / (steps - 1) > 0.6;
+  }
+
+  function renderNetwork() {
+    var imgData = ctx.createImageData(W, H);
+    var data = imgData.data;
+
+    for (var i = 0; i < W * H; i++) {
+      var v = Math.min(trail[i] * 3, 255);
+      var off = i * 4;
+      data[off]     = Math.round(v * 0.75);
+      data[off + 1] = Math.round(v * 0.9);
+      data[off + 2] = Math.round(v * 0.2);
+      data[off + 3] = 255;
+    }
+    ctx.putImageData(imgData, 0, 0);
+
+    /* Draw cities */
+    for (var c = 0; c < cities.length; c++) {
+      ctx.beginPath();
+      ctx.arc(cities[c].x, cities[c].y, 8, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(255, 100, 50, 0.85)";
+      ctx.fill();
+      ctx.strokeStyle = "rgba(255, 200, 150, 0.9)";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      /* Label */
+      ctx.fillStyle = "#fff";
+      ctx.font = "bold 10px 'Source Sans 3', sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(String(c + 1), cities[c].x, cities[c].y);
+    }
+
+    drawMST();
+  }
+
+  var netFrameCount = 0;
+
+  function netLoop() {
+    if (!running) return;
+    netStepAgents();
+    netDiffuseAndDecay();
+    renderNetwork();
+    netFrameCount++;
+    if (netFrameCount % 30 === 0) updateStats();
+    if (!reducedMotion) {
+      animId = requestAnimationFrame(netLoop);
+    }
+  }
+
+  document.getElementById("start-network").addEventListener("click", function() {
+    if (cities.length < 2) return;
+    if (running) return;
+    running = true;
+    netFrameCount = 0;
+    spawnAgents();
+    netLoop();
+  });
+
+  document.getElementById("toggle-mst").addEventListener("click", function() {
+    showMST = !showMST;
+    var btn = document.getElementById("toggle-mst");
+    btn.classList.toggle("active", showMST);
+    btn.textContent = showMST ? "Hide MST" : "Show MST";
+    if (showMST) drawMST();
+    else clearSVG();
+  });
+
+  document.getElementById("reset-network").addEventListener("click", function() {
+    running = false;
+    if (animId) cancelAnimationFrame(animId);
+    initSim();
+    renderNetwork();
+  });
+
+  function resetNetwork() {
+    running = false;
+    if (animId) cancelAnimationFrame(animId);
+    initSim();
+    renderNetwork();
+  }
+
+  var ro = new ResizeObserver(function() {
+    resetNetwork();
+  });
+  ro.observe(canvas.parentElement);
+
+  initSim();
+  renderNetwork();
+})();
+</script>
+</body>
+</html>

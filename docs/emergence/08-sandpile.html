@@ -1,0 +1,918 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sandpile: Self-Organized Criticality</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;500&family=Source+Sans+3:wght@400;600;700&family=Source+Serif+4:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --article-width: 740px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem;
+  --line-height: 1.6;
+  --text: #1a1a2e;
+  --text-2: #4a4a6a;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --bg: #fafafa;
+  --fig-bg: #ffffff;
+  --border: #e2e2e8;
+}
+body { font-family: var(--body-font); font-size: var(--body-size);
+  line-height: var(--line-height); color: var(--text); background: var(--bg);
+  -webkit-font-smoothing: antialiased; }
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
+h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+h3 { font-size: 1.15rem; margin: 2rem 0 0.75rem; }
+p { margin: 0 0 1rem; }
+a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+a:hover { color: #1d4ed8; }
+.header { padding: 4rem 0 2rem; border-bottom: 1px solid var(--border); margin-bottom: 2.5rem; }
+.header .back { font-family: var(--heading-font); font-size: 0.85rem; display: inline-block; margin-bottom: 1.5rem; }
+.header .subtitle { font-family: var(--heading-font); font-size: 1.15rem; color: var(--text-2); margin-bottom: 0; max-width: 580px; }
+.figure { margin: 2rem 0; padding: 1.5rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.figure canvas { display: block; cursor: crosshair; image-rendering: pixelated; border-radius: 3px; }
+.figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; line-height: 1.4; }
+.figure-label { font-weight: 600; color: var(--text); }
+.insight { background: var(--accent-light); border-left: 3px solid var(--accent); padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 4px 4px 0; }
+.insight p { margin: 0; }
+.insight p + p { margin-top: 0.75rem; }
+.controls { display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-end; margin-top: 1rem; font-family: var(--heading-font); font-size: 0.85rem; }
+.control-group { display: flex; flex-direction: column; gap: 0.25rem; }
+.control-group label { color: var(--text-2); font-weight: 600; }
+.control-group input[type="range"] { width: 100px; accent-color: var(--accent); }
+.control-group .val { font-family: var(--mono-font); font-variant-numeric: tabular-nums;
+  min-width: 2em; text-align: right; color: var(--text); }
+.control-group .slider-row { display: flex; align-items: center; gap: 0.5rem; }
+.btn { font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600;
+  padding: 0.45rem 1.1rem; border-radius: 5px; border: 1px solid var(--border);
+  background: var(--fig-bg); color: var(--text); cursor: pointer;
+  transition: background 0.15s, border-color 0.15s; user-select: none; }
+.btn:hover { border-color: var(--accent); background: var(--accent-light); }
+.btn.active { border-color: var(--accent); background: var(--accent); color: white; }
+.click-hint { font-family: var(--heading-font); font-size: 0.8rem; color: var(--text-2);
+  text-align: center; margin-top: 0.5rem; font-style: italic; }
+svg text { font-family: var(--heading-font); }
+.stats-row { display: flex; gap: 2rem; flex-wrap: wrap; margin-top: 0.75rem;
+  font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); }
+.stats-row .stat-val { font-family: var(--mono-font); font-weight: 500; color: var(--text);
+  font-variant-numeric: tabular-nums; }
+.histogram-svg { display: block; width: 100%; }
+.identity-canvas { cursor: default; }
+.toggle-row { display: flex; gap: 0.5rem; align-items: center; }
+
+@media (prefers-reduced-motion: reduce) {
+  .figure canvas { outline: 2px dashed var(--border); outline-offset: -2px; }
+}
+@media (max-width: 600px) {
+  h1 { font-size: 1.75rem; }
+  .controls { gap: 0.6rem; }
+  .stats-row { gap: 1rem; }
+  .control-group input[type="range"] { width: 80px; }
+}
+</style>
+</head>
+<body>
+<div class="article">
+
+<div class="header">
+  <a href="index.html" class="back">&larr; Emergence</a>
+  <h1>Sandpile: Self-Organized Criticality</h1>
+  <p class="subtitle">Drop grains of sand one at a time and watch the pile organize itself to the edge of chaos</p>
+</div>
+
+<p>
+Take a table. Drop grains of sand, one by one, onto the same spot. At first nothing
+interesting happens. The pile grows. Then it gets steep enough that grains start to
+slide. A single grain can trigger a tiny trickle or a massive avalanche that
+rearranges the whole pile.
+</p>
+
+<p>
+In 1987, Per Bak, Chao Tang, and Kurt Wiesenfeld turned this into a simple model on
+a grid. They found something surprising. The pile does not need to be tuned to any
+particular slope or density. It tunes itself. It evolves to a critical state where
+avalanches of all sizes occur, from one cell to thousands. The system finds its own
+edge.
+</p>
+
+<p>
+They called this <strong>self-organized criticality</strong>. The "self-organized"
+part matters. Nobody adjusts a parameter. The dynamics alone push the system to the
+critical point and hold it there.
+</p>
+
+<h2>The Abelian Sandpile</h2>
+
+<p>
+Here is the model. A grid of cells, each holding 0 to 3 grains of sand. When a cell
+reaches 4 grains, it topples: it loses 4 grains and sends one to each of its four
+neighbors. Neighbors that reach 4 topple too. Grains that fall off the edge
+are lost forever. One grain dropped can trigger a chain reaction across the
+entire grid.
+</p>
+
+<p>
+Click anywhere on the grid to drop a grain at that spot. Or hit auto-drop to add
+grains at random positions continuously. Watch how the early drops do nothing. The
+grid fills up quietly. Then, once most cells hold 2 or 3 grains, the cascades begin.
+That transition from calm to intermittent avalanching is the pile reaching criticality.
+</p>
+
+<div class="figure" id="fig-sandpile">
+  <canvas id="sandpile-canvas"></canvas>
+  <div class="controls">
+    <div class="control-group">
+      <button class="btn" id="btn-auto">Auto-drop</button>
+    </div>
+    <div class="control-group">
+      <label>Speed</label>
+      <div class="slider-row">
+        <input type="range" id="speed-slider" min="1" max="50" value="5">
+        <span class="val" id="speed-val">5</span>
+      </div>
+    </div>
+    <div class="control-group">
+      <button class="btn" id="btn-reset">Reset</button>
+    </div>
+  </div>
+  <div class="stats-row">
+    <div>Grains dropped: <span class="stat-val" id="stat-drops">0</span></div>
+    <div>Total topplings: <span class="stat-val" id="stat-topplings">0</span></div>
+    <div>Largest avalanche: <span class="stat-val" id="stat-largest">0</span></div>
+  </div>
+  <p class="click-hint">Click on the grid to drop a grain</p>
+</div>
+
+<p>
+The colors encode grain count. The lightest cells hold zero grains. The darkest hold
+three. When a cell gets a fourth grain it becomes unstable and topples immediately.
+You will sometimes see a brief red flash at the site of a toppling before the grid
+settles to its new stable state.
+</p>
+
+<p>
+The name "abelian" comes from a mathematical property. The final state of the pile
+does not depend on the order you drop the grains. Drop one grain at position A,
+then one at position B. Or reverse the order. After all topplings finish, you get
+the same configuration. This is commutativity, and it gives the sandpile a clean
+algebraic structure.
+</p>
+
+<h2>Avalanche Sizes</h2>
+
+<p>
+Now for the interesting part. As the pile reaches its critical state, we can measure
+each avalanche: how many cells toppled from a single grain drop. Most drops trigger
+nothing or a single toppling. Occasionally a drop sets off a chain reaction
+involving hundreds or thousands of cells.
+</p>
+
+<p>
+Plot the frequency of each avalanche size on a log-log scale and you see a straight
+line. That straight line is a power law. It means there is no characteristic scale.
+Small avalanches are common, medium ones less so, giant ones rare. But they all
+follow the same mathematical relationship. There is no "typical" avalanche size.
+This is the signature of criticality.
+</p>
+
+<div class="figure" id="fig-histogram">
+  <svg id="histogram-svg" class="histogram-svg"></svg>
+  <div class="stats-row">
+    <div>Total avalanches: <span class="stat-val" id="stat-avalanches">0</span></div>
+    <div>Power-law slope: <span class="stat-val" id="stat-exponent">&mdash;</span></div>
+  </div>
+  <p class="figure-caption">
+    <span class="figure-label">Fig. 1.</span>
+    Distribution of avalanche sizes on a log-log scale. Each dot is a bin of
+    similar-sized avalanches. A straight line means a power law. The red dashed
+    line is a least-squares fit; its slope is the exponent. Drop at least a few
+    thousand grains to see the distribution stabilize.
+  </p>
+</div>
+
+<p>
+The theoretical exponent for the 2D sandpile is close to &minus;1 for the
+probability density of avalanche sizes. You need a few thousand drops before the
+line stabilizes. Early on the pile is subcritical and most drops produce zero
+topplings. Once the grid is saturated, the power law emerges and holds.
+</p>
+
+<p>
+This is different from a Gaussian distribution, where events far from the mean are
+vanishingly unlikely. In a power-law system, large events are rare but not
+unthinkable. A single grain can always trigger the largest avalanche the system
+has ever seen. That is what makes criticality interesting, and what makes it a
+useful model for real-world phenomena where extreme events keep happening.
+</p>
+
+<h2>The Identity Element</h2>
+
+<p>
+The abelian sandpile has a richer structure than just criticality. The set of
+recurrent configurations (states the pile visits again and again after reaching
+criticality) forms a mathematical group under the operation of adding configurations
+cell-by-cell and relaxing. Every group has an identity element. For the sandpile
+group, that is a unique configuration that, when added to any recurrent
+configuration and then relaxed, leaves it unchanged.
+</p>
+
+<p>
+What does the identity look like? For a square grid, it is a fractal. The pattern
+has self-similar structure at multiple scales, with intricate nested regions of 0,
+2, and 3 grains. Computing it takes some work: start from a high uniform
+configuration (every cell set to 6), relax it, add 6 to every cell again, relax
+again. Repeat until the result stabilizes. The fixed point is the identity.
+</p>
+
+<p>
+Below is the identity element for a smaller grid. The colors match the main
+sandpile above. Toggle to see the current pile state for comparison.
+</p>
+
+<div class="figure" id="fig-identity">
+  <canvas id="identity-canvas" class="identity-canvas"></canvas>
+  <div class="controls toggle-row">
+    <button class="btn active" id="btn-show-identity">Identity</button>
+    <button class="btn" id="btn-show-pile">Current pile</button>
+  </div>
+  <p class="figure-caption">
+    <span class="figure-label">Fig. 2.</span>
+    The identity element of the sandpile group on a 48&times;48 grid. Notice the
+    four-fold symmetry and the fractal-like nested triangles. Larger grids produce
+    even more intricate patterns. This single configuration is the neutral element of
+    sandpile addition.
+  </p>
+</div>
+
+<p>
+The identity configuration is often strikingly beautiful. On larger grids the fractal
+detail deepens. The pattern reflects the geometry of the grid boundary. Circular
+boundaries produce circular identities. Triangular boundaries produce triangular ones.
+The boundary shape propagates inward through the relaxation dynamics and leaves
+its fingerprint on the fractal.
+</p>
+
+<div class="insight">
+  <p>
+  Earthquakes, forest fires, stock market crashes, and even extinction events may
+  follow power laws similar to the sandpile. Per Bak argued that self-organized
+  criticality is nature's preferred operating state. Systems evolve to the edge where
+  interesting things happen.
+  </p>
+  <p>
+  The sandpile is the simplest example. No one tunes a parameter. No one picks a
+  critical temperature or coupling constant. The pile just builds until it is steep
+  enough to avalanche, then holds itself at that boundary between order and chaos.
+  Criticality is the attractor.
+  </p>
+</div>
+
+</div><!-- .article -->
+
+<!-- ── Section 1: Abelian Sandpile ────────────────────────────────────── -->
+<script>
+(function () {
+  'use strict';
+
+  var REDUCED_MOTION = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // Grid dimensions
+  var N = 100;
+  var grid = new Int16Array(N * N);
+
+  // Stats
+  var totalDrops = 0;
+  var totalTopplings = 0;
+  var largestAvalanche = 0;
+  var autoRunning = false;
+  var autoRAF = null;
+  var speed = 5;
+
+  // Avalanche recording for histogram (only non-zero)
+  var avalancheSizes = [];
+
+  // Colors: [R,G,B] for grain counts 0..3, plus a flash color for toppling
+  var COLORS = [
+    [235, 235, 240],  // 0: near white
+    [174, 194, 228],  // 1: light blue
+    [80,  115, 190],  // 2: medium blue
+    [24,  42,  110],  // 3: dark navy
+  ];
+
+  // DOM references
+  var canvas = document.getElementById('sandpile-canvas');
+  var ctx = canvas.getContext('2d');
+  var figEl = document.getElementById('fig-sandpile');
+  var btnAuto = document.getElementById('btn-auto');
+  var btnReset = document.getElementById('btn-reset');
+  var speedSlider = document.getElementById('speed-slider');
+  var speedVal = document.getElementById('speed-val');
+  var statDrops = document.getElementById('stat-drops');
+  var statTopplings = document.getElementById('stat-topplings');
+  var statLargest = document.getElementById('stat-largest');
+
+  // ── Canvas sizing ──────────────────────────────────────────────────
+  var cellSize = 1;
+  var imageData;
+
+  function sizeCanvas() {
+    var w = figEl.clientWidth - 48;
+    cellSize = Math.max(2, Math.floor(w / N));
+    var px = cellSize * N;
+    canvas.width = px;
+    canvas.height = px;
+    canvas.style.width = px + 'px';
+    canvas.style.height = px + 'px';
+    imageData = ctx.createImageData(px, px);
+    drawGrid();
+  }
+
+  var ro = new ResizeObserver(function () { sizeCanvas(); });
+  ro.observe(figEl);
+  sizeCanvas();
+
+  // ── Rendering ──────────────────────────────────────────────────────
+  function drawGrid() {
+    var px = cellSize * N;
+    var data = imageData.data;
+    var r, c, val, color, dy, dx, py, pxc, idx;
+
+    for (r = 0; r < N; r++) {
+      for (c = 0; c < N; c++) {
+        val = grid[r * N + c];
+        if (val < 0) val = 0;
+        color = val > 3 ? COLORS[3] : COLORS[val];
+        for (dy = 0; dy < cellSize; dy++) {
+          py = r * cellSize + dy;
+          for (dx = 0; dx < cellSize; dx++) {
+            pxc = c * cellSize + dx;
+            idx = (py * px + pxc) * 4;
+            data[idx]     = color[0];
+            data[idx + 1] = color[1];
+            data[idx + 2] = color[2];
+            data[idx + 3] = 255;
+          }
+        }
+      }
+    }
+    ctx.putImageData(imageData, 0, 0);
+  }
+
+  // ── Toppling (BFS) ────────────────────────────────────────────────
+  // Uses a proper BFS queue. Each cell that reaches >= 4 goes into the
+  // queue. We process it, decrement by 4, and push neighbors if they
+  // reach >= 4. A cell can re-enter the queue if it gets pushed above 4
+  // again by later topplings.
+
+  function dropAndRelax(row, col) {
+    if (row < 0 || row >= N || col < 0 || col >= N) return 0;
+    grid[row * N + col]++;
+    totalDrops++;
+
+    var topplings = 0;
+    var queue = [];
+    var startIdx = row * N + col;
+    if (grid[startIdx] >= 4) queue.push(startIdx);
+
+    var head = 0;
+    while (head < queue.length) {
+      var idx = queue[head++];
+      // A cell might have been enqueued multiple times or already
+      // toppled below 4 by the time we reach it. Check again.
+      while (grid[idx] >= 4) {
+        grid[idx] -= 4;
+        topplings++;
+        var rr = (idx / N) | 0;
+        var cc = idx % N;
+
+        if (rr > 0) {
+          grid[idx - N]++;
+          if (grid[idx - N] >= 4) queue.push(idx - N);
+        }
+        if (rr < N - 1) {
+          grid[idx + N]++;
+          if (grid[idx + N] >= 4) queue.push(idx + N);
+        }
+        if (cc > 0) {
+          grid[idx - 1]++;
+          if (grid[idx - 1] >= 4) queue.push(idx - 1);
+        }
+        if (cc < N - 1) {
+          grid[idx + 1]++;
+          if (grid[idx + 1] >= 4) queue.push(idx + 1);
+        }
+      }
+    }
+
+    totalTopplings += topplings;
+    if (topplings > largestAvalanche) largestAvalanche = topplings;
+    if (topplings > 0) avalancheSizes.push(topplings);
+    return topplings;
+  }
+
+  function updateStats() {
+    statDrops.textContent = totalDrops.toLocaleString();
+    statTopplings.textContent = totalTopplings.toLocaleString();
+    statLargest.textContent = largestAvalanche.toLocaleString();
+  }
+
+  // ── Click to drop ──────────────────────────────────────────────────
+  canvas.addEventListener('click', function (e) {
+    var rect = canvas.getBoundingClientRect();
+    var scaleX = canvas.width / rect.width;
+    var scaleY = canvas.height / rect.height;
+    var col = Math.floor((e.clientX - rect.left) * scaleX / cellSize);
+    var row = Math.floor((e.clientY - rect.top) * scaleY / cellSize);
+    col = Math.max(0, Math.min(N - 1, col));
+    row = Math.max(0, Math.min(N - 1, row));
+    dropAndRelax(row, col);
+    drawGrid();
+    updateStats();
+    if (typeof window.updateHistogram === 'function') window.updateHistogram();
+  });
+
+  // ── Auto-drop ──────────────────────────────────────────────────────
+  function startAuto() {
+    autoRunning = true;
+    btnAuto.classList.add('active');
+    btnAuto.textContent = 'Pause';
+    if (REDUCED_MOTION) {
+      // Batch without animation
+      for (var i = 0; i < 500; i++) {
+        dropAndRelax(
+          Math.floor(Math.random() * N),
+          Math.floor(Math.random() * N)
+        );
+      }
+      drawGrid();
+      updateStats();
+      if (typeof window.updateHistogram === 'function') window.updateHistogram();
+      stopAuto();
+    } else {
+      autoStep();
+    }
+  }
+
+  function stopAuto() {
+    autoRunning = false;
+    if (autoRAF) cancelAnimationFrame(autoRAF);
+    autoRAF = null;
+    btnAuto.classList.remove('active');
+    btnAuto.textContent = 'Auto-drop';
+  }
+
+  function autoStep() {
+    if (!autoRunning) return;
+    for (var i = 0; i < speed; i++) {
+      dropAndRelax(
+        Math.floor(Math.random() * N),
+        Math.floor(Math.random() * N)
+      );
+    }
+    drawGrid();
+    updateStats();
+    if (typeof window.updateHistogram === 'function') window.updateHistogram();
+    autoRAF = requestAnimationFrame(autoStep);
+  }
+
+  btnAuto.addEventListener('click', function () {
+    if (autoRunning) stopAuto(); else startAuto();
+  });
+
+  speedSlider.addEventListener('input', function () {
+    speed = parseInt(this.value, 10);
+    speedVal.textContent = speed;
+  });
+
+  // ── Reset ──────────────────────────────────────────────────────────
+  btnReset.addEventListener('click', function () {
+    stopAuto();
+    grid.fill(0);
+    totalDrops = 0;
+    totalTopplings = 0;
+    largestAvalanche = 0;
+    avalancheSizes.length = 0;
+    updateStats();
+    drawGrid();
+    if (typeof window.resetHistogram === 'function') window.resetHistogram();
+  });
+
+  // Expose state for other sections
+  window._sandpile = {
+    getAvalancheSizes: function () { return avalancheSizes; },
+    getGrid: function () { return grid; },
+    getN: function () { return N; },
+    getCOLORS: function () { return COLORS; }
+  };
+
+  drawGrid();
+  updateStats();
+})();
+</script>
+
+<!-- ── Section 2: Avalanche Size Histogram ────────────────────────────── -->
+<script>
+(function () {
+  'use strict';
+
+  var svgEl = document.getElementById('histogram-svg');
+  var figEl = document.getElementById('fig-histogram');
+  var statAvalanches = document.getElementById('stat-avalanches');
+  var statExponent = document.getElementById('stat-exponent');
+
+  var margin = { top: 16, right: 24, bottom: 52, left: 56 };
+  var width, height;
+
+  var svg = d3.select(svgEl);
+  var gPlot, gXAxis, gYAxis, gDots, gLine, labelX, labelY;
+
+  // ── Sizing ─────────────────────────────────────────────────────────
+  function sizeSVG() {
+    var cw = figEl.clientWidth - 48;
+    var totalW = Math.min(cw, 680);
+    var totalH = Math.min(totalW * 0.55, 340);
+    width = totalW - margin.left - margin.right;
+    height = totalH - margin.top - margin.bottom;
+    svg.attr('width', totalW).attr('height', totalH);
+  }
+
+  function initSVG() {
+    sizeSVG();
+    svg.selectAll('*').remove();
+
+    gPlot = svg.append('g')
+      .attr('transform', 'translate(' + margin.left + ',' + margin.top + ')');
+
+    gXAxis = gPlot.append('g').attr('class', 'x-axis')
+      .attr('transform', 'translate(0,' + height + ')');
+    gYAxis = gPlot.append('g').attr('class', 'y-axis');
+    gLine = gPlot.append('g');
+    gDots = gPlot.append('g');
+
+    labelX = gPlot.append('text')
+      .attr('x', width / 2).attr('y', height + 42)
+      .attr('text-anchor', 'middle')
+      .attr('font-size', '0.8rem').attr('fill', '#4a4a6a')
+      .text('Avalanche size (log scale)');
+
+    labelY = gPlot.append('text')
+      .attr('transform', 'rotate(-90)')
+      .attr('x', -height / 2).attr('y', -42)
+      .attr('text-anchor', 'middle')
+      .attr('font-size', '0.8rem').attr('fill', '#4a4a6a')
+      .text('Frequency (log scale)');
+  }
+
+  initSVG();
+
+  var ro = new ResizeObserver(function () {
+    initSVG();
+    window.updateHistogram();
+  });
+  ro.observe(figEl);
+
+  // ── Binning ────────────────────────────────────────────────────────
+  // Logarithmic bins. We build a frequency map first (O(n)), then
+  // distribute into log-spaced bins (O(bins)).
+
+  function buildBins(sizes) {
+    if (sizes.length === 0) return [];
+
+    // Build frequency map
+    var freq = {};
+    var maxSize = 0;
+    for (var i = 0; i < sizes.length; i++) {
+      var s = sizes[i];
+      freq[s] = (freq[s] || 0) + 1;
+      if (s > maxSize) maxSize = s;
+    }
+    if (maxSize < 1) return [];
+
+    // Create logarithmic bin edges
+    var logMax = Math.log10(maxSize);
+    var nBins = Math.max(10, Math.min(35, Math.ceil(logMax * 8)));
+    var edges = new Float64Array(nBins + 1);
+    for (var b = 0; b <= nBins; b++) {
+      edges[b] = Math.pow(10, (b / nBins) * logMax);
+    }
+    // Ensure first edge starts at 1
+    edges[0] = 0.5;
+
+    // Fill bins using the frequency map
+    var bins = [];
+    var keys = Object.keys(freq);
+    for (var bi = 0; bi < nBins; bi++) {
+      var lo = edges[bi];
+      var hi = edges[bi + 1];
+      var count = 0;
+      for (var ki = 0; ki < keys.length; ki++) {
+        var k = +keys[ki];
+        if (k >= lo && (bi === nBins - 1 ? k <= hi : k < hi)) {
+          count += freq[keys[ki]];
+        }
+      }
+      if (count > 0) {
+        bins.push({ size: Math.sqrt(lo * hi), count: count });
+      }
+    }
+    return bins;
+  }
+
+  // ── Power-law fit (OLS on log-log) ─────────────────────────────────
+  function fitLine(bins) {
+    if (bins.length < 3) return null;
+    var n = bins.length;
+    var sx = 0, sy = 0, sxx = 0, sxy = 0;
+    for (var i = 0; i < n; i++) {
+      var lx = Math.log10(bins[i].size);
+      var ly = Math.log10(bins[i].count);
+      sx += lx; sy += ly;
+      sxx += lx * lx;
+      sxy += lx * ly;
+    }
+    var denom = n * sxx - sx * sx;
+    if (Math.abs(denom) < 1e-12) return null;
+    var slope = (n * sxy - sx * sy) / denom;
+    var intercept = (sy - slope * sx) / n;
+    return {
+      slope: slope,
+      intercept: intercept,
+      xMin: Math.log10(bins[0].size),
+      xMax: Math.log10(bins[n - 1].size)
+    };
+  }
+
+  // ── Render ─────────────────────────────────────────────────────────
+  window.updateHistogram = function () {
+    var sizes = window._sandpile.getAvalancheSizes();
+    statAvalanches.textContent = sizes.length.toLocaleString();
+
+    var bins = buildBins(sizes);
+    if (bins.length < 2) {
+      statExponent.innerHTML = '&mdash;';
+      gDots.selectAll('*').remove();
+      gLine.selectAll('*').remove();
+      return;
+    }
+
+    // Scales
+    var xExt = d3.extent(bins, function (d) { return d.size; });
+    var yExt = d3.extent(bins, function (d) { return d.count; });
+
+    var x = d3.scaleLog()
+      .domain([Math.max(0.5, xExt[0] * 0.5), xExt[1] * 2])
+      .range([0, width]).nice();
+
+    var y = d3.scaleLog()
+      .domain([0.5, yExt[1] * 2])
+      .range([height, 0]).nice();
+
+    // Axes
+    gXAxis.call(d3.axisBottom(x).ticks(5, '~s'))
+      .selectAll('text').attr('font-size', '0.72rem');
+    gYAxis.call(d3.axisLeft(y).ticks(4, '~s'))
+      .selectAll('text').attr('font-size', '0.72rem');
+
+    // Dots (enter-update-exit)
+    var circles = gDots.selectAll('circle')
+      .data(bins, function (d, i) { return i; });
+
+    circles.exit().remove();
+
+    circles.enter().append('circle')
+      .attr('r', 3.5)
+      .attr('fill', '#2563eb')
+      .attr('fill-opacity', 0.75)
+      .attr('stroke', '#1d4ed8')
+      .attr('stroke-width', 0.5)
+    .merge(circles)
+      .attr('cx', function (d) { return x(d.size); })
+      .attr('cy', function (d) { return y(d.count); });
+
+    // Fit line
+    gLine.selectAll('*').remove();
+    var fit = fitLine(bins);
+    if (fit && bins.length >= 5) {
+      var lx1 = fit.xMin, lx2 = fit.xMax;
+      var ly1 = fit.intercept + fit.slope * lx1;
+      var ly2 = fit.intercept + fit.slope * lx2;
+      var px1 = Math.pow(10, lx1), px2 = Math.pow(10, lx2);
+      var py1 = Math.pow(10, ly1), py2 = Math.pow(10, ly2);
+
+      // Clamp to domain
+      py1 = Math.max(0.5, py1);
+      py2 = Math.max(0.5, py2);
+
+      gLine.append('line')
+        .attr('x1', x(px1)).attr('y1', y(py1))
+        .attr('x2', x(px2)).attr('y2', y(py2))
+        .attr('stroke', '#dc2626')
+        .attr('stroke-width', 1.5)
+        .attr('stroke-dasharray', '6,4')
+        .attr('opacity', 0.85);
+
+      statExponent.textContent = fit.slope.toFixed(2);
+    } else {
+      statExponent.innerHTML = '&mdash;';
+    }
+  };
+
+  window.resetHistogram = function () {
+    gDots.selectAll('*').remove();
+    gLine.selectAll('*').remove();
+    gXAxis.selectAll('*').remove();
+    gYAxis.selectAll('*').remove();
+    statAvalanches.textContent = '0';
+    statExponent.innerHTML = '&mdash;';
+  };
+})();
+</script>
+
+<!-- ── Section 3: Identity Element ────────────────────────────────────── -->
+<script>
+(function () {
+  'use strict';
+
+  // Use a smaller grid so the identity computation finishes quickly.
+  // 48x48 produces a clear fractal in under a second.
+  var M = 48;
+  var identityGrid = null;
+  var showingIdentity = true;
+
+  var canvas = document.getElementById('identity-canvas');
+  var ctx = canvas.getContext('2d');
+  var figEl = document.getElementById('fig-identity');
+  var btnIdentity = document.getElementById('btn-show-identity');
+  var btnPile = document.getElementById('btn-show-pile');
+
+  var COLORS = window._sandpile.getCOLORS();
+
+  // ── Canvas sizing ──────────────────────────────────────────────────
+  var cellSize = 1;
+  var imageData;
+
+  function sizeCanvas() {
+    var w = figEl.clientWidth - 48;
+    cellSize = Math.max(2, Math.floor(w / M));
+    var px = cellSize * M;
+    canvas.width = px;
+    canvas.height = px;
+    canvas.style.width = px + 'px';
+    canvas.style.height = px + 'px';
+    imageData = ctx.createImageData(px, px);
+    drawCanvas();
+  }
+
+  var ro = new ResizeObserver(function () { sizeCanvas(); });
+  ro.observe(figEl);
+
+  // ── Relax a grid to stable (all cells < 4) ────────────────────────
+  // Full-scan relaxation. Suitable for the identity computation where
+  // many cells are far above threshold. Processes each unstable cell by
+  // toppling it floor(val/4) times at once (multi-topple), then makes
+  // another pass until nothing changes.
+
+  function relaxFull(g, n) {
+    var changed = true;
+    while (changed) {
+      changed = false;
+      for (var i = 0; i < n * n; i++) {
+        if (g[i] >= 4) {
+          changed = true;
+          var topples = (g[i] >> 2);  // floor(g[i] / 4)
+          g[i] -= topples * 4;
+          var r = (i / n) | 0;
+          var c = i % n;
+          if (r > 0)     g[i - n] += topples;
+          if (r < n - 1) g[i + n] += topples;
+          if (c > 0)     g[i - 1] += topples;
+          if (c < n - 1) g[i + 1] += topples;
+        }
+      }
+    }
+  }
+
+  // ── Compute the identity element ───────────────────────────────────
+  // Algorithm: repeatedly apply the "Markov" operator.
+  //   1. Start with c = uniform high value (every cell = 2*max_stable = 6).
+  //   2. Relax c to get c'.
+  //   3. Set c = c' + 6 (add the high config again).
+  //   4. Relax. Compare to previous relaxed result.
+  //   5. Repeat until the relaxed configuration stops changing.
+  //
+  // This converges to the identity in 2-3 iterations for small grids.
+  // The key insight: the identity is the unique fixed point of the map
+  // s -> relax(s + all-6) restricted to recurrent configurations.
+
+  function computeIdentity() {
+    var size = M * M;
+
+    // Iteration 1: relax(all-6)
+    var prev = new Int32Array(size);
+    for (var i = 0; i < size; i++) prev[i] = 6;
+    relaxFull(prev, M);
+
+    // Iterate until convergence
+    for (var iter = 0; iter < 10; iter++) {
+      var curr = new Int32Array(size);
+      for (var j = 0; j < size; j++) curr[j] = prev[j] + 6;
+      relaxFull(curr, M);
+
+      // Check convergence
+      var same = true;
+      for (var k = 0; k < size; k++) {
+        if (curr[k] !== prev[k]) { same = false; break; }
+      }
+
+      prev = curr;
+      if (same) break;
+    }
+
+    // Store as Uint8Array for rendering
+    identityGrid = new Uint8Array(size);
+    for (var m = 0; m < size; m++) {
+      identityGrid[m] = prev[m];
+    }
+  }
+
+  computeIdentity();
+
+  // ── Drawing ────────────────────────────────────────────────────────
+  function drawCanvas() {
+    var dataGrid;
+
+    if (showingIdentity) {
+      dataGrid = identityGrid;
+    } else {
+      // Show the main pile, downsampled to M x M
+      var mainGrid = window._sandpile.getGrid();
+      var mainN = window._sandpile.getN();
+      var ratio = mainN / M;
+      dataGrid = new Uint8Array(M * M);
+      for (var r = 0; r < M; r++) {
+        for (var c = 0; c < M; c++) {
+          var sr = Math.floor(r * ratio);
+          var sc = Math.floor(c * ratio);
+          // Clamp to valid range
+          var v = mainGrid[sr * mainN + sc];
+          dataGrid[r * M + c] = v > 3 ? 3 : (v < 0 ? 0 : v);
+        }
+      }
+    }
+
+    if (!dataGrid) return;
+
+    var px = cellSize * M;
+    var data = imageData.data;
+    var r2, c2, val, color, dy, dx, py, pxc, idx;
+
+    for (r2 = 0; r2 < M; r2++) {
+      for (c2 = 0; c2 < M; c2++) {
+        val = dataGrid[r2 * M + c2];
+        color = val > 3 ? COLORS[3] : COLORS[val];
+        for (dy = 0; dy < cellSize; dy++) {
+          py = r2 * cellSize + dy;
+          for (dx = 0; dx < cellSize; dx++) {
+            pxc = c2 * cellSize + dx;
+            idx = (py * px + pxc) * 4;
+            data[idx]     = color[0];
+            data[idx + 1] = color[1];
+            data[idx + 2] = color[2];
+            data[idx + 3] = 255;
+          }
+        }
+      }
+    }
+    ctx.putImageData(imageData, 0, 0);
+  }
+
+  // ── Toggle buttons ─────────────────────────────────────────────────
+  btnIdentity.addEventListener('click', function () {
+    showingIdentity = true;
+    btnIdentity.classList.add('active');
+    btnPile.classList.remove('active');
+    drawCanvas();
+  });
+
+  btnPile.addEventListener('click', function () {
+    showingIdentity = false;
+    btnPile.classList.add('active');
+    btnIdentity.classList.remove('active');
+    drawCanvas();
+  });
+
+  sizeCanvas();
+})();
+</script>
+</body>
+</html>

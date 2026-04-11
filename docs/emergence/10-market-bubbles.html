@@ -1,0 +1,953 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Market Bubbles: Feedback Loops in Price</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;500&family=Source+Sans+3:wght@400;600;700&family=Source+Serif+4:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --article-width: 740px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem;
+  --line-height: 1.6;
+  --text: #1a1a2e;
+  --text-2: #4a4a6a;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --bg: #fafafa;
+  --fig-bg: #ffffff;
+  --border: #e2e2e8;
+  --green: #22c55e;
+  --red: #ef4444;
+  --orange: #f97316;
+  --slate: #94a3b8;
+}
+body { font-family: var(--body-font); font-size: var(--body-size);
+  line-height: var(--line-height); color: var(--text); background: var(--bg);
+  -webkit-font-smoothing: antialiased; }
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
+h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+h3 { font-size: 1.15rem; margin: 2rem 0 0.75rem; }
+p { margin: 0 0 1rem; }
+a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+a:hover { color: #1d4ed8; }
+.header { padding: 4rem 0 2rem; border-bottom: 1px solid var(--border); margin-bottom: 2.5rem; }
+.header .back { font-family: var(--heading-font); font-size: 0.85rem; display: inline-block; margin-bottom: 1.5rem; }
+.header .subtitle { font-family: var(--heading-font); font-size: 1.15rem; color: var(--text-2);
+  margin-bottom: 0; max-width: 580px; }
+.figure { margin: 2rem 0; padding: 1.5rem; background: var(--fig-bg);
+  border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.figure svg { display: block; width: 100%; overflow: visible; }
+.figure-caption { font-family: var(--heading-font); font-size: 0.85rem;
+  color: var(--text-2); margin-top: 0.75rem; line-height: 1.4; }
+.figure-label { font-weight: 600; color: var(--text); }
+.insight { background: var(--accent-light); border-left: 3px solid var(--accent);
+  padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 4px 4px 0; }
+.insight p { margin: 0; }
+.insight p + p { margin-top: 0.75rem; }
+.controls { display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-end;
+  margin-top: 1rem; font-family: var(--heading-font); font-size: 0.85rem; }
+.control-group { display: flex; flex-direction: column; gap: 0.25rem; }
+.control-group label { color: var(--text-2); font-weight: 600; }
+.control-group .slider-row { display: flex; align-items: center; gap: 0.5rem; }
+.control-group input[type="range"] { width: 120px; accent-color: var(--accent); }
+.control-group .val { font-family: var(--mono-font); font-variant-numeric: tabular-nums;
+  min-width: 2.5em; text-align: right; color: var(--text); }
+.btn { font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600;
+  padding: 0.45rem 1.1rem; border-radius: 5px; border: 1px solid var(--border);
+  background: var(--fig-bg); color: var(--text); cursor: pointer;
+  transition: background 0.15s, border-color 0.15s; user-select: none; }
+.btn:hover { border-color: var(--accent); background: var(--accent-light); }
+.btn.active { border-color: var(--accent); background: var(--accent); color: white; }
+.stat-row { display: flex; gap: 1.5rem; margin-top: 0.75rem;
+  font-family: var(--heading-font); font-size: 0.85rem; flex-wrap: wrap; }
+.stat-row .stat { display: flex; gap: 0.35rem; align-items: baseline; }
+.stat-row .stat-label { color: var(--text-2); font-weight: 600; }
+.stat-row .stat-val { font-family: var(--mono-font); font-variant-numeric: tabular-nums;
+  color: var(--text); }
+svg text { font-family: var(--heading-font); }
+
+.sentiment-bar { margin-top: 0.75rem; }
+.sentiment-bar .bar-wrap { height: 20px; border-radius: 3px; overflow: hidden;
+  display: flex; border: 1px solid var(--border); }
+.sentiment-bar .seg-buy { background: var(--green); transition: width 0.2s; }
+.sentiment-bar .seg-hold { background: #e5e7eb; transition: width 0.2s; }
+.sentiment-bar .seg-sell { background: var(--red); transition: width 0.2s; }
+.sentiment-bar .bar-labels { display: flex; justify-content: space-between;
+  font-family: var(--heading-font); font-size: 0.75rem;
+  color: var(--text-2); margin-top: 0.25rem; }
+
+.legend { display: flex; gap: 1.25rem; margin-top: 0.5rem;
+  font-family: var(--heading-font); font-size: 0.8rem; color: var(--text-2); flex-wrap: wrap; }
+.legend-item { display: flex; align-items: center; gap: 0.35rem; }
+.legend-swatch { width: 12px; height: 12px; border-radius: 2px; flex-shrink: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .figure svg { outline: 2px dashed var(--border); outline-offset: -2px; }
+}
+@media (max-width: 600px) {
+  h1 { font-size: 1.75rem; }
+  .controls { gap: 0.6rem; }
+  .control-group input[type="range"] { width: 80px; }
+}
+</style>
+</head>
+<body>
+<div class="article">
+
+<div class="header">
+  <a href="index.html" class="back">&larr; Emergence</a>
+  <h1>Market Bubbles</h1>
+  <p class="subtitle">When traders follow each other instead of fundamentals, prices detach from reality</p>
+</div>
+
+<p>
+Every few years a market goes parabolic. Tulips, railroads, dot-coms, housing, crypto.
+The pattern repeats because the mechanism is structural, not cultural. It lives in the
+feedback loop between price and behavior.
+</p>
+
+<p>
+A bubble does not require irrational people. It requires a system where the actions of
+participants feed back into the signals those participants act on. Rising prices attract
+buyers. Buying raises prices. The loop amplifies small perturbations into spectacular
+departures from reality.
+</p>
+
+<p>
+The simulations below let you build that loop from the ground up.
+</p>
+
+<!-- =============== Section 1 =============== -->
+
+<h2>1. Fundamentalists vs. Chartists</h2>
+
+<p>
+Two kinds of traders operate in our model market. Fundamentalists compare the current
+price to a true underlying value. When price is below value, they buy. When above,
+they sell. They are the stabilizing force. Left alone, they keep price tethered to reality.
+</p>
+
+<p>
+Chartists do something different. They look at the recent price trend. If price has been
+rising, they buy more. If falling, they sell. They do not care about underlying value.
+They care about momentum. This is the destabilizing force. Chartists do not cause bubbles
+on purpose. They just follow the signal that is loudest: the price itself.
+</p>
+
+<p>
+The simulation starts with 20% chartists. Price wobbles but stays close to the dashed
+fundamental-value line. Now drag the chartists slider toward 60% or higher. The blue line
+will detach. Sometimes it overshoots wildly, then snaps back when the fundamentalists
+overpower the momentum. That snap-back is a crash.
+</p>
+
+<p>
+Try the sensitivity slider too. It controls how aggressively chartists chase the trend.
+Even a moderate chartist fraction becomes explosive at high sensitivity.
+</p>
+
+<div class="figure" id="fig-fundamentals">
+  <svg id="svg-price"></svg>
+  <div class="controls">
+    <div class="control-group">
+      <label>Chartists</label>
+      <div class="slider-row">
+        <input type="range" id="sl-frac" min="0" max="100" value="20" step="1">
+        <span class="val" id="v-frac">20%</span>
+      </div>
+    </div>
+    <div class="control-group">
+      <label>Sensitivity</label>
+      <div class="slider-row">
+        <input type="range" id="sl-sens" min="0.1" max="3" value="1" step="0.1">
+        <span class="val" id="v-sens">1.0</span>
+      </div>
+    </div>
+    <div class="control-group">
+      <label>Noise</label>
+      <div class="slider-row">
+        <input type="range" id="sl-noise" min="0" max="2" value="0.5" step="0.1">
+        <span class="val" id="v-noise">0.5</span>
+      </div>
+    </div>
+    <div class="control-group" style="align-self:flex-end">
+      <button class="btn" id="btn-reset1">Reset</button>
+    </div>
+  </div>
+  <div class="stat-row">
+    <div class="stat"><span class="stat-label">Price:</span>
+      <span class="stat-val" id="s1-price">100.0</span></div>
+    <div class="stat"><span class="stat-label">Value:</span>
+      <span class="stat-val" id="s1-fund">100.0</span></div>
+    <div class="stat"><span class="stat-label">Gap:</span>
+      <span class="stat-val" id="s1-dev">+0.0%</span></div>
+  </div>
+  <div class="legend">
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--accent)"></div> Price</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--slate)"></div> Fundamental value</div>
+  </div>
+  <p class="figure-caption"><span class="figure-label">Fig 1.</span> Asset price driven
+  by a mix of fundamentalists and chartists. The fundamental value drifts slowly. With
+  few chartists the price tracks it. With many, it does not.</p>
+</div>
+
+<!-- =============== Section 2 =============== -->
+
+<h2>2. Anatomy of a Bubble</h2>
+
+<p>
+Bubbles are not shapeless. They follow a recognizable arc that economists have
+catalogued. The sequence goes roughly like this:
+</p>
+
+<p>
+<strong>Stealth.</strong> Smart money enters early. The price begins to drift above
+fundamental value, but the move is small enough that most participants ignore it.
+</p>
+
+<p>
+<strong>Awareness.</strong> The trend becomes visible. Chartists pile in. Media coverage
+begins. The price rise accelerates.
+</p>
+
+<p>
+<strong>Mania.</strong> Everyone is buying. The narrative justifies any price. Skeptics are
+dismissed. The deviation from fundamental value becomes extreme.
+</p>
+
+<p>
+<strong>Blow-off.</strong> Some event or simply exhaustion tips the balance. The price peaks
+and begins to fall. But chartists are still buying the dip, so the drop is choppy at first.
+</p>
+
+<p>
+<strong>Capitulation.</strong> Trend-followers capitulate. Selling feeds selling. The price
+crashes back toward fundamental value, often overshooting to the downside.
+</p>
+
+<p>
+The simulation below runs the same model from Section 1 but auto-detects these phases.
+Watch the labels appear on the chart as the bubble forms and collapses. Below the chart,
+the sentiment bar shows what fraction of agents are buying, holding, or selling at each
+moment.
+</p>
+
+<p>
+Set chartists to 60% or higher to reliably produce full bubble cycles.
+</p>
+
+<div class="figure" id="fig-anatomy">
+  <svg id="svg-anatomy"></svg>
+  <div class="controls">
+    <div class="control-group">
+      <label>Chartists</label>
+      <div class="slider-row">
+        <input type="range" id="sl-a-frac" min="0" max="100" value="65" step="1">
+        <span class="val" id="v-a-frac">65%</span>
+      </div>
+    </div>
+    <div class="control-group">
+      <label>Speed</label>
+      <div class="slider-row">
+        <input type="range" id="sl-a-speed" min="1" max="5" value="2" step="1">
+        <span class="val" id="v-a-speed">2x</span>
+      </div>
+    </div>
+    <div class="control-group" style="align-self:flex-end">
+      <button class="btn" id="btn-reset2">Reset</button>
+    </div>
+  </div>
+  <div class="sentiment-bar">
+    <div class="bar-wrap">
+      <div class="seg-buy" id="seg-buy" style="width:33%"></div>
+      <div class="seg-hold" id="seg-hold" style="width:34%"></div>
+      <div class="seg-sell" id="seg-sell" style="width:33%"></div>
+    </div>
+    <div class="bar-labels">
+      <span>Buying <span id="pct-buy">33%</span></span>
+      <span>Holding</span>
+      <span>Selling <span id="pct-sell">33%</span></span>
+    </div>
+  </div>
+  <p class="figure-caption"><span class="figure-label">Fig 2.</span> Bubble phases
+  detected in real time. The sentiment bar shows aggregate trader behavior.</p>
+</div>
+
+<!-- =============== Section 3 =============== -->
+
+<h2>3. Herding and Contagion</h2>
+
+<p>
+The models above treat the chartist fraction as a fixed dial. In real markets,
+traders switch strategies. A fundamentalist watches her neighbors get rich by following
+the trend and thinks: maybe they see something I do not. She starts trend-following too.
+This is herding.
+</p>
+
+<p>
+Herding is rational locally but destructive globally. If your neighbor is profiting, copying
+her strategy is a reasonable bet. The problem is that when everyone copies, the strategy
+stops working. The price is now supported entirely by the feedback loop. The moment new
+buyers stop arriving, the loop reverses.
+</p>
+
+<p>
+Below, each node is a trader connected to neighbors in a small-world network. Blue
+nodes are fundamentalists. Orange nodes are chartists. At each step, agents can flip
+their strategy based on what their neighbors are doing and how profitable that strategy
+has been recently.
+</p>
+
+<p>
+Watch for clusters. When a pocket of chartists forms, it reinforces itself. The
+cluster's buying pushes price up, which validates the chartist strategy, which
+converts more neighbors. The bubble is a spatial phenomenon, not just a statistical one.
+Crank herding pressure high and watch orange clusters engulf the network. Then watch
+them collapse when the price reverts.
+</p>
+
+<div class="figure" id="fig-network">
+  <svg id="svg-network"></svg>
+  <div class="controls">
+    <div class="control-group">
+      <label>Herding pressure</label>
+      <div class="slider-row">
+        <input type="range" id="sl-herd" min="0" max="1" value="0.3" step="0.05">
+        <span class="val" id="v-herd">0.30</span>
+      </div>
+    </div>
+    <div class="control-group">
+      <label>Agents</label>
+      <div class="slider-row">
+        <input type="range" id="sl-agents" min="30" max="120" value="60" step="10">
+        <span class="val" id="v-agents">60</span>
+      </div>
+    </div>
+    <div class="control-group" style="align-self:flex-end">
+      <button class="btn" id="btn-reset3">Reset</button>
+    </div>
+  </div>
+  <div class="stat-row">
+    <div class="stat"><span class="stat-label">Fundamentalists:</span>
+      <span class="stat-val" id="s3-fund">--</span></div>
+    <div class="stat"><span class="stat-label">Chartists:</span>
+      <span class="stat-val" id="s3-chart">--</span></div>
+    <div class="stat"><span class="stat-label">Price:</span>
+      <span class="stat-val" id="s3-price">100.0</span></div>
+  </div>
+  <div class="legend">
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--accent)"></div> Fundamentalist</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:var(--orange)"></div> Chartist</div>
+    <div class="legend-item" style="font-size:0.75rem;color:var(--text-2)">Node size = wealth</div>
+  </div>
+  <p class="figure-caption"><span class="figure-label">Fig 3.</span> Strategy contagion
+  on a network. Clusters of chartists form, amplify price swings, and collapse when
+  fundamentalists profit from the reversion.</p>
+</div>
+
+<div class="insight">
+  <p>In 2000, 2008, and 2021, the same feedback pattern played out with different assets.
+  The mechanism is not specific to any market. It is a property of any system where
+  participants watch and imitate each other.</p>
+</div>
+
+</div>
+
+<script>
+/* ================================================================
+   Section 1: Fundamentalists vs Chartists
+   ================================================================ */
+(function () {
+  "use strict";
+
+  var W, H;
+  var M = { top: 20, right: 20, bottom: 28, left: 50 };
+  var svg = d3.select("#svg-price");
+  var g, xSc, ySc, xAx, yAx, pathPrice, pathFund;
+  var hist = [];
+  var MAX = 300;
+  var fundVal = 100;
+  var price = 100;
+  var trend = 0;
+  var rafId = null;
+  var reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  /* DOM refs */
+  var elFrac  = document.getElementById("sl-frac");
+  var elSens  = document.getElementById("sl-sens");
+  var elNoise = document.getElementById("sl-noise");
+  var vFrac   = document.getElementById("v-frac");
+  var vSens   = document.getElementById("v-sens");
+  var vNoise  = document.getElementById("v-noise");
+  var sPrice  = document.getElementById("s1-price");
+  var sFund   = document.getElementById("s1-fund");
+  var sDev    = document.getElementById("s1-dev");
+
+  elFrac.addEventListener("input",  function () { vFrac.textContent  = this.value + "%"; });
+  elSens.addEventListener("input",  function () { vSens.textContent  = (+this.value).toFixed(1); });
+  elNoise.addEventListener("input", function () { vNoise.textContent = (+this.value).toFixed(1); });
+
+  document.getElementById("btn-reset1").addEventListener("click", function () {
+    hist = []; price = 100; fundVal = 100; trend = 0;
+  });
+
+  function measure() {
+    var box = document.getElementById("fig-fundamentals").getBoundingClientRect();
+    W = Math.round(box.width - 48);          /* 1.5rem padding each side */
+    H = Math.min(280, Math.round(W * 0.45));
+  }
+
+  function layout() {
+    measure();
+    svg.attr("viewBox", "0 0 " + W + " " + H);
+    var iw = W - M.left - M.right, ih = H - M.top - M.bottom;
+    svg.selectAll("*").remove();
+    g = svg.append("g").attr("transform", "translate(" + M.left + "," + M.top + ")");
+
+    xSc = d3.scaleLinear().domain([0, MAX]).range([0, iw]);
+    ySc = d3.scaleLinear().domain([50, 150]).range([ih, 0]);
+
+    xAx = g.append("g").attr("transform", "translate(0," + ih + ")").call(d3.axisBottom(xSc).ticks(5));
+    yAx = g.append("g").call(d3.axisLeft(ySc).ticks(5));
+    xAx.selectAll("text").style("font-size", "10px");
+    yAx.selectAll("text").style("font-size", "10px");
+
+    pathFund = g.append("path").attr("fill", "none").attr("stroke", "var(--slate)")
+      .attr("stroke-width", 1.5).attr("stroke-dasharray", "4,3");
+    pathPrice = g.append("path").attr("fill", "none").attr("stroke", "var(--accent)")
+      .attr("stroke-width", 2);
+  }
+
+  function step() {
+    var cf = +elFrac.value / 100;
+    var cs = +elSens.value;
+    var nz = +elNoise.value;
+
+    fundVal += (Math.random() - 0.5) * 0.2;
+    fundVal = Math.max(30, Math.min(250, fundVal));
+
+    /* Exponential moving average of recent returns */
+    var lastPrice = hist.length > 0 ? hist[hist.length - 1].p : price;
+    trend = 0.88 * trend + 0.12 * (price - lastPrice);
+
+    var fundDemand  = (1 - cf) * (fundVal - price) * 0.05;
+    var chartDemand = cf * cs * trend;
+    var noise       = nz * (Math.random() - 0.5) * 2;
+
+    price += fundDemand + chartDemand + noise;
+    price = Math.max(1, price);
+
+    hist.push({ p: price, f: fundVal });
+    if (hist.length > MAX) hist.shift();
+  }
+
+  function draw() {
+    if (!hist.length) return;
+    var ih = H - M.top - M.bottom;
+    var lo = d3.min(hist, function (d) { return Math.min(d.p, d.f); });
+    var hi = d3.max(hist, function (d) { return Math.max(d.p, d.f); });
+    var pad = Math.max((hi - lo) * 0.15, 5);
+    ySc.domain([lo - pad, hi + pad]);
+    yAx.call(d3.axisLeft(ySc).ticks(5));
+    yAx.selectAll("text").style("font-size", "10px");
+
+    var lp = d3.line().x(function (_, i) { return xSc(i); }).y(function (d) { return ySc(d.p); });
+    var lf = d3.line().x(function (_, i) { return xSc(i); }).y(function (d) { return ySc(d.f); });
+    pathPrice.datum(hist).attr("d", lp);
+    pathFund.datum(hist).attr("d", lf);
+
+    sPrice.textContent = price.toFixed(1);
+    sFund.textContent  = fundVal.toFixed(1);
+    var dev = fundVal > 0 ? (price - fundVal) / fundVal * 100 : 0;
+    sDev.textContent = (dev >= 0 ? "+" : "") + dev.toFixed(1) + "%";
+  }
+
+  var last = 0;
+  function loop(ts) {
+    if (ts - last > 50) { step(); draw(); last = ts; }
+    rafId = requestAnimationFrame(loop);
+  }
+
+  function init() {
+    layout();
+    if (reducedMotion) { for (var i = 0; i < 200; i++) step(); draw(); }
+    else { rafId = requestAnimationFrame(loop); }
+  }
+
+  new ResizeObserver(function () { layout(); draw(); })
+    .observe(document.getElementById("fig-fundamentals"));
+  init();
+})();
+
+
+/* ================================================================
+   Section 2: Anatomy of a Bubble
+   ================================================================ */
+(function () {
+  "use strict";
+
+  var W, H;
+  var M = { top: 30, right: 20, bottom: 28, left: 50 };
+  var svg = d3.select("#svg-anatomy");
+  var g, xSc, ySc, xAx, yAx, pathPrice, pathFund, gLabels;
+  var hist = [];
+  var MAX = 400;
+  var fundVal = 100;
+  var price = 100;
+  var trend = 0;
+  var rafId = null;
+  var reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  var elFrac  = document.getElementById("sl-a-frac");
+  var elSpeed = document.getElementById("sl-a-speed");
+  var vFrac   = document.getElementById("v-a-frac");
+  var vSpeed  = document.getElementById("v-a-speed");
+
+  elFrac.addEventListener("input",  function () { vFrac.textContent  = this.value + "%"; });
+  elSpeed.addEventListener("input", function () { vSpeed.textContent = this.value + "x"; });
+
+  document.getElementById("btn-reset2").addEventListener("click", function () {
+    hist = []; price = 100; fundVal = 100; trend = 0;
+  });
+
+  function measure() {
+    var box = document.getElementById("fig-anatomy").getBoundingClientRect();
+    W = Math.round(box.width - 48);
+    H = Math.min(300, Math.round(W * 0.5));
+  }
+
+  function layout() {
+    measure();
+    svg.attr("viewBox", "0 0 " + W + " " + H);
+    var iw = W - M.left - M.right, ih = H - M.top - M.bottom;
+    svg.selectAll("*").remove();
+    g = svg.append("g").attr("transform", "translate(" + M.left + "," + M.top + ")");
+
+    xSc = d3.scaleLinear().domain([0, MAX]).range([0, iw]);
+    ySc = d3.scaleLinear().domain([50, 150]).range([ih, 0]);
+
+    xAx = g.append("g").attr("transform", "translate(0," + ih + ")").call(d3.axisBottom(xSc).ticks(5));
+    yAx = g.append("g").call(d3.axisLeft(ySc).ticks(5));
+    xAx.selectAll("text").style("font-size", "10px");
+    yAx.selectAll("text").style("font-size", "10px");
+
+    pathFund = g.append("path").attr("fill", "none").attr("stroke", "var(--slate)")
+      .attr("stroke-width", 1.5).attr("stroke-dasharray", "4,3");
+    pathPrice = g.append("path").attr("fill", "none").attr("stroke", "var(--accent)")
+      .attr("stroke-width", 2);
+    gLabels = g.append("g");
+  }
+
+  function step() {
+    var cf = +elFrac.value / 100;
+
+    fundVal += (Math.random() - 0.5) * 0.15;
+    fundVal = Math.max(30, Math.min(250, fundVal));
+
+    var lastP = hist.length > 0 ? hist[hist.length - 1].p : price;
+    trend = 0.90 * trend + 0.10 * (price - lastP);
+
+    var fundD  = (1 - cf) * (fundVal - price) * 0.04;
+    var chartD = cf * 1.2 * trend;
+    var noise  = 0.5 * (Math.random() - 0.5) * 2;
+
+    price += fundD + chartD + noise;
+    price = Math.max(1, price);
+
+    /* Compute sentiment split */
+    var nF = Math.round((1 - cf) * 100);
+    var nC = 100 - nF;
+    var buying = 0, selling = 0;
+
+    /* Fundamentalists */
+    var devPct = (price - fundVal) / fundVal;
+    if (devPct < -0.01) buying += nF;
+    else if (devPct > 0.01) selling += nF;
+    else { buying += Math.round(nF * 0.5); selling += nF - Math.round(nF * 0.5); }
+
+    /* Chartists */
+    if (trend > 0.15) buying += nC;
+    else if (trend < -0.15) selling += nC;
+    else { buying += Math.round(nC * 0.5); selling += nC - Math.round(nC * 0.5); }
+
+    var holding = 100 - buying - selling;
+    hist.push({ p: price, f: fundVal, buy: buying, sell: selling, hold: holding });
+    if (hist.length > MAX) hist.shift();
+  }
+
+  /* Phase detection: find the most prominent bubble in the visible window.
+     Walk from the global max-deviation backward and forward to mark transitions. */
+  function detectPhases() {
+    var n = hist.length;
+    if (n < 80) return [];
+
+    var devs = hist.map(function (d) { return (d.p - d.f) / d.f; });
+
+    /* Find global positive peak */
+    var peakVal = -Infinity, peakIdx = -1;
+    for (var i = 0; i < n; i++) {
+      if (devs[i] > peakVal) { peakVal = devs[i]; peakIdx = i; }
+    }
+    if (peakVal < 0.06) return [];   /* no meaningful bubble */
+
+    var out = [];
+
+    /* Stealth: walking backward, first index where dev < 15% of peak */
+    for (var i = peakIdx; i >= 0; i--) {
+      if (devs[i] < peakVal * 0.15) {
+        out.push({ idx: i, label: "Stealth", color: "#64748b" });
+        break;
+      }
+    }
+
+    /* Awareness: first index where dev crosses 35% of peak on the way up */
+    for (var i = (out.length ? out[0].idx : 0); i < peakIdx; i++) {
+      if (devs[i] >= peakVal * 0.35) {
+        out.push({ idx: i, label: "Awareness", color: "#0ea5e9" });
+        break;
+      }
+    }
+
+    /* Mania: first index where dev crosses 70% of peak */
+    for (var i = (out.length > 1 ? out[1].idx : 0); i < peakIdx; i++) {
+      if (devs[i] >= peakVal * 0.70) {
+        out.push({ idx: i, label: "Mania", color: "var(--orange)" });
+        break;
+      }
+    }
+
+    /* Blow-off: the peak itself */
+    out.push({ idx: peakIdx, label: "Blow-off", color: "var(--red)" });
+
+    /* Capitulation: post-peak, first index where dev drops below 15% of peak */
+    for (var i = peakIdx + 1; i < n; i++) {
+      if (devs[i] < peakVal * 0.15) {
+        out.push({ idx: i, label: "Capitulation", color: "#6b7280" });
+        break;
+      }
+    }
+
+    return out;
+  }
+
+  function draw() {
+    if (hist.length < 2) return;
+    var lo = d3.min(hist, function (d) { return Math.min(d.p, d.f); });
+    var hi = d3.max(hist, function (d) { return Math.max(d.p, d.f); });
+    var pad = Math.max((hi - lo) * 0.2, 5);
+    ySc.domain([lo - pad, hi + pad]);
+    yAx.call(d3.axisLeft(ySc).ticks(5));
+    yAx.selectAll("text").style("font-size", "10px");
+
+    var lp = d3.line().x(function (_, i) { return xSc(i); }).y(function (d) { return ySc(d.p); });
+    var lf = d3.line().x(function (_, i) { return xSc(i); }).y(function (d) { return ySc(d.f); });
+    pathPrice.datum(hist).attr("d", lp);
+    pathFund.datum(hist).attr("d", lf);
+
+    /* Phase annotations */
+    var phases = detectPhases();
+    gLabels.selectAll("*").remove();
+    phases.forEach(function (ph) {
+      if (ph.idx < 0 || ph.idx >= hist.length) return;
+      var x = xSc(ph.idx);
+      var y = ySc(hist[ph.idx].p);
+      /* Clamp label above chart area */
+      var ly = Math.max(8, y - 26);
+      gLabels.append("line").attr("x1", x).attr("x2", x)
+        .attr("y1", y - 6).attr("y2", ly + 4)
+        .attr("stroke", ph.color).attr("stroke-width", 1);
+      gLabels.append("text").attr("x", x).attr("y", ly)
+        .attr("text-anchor", "middle").attr("fill", ph.color)
+        .style("font-size", "0.65rem").style("font-weight", "600")
+        .text(ph.label);
+    });
+
+    /* Sentiment bar */
+    var last = hist[hist.length - 1];
+    var bPct = last.buy, sPct = last.sell, hPct = last.hold;
+    document.getElementById("seg-buy").style.width  = bPct + "%";
+    document.getElementById("seg-hold").style.width = hPct + "%";
+    document.getElementById("seg-sell").style.width = sPct + "%";
+    document.getElementById("pct-buy").textContent  = bPct + "%";
+    document.getElementById("pct-sell").textContent = sPct + "%";
+  }
+
+  var last = 0;
+  function loop(ts) {
+    if (ts - last > 50) {
+      var spd = +elSpeed.value;
+      for (var s = 0; s < spd; s++) step();
+      draw();
+      last = ts;
+    }
+    rafId = requestAnimationFrame(loop);
+  }
+
+  function init() {
+    layout();
+    if (reducedMotion) { for (var i = 0; i < 350; i++) step(); draw(); }
+    else { rafId = requestAnimationFrame(loop); }
+  }
+
+  new ResizeObserver(function () { layout(); draw(); })
+    .observe(document.getElementById("fig-anatomy"));
+  init();
+})();
+
+
+/* ================================================================
+   Section 3: Herding and Contagion (network)
+   ================================================================ */
+(function () {
+  "use strict";
+
+  var W, H;
+  var svg = d3.select("#svg-network");
+  var gLinks, gNodes;
+  var sim;                       /* d3 force simulation */
+  var agents = [];
+  var edges  = [];               /* {source, target} index pairs */
+  var edgeObjs = [];             /* resolved objects for d3-force */
+  var price = 100;
+  var fundVal = 100;
+  var trend = 0;
+  var tick = 0;
+  var rafId = null;
+  var reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  var elHerd   = document.getElementById("sl-herd");
+  var elAgents = document.getElementById("sl-agents");
+  var vHerd    = document.getElementById("v-herd");
+  var vAgents  = document.getElementById("v-agents");
+  var sFund    = document.getElementById("s3-fund");
+  var sChart   = document.getElementById("s3-chart");
+  var sPrice   = document.getElementById("s3-price");
+
+  elHerd.addEventListener("input", function ()   { vHerd.textContent   = (+this.value).toFixed(2); });
+  elAgents.addEventListener("input", function ()  { vAgents.textContent = this.value; rebuild(); });
+  document.getElementById("btn-reset3").addEventListener("click", rebuild);
+
+  /* Build a Watts-Strogatz small-world network */
+  function makeNetwork(n) {
+    agents = [];
+    edges  = [];
+    for (var i = 0; i < n; i++) {
+      agents.push({
+        id: i,
+        strat: Math.random() < 0.7 ? "F" : "C",
+        wealth: 100
+      });
+    }
+    var K = Math.min(4, n - 1);
+    for (var i = 0; i < n; i++) {
+      for (var j = 1; j <= Math.floor(K / 2); j++) {
+        edges.push({ source: i, target: (i + j) % n });
+      }
+    }
+    /* Rewire 20% of edges */
+    edges.forEach(function (e) {
+      if (Math.random() < 0.2) {
+        var t = Math.floor(Math.random() * n);
+        if (t !== e.source && t !== e.target) e.target = t;
+      }
+    });
+    /* Build adjacency for fast lookup */
+    agents.forEach(function (a) { a.neighbors = []; });
+    edges.forEach(function (e) {
+      agents[e.source].neighbors.push(e.target);
+      agents[e.target].neighbors.push(e.source);
+    });
+  }
+
+  function measure() {
+    var box = document.getElementById("fig-network").getBoundingClientRect();
+    W = Math.round(box.width - 48);
+    H = Math.min(400, Math.round(W * 0.65));
+  }
+
+  function buildSVG() {
+    measure();
+    svg.attr("viewBox", "0 0 " + W + " " + H);
+    svg.selectAll("*").remove();
+    gLinks = svg.append("g");
+    gNodes = svg.append("g");
+  }
+
+  function startSim() {
+    if (sim) sim.stop();
+    /* Copy edge indices into fresh objects so d3-force can resolve them */
+    edgeObjs = edges.map(function (e) { return { source: e.source, target: e.target }; });
+
+    sim = d3.forceSimulation(agents)
+      .force("link", d3.forceLink(edgeObjs).id(function (d) { return d.id; }).distance(40).strength(0.4))
+      .force("charge", d3.forceManyBody().strength(-35))
+      .force("center", d3.forceCenter(W / 2, H / 2))
+      .force("collide", d3.forceCollide().radius(function (d) { return nodeR(d) + 1; }))
+      .force("x", d3.forceX(W / 2).strength(0.04))
+      .force("y", d3.forceY(H / 2).strength(0.04))
+      .alphaDecay(0.015)
+      .on("tick", renderNetwork);
+  }
+
+  function nodeR(d) { return 3 + d.wealth / 35; }
+
+  function renderNetwork() {
+    /* Links */
+    var ls = gLinks.selectAll("line").data(edgeObjs);
+    ls.enter().append("line")
+      .attr("stroke", "var(--border)").attr("stroke-width", 0.7)
+      .merge(ls)
+      .attr("x1", function (d) { return d.source.x; })
+      .attr("y1", function (d) { return d.source.y; })
+      .attr("x2", function (d) { return d.target.x; })
+      .attr("y2", function (d) { return d.target.y; });
+    ls.exit().remove();
+
+    /* Nodes */
+    var ns = gNodes.selectAll("circle").data(agents, function (d) { return d.id; });
+    ns.enter().append("circle").attr("stroke", "#fff").attr("stroke-width", 1)
+      .merge(ns)
+      .attr("cx", function (d) { return d.x; })
+      .attr("cy", function (d) { return d.y; })
+      .attr("r",  function (d) { return nodeR(d); })
+      .attr("fill", function (d) { return d.strat === "F" ? "var(--accent)" : "var(--orange)"; });
+    ns.exit().remove();
+
+    /* Stats */
+    var nF = agents.filter(function (a) { return a.strat === "F"; }).length;
+    sFund.textContent  = nF;
+    sChart.textContent = agents.length - nF;
+    sPrice.textContent = price.toFixed(1);
+  }
+
+  function stepModel() {
+    tick++;
+    var nC = agents.filter(function (a) { return a.strat === "C"; }).length;
+    var cf = nC / agents.length;
+
+    fundVal += (Math.random() - 0.5) * 0.15;
+    fundVal = Math.max(30, Math.min(250, fundVal));
+
+    var oldP = price;
+    var fundD  = (1 - cf) * (fundVal - price) * 0.04;
+    var chartD = cf * 1.1 * trend;
+    var noise  = 0.35 * (Math.random() - 0.5) * 2;
+
+    price += fundD + chartD + noise;
+    price = Math.max(1, price);
+    trend = 0.85 * trend + 0.15 * (price - oldP);
+
+    /* Wealth update */
+    var dp = price - oldP;
+    agents.forEach(function (a) {
+      if (a.strat === "C") {
+        /* Chartists profit when trend continues in their direction */
+        a.wealth += dp * 0.5;
+      } else {
+        /* Fundamentalists profit from mean reversion */
+        a.wealth += (fundVal - oldP) * 0.02;
+      }
+      a.wealth = Math.max(20, Math.min(300, a.wealth));
+    });
+
+    /* Strategy switching every 3 ticks */
+    if (tick % 3 !== 0) return;
+    var herding = +elHerd.value;
+
+    agents.forEach(function (a) {
+      var nb = a.neighbors;
+      if (!nb.length) return;
+      var cCount = 0, cWealth = 0, fWealth = 0, fCount = 0;
+      nb.forEach(function (idx) {
+        var n = agents[idx];
+        if (n.strat === "C") { cCount++; cWealth += n.wealth; }
+        else { fCount++; fWealth += n.wealth; }
+      });
+
+      /* Social pressure: fraction of neighbors with each strategy */
+      var pressure = (cCount - fCount) / nb.length;   /* -1 to +1 */
+
+      /* Profit signal: compare average wealth */
+      var profit = 0;
+      if (cCount > 0 && fCount > 0) {
+        profit = (cWealth / cCount - fWealth / fCount) / 100;  /* normalized */
+      }
+
+      var switchProb;
+      if (a.strat === "F") {
+        /* Fundamentalist tempted to become chartist */
+        switchProb = herding * Math.max(0, pressure * 0.6 + profit * 0.4);
+      } else {
+        /* Chartist tempted to become fundamentalist */
+        switchProb = herding * Math.max(0, -pressure * 0.6 - profit * 0.4);
+      }
+      /* Also add a small baseline switching rate so clusters can dissolve */
+      switchProb += 0.02;
+      switchProb = Math.min(switchProb, 0.35);
+
+      if (Math.random() < switchProb) {
+        a.strat = a.strat === "F" ? "C" : "F";
+      }
+    });
+  }
+
+  function rebuild() {
+    price = 100; fundVal = 100; trend = 0; tick = 0;
+    buildSVG();
+    makeNetwork(+elAgents.value);
+    startSim();
+  }
+
+  var lastTs = 0;
+  function loop(ts) {
+    if (ts - lastTs > 180) {
+      stepModel();
+      /* Nudge simulation to keep layout updating with node-size changes */
+      if (sim) {
+        sim.force("collide").radius(function (d) { return nodeR(d) + 1; });
+        sim.alpha(Math.max(sim.alpha(), 0.08)).restart();
+      }
+      lastTs = ts;
+    }
+    rafId = requestAnimationFrame(loop);
+  }
+
+  new ResizeObserver(function () {
+    measure();
+    svg.attr("viewBox", "0 0 " + W + " " + H);
+    if (sim) {
+      sim.force("center", d3.forceCenter(W / 2, H / 2));
+      sim.force("x", d3.forceX(W / 2).strength(0.04));
+      sim.force("y", d3.forceY(H / 2).strength(0.04));
+      sim.alpha(0.3).restart();
+    }
+  }).observe(document.getElementById("fig-network"));
+
+  function init() {
+    buildSVG();
+    makeNetwork(+elAgents.value);
+    startSim();
+    if (reducedMotion) {
+      for (var i = 0; i < 300; i++) sim.tick();
+      for (var i = 0; i < 60; i++) stepModel();
+      renderNetwork();
+    } else {
+      rafId = requestAnimationFrame(loop);
+    }
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>

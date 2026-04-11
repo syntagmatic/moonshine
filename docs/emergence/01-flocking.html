@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flocking: How Birds Fly Together</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;500&family=Source+Sans+3:wght@400;600;700&family=Source+Serif+4:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --article-width: 740px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem;
+  --line-height: 1.6;
+  --text: #1a1a2e;
+  --text-2: #4a4a6a;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --bg: #fafafa;
+  --fig-bg: #ffffff;
+  --border: #e2e2e8;
+}
+body { font-family: var(--body-font); font-size: var(--body-size);
+  line-height: var(--line-height); color: var(--text); background: var(--bg);
+  -webkit-font-smoothing: antialiased; }
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
+h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+h3 { font-size: 1.15rem; margin: 2rem 0 0.75rem; }
+p { margin: 0 0 1rem; }
+a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+a:hover { color: #1d4ed8; }
+.header { padding: 4rem 0 2rem; border-bottom: 1px solid var(--border); margin-bottom: 2.5rem; }
+.header .back { font-family: var(--heading-font); font-size: 0.85rem; display: inline-block; margin-bottom: 1.5rem; }
+.header .subtitle { font-family: var(--heading-font); font-size: 1.15rem; color: var(--text-2); margin-bottom: 0; max-width: 580px; }
+.figure { margin: 2rem 0; padding: 1.5rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.figure canvas { display: block; width: 100%; border-radius: 3px; }
+.figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; }
+.figure-label { font-weight: 600; color: var(--text); }
+.insight { background: var(--accent-light); border-left: 3px solid var(--accent); padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 4px 4px 0; }
+.insight p { margin: 0; }
+.controls { display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-end; margin-top: 1rem; font-family: var(--heading-font); font-size: 0.85rem; }
+.control-group { display: flex; flex-direction: column; gap: 0.25rem; }
+.control-group label { color: var(--text-2); font-weight: 600; }
+.control-group .slider-row { display: flex; align-items: center; gap: 0.5rem; }
+.control-group input[type="range"] { width: 120px; accent-color: var(--accent); }
+.control-group .val { font-family: var(--mono-font); font-variant-numeric: tabular-nums; min-width: 2.5em; text-align: right; color: var(--text); }
+.btn { font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600;
+  padding: 0.45rem 1.1rem; border-radius: 5px; border: 1px solid var(--border);
+  background: var(--fig-bg); color: var(--text); cursor: pointer;
+  transition: background 0.15s, border-color 0.15s; user-select: none; }
+.btn:hover { border-color: var(--accent); background: var(--accent-light); }
+.btn.active { border-color: var(--accent); background: var(--accent); color: white; }
+.click-hint { font-family: var(--heading-font); font-size: 0.8rem; color: var(--text-2);
+  text-align: center; margin-top: 0.5rem; font-style: italic; }
+svg text { font-family: var(--heading-font); }
+
+@media (prefers-reduced-motion: reduce) {
+  .figure canvas { outline: 2px dashed var(--border); outline-offset: -2px; }
+}
+@media (max-width: 600px) {
+  h1 { font-size: 1.75rem; }
+  .controls { gap: 0.6rem; }
+  .control-group input[type="range"] { width: 80px; }
+}
+</style>
+</head>
+<body>
+<div class="article">
+
+<div class="header">
+  <a href="index.html" class="back">&larr; Emergence</a>
+  <h1>Flocking: How Birds Fly Together</h1>
+  <p class="subtitle">Three simple rules produce the mesmerizing coordination of a murmuration</p>
+</div>
+
+<p>
+Watch a flock of starlings at dusk. Thousands of birds twist and pulse through the sky
+as a single shape. It looks choreographed, but there is no choreographer. No bird leads.
+No bird knows what the flock is doing. Each bird reacts only to its nearby neighbors,
+and the global pattern falls out for free.
+</p>
+
+<p>
+In 1986, Craig Reynolds built a computer simulation showing that three simple steering
+rules are enough to produce this behavior. He called the simulated birds "boids."
+The rules are separation, alignment, and cohesion. That is all you need.
+</p>
+
+<h2>The Three Rules</h2>
+
+<p>
+Each boid looks at its neighbors and computes three steering forces:
+</p>
+
+<p>
+<strong>Separation.</strong> Steer away from neighbors that are too close. This prevents
+collisions and keeps the group from collapsing into a single point.
+</p>
+
+<p>
+<strong>Alignment.</strong> Steer toward the average heading of nearby neighbors. This
+makes the group move in roughly the same direction.
+</p>
+
+<p>
+<strong>Cohesion.</strong> Steer toward the average position of nearby neighbors. This
+keeps the group together instead of drifting apart.
+</p>
+
+<p>
+The simulation below runs all three at once. Try dragging each slider to zero and
+watch what happens. With no separation, birds pile on top of each other. With no
+alignment, they swirl without direction. With no cohesion, they scatter.
+</p>
+
+<div class="figure" id="fig-rules">
+  <canvas id="canvas-rules"></canvas>
+  <div class="controls">
+    <div class="control-group">
+      <label>Separation</label>
+      <div class="slider-row">
+        <input type="range" id="sep-slider" min="0" max="2" step="0.05" value="1.2">
+        <span class="val" id="sep-val">1.20</span>
+      </div>
+    </div>
+    <div class="control-group">
+      <label>Alignment</label>
+      <div class="slider-row">
+        <input type="range" id="ali-slider" min="0" max="2" step="0.05" value="1.0">
+        <span class="val" id="ali-val">1.00</span>
+      </div>
+    </div>
+    <div class="control-group">
+      <label>Cohesion</label>
+      <div class="slider-row">
+        <input type="range" id="coh-slider" min="0" max="2" step="0.05" value="0.8">
+        <span class="val" id="coh-val">0.80</span>
+      </div>
+    </div>
+    <button class="btn" id="reset-rules">Reset</button>
+  </div>
+  <p class="figure-caption"><span class="figure-label">Figure 1.</span> 200 boids following three local rules. Adjust the sliders to weight each force. Setting a rule to zero removes it entirely.</p>
+</div>
+
+<div class="insight">
+<p>
+No bird decides "we should fly east." Each bird adjusts its heading based on
+a handful of neighbors. The flock-level direction is a side effect.
+</p>
+</div>
+
+<h2>Vision and Neighborhoods</h2>
+
+<p>
+Real birds do not sense every other bird in the sky. They respond to a small number
+of nearby neighbors, typically within a limited field of view. A bird behind you
+does not influence your steering.
+</p>
+
+<p>
+In the simulation, each boid has a vision radius and a roughly 270-degree field of view.
+Only neighbors inside this cone count. Click on any boid below to highlight it and see
+its vision cone. Neighbors it can see are drawn in blue. Those outside its perception
+are gray.
+</p>
+
+<div class="figure" id="fig-vision">
+  <canvas id="canvas-vision"></canvas>
+  <div class="controls">
+    <div class="control-group">
+      <label>Vision radius</label>
+      <div class="slider-row">
+        <input type="range" id="radius-slider" min="20" max="120" step="5" value="50">
+        <span class="val" id="radius-val">50</span>
+      </div>
+    </div>
+  </div>
+  <p class="click-hint">Click a boid to inspect its neighborhood</p>
+  <p class="figure-caption"><span class="figure-label">Figure 2.</span> A boid's vision cone (light blue wedge) and visible neighbors (blue). The selected boid is outlined in red. Adjust the radius to see how perception range affects group structure.</p>
+</div>
+
+<p>
+With a very small radius, each boid sees almost no one. The group fragments into
+tiny clusters that drift independently. Increase the radius and the flock tightens,
+because each bird can coordinate with more of the group. But even a modest radius
+is enough. You do not need global awareness to produce global order.
+</p>
+
+<h2>From Local to Global</h2>
+
+<p>
+The three rules produce large-scale flow structures: rivers of birds curving through
+space, splitting at obstacles, merging at the edges. These patterns are hard to see
+when you only watch the birds. Trails make them visible.
+</p>
+
+<p>
+Toggle trail mode below. Each boid leaves a fading path behind it. The trails reveal
+the coherent streams and eddies that emerge from purely local interactions.
+</p>
+
+<div class="figure" id="fig-trails">
+  <canvas id="canvas-trails"></canvas>
+  <div class="controls">
+    <div class="control-group">
+      <label>Speed</label>
+      <div class="slider-row">
+        <input type="range" id="speed-slider" min="0.2" max="3" step="0.1" value="1.0">
+        <span class="val" id="speed-val">1.0</span>
+      </div>
+    </div>
+    <button class="btn" id="trail-toggle">Trails: OFF</button>
+    <button class="btn" id="reset-trails">Reset</button>
+  </div>
+  <p class="figure-caption"><span class="figure-label">Figure 3.</span> Trail mode draws fading paths behind each boid. Watch for coherent streams, curves, and the moments where streams merge or split.</p>
+</div>
+
+<h2>Breaking the Flock</h2>
+
+<p>
+What happens when you introduce danger? Click anywhere in the simulation below to
+place a predator. Birds within range flee from it, adding a fourth force that
+overrides the usual flocking behavior near the threat.
+</p>
+
+<p>
+Watch the flock split around the predator and reform on the other side. No bird
+decides to split the flock. No bird signals "regroup." The splitting and reforming
+are entirely emergent.
+</p>
+
+<div class="figure" id="fig-predator">
+  <canvas id="canvas-predator"></canvas>
+  <div class="controls">
+    <button class="btn" id="clear-predators">Clear predators</button>
+  </div>
+  <p class="click-hint">Click to place a predator (red dot)</p>
+  <p class="figure-caption"><span class="figure-label">Figure 4.</span> Click to drop a predator. Birds flee from red dots, splitting the flock. Remove predators to watch the flock reform.</p>
+</div>
+
+<div class="insight">
+<p>
+No bird decides to split the flock. Each bird simply steers away from danger,
+and the split emerges from hundreds of individual escape responses.
+</p>
+</div>
+
+<p>
+This is the central lesson of emergence. You do not need a leader or a plan. You
+need a population of agents following local rules. The large-scale order is a
+consequence, not a cause. Flocking, traffic patterns, market dynamics, neural
+synchrony. The recipe is the same: simple rules, local interactions, global structure.
+</p>
+
+</div><!-- .article -->
+
+<script>
+// ===================================================================
+// Shared boid engine
+// ===================================================================
+const REDUCED_MOTION = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+function createBoids(count, w, h) {
+  const boids = [];
+  for (let i = 0; i < count; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 1.5 + Math.random() * 1.0;
+    boids.push({
+      x: Math.random() * w,
+      y: Math.random() * h,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+    });
+  }
+  return boids;
+}
+
+function updateBoids(boids, w, h, opts) {
+  const {
+    separation = 1.2,
+    alignment = 1.0,
+    cohesion = 0.8,
+    radius = 50,
+    fov = 270,
+    maxSpeed = 3,
+    maxForce = 0.15,
+    predators = [],
+    predatorRadius = 80,
+    predatorWeight = 2.5,
+    speedMult = 1,
+  } = opts;
+
+  const fovRad = (fov / 360) * Math.PI;
+  const r2 = radius * radius;
+  const sepDist = radius * 0.45;
+  const sepDist2 = sepDist * sepDist;
+
+  for (let i = 0; i < boids.length; i++) {
+    const b = boids[i];
+    let sepX = 0, sepY = 0;
+    let aliX = 0, aliY = 0;
+    let cohX = 0, cohY = 0;
+    let sepCount = 0, neighCount = 0;
+
+    const bAngle = Math.atan2(b.vy, b.vx);
+
+    for (let j = 0; j < boids.length; j++) {
+      if (i === j) continue;
+      const o = boids[j];
+      const dx = o.x - b.x;
+      const dy = o.y - b.y;
+      const dist2 = dx * dx + dy * dy;
+      if (dist2 > r2 || dist2 < 0.0001) continue;
+
+      // Field-of-view check
+      const angle = Math.atan2(dy, dx);
+      let diff = angle - bAngle;
+      if (diff > Math.PI) diff -= 2 * Math.PI;
+      if (diff < -Math.PI) diff += 2 * Math.PI;
+      if (Math.abs(diff) > fovRad) continue;
+
+      const dist = Math.sqrt(dist2);
+      neighCount++;
+      aliX += o.vx;
+      aliY += o.vy;
+      cohX += o.x;
+      cohY += o.y;
+
+      if (dist2 < sepDist2) {
+        sepX -= dx / dist;
+        sepY -= dy / dist;
+        sepCount++;
+      }
+    }
+
+    let fx = 0, fy = 0;
+
+    if (sepCount > 0) {
+      sepX /= sepCount;
+      sepY /= sepCount;
+      const sm = Math.sqrt(sepX * sepX + sepY * sepY);
+      if (sm > 0) { sepX = sepX / sm * maxSpeed - b.vx; sepY = sepY / sm * maxSpeed - b.vy; }
+      fx += sepX * separation;
+      fy += sepY * separation;
+    }
+    if (neighCount > 0) {
+      aliX /= neighCount;
+      aliY /= neighCount;
+      const am = Math.sqrt(aliX * aliX + aliY * aliY);
+      if (am > 0) { aliX = aliX / am * maxSpeed - b.vx; aliY = aliY / am * maxSpeed - b.vy; }
+      fx += aliX * alignment;
+      fy += aliY * alignment;
+
+      cohX = cohX / neighCount - b.x;
+      cohY = cohY / neighCount - b.y;
+      const cm = Math.sqrt(cohX * cohX + cohY * cohY);
+      if (cm > 0) { cohX = cohX / cm * maxSpeed - b.vx; cohY = cohY / cm * maxSpeed - b.vy; }
+      fx += cohX * cohesion;
+      fy += cohY * cohesion;
+    }
+
+    // Predator avoidance
+    for (let p = 0; p < predators.length; p++) {
+      const pred = predators[p];
+      const pdx = b.x - pred.x;
+      const pdy = b.y - pred.y;
+      const pd2 = pdx * pdx + pdy * pdy;
+      const pr2 = predatorRadius * predatorRadius;
+      if (pd2 < pr2 && pd2 > 0.01) {
+        const pd = Math.sqrt(pd2);
+        const strength = (1 - pd / predatorRadius) * predatorWeight;
+        fx += (pdx / pd) * maxSpeed * strength;
+        fy += (pdy / pd) * maxSpeed * strength;
+      }
+    }
+
+    // Clamp force
+    const fm = Math.sqrt(fx * fx + fy * fy);
+    if (fm > maxForce) { fx = fx / fm * maxForce; fy = fy / fm * maxForce; }
+
+    b.vx += fx;
+    b.vy += fy;
+    const spd = Math.sqrt(b.vx * b.vx + b.vy * b.vy);
+    if (spd > maxSpeed) { b.vx = b.vx / spd * maxSpeed; b.vy = b.vy / spd * maxSpeed; }
+    // Min speed to prevent stalling
+    if (spd < 0.5) {
+      const a = Math.random() * Math.PI * 2;
+      b.vx += Math.cos(a) * 0.3;
+      b.vy += Math.sin(a) * 0.3;
+    }
+
+    b.x += b.vx * speedMult;
+    b.y += b.vy * speedMult;
+
+    // Wrap edges
+    if (b.x < 0) b.x += w;
+    if (b.x > w) b.x -= w;
+    if (b.y < 0) b.y += h;
+    if (b.y > h) b.y -= h;
+  }
+}
+
+function drawBoid(ctx, b, size, color) {
+  const angle = Math.atan2(b.vy, b.vx);
+  ctx.save();
+  ctx.translate(b.x, b.y);
+  ctx.rotate(angle);
+  ctx.beginPath();
+  ctx.moveTo(size, 0);
+  ctx.lineTo(-size * 0.6, size * 0.4);
+  ctx.lineTo(-size * 0.35, 0);
+  ctx.lineTo(-size * 0.6, -size * 0.4);
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.restore();
+}
+
+function getCanvasDims(container) {
+  const rect = container.getBoundingClientRect();
+  const w = Math.floor(rect.width - 48); // 1.5rem padding each side
+  const h = Math.min(420, Math.floor(w * 0.6));
+  return { w, h };
+}
+
+function setupCanvas(canvas, w, h) {
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+  canvas.style.width = w + 'px';
+  canvas.style.height = h + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return ctx;
+}
+
+// ===================================================================
+// Figure 1: The Three Rules
+// ===================================================================
+(function() {
+  const container = document.getElementById('fig-rules');
+  const canvas = document.getElementById('canvas-rules');
+  const sepSlider = document.getElementById('sep-slider');
+  const aliSlider = document.getElementById('ali-slider');
+  const cohSlider = document.getElementById('coh-slider');
+  const sepVal = document.getElementById('sep-val');
+  const aliVal = document.getElementById('ali-val');
+  const cohVal = document.getElementById('coh-val');
+  const resetBtn = document.getElementById('reset-rules');
+
+  let dims = getCanvasDims(container);
+  let ctx = setupCanvas(canvas, dims.w, dims.h);
+  let boids = createBoids(200, dims.w, dims.h);
+
+  function readSliders() {
+    return {
+      separation: +sepSlider.value,
+      alignment: +aliSlider.value,
+      cohesion: +cohSlider.value,
+    };
+  }
+
+  function updateLabels() {
+    sepVal.textContent = (+sepSlider.value).toFixed(2);
+    aliVal.textContent = (+aliSlider.value).toFixed(2);
+    cohVal.textContent = (+cohSlider.value).toFixed(2);
+  }
+
+  sepSlider.addEventListener('input', updateLabels);
+  aliSlider.addEventListener('input', updateLabels);
+  cohSlider.addEventListener('input', updateLabels);
+
+  resetBtn.addEventListener('click', function() {
+    sepSlider.value = 1.2; aliSlider.value = 1.0; cohSlider.value = 0.8;
+    updateLabels();
+    boids = createBoids(200, dims.w, dims.h);
+  });
+
+  const ro = new ResizeObserver(function() {
+    dims = getCanvasDims(container);
+    ctx = setupCanvas(canvas, dims.w, dims.h);
+  });
+  ro.observe(container);
+
+  function tick() {
+    const params = readSliders();
+    updateBoids(boids, dims.w, dims.h, params);
+
+    ctx.clearRect(0, 0, dims.w, dims.h);
+    ctx.fillStyle = '#f8f8fc';
+    ctx.fillRect(0, 0, dims.w, dims.h);
+
+    for (let i = 0; i < boids.length; i++) {
+      drawBoid(ctx, boids[i], 5, '#1a1a2e');
+    }
+    requestAnimationFrame(tick);
+  }
+
+  if (REDUCED_MOTION) {
+    // Run a few frames to settle, then draw once
+    for (let i = 0; i < 60; i++) updateBoids(boids, dims.w, dims.h, readSliders());
+    ctx.clearRect(0, 0, dims.w, dims.h);
+    ctx.fillStyle = '#f8f8fc';
+    ctx.fillRect(0, 0, dims.w, dims.h);
+    for (let i = 0; i < boids.length; i++) drawBoid(ctx, boids[i], 5, '#1a1a2e');
+  } else {
+    requestAnimationFrame(tick);
+  }
+})();
+
+// ===================================================================
+// Figure 2: Vision and Neighborhoods
+// ===================================================================
+(function() {
+  const container = document.getElementById('fig-vision');
+  const canvas = document.getElementById('canvas-vision');
+  const radiusSlider = document.getElementById('radius-slider');
+  const radiusVal = document.getElementById('radius-val');
+
+  let dims = getCanvasDims(container);
+  let ctx = setupCanvas(canvas, dims.w, dims.h);
+  let boids = createBoids(120, dims.w, dims.h);
+  let selectedIdx = -1;
+  const fov = 270;
+  const fovRad = (fov / 360) * Math.PI;
+
+  radiusSlider.addEventListener('input', function() {
+    radiusVal.textContent = radiusSlider.value;
+  });
+
+  canvas.addEventListener('click', function(e) {
+    const rect = canvas.getBoundingClientRect();
+    const mx = (e.clientX - rect.left) * (dims.w / rect.width);
+    const my = (e.clientY - rect.top) * (dims.h / rect.height);
+    let best = -1, bestDist = 900;
+    for (let i = 0; i < boids.length; i++) {
+      const dx = boids[i].x - mx, dy = boids[i].y - my;
+      const d = Math.sqrt(dx * dx + dy * dy);
+      if (d < bestDist) { bestDist = d; best = i; }
+    }
+    selectedIdx = (bestDist < 30) ? best : -1;
+  });
+
+  const ro = new ResizeObserver(function() {
+    dims = getCanvasDims(container);
+    ctx = setupCanvas(canvas, dims.w, dims.h);
+  });
+  ro.observe(container);
+
+  function tick() {
+    const radius = +radiusSlider.value;
+    updateBoids(boids, dims.w, dims.h, { radius: radius, separation: 1.2, alignment: 1.0, cohesion: 0.8, fov: fov });
+
+    ctx.clearRect(0, 0, dims.w, dims.h);
+    ctx.fillStyle = '#f8f8fc';
+    ctx.fillRect(0, 0, dims.w, dims.h);
+
+    // Determine visible neighbors for selected boid
+    const visibleSet = new Set();
+    if (selectedIdx >= 0 && selectedIdx < boids.length) {
+      const sb = boids[selectedIdx];
+      const bAngle = Math.atan2(sb.vy, sb.vx);
+      const r2 = radius * radius;
+
+      // Draw vision cone
+      ctx.save();
+      ctx.globalAlpha = 0.1;
+      ctx.fillStyle = '#2563eb';
+      ctx.beginPath();
+      ctx.moveTo(sb.x, sb.y);
+      ctx.arc(sb.x, sb.y, radius, bAngle - fovRad, bAngle + fovRad);
+      ctx.closePath();
+      ctx.fill();
+      ctx.globalAlpha = 0.35;
+      ctx.strokeStyle = '#2563eb';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(sb.x, sb.y, radius, bAngle - fovRad, bAngle + fovRad);
+      ctx.lineTo(sb.x, sb.y);
+      ctx.closePath();
+      ctx.stroke();
+      ctx.restore();
+
+      for (let j = 0; j < boids.length; j++) {
+        if (j === selectedIdx) continue;
+        const o = boids[j];
+        const dx = o.x - sb.x, dy = o.y - sb.y;
+        const dist2 = dx * dx + dy * dy;
+        if (dist2 > r2) continue;
+        const angle = Math.atan2(dy, dx);
+        let diff = angle - bAngle;
+        if (diff > Math.PI) diff -= 2 * Math.PI;
+        if (diff < -Math.PI) diff += 2 * Math.PI;
+        if (Math.abs(diff) <= fovRad) visibleSet.add(j);
+      }
+    }
+
+    // Draw all boids
+    for (let i = 0; i < boids.length; i++) {
+      if (i === selectedIdx) continue;
+      const color = visibleSet.has(i) ? '#2563eb' : (selectedIdx >= 0 ? '#b0b0c0' : '#1a1a2e');
+      drawBoid(ctx, boids[i], 5, color);
+    }
+    // Draw selected boid last (on top)
+    if (selectedIdx >= 0 && selectedIdx < boids.length) {
+      drawBoid(ctx, boids[selectedIdx], 6, '#dc2626');
+      ctx.save();
+      ctx.strokeStyle = '#dc2626';
+      ctx.lineWidth = 1.5;
+      const sb = boids[selectedIdx];
+      const angle = Math.atan2(sb.vy, sb.vx);
+      ctx.beginPath();
+      ctx.arc(sb.x, sb.y, 8, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    if (!REDUCED_MOTION) requestAnimationFrame(tick);
+  }
+
+  if (REDUCED_MOTION) {
+    for (let i = 0; i < 60; i++) updateBoids(boids, dims.w, dims.h, { radius: 50, separation: 1.2, alignment: 1.0, cohesion: 0.8, fov: fov });
+    tick();
+  } else {
+    requestAnimationFrame(tick);
+  }
+})();
+
+// ===================================================================
+// Figure 3: Trails (From Local to Global)
+// ===================================================================
+(function() {
+  const container = document.getElementById('fig-trails');
+  const canvas = document.getElementById('canvas-trails');
+  const speedSlider = document.getElementById('speed-slider');
+  const speedVal = document.getElementById('speed-val');
+  const trailBtn = document.getElementById('trail-toggle');
+  const resetBtn = document.getElementById('reset-trails');
+
+  let dims = getCanvasDims(container);
+  let ctx = setupCanvas(canvas, dims.w, dims.h);
+  let boids = createBoids(200, dims.w, dims.h);
+  let trails = false;
+  // History buffer for trails: each boid gets a ring buffer of positions
+  const TRAIL_LEN = 40;
+  let history = boids.map(function() { return []; });
+
+  speedSlider.addEventListener('input', function() {
+    speedVal.textContent = (+speedSlider.value).toFixed(1);
+  });
+
+  trailBtn.addEventListener('click', function() {
+    trails = !trails;
+    trailBtn.textContent = trails ? 'Trails: ON' : 'Trails: OFF';
+    if (trails) trailBtn.classList.add('active');
+    else trailBtn.classList.remove('active');
+    // Clear history when toggling on
+    if (trails) history = boids.map(function() { return []; });
+  });
+
+  resetBtn.addEventListener('click', function() {
+    boids = createBoids(200, dims.w, dims.h);
+    history = boids.map(function() { return []; });
+  });
+
+  const ro = new ResizeObserver(function() {
+    dims = getCanvasDims(container);
+    ctx = setupCanvas(canvas, dims.w, dims.h);
+  });
+  ro.observe(container);
+
+  function tick() {
+    const spd = +speedSlider.value;
+    updateBoids(boids, dims.w, dims.h, { separation: 1.2, alignment: 1.0, cohesion: 0.8, speedMult: spd });
+
+    // Record trail history
+    if (trails) {
+      for (let i = 0; i < boids.length; i++) {
+        history[i].push({ x: boids[i].x, y: boids[i].y });
+        if (history[i].length > TRAIL_LEN) history[i].shift();
+      }
+    }
+
+    ctx.clearRect(0, 0, dims.w, dims.h);
+    ctx.fillStyle = '#f8f8fc';
+    ctx.fillRect(0, 0, dims.w, dims.h);
+
+    // Draw trails
+    if (trails) {
+      for (let i = 0; i < boids.length; i++) {
+        const h = history[i];
+        if (h.length < 2) continue;
+        ctx.beginPath();
+        ctx.moveTo(h[0].x, h[0].y);
+        for (let t = 1; t < h.length; t++) {
+          // Skip segments that wrap around edges
+          const dx = Math.abs(h[t].x - h[t-1].x);
+          const dy = Math.abs(h[t].y - h[t-1].y);
+          if (dx > dims.w * 0.5 || dy > dims.h * 0.5) {
+            ctx.moveTo(h[t].x, h[t].y);
+          } else {
+            ctx.lineTo(h[t].x, h[t].y);
+          }
+        }
+        ctx.strokeStyle = 'rgba(37, 99, 235, 0.15)';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
+    }
+
+    for (let i = 0; i < boids.length; i++) {
+      drawBoid(ctx, boids[i], 5, '#1a1a2e');
+    }
+    if (!REDUCED_MOTION) requestAnimationFrame(tick);
+  }
+
+  if (REDUCED_MOTION) {
+    for (let i = 0; i < 60; i++) updateBoids(boids, dims.w, dims.h, { separation: 1.2, alignment: 1.0, cohesion: 0.8 });
+    tick();
+  } else {
+    requestAnimationFrame(tick);
+  }
+})();
+
+// ===================================================================
+// Figure 4: Breaking the Flock (Predator)
+// ===================================================================
+(function() {
+  const container = document.getElementById('fig-predator');
+  const canvas = document.getElementById('canvas-predator');
+  const clearBtn = document.getElementById('clear-predators');
+
+  let dims = getCanvasDims(container);
+  let ctx = setupCanvas(canvas, dims.w, dims.h);
+  let boids = createBoids(200, dims.w, dims.h);
+  let predators = [];
+
+  canvas.style.cursor = 'crosshair';
+
+  canvas.addEventListener('click', function(e) {
+    const rect = canvas.getBoundingClientRect();
+    const mx = (e.clientX - rect.left) * (dims.w / rect.width);
+    const my = (e.clientY - rect.top) * (dims.h / rect.height);
+    predators.push({ x: mx, y: my });
+  });
+
+  clearBtn.addEventListener('click', function() {
+    predators = [];
+  });
+
+  const ro = new ResizeObserver(function() {
+    dims = getCanvasDims(container);
+    ctx = setupCanvas(canvas, dims.w, dims.h);
+  });
+  ro.observe(container);
+
+  function tick() {
+    updateBoids(boids, dims.w, dims.h, {
+      separation: 1.2,
+      alignment: 1.0,
+      cohesion: 0.8,
+      predators: predators,
+      predatorRadius: 80,
+      predatorWeight: 2.5,
+    });
+
+    ctx.clearRect(0, 0, dims.w, dims.h);
+    ctx.fillStyle = '#f8f8fc';
+    ctx.fillRect(0, 0, dims.w, dims.h);
+
+    // Draw predator danger zones
+    for (let p = 0; p < predators.length; p++) {
+      ctx.save();
+      ctx.globalAlpha = 0.06;
+      ctx.fillStyle = '#dc2626';
+      ctx.beginPath();
+      ctx.arc(predators[p].x, predators[p].y, 80, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      // Predator dot
+      ctx.save();
+      ctx.fillStyle = '#dc2626';
+      ctx.beginPath();
+      ctx.arc(predators[p].x, predators[p].y, 6, 0, Math.PI * 2);
+      ctx.fill();
+      // Outer ring
+      ctx.strokeStyle = '#dc2626';
+      ctx.lineWidth = 1.5;
+      ctx.globalAlpha = 0.3;
+      ctx.beginPath();
+      ctx.arc(predators[p].x, predators[p].y, 80, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    for (let i = 0; i < boids.length; i++) {
+      drawBoid(ctx, boids[i], 5, '#1a1a2e');
+    }
+    if (!REDUCED_MOTION) requestAnimationFrame(tick);
+  }
+
+  if (REDUCED_MOTION) {
+    for (let i = 0; i < 60; i++) updateBoids(boids, dims.w, dims.h, { separation: 1.2, alignment: 1.0, cohesion: 0.8 });
+    tick();
+  } else {
+    requestAnimationFrame(tick);
+  }
+})();
+</script>
+</body>
+</html>

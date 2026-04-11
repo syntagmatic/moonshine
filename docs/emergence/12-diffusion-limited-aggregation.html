@@ -1,0 +1,961 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Diffusion-Limited Aggregation: Fractal Growth from Random Walks</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;500&family=Source+Sans+3:wght@400;600;700&family=Source+Serif+4:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --article-width: 740px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem;
+  --line-height: 1.6;
+  --text: #1a1a2e;
+  --text-2: #4a4a6a;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --bg: #fafafa;
+  --fig-bg: #ffffff;
+  --border: #e2e2e8;
+}
+body { font-family: var(--body-font); font-size: var(--body-size);
+  line-height: var(--line-height); color: var(--text); background: var(--bg);
+  -webkit-font-smoothing: antialiased; }
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
+h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+h3 { font-size: 1.15rem; margin: 2rem 0 0.75rem; }
+p { margin: 0 0 1rem; }
+a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+a:hover { color: #1d4ed8; }
+.header { padding: 4rem 0 2rem; border-bottom: 1px solid var(--border); margin-bottom: 2.5rem; }
+.header .back { font-family: var(--heading-font); font-size: 0.85rem; display: inline-block; margin-bottom: 1.5rem; }
+.header .subtitle { font-family: var(--heading-font); font-size: 1.15rem; color: var(--text-2); margin-bottom: 0; max-width: 580px; }
+.figure { margin: 2rem 0; padding: 1.5rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.figure canvas { display: block; width: 100%; image-rendering: pixelated; border-radius: 3px; }
+.figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; line-height: 1.4; }
+.figure-label { font-weight: 600; color: var(--text); }
+.insight { background: var(--accent-light); border-left: 3px solid var(--accent); padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 4px 4px 0; }
+.insight p { margin: 0; }
+.insight p + p { margin-top: 0.75rem; }
+.controls { display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-end; margin-top: 1rem; font-family: var(--heading-font); font-size: 0.85rem; }
+.control-group { display: flex; flex-direction: column; gap: 0.25rem; }
+.control-group label { color: var(--text-2); font-weight: 600; }
+.control-group .slider-row { display: flex; align-items: center; gap: 0.5rem; }
+.control-group input[type="range"] { width: 120px; accent-color: var(--accent); }
+.control-group .val { font-family: var(--mono-font); font-variant-numeric: tabular-nums;
+  min-width: 2.5em; text-align: right; color: var(--text); }
+.btn { font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600;
+  padding: 0.45rem 1.1rem; border-radius: 5px; border: 1px solid var(--border);
+  background: var(--fig-bg); color: var(--text); cursor: pointer;
+  transition: background 0.15s, border-color 0.15s; user-select: none; }
+.btn:hover { border-color: var(--accent); background: var(--accent-light); }
+.btn.active { border-color: var(--accent); background: var(--accent); color: white; }
+.stat-row { display: flex; gap: 1.5rem; margin-top: 0.75rem; font-family: var(--heading-font); font-size: 0.85rem; }
+.stat-row .stat { display: flex; gap: 0.35rem; align-items: baseline; }
+.stat-row .stat-label { color: var(--text-2); font-weight: 600; }
+.stat-row .stat-val { font-family: var(--mono-font); font-variant-numeric: tabular-nums; color: var(--text); }
+.click-hint { font-family: var(--heading-font); font-size: 0.8rem; color: var(--text-2);
+  text-align: center; margin-top: 0.5rem; font-style: italic; }
+svg text { font-family: var(--heading-font); }
+
+.side-by-side { display: flex; gap: 1rem; }
+.side-by-side .side-panel { flex: 1; min-width: 0; }
+.side-by-side .side-panel canvas { width: 100%; }
+.side-label { font-family: var(--heading-font); font-size: 0.8rem; font-weight: 600;
+  color: var(--text-2); text-align: center; margin-top: 0.5rem; }
+
+@media (prefers-reduced-motion: reduce) {
+  .figure canvas { outline: 2px dashed var(--border); outline-offset: -2px; }
+}
+@media (max-width: 600px) {
+  h1 { font-size: 1.75rem; }
+  .controls { gap: 0.6rem; }
+  .control-group input[type="range"] { width: 80px; }
+  .side-by-side { flex-direction: column; }
+}
+</style>
+</head>
+<body>
+<div class="article">
+
+<div class="header">
+  <a href="index.html" class="back">&larr; Emergence</a>
+  <h1>Diffusion-Limited Aggregation</h1>
+  <p class="subtitle">Release a random walker and let it stick where it lands. The result is a fractal tree that resembles lightning, coral, and frost.</p>
+</div>
+
+<p>
+Start with a single particle. Release another particle far away and let it
+wander randomly. When the walker bumps into the first particle, it sticks.
+Release another. And another. The structure that grows is not round. It is
+not smooth. It is a fractal tree with branches that keep branching.
+</p>
+
+<p>
+This is diffusion-limited aggregation, or DLA. The growth is "diffusion-limited"
+because the random walk (diffusion) of incoming particles is the bottleneck.
+Particles arrive slowly. They stick fast. That asymmetry is what makes fractals.
+</p>
+
+<h2>1. The Algorithm</h2>
+
+<p>
+The simulation below places a seed at the center of the grid. Walkers are released
+from a circle around the cluster. Each walker steps randomly on a lattice: up, down,
+left, or right. When a walker lands next to an occupied cell, it sticks and becomes
+part of the cluster. Then a new walker is released.
+</p>
+
+<p>
+Particles are colored by arrival order. Early particles are dark blue. Late particles
+are pale yellow. Watch the branches form. Notice how the outer tips grow fastest.
+</p>
+
+<div class="figure" id="fig-algorithm">
+  <canvas id="canvas-algo"></canvas>
+  <div class="stat-row">
+    <div class="stat">
+      <span class="stat-label">Particles:</span>
+      <span class="stat-val" id="stat-algo-count">1</span>
+    </div>
+    <div class="stat">
+      <span class="stat-label">Radius:</span>
+      <span class="stat-val" id="stat-algo-radius">0</span>
+    </div>
+  </div>
+  <div class="controls">
+    <div class="control-group">
+      <label>Speed</label>
+      <div class="slider-row">
+        <input type="range" id="speed-slider" min="1" max="200" step="1" value="40">
+        <span class="val" id="speed-val">40</span>
+      </div>
+    </div>
+    <button class="btn" id="pause-algo">Pause</button>
+    <button class="btn" id="reset-algo">Reset</button>
+  </div>
+  <p class="figure-caption"><span class="figure-label">Figure 1.</span> DLA cluster growing from a single seed. Color encodes arrival order (dark = early, light = late). Drag the speed slider to control how many walkers are processed per frame.</p>
+</div>
+
+<p>
+The shape looks organic. It looks like something that grew. That is because it did
+grow, one particle at a time, governed by nothing but randomness and contact. No
+blueprint. No symmetry constraint. Just a rule: stick where you land.
+</p>
+
+<h2>2. The Screening Effect</h2>
+
+<p>
+Why branches? Why not a round blob? The answer is screening. A random walker
+approaching the cluster is far more likely to hit an outer tip than to penetrate
+deep into a crevice. Tips intercept walkers before they can reach the interior.
+This means tips grow faster. Small bumps become big branches. Big branches
+develop their own bumps. The process is self-reinforcing.
+</p>
+
+<p>
+The heatmap below visualizes this. It shows the probability that a random walker
+reaches each empty cell adjacent to the cluster. Bright cells are easy to reach.
+Dark cells are screened. Notice that the tips glow hot while the gaps between
+branches are nearly invisible.
+</p>
+
+<div class="figure" id="fig-screening">
+  <canvas id="canvas-screening"></canvas>
+  <div class="controls">
+    <button class="btn" id="toggle-heatmap">Show Heatmap</button>
+    <button class="btn" id="reset-screening">Reset</button>
+  </div>
+  <p class="figure-caption"><span class="figure-label">Figure 2.</span> Click "Show Heatmap" to overlay arrival probability on the cluster boundary. Bright = high probability (exposed tips). Dark = low probability (screened crevices). This gradient is why DLA produces branches, not blobs.</p>
+</div>
+
+<p>
+Screening is a geometric fact. A random walker coming from far away sees the
+cluster as a silhouette. The tips poke out. The crevices hide behind them.
+The deeper a gap, the less likely a walker finds its way in. This is the same
+reason lightning follows branching paths: charge diffuses through air and
+preferentially strikes protruding conductors.
+</p>
+
+<h2>3. Stickiness and Density</h2>
+
+<p>
+So far every walker sticks on first contact. What happens if you reduce the
+sticking probability? A walker that touches the cluster but does not stick
+continues its random walk. It bounces around near the surface. Eventually it
+sticks somewhere, but that somewhere is more likely to be deep inside a crevice
+because the walker had time to explore.
+</p>
+
+<p>
+Low stickiness defeats the screening effect. The cluster becomes denser, rounder,
+less branchy. High stickiness amplifies screening. The cluster becomes sparse
+and wildly branched. The sticking probability controls the fractal dimension:
+how much the structure fills space.
+</p>
+
+<div class="figure" id="fig-stickiness">
+  <div class="side-by-side">
+    <div class="side-panel">
+      <canvas id="canvas-sticky-high"></canvas>
+      <div class="side-label" id="label-sticky-high">Stickiness: 1.00</div>
+    </div>
+    <div class="side-panel">
+      <canvas id="canvas-sticky-low"></canvas>
+      <div class="side-label" id="label-sticky-low">Stickiness: 0.05</div>
+    </div>
+  </div>
+  <div class="stat-row">
+    <div class="stat">
+      <span class="stat-label">Left particles:</span>
+      <span class="stat-val" id="stat-sticky-high">1</span>
+    </div>
+    <div class="stat">
+      <span class="stat-label">Right particles:</span>
+      <span class="stat-val" id="stat-sticky-low">1</span>
+    </div>
+  </div>
+  <div class="controls">
+    <div class="control-group">
+      <label>Right stickiness</label>
+      <div class="slider-row">
+        <input type="range" id="sticky-slider" min="0.01" max="1.0" step="0.01" value="0.05">
+        <span class="val" id="sticky-val">0.05</span>
+      </div>
+    </div>
+    <button class="btn" id="reset-sticky">Reset Both</button>
+  </div>
+  <p class="figure-caption"><span class="figure-label">Figure 3.</span> Left: stickiness = 1.0 (stick on first contact). Right: reduced stickiness (walker can bounce before sticking). Lower stickiness produces denser, rounder clusters because walkers penetrate past the screening barrier.</p>
+</div>
+
+<h2>4. Multiple Seeds</h2>
+
+<p>
+Place two or more seeds on the canvas below by clicking. Each seed starts its own
+cluster. As they grow, they compete for incoming walkers. A branch from one cluster
+screens territory from the others. The boundaries between clusters trace out curves
+resembling Voronoi cells.
+</p>
+
+<p>
+This is how competing DLA structures partition space. Each cluster captures the walkers
+nearest to its exposed surface. The pattern is reminiscent of mineral dendrites growing
+on a rock face or frost crystals competing for moisture on a windowpane.
+</p>
+
+<div class="figure" id="fig-multi">
+  <canvas id="canvas-multi"></canvas>
+  <div class="stat-row">
+    <div class="stat">
+      <span class="stat-label">Seeds:</span>
+      <span class="stat-val" id="stat-multi-seeds">0</span>
+    </div>
+    <div class="stat">
+      <span class="stat-label">Total particles:</span>
+      <span class="stat-val" id="stat-multi-count">0</span>
+    </div>
+  </div>
+  <div class="controls">
+    <button class="btn" id="reset-multi">Clear</button>
+  </div>
+  <p class="click-hint">Click to place 2-4 seed points, then watch them compete.</p>
+  <p class="figure-caption"><span class="figure-label">Figure 4.</span> Competing DLA clusters from multiple seeds. Each seed's cluster is colored differently. Boundaries emerge where clusters screen each other from incoming walkers.</p>
+</div>
+
+<div class="insight">
+<p>
+DLA was discovered by Tom Witten and Leonard Sander in 1981. The same growth rule
+explains the branching of electrodeposition, mineral dendrites, bacterial colonies,
+and dielectric breakdown (lightning). Any system where particles diffuse and
+irreversibly attach produces these fractal trees.
+</p>
+</div>
+
+</div><!-- .article -->
+
+<script>
+(function() {
+  "use strict";
+
+  var reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  /* ---------------------------------------------------------------
+     Shared utilities
+  --------------------------------------------------------------- */
+
+  var DIRS = [[1,0],[-1,0],[0,1],[0,-1]];
+
+  function makeGrid(size) {
+    return new Int16Array(size * size);
+  }
+
+  function idx(x, y, size) {
+    return y * size + x;
+  }
+
+  function inBounds(x, y, size) {
+    return x >= 0 && x < size && y >= 0 && y < size;
+  }
+
+  function hasNeighbor(grid, x, y, size) {
+    for (var d = 0; d < 4; d++) {
+      var nx = x + DIRS[d][0], ny = y + DIRS[d][1];
+      if (inBounds(nx, ny, size) && grid[idx(nx, ny, size)] > 0) return true;
+    }
+    return false;
+  }
+
+  function launchWalker(cx, cy, radius, size) {
+    var launchR = Math.min(radius + 15, Math.floor(size * 0.45));
+    var angle = Math.random() * 2 * Math.PI;
+    var x = Math.round(cx + launchR * Math.cos(angle));
+    var y = Math.round(cy + launchR * Math.sin(angle));
+    x = Math.max(0, Math.min(size - 1, x));
+    y = Math.max(0, Math.min(size - 1, y));
+    return { x: x, y: y };
+  }
+
+  function stepWalker(w, size) {
+    var d = DIRS[Math.floor(Math.random() * 4)];
+    w.x += d[0];
+    w.y += d[1];
+    return w.x >= 0 && w.x < size && w.y >= 0 && w.y < size;
+  }
+
+  function killRadius(radius, size) {
+    return Math.min(radius + 40, Math.floor(size * 0.48));
+  }
+
+  function walkerTooFar(w, cx, cy, kr) {
+    var dx = w.x - cx, dy = w.y - cy;
+    return (dx * dx + dy * dy) > kr * kr;
+  }
+
+  /* Colormap: build RGBA lookup tables once per max particle count.
+     Arrival order 0..maxN maps through a dark-blue -> teal -> gold ramp. */
+  function buildColorLUT(maxN) {
+    var lut = new Uint8Array((maxN + 1) * 3);
+    for (var i = 0; i <= maxN; i++) {
+      var t = maxN > 1 ? i / maxN : 0;
+      var off = i * 3;
+      lut[off]     = 15 + t * 230 | 0;                             // R
+      lut[off + 1] = 30 + t * 100 + Math.max(0, t - 0.5) * 130 | 0; // G
+      lut[off + 2] = 120 - t * 80 | 0;                             // B
+    }
+    return lut;
+  }
+
+  /* Set up a canvas at exact grid resolution. CSS scales it up;
+     image-rendering: pixelated keeps it crisp. */
+  function setupCanvas(canvasEl, size) {
+    canvasEl.width = size;
+    canvasEl.height = size;
+    var ctx = canvasEl.getContext("2d");
+    return ctx;
+  }
+
+  /* Write grid contents into an ImageData buffer and put it on the canvas.
+     Much faster than individual fillRect calls for large grids. */
+  function renderGrid(ctx, grid, order, size, lut, imgData) {
+    var data = imgData.data;
+    var bg_r = 11, bg_g = 11, bg_b = 30; // #0b0b1e
+    for (var i = 0, px = 0; i < size * size; i++, px += 4) {
+      if (grid[i] > 0) {
+        var off = order[i] * 3;
+        data[px]     = lut[off];
+        data[px + 1] = lut[off + 1];
+        data[px + 2] = lut[off + 2];
+        data[px + 3] = 255;
+      } else {
+        data[px]     = bg_r;
+        data[px + 1] = bg_g;
+        data[px + 2] = bg_b;
+        data[px + 3] = 255;
+      }
+    }
+    ctx.putImageData(imgData, 0, 0);
+  }
+
+  /* ---------------------------------------------------------------
+     Section 1: The Algorithm
+  --------------------------------------------------------------- */
+  (function() {
+    var S = 301;
+    var cx = S >> 1, cy = S >> 1;
+    var grid, order, particleCount, maxRadius, walker;
+    var paused = false;
+    var animId = null;
+    var MAX_PARTICLES = 6000;
+
+    var canvasEl = document.getElementById("canvas-algo");
+    var ctx = setupCanvas(canvasEl, S);
+    var imgData = ctx.createImageData(S, S);
+
+    var speedSlider = document.getElementById("speed-slider");
+    var speedVal = document.getElementById("speed-val");
+    var statCount = document.getElementById("stat-algo-count");
+    var statRadius = document.getElementById("stat-algo-radius");
+
+    function init() {
+      grid = makeGrid(S);
+      order = new Uint16Array(S * S);
+      particleCount = 1;
+      maxRadius = 0;
+      grid[idx(cx, cy, S)] = 1;
+      order[idx(cx, cy, S)] = 0;
+      walker = null;
+      draw();
+      statCount.textContent = "1";
+      statRadius.textContent = "0";
+    }
+
+    function spawnWalker() {
+      walker = launchWalker(cx, cy, maxRadius, S);
+    }
+
+    function simStep() {
+      if (particleCount >= MAX_PARTICLES) return;
+      if (!walker) spawnWalker();
+
+      if (!stepWalker(walker, S)) { spawnWalker(); return; }
+
+      var kr = killRadius(maxRadius, S);
+      if (walkerTooFar(walker, cx, cy, kr)) { spawnWalker(); return; }
+
+      if (hasNeighbor(grid, walker.x, walker.y, S)) {
+        grid[idx(walker.x, walker.y, S)] = 1;
+        order[idx(walker.x, walker.y, S)] = particleCount;
+        particleCount++;
+        var dx = walker.x - cx, dy = walker.y - cy;
+        var r = Math.sqrt(dx * dx + dy * dy);
+        if (r > maxRadius) maxRadius = r;
+        walker = null;
+      }
+    }
+
+    function draw() {
+      var lut = buildColorLUT(particleCount);
+      renderGrid(ctx, grid, order, S, lut, imgData);
+
+      // Draw the active walker as a bright red dot
+      if (walker) {
+        ctx.fillStyle = "#ff6060";
+        ctx.fillRect(walker.x - 1, walker.y - 1, 3, 3);
+      }
+    }
+
+    function loop() {
+      if (!paused) {
+        var steps = parseInt(speedSlider.value, 10);
+        for (var i = 0; i < steps; i++) {
+          for (var j = 0; j < 80; j++) simStep();
+        }
+        draw();
+        statCount.textContent = particleCount;
+        statRadius.textContent = Math.round(maxRadius);
+      }
+      animId = requestAnimationFrame(loop);
+    }
+
+    speedSlider.addEventListener("input", function() {
+      speedVal.textContent = speedSlider.value;
+    });
+
+    document.getElementById("pause-algo").addEventListener("click", function() {
+      paused = !paused;
+      this.textContent = paused ? "Play" : "Pause";
+      if (paused) this.classList.add("active");
+      else this.classList.remove("active");
+    });
+
+    document.getElementById("reset-algo").addEventListener("click", function() {
+      if (animId) cancelAnimationFrame(animId);
+      animId = null;
+      paused = false;
+      document.getElementById("pause-algo").textContent = "Pause";
+      document.getElementById("pause-algo").classList.remove("active");
+      init();
+      if (!reducedMotion) loop();
+    });
+
+    new ResizeObserver(function() {
+      ctx = setupCanvas(canvasEl, S);
+      imgData = ctx.createImageData(S, S);
+      draw();
+    }).observe(document.getElementById("fig-algorithm"));
+
+    init();
+    if (!reducedMotion) loop();
+    else {
+      for (var i = 0; i < 50000; i++) simStep();
+      draw();
+      statCount.textContent = particleCount;
+      statRadius.textContent = Math.round(maxRadius);
+    }
+  })();
+
+  /* ---------------------------------------------------------------
+     Section 2: The Screening Effect
+  --------------------------------------------------------------- */
+  (function() {
+    var S = 301;
+    var cx = S >> 1, cy = S >> 1;
+    var grid, order, particleCount, maxRadius, walker;
+    var showHeatmap = false;
+    var heatmapData = null;
+    var animId = null;
+    var MAX_PARTICLES = 4000;
+
+    var canvasEl = document.getElementById("canvas-screening");
+    var ctx = setupCanvas(canvasEl, S);
+    var imgData = ctx.createImageData(S, S);
+
+    function init() {
+      grid = makeGrid(S);
+      order = new Uint16Array(S * S);
+      particleCount = 1;
+      maxRadius = 0;
+      grid[idx(cx, cy, S)] = 1;
+      order[idx(cx, cy, S)] = 0;
+      walker = null;
+      heatmapData = null;
+      showHeatmap = false;
+      document.getElementById("toggle-heatmap").textContent = "Show Heatmap";
+      document.getElementById("toggle-heatmap").classList.remove("active");
+      draw();
+    }
+
+    function spawnWalker() {
+      walker = launchWalker(cx, cy, maxRadius, S);
+    }
+
+    function simStep() {
+      if (particleCount >= MAX_PARTICLES) return;
+      if (!walker) spawnWalker();
+
+      if (!stepWalker(walker, S)) { spawnWalker(); return; }
+
+      var kr = killRadius(maxRadius, S);
+      if (walkerTooFar(walker, cx, cy, kr)) { spawnWalker(); return; }
+
+      if (hasNeighbor(grid, walker.x, walker.y, S)) {
+        grid[idx(walker.x, walker.y, S)] = 1;
+        order[idx(walker.x, walker.y, S)] = particleCount;
+        particleCount++;
+        var dx = walker.x - cx, dy = walker.y - cy;
+        var r = Math.sqrt(dx * dx + dy * dy);
+        if (r > maxRadius) maxRadius = r;
+        walker = null;
+      }
+    }
+
+    /* Compute arrival-probability heatmap via Laplace relaxation.
+       Boundary condition: launch circle = 1, cluster cells = 0 (absorbing).
+       After relaxation, extract the probability at each empty cell
+       that is adjacent to the cluster. */
+    function computeHeatmap() {
+      var prob = new Float32Array(S * S);
+      var tmp = new Float32Array(S * S);
+
+      // Set source boundary: launch circle
+      var launchR = Math.min(maxRadius + 15, Math.floor(S * 0.45));
+      for (var a = 0; a < 720; a++) {
+        var rad = a * Math.PI / 360;
+        var bx = Math.round(cx + launchR * Math.cos(rad));
+        var by = Math.round(cy + launchR * Math.sin(rad));
+        if (inBounds(bx, by, S)) prob[idx(bx, by, S)] = 1.0;
+      }
+
+      // Jacobi iteration
+      for (var iter = 0; iter < 150; iter++) {
+        tmp.set(prob);
+        for (var y = 1; y < S - 1; y++) {
+          for (var x = 1; x < S - 1; x++) {
+            var i = idx(x, y, S);
+            if (grid[i] > 0) { tmp[i] = 0; continue; }
+            var dx2 = x - cx, dy2 = y - cy;
+            if (dx2 * dx2 + dy2 * dy2 >= launchR * launchR) continue;
+            tmp[i] = 0.25 * (prob[i + 1] + prob[i - 1] + prob[i + S] + prob[i - S]);
+          }
+        }
+        prob.set(tmp);
+      }
+
+      // Collect boundary cells
+      var boundary = [];
+      var maxP = 0;
+      for (var y2 = 1; y2 < S - 1; y2++) {
+        for (var x2 = 1; x2 < S - 1; x2++) {
+          if (grid[idx(x2, y2, S)] === 0 && hasNeighbor(grid, x2, y2, S)) {
+            var p = prob[idx(x2, y2, S)];
+            boundary.push({ x: x2, y: y2, p: p });
+            if (p > maxP) maxP = p;
+          }
+        }
+      }
+      return { boundary: boundary, maxP: maxP };
+    }
+
+    function draw() {
+      var lut = buildColorLUT(particleCount);
+      renderGrid(ctx, grid, order, S, lut, imgData);
+
+      if (showHeatmap && heatmapData) {
+        var bd = heatmapData.boundary;
+        var maxP = heatmapData.maxP;
+        for (var i = 0; i < bd.length; i++) {
+          var t = maxP > 0 ? bd[i].p / maxP : 0;
+          // Bright green-yellow for high probability, dim for low
+          var r = Math.round(255 * t);
+          var g = Math.round(80 + 175 * t);
+          var b = Math.round(60 * (1 - t));
+          ctx.fillStyle = "rgba(" + r + "," + g + "," + b + "," + (0.2 + t * 0.8).toFixed(2) + ")";
+          // Draw as a 3x3 glow so it is visible at grid scale
+          ctx.fillRect(bd[i].x - 1, bd[i].y - 1, 3, 3);
+        }
+      }
+    }
+
+    function loop() {
+      for (var i = 0; i < 60; i++) {
+        for (var j = 0; j < 80; j++) simStep();
+      }
+      draw();
+      animId = requestAnimationFrame(loop);
+    }
+
+    document.getElementById("toggle-heatmap").addEventListener("click", function() {
+      if (!showHeatmap) {
+        heatmapData = computeHeatmap();
+        showHeatmap = true;
+        this.textContent = "Hide Heatmap";
+        this.classList.add("active");
+      } else {
+        showHeatmap = false;
+        heatmapData = null;
+        this.textContent = "Show Heatmap";
+        this.classList.remove("active");
+      }
+      draw();
+    });
+
+    document.getElementById("reset-screening").addEventListener("click", function() {
+      if (animId) cancelAnimationFrame(animId);
+      animId = null;
+      init();
+      if (!reducedMotion) loop();
+    });
+
+    new ResizeObserver(function() {
+      ctx = setupCanvas(canvasEl, S);
+      imgData = ctx.createImageData(S, S);
+      draw();
+    }).observe(document.getElementById("fig-screening"));
+
+    init();
+    if (!reducedMotion) loop();
+    else {
+      for (var i = 0; i < 40000; i++) simStep();
+      draw();
+    }
+  })();
+
+  /* ---------------------------------------------------------------
+     Section 3: Stickiness comparison (side by side)
+  --------------------------------------------------------------- */
+  (function() {
+    var S = 201;
+    var cx = S >> 1, cy = S >> 1;
+    var MAX_PARTICLES = 3000;
+
+    function DLASim(canvasId, stickiness) {
+      var canvasEl = document.getElementById(canvasId);
+      var sCtx = setupCanvas(canvasEl, S);
+      var sImgData = sCtx.createImageData(S, S);
+
+      var grid = makeGrid(S);
+      var order = new Uint16Array(S * S);
+      var particleCount = 1;
+      var maxRadius = 0;
+      var walker = null;
+      grid[idx(cx, cy, S)] = 1;
+
+      function spawnW() {
+        walker = launchWalker(cx, cy, maxRadius, S);
+      }
+
+      function step() {
+        if (particleCount >= MAX_PARTICLES) return;
+        if (!walker) spawnW();
+
+        if (!stepWalker(walker, S)) { spawnW(); return; }
+        var kr = killRadius(maxRadius, S);
+        if (walkerTooFar(walker, cx, cy, kr)) { spawnW(); return; }
+
+        if (hasNeighbor(grid, walker.x, walker.y, S)) {
+          if (Math.random() < stickiness) {
+            grid[idx(walker.x, walker.y, S)] = 1;
+            order[idx(walker.x, walker.y, S)] = particleCount;
+            particleCount++;
+            var dx = walker.x - cx, dy = walker.y - cy;
+            var r = Math.sqrt(dx * dx + dy * dy);
+            if (r > maxRadius) maxRadius = r;
+            walker = null;
+          }
+        }
+      }
+
+      function draw() {
+        var lut = buildColorLUT(particleCount);
+        renderGrid(sCtx, grid, order, S, lut, sImgData);
+      }
+
+      return {
+        step: step,
+        draw: draw,
+        count: function() { return particleCount; },
+        reset: function(newStick) {
+          stickiness = newStick;
+          grid = makeGrid(S);
+          order = new Uint16Array(S * S);
+          particleCount = 1;
+          maxRadius = 0;
+          walker = null;
+          grid[idx(cx, cy, S)] = 1;
+          draw();
+        },
+        resize: function() {
+          sCtx = setupCanvas(canvasEl, S);
+          sImgData = sCtx.createImageData(S, S);
+          draw();
+        }
+      };
+    }
+
+    var simHigh = DLASim("canvas-sticky-high", 1.0);
+    var simLow = DLASim("canvas-sticky-low", 0.05);
+    var animId = null;
+
+    var stickySlider = document.getElementById("sticky-slider");
+    var stickyVal = document.getElementById("sticky-val");
+    var statHigh = document.getElementById("stat-sticky-high");
+    var statLow = document.getElementById("stat-sticky-low");
+
+    function loop() {
+      // High-stickiness sim: normal batch
+      for (var i = 0; i < 40; i++) {
+        for (var j = 0; j < 80; j++) simHigh.step();
+      }
+      // Low-stickiness sim: larger inner batch since walkers bounce many times
+      for (var i2 = 0; i2 < 40; i2++) {
+        for (var j2 = 0; j2 < 120; j2++) simLow.step();
+      }
+      simHigh.draw();
+      simLow.draw();
+      statHigh.textContent = simHigh.count();
+      statLow.textContent = simLow.count();
+      animId = requestAnimationFrame(loop);
+    }
+
+    stickySlider.addEventListener("input", function() {
+      stickyVal.textContent = parseFloat(stickySlider.value).toFixed(2);
+      document.getElementById("label-sticky-low").textContent =
+        "Stickiness: " + parseFloat(stickySlider.value).toFixed(2);
+    });
+
+    document.getElementById("reset-sticky").addEventListener("click", function() {
+      if (animId) cancelAnimationFrame(animId);
+      animId = null;
+      simHigh.reset(1.0);
+      simLow.reset(parseFloat(stickySlider.value));
+      if (!reducedMotion) loop();
+    });
+
+    new ResizeObserver(function() {
+      simHigh.resize();
+      simLow.resize();
+    }).observe(document.getElementById("fig-stickiness"));
+
+    if (!reducedMotion) loop();
+    else {
+      for (var i = 0; i < 30000; i++) { simHigh.step(); simLow.step(); }
+      simHigh.draw();
+      simLow.draw();
+      statHigh.textContent = simHigh.count();
+      statLow.textContent = simLow.count();
+    }
+  })();
+
+  /* ---------------------------------------------------------------
+     Section 4: Multiple Seeds
+  --------------------------------------------------------------- */
+  (function() {
+    var S = 301;
+    var MAX_SEEDS = 4;
+    var MAX_PARTICLES = 6000;
+
+    var canvasEl = document.getElementById("canvas-multi");
+    var ctx = setupCanvas(canvasEl, S);
+    var imgData = ctx.createImageData(S, S);
+
+    var grid, order, seeds, particleCount, maxRadius, walker;
+    var animId = null;
+    var running = false;
+
+    var statSeeds = document.getElementById("stat-multi-seeds");
+    var statCount = document.getElementById("stat-multi-count");
+
+    /* Four distinct palettes. Each returns [r,g,b] for a given t in 0..1. */
+    var palettes = [
+      function(t) { return [30 + t*180|0, 60 + t*90|0,  180 - t*60|0]; },  // blue
+      function(t) { return [180 - t*60|0, 50 + t*160|0, 40 + t*60|0]; },   // green
+      function(t) { return [180 + t*60|0, 60 + t*100|0, 30 + t*40|0]; },   // orange
+      function(t) { return [120 + t*60|0, 40 + t*80|0,  160 + t*60|0]; }   // purple
+    ];
+
+    function init() {
+      grid = makeGrid(S);
+      order = new Uint16Array(S * S);
+      seeds = [];
+      particleCount = 0;
+      maxRadius = 0;
+      walker = null;
+      running = false;
+      draw();
+      statSeeds.textContent = "0";
+      statCount.textContent = "0";
+    }
+
+    function addSeed(gx, gy) {
+      if (seeds.length >= MAX_SEEDS) return;
+      if (grid[idx(gx, gy, S)] > 0) return;
+      var seedId = seeds.length + 1;
+      seeds.push({ x: gx, y: gy, id: seedId });
+      grid[idx(gx, gy, S)] = seedId;
+      order[idx(gx, gy, S)] = 0;
+      particleCount++;
+      statSeeds.textContent = seeds.length;
+      statCount.textContent = particleCount;
+      draw();
+
+      if (seeds.length >= 2 && !running) {
+        running = true;
+        if (!reducedMotion) loop();
+      }
+    }
+
+    function computeCenter() {
+      if (seeds.length === 0) return { x: S >> 1, y: S >> 1 };
+      var sx = 0, sy = 0;
+      for (var i = 0; i < seeds.length; i++) { sx += seeds[i].x; sy += seeds[i].y; }
+      return { x: sx / seeds.length | 0, y: sy / seeds.length | 0 };
+    }
+
+    function spawnWalker() {
+      var c = computeCenter();
+      walker = launchWalker(c.x, c.y, maxRadius, S);
+    }
+
+    function neighborSeedId(x, y) {
+      for (var d = 0; d < 4; d++) {
+        var nx = x + DIRS[d][0], ny = y + DIRS[d][1];
+        if (inBounds(nx, ny, S) && grid[idx(nx, ny, S)] > 0) {
+          return grid[idx(nx, ny, S)];
+        }
+      }
+      return 0;
+    }
+
+    function simStep() {
+      if (particleCount >= MAX_PARTICLES || seeds.length < 2) return;
+      if (!walker) spawnWalker();
+
+      if (!stepWalker(walker, S)) { spawnWalker(); return; }
+
+      var c = computeCenter();
+      var kr = killRadius(maxRadius, S);
+      if (walkerTooFar(walker, c.x, c.y, kr)) { spawnWalker(); return; }
+
+      var nid = neighborSeedId(walker.x, walker.y);
+      if (nid > 0) {
+        grid[idx(walker.x, walker.y, S)] = nid;
+        order[idx(walker.x, walker.y, S)] = particleCount;
+        particleCount++;
+        var dx = walker.x - c.x, dy = walker.y - c.y;
+        var r = Math.sqrt(dx * dx + dy * dy);
+        if (r > maxRadius) maxRadius = r;
+        walker = null;
+      }
+    }
+
+    function draw() {
+      var data = imgData.data;
+      // Background fill
+      for (var i = 0, px = 0; i < S * S; i++, px += 4) {
+        var v = grid[i];
+        if (v > 0 && v <= seeds.length) {
+          var t = particleCount > 1 ? order[i] / particleCount : 0;
+          var c = palettes[v - 1](t);
+          data[px] = c[0]; data[px+1] = c[1]; data[px+2] = c[2]; data[px+3] = 255;
+        } else {
+          data[px] = 11; data[px+1] = 11; data[px+2] = 30; data[px+3] = 255;
+        }
+      }
+      ctx.putImageData(imgData, 0, 0);
+
+      // White dot on each seed
+      ctx.fillStyle = "#ffffff";
+      for (var s = 0; s < seeds.length; s++) {
+        ctx.beginPath();
+        ctx.arc(seeds[s].x, seeds[s].y, 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    function loop() {
+      for (var i = 0; i < 50; i++) {
+        for (var j = 0; j < 80; j++) simStep();
+      }
+      draw();
+      statCount.textContent = particleCount;
+      animId = requestAnimationFrame(loop);
+    }
+
+    canvasEl.addEventListener("click", function(e) {
+      if (seeds.length >= MAX_SEEDS) return;
+      var rect = canvasEl.getBoundingClientRect();
+      var gx = Math.round((e.clientX - rect.left) / rect.width * S);
+      var gy = Math.round((e.clientY - rect.top) / rect.height * S);
+      gx = Math.max(10, Math.min(S - 10, gx));
+      gy = Math.max(10, Math.min(S - 10, gy));
+      addSeed(gx, gy);
+    });
+
+    document.getElementById("reset-multi").addEventListener("click", function() {
+      if (animId) cancelAnimationFrame(animId);
+      animId = null;
+      init();
+    });
+
+    new ResizeObserver(function() {
+      ctx = setupCanvas(canvasEl, S);
+      imgData = ctx.createImageData(S, S);
+      draw();
+    }).observe(document.getElementById("fig-multi"));
+
+    init();
+  })();
+
+})();
+</script>
+</body>
+</html>

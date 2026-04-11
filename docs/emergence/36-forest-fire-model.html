@@ -1,0 +1,1099 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Forest Fire Model: Lightning-Driven Criticality</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;500&family=Source+Sans+3:wght@400;600;700&family=Source+Serif+4:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --article-width: 740px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem;
+  --line-height: 1.6;
+  --text: #1a1a2e;
+  --text-2: #4a4a6a;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --bg: #fafafa;
+  --fig-bg: #ffffff;
+  --border: #e2e2e8;
+}
+body { font-family: var(--body-font); font-size: var(--body-size);
+  line-height: var(--line-height); color: var(--text); background: var(--bg);
+  -webkit-font-smoothing: antialiased; }
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
+h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+h3 { font-size: 1.15rem; margin: 2rem 0 0.75rem; }
+p { margin: 0 0 1rem; }
+a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+a:hover { color: #1d4ed8; }
+.header { padding: 4rem 0 2rem; border-bottom: 1px solid var(--border); margin-bottom: 2.5rem; }
+.header .back { font-family: var(--heading-font); font-size: 0.85rem; display: inline-block; margin-bottom: 1.5rem; }
+.header .subtitle { font-family: var(--heading-font); font-size: 1.15rem; color: var(--text-2); margin-bottom: 0; max-width: 580px; }
+.figure { margin: 2rem 0; padding: 1.5rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.figure canvas { display: block; cursor: crosshair; image-rendering: pixelated; border-radius: 3px; }
+.figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; line-height: 1.4; }
+.figure-label { font-weight: 600; color: var(--text); }
+.insight { background: var(--accent-light); border-left: 3px solid var(--accent); padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 4px 4px 0; }
+.insight p { margin: 0; }
+.insight p + p { margin-top: 0.75rem; }
+.controls { display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-end; margin-top: 1rem; font-family: var(--heading-font); font-size: 0.85rem; }
+.control-group { display: flex; flex-direction: column; gap: 0.25rem; }
+.control-group label { color: var(--text-2); font-weight: 600; }
+.control-group input[type="range"] { width: 120px; accent-color: var(--accent); }
+.control-group .val { font-family: var(--mono-font); font-variant-numeric: tabular-nums;
+  min-width: 2.5em; text-align: right; color: var(--text); }
+.control-group .slider-row { display: flex; align-items: center; gap: 0.5rem; }
+.btn { font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600;
+  padding: 0.45rem 1.1rem; border-radius: 5px; border: 1px solid var(--border);
+  background: var(--fig-bg); color: var(--text); cursor: pointer;
+  transition: background 0.15s, border-color 0.15s; user-select: none; }
+.btn:hover { border-color: var(--accent); background: var(--accent-light); }
+.btn.active { border-color: var(--accent); background: var(--accent); color: white; }
+.click-hint { font-family: var(--heading-font); font-size: 0.8rem; color: var(--text-2);
+  text-align: center; margin-top: 0.5rem; font-style: italic; }
+.stats-row { display: flex; gap: 2rem; flex-wrap: wrap; margin-top: 0.75rem;
+  font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); }
+.stats-row .stat-val { font-family: var(--mono-font); font-weight: 500; color: var(--text);
+  font-variant-numeric: tabular-nums; }
+.histogram-svg { display: block; width: 100%; }
+svg text { font-family: var(--heading-font); }
+
+.legend { display: flex; gap: 1rem; flex-wrap: wrap; font-family: var(--heading-font);
+  font-size: 0.8rem; margin-top: 0.5rem; }
+.legend-item { display: flex; align-items: center; gap: 0.35rem; }
+.legend-swatch { width: 12px; height: 12px; border-radius: 2px; border: 1px solid var(--border); }
+
+.ratio-display { font-family: var(--mono-font); font-size: 1.1rem; font-weight: 500;
+  color: var(--accent); margin-top: 0.5rem; }
+
+@media (prefers-reduced-motion: reduce) {
+  .figure canvas { outline: 2px dashed var(--border); outline-offset: -2px; }
+}
+@media (max-width: 600px) {
+  h1 { font-size: 1.75rem; }
+  .controls { gap: 0.6rem; }
+  .stats-row { gap: 1rem; }
+  .control-group input[type="range"] { width: 80px; }
+}
+</style>
+</head>
+<body>
+<div class="article">
+
+<div class="header">
+  <a href="index.html" class="back">&larr; Emergence</a>
+  <h1>Forest Fire Model</h1>
+  <p class="subtitle">Trees grow, lightning strikes, fires burn clusters. The resulting dynamics produce a power-law distribution of fire sizes.</p>
+</div>
+
+<p>
+Imagine a landscape where trees grow slowly and steadily on empty ground. Every
+so often, lightning strikes a random spot. If it hits a tree, fire spreads
+instantly to every connected tree, burning the entire cluster to ash. Then the
+cycle restarts: regrowth, another strike, another burn.
+</p>
+
+<p>
+This is the Drossel-Schwaab forest fire model, introduced in 1992. It has two
+competing rates. Trees grow with probability <em>p</em> per empty cell per
+time step. Lightning strikes a random tree with probability <em>f</em>, where
+<em>f</em> is much smaller than <em>p</em>. The ratio between these two rates
+determines everything.
+</p>
+
+<p>
+The remarkable finding: the system tunes itself to a state where fire sizes
+follow a power law. Many small fires, fewer medium fires, rare catastrophic
+ones. No one adjusts a dial to produce this distribution. It emerges from the
+competition between growth and destruction.
+</p>
+
+<h2>Grow and Burn</h2>
+
+<p>
+The grid below runs the model. Each step, new trees (green) sprout on random
+empty cells (tan). With some probability each step, lightning strikes a random
+spot on the grid. If it hits a tree, fire spreads instantly through the entire
+connected cluster, clearing it back to empty ground ready for regrowth.
+</p>
+
+<p>
+Watch the cycle: the grid fills with green, a spark ignites a cluster, a patch
+burns away, and trees creep back in. You can also click anywhere on the grid
+to strike lightning manually at that spot.
+</p>
+
+<div class="figure" id="fig-grow">
+  <canvas id="grow-canvas"></canvas>
+  <div class="controls">
+    <div class="control-group">
+      <button class="btn" id="btn-run">Run</button>
+    </div>
+    <div class="control-group">
+      <label>Speed</label>
+      <div class="slider-row">
+        <input type="range" id="speed-slider" min="1" max="40" value="10">
+        <span class="val" id="speed-val">10</span>
+      </div>
+    </div>
+    <div class="control-group">
+      <button class="btn" id="btn-reset">Reset</button>
+    </div>
+  </div>
+  <div class="stats-row">
+    <div>Step: <span class="stat-val" id="stat-step">0</span></div>
+    <div>Trees: <span class="stat-val" id="stat-trees">0</span></div>
+    <div>Fires: <span class="stat-val" id="stat-fires">0</span></div>
+    <div>Last burn: <span class="stat-val" id="stat-last-burn">0</span></div>
+  </div>
+  <div class="legend">
+    <div class="legend-item"><div class="legend-swatch" style="background:#2d8a4e"></div> Tree</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:#e8a849"></div> Burning</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:#c4a66a"></div> Empty</div>
+  </div>
+  <p class="click-hint">Click on the grid to strike lightning</p>
+</div>
+
+<h2>The Ratio Matters</h2>
+
+<p>
+The single number that controls the model's behavior is the ratio <em>f/p</em>,
+lightning frequency relative to growth rate. When <em>f/p</em> is high,
+lightning strikes before trees have time to form large clusters. Fires stay
+small. The landscape is a patchwork of tiny groves separated by gaps.
+</p>
+
+<p>
+When <em>f/p</em> is very low, trees have plenty of time to grow and merge
+into continent-sized forests before a spark arrives. When lightning finally
+strikes, a single fire can burn thousands of trees. The resulting dynamics are
+bursty: long quiet periods of growth punctuated by catastrophic burns.
+</p>
+
+<p>
+In between, at an intermediate ratio, you get the power-law regime. Clusters
+of all sizes coexist. Small fires are common, medium fires less so, and
+occasional large fires reshape the landscape. This is the self-organized
+critical state.
+</p>
+
+<p>
+Use the sliders below to control growth rate (trees planted per step) and
+lightning frequency (probability of a strike each step) independently.
+The display shows how many trees grow between fires on average. Watch how the
+character of the fires changes as you adjust the balance.
+</p>
+
+<div class="figure" id="fig-ratio">
+  <canvas id="ratio-canvas"></canvas>
+  <div class="controls">
+    <div class="control-group">
+      <button class="btn" id="btn-ratio-run">Run</button>
+    </div>
+    <div class="control-group">
+      <label>Growth (trees/step)</label>
+      <div class="slider-row">
+        <input type="range" id="growth-slider" min="10" max="500" value="100">
+        <span class="val" id="growth-val">100</span>
+      </div>
+    </div>
+    <div class="control-group">
+      <label>Lightning (%/step)</label>
+      <div class="slider-row">
+        <input type="range" id="lightning-slider" min="1" max="200" value="30">
+        <span class="val" id="lightning-val">3.0%</span>
+      </div>
+    </div>
+    <div class="control-group">
+      <label>Speed</label>
+      <div class="slider-row">
+        <input type="range" id="ratio-speed-slider" min="1" max="40" value="10">
+        <span class="val" id="ratio-speed-val">10</span>
+      </div>
+    </div>
+    <div class="control-group">
+      <button class="btn" id="btn-ratio-reset">Reset</button>
+    </div>
+  </div>
+  <div class="ratio-display">Trees grown between fires: ~<span id="ratio-val">3,333</span></div>
+  <div class="stats-row">
+    <div>Step: <span class="stat-val" id="ratio-stat-step">0</span></div>
+    <div>Trees: <span class="stat-val" id="ratio-stat-trees">0</span></div>
+    <div>Total fires: <span class="stat-val" id="ratio-stat-fires">0</span></div>
+    <div>Largest fire: <span class="stat-val" id="ratio-stat-largest">0</span></div>
+  </div>
+  <p class="figure-caption">
+    <span class="figure-label">Fig. 1.</span>
+    Try cranking lightning high and watch the small scattered burns. Then lower
+    it and wait for the massive conflagrations. The critical regime lives in
+    between, where fires of all sizes occur.
+  </p>
+</div>
+
+<h2>Fire Size Distribution</h2>
+
+<p>
+The real test of criticality is the fire size distribution. Count how many trees
+each fire burns and plot the frequency of each size on logarithmic axes. If the
+system is critical, the points fall on a straight line: a power law. The slope
+of that line is the critical exponent.
+</p>
+
+<p>
+The chart below updates live as the simulation above runs. At the default
+settings, you should see an approximately linear trend on the log-log plot
+after a few hundred fires. Adjust the growth and lightning sliders above and
+watch the distribution shift.
+</p>
+
+<div class="figure" id="fig-histogram">
+  <svg id="histogram-svg" class="histogram-svg"></svg>
+  <div class="stats-row">
+    <div>Total fires: <span class="stat-val" id="hist-stat-fires">0</span></div>
+    <div>Power-law slope: <span class="stat-val" id="hist-stat-slope">&mdash;</span></div>
+  </div>
+  <p class="figure-caption">
+    <span class="figure-label">Fig. 2.</span>
+    Fire size distribution on log-log axes. Each dot is a logarithmic bin of
+    fire sizes. A straight line indicates a power law. The dashed red line is
+    a least-squares fit. Run the simulation long enough (a few hundred fires)
+    to see the distribution stabilize.
+  </p>
+</div>
+
+<div class="insight">
+  <p>
+  The forest fire model was proposed by Drossel and Schwaab in 1992 as a minimal
+  model of self-organized criticality. Unlike the Bak-Tang-Wiesenfeld sandpile,
+  which reaches criticality through a single slow drive, the forest fire model
+  balances two explicit rates: growth and ignition. The resulting power-law
+  distribution of fire sizes appears without any external tuning.
+  </p>
+  <p>
+  Similar dynamics may explain why both actual wildfire sizes and earthquake
+  magnitudes follow power laws. The system tunes itself to the boundary between
+  sparse and connected. When forests are sparse, fires are small and growth
+  dominates. When forests are dense, huge fires thin them out. The feedback
+  loop holds the system near the critical point where clusters of all sizes
+  coexist.
+  </p>
+</div>
+
+</div><!-- .article -->
+
+<!-- ================================================================== -->
+<!-- Section 1: Grow and Burn                                           -->
+<!-- ================================================================== -->
+<script>
+(function () {
+  'use strict';
+
+  var REDUCED_MOTION = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // Cell states
+  var EMPTY = 0;
+  var TREE  = 1;
+
+  // Grid
+  var N = 200;
+  var grid = new Uint8Array(N * N);
+
+  // Default parameters for Section 1
+  // growRate: number of random empty cells that get a tree each step
+  // fLightning: probability of a lightning strike each step
+  var growRate = 80;
+  var fLightning = 0.02;
+
+  // State
+  var running = false;
+  var animRAF = null;
+  var speed = 10;
+  var stepCount = 0;
+  var totalFires = 0;
+  var lastBurnSize = 0;
+  var treeCount = 0;
+
+  // For brief burn flash
+  var burnCells = null;
+  var burnFlashFrames = 0;
+
+  // Colors [R,G,B]
+  var COL_EMPTY   = [196, 166, 106];
+  var COL_TREE    = [45, 138, 78];
+  var COL_BURNING = [232, 168, 73];
+
+  // DOM
+  var canvas  = document.getElementById('grow-canvas');
+  var ctx     = canvas.getContext('2d');
+  var figEl   = document.getElementById('fig-grow');
+  var btnRun  = document.getElementById('btn-run');
+  var btnReset = document.getElementById('btn-reset');
+  var speedSlider = document.getElementById('speed-slider');
+  var speedVal    = document.getElementById('speed-val');
+  var statStep    = document.getElementById('stat-step');
+  var statTrees   = document.getElementById('stat-trees');
+  var statFires   = document.getElementById('stat-fires');
+  var statLastBurn = document.getElementById('stat-last-burn');
+
+  // ── Canvas sizing ──────────────────────────────────────────────────
+  var cellSize = 1;
+  var imageData;
+
+  function sizeCanvas() {
+    var w = figEl.clientWidth - 48;
+    cellSize = Math.max(1, Math.floor(w / N));
+    if (cellSize < 1) cellSize = 1;
+    var px = cellSize * N;
+    canvas.width = px;
+    canvas.height = px;
+    canvas.style.width = px + 'px';
+    canvas.style.height = px + 'px';
+    imageData = ctx.createImageData(px, px);
+    drawGrid();
+  }
+
+  var ro = new ResizeObserver(function () { sizeCanvas(); });
+  ro.observe(figEl);
+
+  // ── Rendering ──────────────────────────────────────────────────────
+  function drawGrid() {
+    var px = cellSize * N;
+    var data = imageData.data;
+    for (var r = 0; r < N; r++) {
+      for (var c = 0; c < N; c++) {
+        var val = grid[r * N + c];
+        var color;
+        if (burnCells && burnCells[r * N + c]) {
+          color = COL_BURNING;
+        } else {
+          color = val === TREE ? COL_TREE : COL_EMPTY;
+        }
+        for (var dy = 0; dy < cellSize; dy++) {
+          var py = r * cellSize + dy;
+          for (var dx = 0; dx < cellSize; dx++) {
+            var pxc = c * cellSize + dx;
+            var idx = (py * px + pxc) * 4;
+            data[idx]     = color[0];
+            data[idx + 1] = color[1];
+            data[idx + 2] = color[2];
+            data[idx + 3] = 255;
+          }
+        }
+      }
+    }
+    ctx.putImageData(imageData, 0, 0);
+  }
+
+  // ── BFS flood fill to find and burn connected cluster ──────────────
+  function burnClusterWithFlash(startIdx) {
+    if (grid[startIdx] !== TREE) return 0;
+    var burned = new Uint8Array(N * N);
+    var queue = [startIdx];
+    var head = 0;
+    burned[startIdx] = 1;
+    grid[startIdx] = EMPTY;
+    var count = 0;
+
+    while (head < queue.length) {
+      var idx = queue[head++];
+      count++;
+      var rr = (idx / N) | 0;
+      var cc = idx % N;
+
+      if (rr > 0 && grid[idx - N] === TREE && !burned[idx - N]) {
+        burned[idx - N] = 1; grid[idx - N] = EMPTY; queue.push(idx - N);
+      }
+      if (rr < N - 1 && grid[idx + N] === TREE && !burned[idx + N]) {
+        burned[idx + N] = 1; grid[idx + N] = EMPTY; queue.push(idx + N);
+      }
+      if (cc > 0 && grid[idx - 1] === TREE && !burned[idx - 1]) {
+        burned[idx - 1] = 1; grid[idx - 1] = EMPTY; queue.push(idx - 1);
+      }
+      if (cc < N - 1 && grid[idx + 1] === TREE && !burned[idx + 1]) {
+        burned[idx + 1] = 1; grid[idx + 1] = EMPTY; queue.push(idx + 1);
+      }
+    }
+
+    // Set flash overlay
+    if (count > 0 && !REDUCED_MOTION) {
+      burnCells = burned;
+      burnFlashFrames = 3;
+    }
+
+    return count;
+  }
+
+  // ── One model step ────────────────────────────────────────────────
+  function modelStep() {
+    stepCount++;
+
+    // Growth: plant trees on random empty cells
+    var total = N * N;
+    for (var g = 0; g < growRate; g++) {
+      var idx = Math.floor(Math.random() * total);
+      if (grid[idx] === EMPTY) { grid[idx] = TREE; treeCount++; }
+    }
+
+    // Lightning: strike a random cell with probability f
+    if (Math.random() < fLightning) {
+      var target = Math.floor(Math.random() * total);
+      if (grid[target] === TREE) {
+        var burned = burnClusterWithFlash(target);
+        if (burned > 0) {
+          totalFires++;
+          lastBurnSize = burned;
+          treeCount -= burned;
+        }
+      }
+    }
+  }
+
+  function updateStats() {
+    statStep.textContent = stepCount.toLocaleString();
+    statTrees.textContent = treeCount.toLocaleString();
+    statFires.textContent = totalFires.toLocaleString();
+    statLastBurn.textContent = lastBurnSize.toLocaleString();
+  }
+
+  // ── Animation loop ────────────────────────────────────────────────
+  var lastFrame = 0;
+
+  function animLoop(ts) {
+    if (!running) return;
+    animRAF = requestAnimationFrame(animLoop);
+
+    // Handle burn flash countdown
+    if (burnFlashFrames > 0) {
+      burnFlashFrames--;
+      if (burnFlashFrames <= 0) burnCells = null;
+      drawGrid();
+      return;
+    }
+
+    var interval = REDUCED_MOTION ? 200 : Math.max(16, 200 / speed);
+    if (ts - lastFrame < interval) return;
+    lastFrame = ts;
+
+    for (var i = 0; i < speed; i++) {
+      modelStep();
+      // If a fire just happened, break to show it
+      if (burnCells) break;
+    }
+
+    drawGrid();
+    updateStats();
+  }
+
+  function startRunning() {
+    running = true;
+    btnRun.classList.add('active');
+    btnRun.textContent = 'Pause';
+    if (REDUCED_MOTION) {
+      for (var i = 0; i < 200; i++) modelStep();
+      drawGrid();
+      updateStats();
+      stopRunning();
+    } else {
+      lastFrame = 0;
+      animRAF = requestAnimationFrame(animLoop);
+    }
+  }
+
+  function stopRunning() {
+    running = false;
+    if (animRAF) { cancelAnimationFrame(animRAF); animRAF = null; }
+    btnRun.classList.remove('active');
+    btnRun.textContent = 'Run';
+  }
+
+  // ── Click to strike lightning ─────────────────────────────────────
+  canvas.addEventListener('click', function (e) {
+    var rect = canvas.getBoundingClientRect();
+    var scaleX = canvas.width / rect.width;
+    var scaleY = canvas.height / rect.height;
+    var col = Math.floor((e.clientX - rect.left) * scaleX / cellSize);
+    var row = Math.floor((e.clientY - rect.top) * scaleY / cellSize);
+    col = Math.max(0, Math.min(N - 1, col));
+    row = Math.max(0, Math.min(N - 1, row));
+
+    var idx = row * N + col;
+    if (grid[idx] === TREE) {
+      var burned = burnClusterWithFlash(idx);
+      if (burned > 0) {
+        totalFires++;
+        lastBurnSize = burned;
+        treeCount -= burned;
+      }
+      drawGrid();
+      updateStats();
+    }
+  });
+
+  // ── Controls ──────────────────────────────────────────────────────
+  btnRun.addEventListener('click', function () {
+    if (running) stopRunning(); else startRunning();
+  });
+
+  speedSlider.addEventListener('input', function () {
+    speed = parseInt(this.value, 10);
+    speedVal.textContent = speed;
+  });
+
+  btnReset.addEventListener('click', function () {
+    stopRunning();
+    grid.fill(EMPTY);
+    stepCount = 0;
+    totalFires = 0;
+    lastBurnSize = 0;
+    treeCount = 0;
+    burnCells = null;
+    burnFlashFrames = 0;
+    updateStats();
+    drawGrid();
+  });
+
+  // Init
+  sizeCanvas();
+  drawGrid();
+  updateStats();
+})();
+</script>
+
+<!-- ================================================================== -->
+<!-- Section 2: The Ratio Matters                                       -->
+<!-- ================================================================== -->
+<script>
+(function () {
+  'use strict';
+
+  var REDUCED_MOTION = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  var EMPTY = 0;
+  var TREE  = 1;
+
+  var N = 200;
+  var grid = new Uint8Array(N * N);
+
+  // Parameters (match slider defaults: growth=100, lightning=30 -> 3%)
+  var growPerStep = 100;
+  var fLightning = 0.03;
+  var speed = 10;
+  var running = false;
+  var animRAF = null;
+  var stepCount = 0;
+  var totalFires = 0;
+  var largestFire = 0;
+  var treeCount = 0;
+
+  // Fire size recording for the histogram
+  var fireSizes = [];
+
+  // For burn flash
+  var burnCells = null;
+  var burnFlashFrames = 0;
+
+  // Colors
+  var COL_EMPTY   = [196, 166, 106];
+  var COL_TREE    = [45, 138, 78];
+  var COL_BURNING = [232, 168, 73];
+
+  // DOM
+  var canvas  = document.getElementById('ratio-canvas');
+  var ctx     = canvas.getContext('2d');
+  var figEl   = document.getElementById('fig-ratio');
+  var btnRun  = document.getElementById('btn-ratio-run');
+  var btnReset = document.getElementById('btn-ratio-reset');
+  var growthSlider = document.getElementById('growth-slider');
+  var growthVal    = document.getElementById('growth-val');
+  var lightSlider  = document.getElementById('lightning-slider');
+  var lightVal     = document.getElementById('lightning-val');
+  var ratioVal     = document.getElementById('ratio-val');
+  var speedSlider = document.getElementById('ratio-speed-slider');
+  var speedValEl  = document.getElementById('ratio-speed-val');
+  var statStep    = document.getElementById('ratio-stat-step');
+  var statTrees   = document.getElementById('ratio-stat-trees');
+  var statFires   = document.getElementById('ratio-stat-fires');
+  var statLargest = document.getElementById('ratio-stat-largest');
+
+  // ── Canvas sizing ──────────────────────────────────────────────────
+  var cellSize = 1;
+  var imageData;
+
+  function sizeCanvas() {
+    var w = figEl.clientWidth - 48;
+    cellSize = Math.max(1, Math.floor(w / N));
+    if (cellSize < 1) cellSize = 1;
+    var px = cellSize * N;
+    canvas.width = px;
+    canvas.height = px;
+    canvas.style.width = px + 'px';
+    canvas.style.height = px + 'px';
+    imageData = ctx.createImageData(px, px);
+    drawGrid();
+  }
+
+  var ro = new ResizeObserver(function () { sizeCanvas(); });
+  ro.observe(figEl);
+
+  // ── Rendering ──────────────────────────────────────────────────────
+  function drawGrid() {
+    var px = cellSize * N;
+    var data = imageData.data;
+    for (var r = 0; r < N; r++) {
+      for (var c = 0; c < N; c++) {
+        var val = grid[r * N + c];
+        var color;
+        if (burnCells && burnCells[r * N + c]) {
+          color = COL_BURNING;
+        } else {
+          color = val === TREE ? COL_TREE : COL_EMPTY;
+        }
+        for (var dy = 0; dy < cellSize; dy++) {
+          var py = r * cellSize + dy;
+          for (var dx = 0; dx < cellSize; dx++) {
+            var pxc = c * cellSize + dx;
+            var idx = (py * px + pxc) * 4;
+            data[idx]     = color[0];
+            data[idx + 1] = color[1];
+            data[idx + 2] = color[2];
+            data[idx + 3] = 255;
+          }
+        }
+      }
+    }
+    ctx.putImageData(imageData, 0, 0);
+  }
+
+  // ── BFS burn ──────────────────────────────────────────────────────
+  function burnCluster(startIdx) {
+    if (grid[startIdx] !== TREE) return 0;
+    var burned = new Uint8Array(N * N);
+    var queue = [startIdx];
+    var head = 0;
+    burned[startIdx] = 1;
+    grid[startIdx] = EMPTY;
+    var count = 0;
+
+    while (head < queue.length) {
+      var idx = queue[head++];
+      count++;
+      var rr = (idx / N) | 0;
+      var cc = idx % N;
+
+      if (rr > 0 && grid[idx - N] === TREE && !burned[idx - N]) {
+        burned[idx - N] = 1; grid[idx - N] = EMPTY; queue.push(idx - N);
+      }
+      if (rr < N - 1 && grid[idx + N] === TREE && !burned[idx + N]) {
+        burned[idx + N] = 1; grid[idx + N] = EMPTY; queue.push(idx + N);
+      }
+      if (cc > 0 && grid[idx - 1] === TREE && !burned[idx - 1]) {
+        burned[idx - 1] = 1; grid[idx - 1] = EMPTY; queue.push(idx - 1);
+      }
+      if (cc < N - 1 && grid[idx + 1] === TREE && !burned[idx + 1]) {
+        burned[idx + 1] = 1; grid[idx + 1] = EMPTY; queue.push(idx + 1);
+      }
+    }
+
+    // Flash overlay
+    if (count > 0 && !REDUCED_MOTION) {
+      burnCells = burned;
+      burnFlashFrames = 3;
+    }
+
+    return count;
+  }
+
+  // ── Model step ────────────────────────────────────────────────────
+  function modelStep() {
+    stepCount++;
+    var total = N * N;
+
+    // Growth: plant random trees
+    for (var i = 0; i < growPerStep; i++) {
+      var idx = Math.floor(Math.random() * total);
+      if (grid[idx] === EMPTY) { grid[idx] = TREE; treeCount++; }
+    }
+
+    // Lightning: probability fLightning per step
+    if (Math.random() < fLightning) {
+      var target = Math.floor(Math.random() * total);
+      if (grid[target] === TREE) {
+        var burned = burnCluster(target);
+        if (burned > 0) {
+          totalFires++;
+          if (burned > largestFire) largestFire = burned;
+          treeCount -= burned;
+          fireSizes.push(burned);
+        }
+      }
+    }
+  }
+
+  function updateStats() {
+    statStep.textContent = stepCount.toLocaleString();
+    statTrees.textContent = treeCount.toLocaleString();
+    statFires.textContent = totalFires.toLocaleString();
+    statLargest.textContent = largestFire.toLocaleString();
+  }
+
+  function updateRatioDisplay() {
+    // Expected trees grown between fires = growPerStep / fLightning
+    var treesPerFire = fLightning > 0 ? Math.round(growPerStep / fLightning) : Infinity;
+    ratioVal.textContent = treesPerFire === Infinity ? 'many' : treesPerFire.toLocaleString();
+  }
+
+  // ── Animation loop ────────────────────────────────────────────────
+  var lastFrame = 0;
+
+  function animLoop(ts) {
+    if (!running) return;
+    animRAF = requestAnimationFrame(animLoop);
+
+    if (burnFlashFrames > 0) {
+      burnFlashFrames--;
+      if (burnFlashFrames <= 0) burnCells = null;
+      drawGrid();
+      return;
+    }
+
+    var interval = REDUCED_MOTION ? 200 : Math.max(16, 200 / speed);
+    if (ts - lastFrame < interval) return;
+    lastFrame = ts;
+
+    for (var i = 0; i < speed; i++) {
+      modelStep();
+      if (burnCells) break;
+    }
+
+    drawGrid();
+    updateStats();
+    if (typeof window.updateFireHistogram === 'function') window.updateFireHistogram();
+  }
+
+  function startRunning() {
+    running = true;
+    btnRun.classList.add('active');
+    btnRun.textContent = 'Pause';
+    if (REDUCED_MOTION) {
+      for (var i = 0; i < 200; i++) modelStep();
+      drawGrid();
+      updateStats();
+      if (typeof window.updateFireHistogram === 'function') window.updateFireHistogram();
+      stopRunning();
+    } else {
+      lastFrame = 0;
+      animRAF = requestAnimationFrame(animLoop);
+    }
+  }
+
+  function stopRunning() {
+    running = false;
+    if (animRAF) { cancelAnimationFrame(animRAF); animRAF = null; }
+    btnRun.classList.remove('active');
+    btnRun.textContent = 'Run';
+  }
+
+  // ── Slider controls ───────────────────────────────────────────────
+  function updateGrowth() {
+    growPerStep = +growthSlider.value;
+    growthVal.textContent = growPerStep;
+    updateRatioDisplay();
+  }
+
+  function updateLightning() {
+    fLightning = +lightSlider.value / 1000;
+    lightVal.textContent = (fLightning * 100).toFixed(1) + '%';
+    updateRatioDisplay();
+  }
+
+  growthSlider.addEventListener('input', updateGrowth);
+  lightSlider.addEventListener('input', updateLightning);
+
+  speedSlider.addEventListener('input', function () {
+    speed = parseInt(this.value, 10);
+    speedValEl.textContent = speed;
+  });
+
+  btnRun.addEventListener('click', function () {
+    if (running) stopRunning(); else startRunning();
+  });
+
+  btnReset.addEventListener('click', function () {
+    stopRunning();
+    grid.fill(EMPTY);
+    stepCount = 0;
+    totalFires = 0;
+    largestFire = 0;
+    treeCount = 0;
+    fireSizes.length = 0;
+    burnCells = null;
+    burnFlashFrames = 0;
+    updateStats();
+    drawGrid();
+    if (typeof window.resetFireHistogram === 'function') window.resetFireHistogram();
+  });
+
+  // Click to strike lightning
+  canvas.addEventListener('click', function (e) {
+    var rect = canvas.getBoundingClientRect();
+    var scaleX = canvas.width / rect.width;
+    var scaleY = canvas.height / rect.height;
+    var col = Math.floor((e.clientX - rect.left) * scaleX / cellSize);
+    var row = Math.floor((e.clientY - rect.top) * scaleY / cellSize);
+    col = Math.max(0, Math.min(N - 1, col));
+    row = Math.max(0, Math.min(N - 1, row));
+
+    var idx = row * N + col;
+    if (grid[idx] === TREE) {
+      var burned = burnCluster(idx);
+      if (burned > 0) {
+        totalFires++;
+        if (burned > largestFire) largestFire = burned;
+        treeCount -= burned;
+        fireSizes.push(burned);
+      }
+      drawGrid();
+      updateStats();
+      if (typeof window.updateFireHistogram === 'function') window.updateFireHistogram();
+    }
+  });
+
+  // Expose state for histogram section
+  window._forestFire = {
+    getFireSizes: function () { return fireSizes; }
+  };
+
+  // Init
+  updateGrowth();
+  updateLightning();
+  sizeCanvas();
+  drawGrid();
+  updateStats();
+})();
+</script>
+
+<!-- ================================================================== -->
+<!-- Section 3: Fire Size Distribution (Log-Log Histogram)              -->
+<!-- ================================================================== -->
+<script>
+(function () {
+  'use strict';
+
+  var svgEl = document.getElementById('histogram-svg');
+  var figEl = document.getElementById('fig-histogram');
+  var statFires = document.getElementById('hist-stat-fires');
+  var statSlope = document.getElementById('hist-stat-slope');
+
+  var margin = { top: 16, right: 24, bottom: 52, left: 56 };
+  var width, height;
+
+  var svg = d3.select(svgEl);
+  var gPlot, gXAxis, gYAxis, gDots, gLine, labelX, labelY;
+
+  // ── Sizing ─────────────────────────────────────────────────────────
+  function sizeSVG() {
+    var cw = figEl.clientWidth - 48;
+    var totalW = Math.min(cw, 680);
+    var totalH = Math.min(totalW * 0.55, 340);
+    width = totalW - margin.left - margin.right;
+    height = totalH - margin.top - margin.bottom;
+    svg.attr('width', totalW).attr('height', totalH);
+  }
+
+  function initSVG() {
+    sizeSVG();
+    svg.selectAll('*').remove();
+
+    gPlot = svg.append('g')
+      .attr('transform', 'translate(' + margin.left + ',' + margin.top + ')');
+
+    gXAxis = gPlot.append('g').attr('class', 'x-axis')
+      .attr('transform', 'translate(0,' + height + ')');
+    gYAxis = gPlot.append('g').attr('class', 'y-axis');
+    gLine = gPlot.append('g');
+    gDots = gPlot.append('g');
+
+    labelX = gPlot.append('text')
+      .attr('x', width / 2).attr('y', height + 42)
+      .attr('text-anchor', 'middle')
+      .attr('font-size', '0.8rem').attr('fill', '#4a4a6a')
+      .text('Fire size (trees burned, log scale)');
+
+    labelY = gPlot.append('text')
+      .attr('transform', 'rotate(-90)')
+      .attr('x', -height / 2).attr('y', -42)
+      .attr('text-anchor', 'middle')
+      .attr('font-size', '0.8rem').attr('fill', '#4a4a6a')
+      .text('Frequency (log scale)');
+  }
+
+  initSVG();
+
+  var ro = new ResizeObserver(function () {
+    initSVG();
+    window.updateFireHistogram();
+  });
+  ro.observe(figEl);
+
+  // ── Logarithmic binning ────────────────────────────────────────────
+  function buildBins(sizes) {
+    if (sizes.length === 0) return [];
+
+    var freq = {};
+    var maxSize = 0;
+    for (var i = 0; i < sizes.length; i++) {
+      var s = sizes[i];
+      freq[s] = (freq[s] || 0) + 1;
+      if (s > maxSize) maxSize = s;
+    }
+    if (maxSize < 1) return [];
+
+    var logMax = Math.log10(maxSize);
+    var nBins = Math.max(10, Math.min(35, Math.ceil(logMax * 8)));
+    var edges = new Float64Array(nBins + 1);
+    for (var b = 0; b <= nBins; b++) {
+      edges[b] = Math.pow(10, (b / nBins) * logMax);
+    }
+    edges[0] = 0.5;
+
+    var bins = [];
+    var keys = Object.keys(freq);
+    for (var bi = 0; bi < nBins; bi++) {
+      var lo = edges[bi];
+      var hi = edges[bi + 1];
+      var count = 0;
+      for (var ki = 0; ki < keys.length; ki++) {
+        var k = +keys[ki];
+        if (k >= lo && (bi === nBins - 1 ? k <= hi : k < hi)) {
+          count += freq[keys[ki]];
+        }
+      }
+      if (count > 0) {
+        bins.push({ size: Math.sqrt(lo * hi), count: count });
+      }
+    }
+    return bins;
+  }
+
+  // ── Power-law fit (OLS on log-log) ─────────────────────────────────
+  function fitLine(bins) {
+    if (bins.length < 3) return null;
+    var n = bins.length;
+    var sx = 0, sy = 0, sxx = 0, sxy = 0;
+    for (var i = 0; i < n; i++) {
+      var lx = Math.log10(bins[i].size);
+      var ly = Math.log10(bins[i].count);
+      sx += lx; sy += ly;
+      sxx += lx * lx;
+      sxy += lx * ly;
+    }
+    var denom = n * sxx - sx * sx;
+    if (Math.abs(denom) < 1e-12) return null;
+    var slope = (n * sxy - sx * sy) / denom;
+    var intercept = (sy - slope * sx) / n;
+    return {
+      slope: slope,
+      intercept: intercept,
+      xMin: Math.log10(bins[0].size),
+      xMax: Math.log10(bins[n - 1].size)
+    };
+  }
+
+  // ── Render histogram ───────────────────────────────────────────────
+  window.updateFireHistogram = function () {
+    if (!window._forestFire) return;
+    var sizes = window._forestFire.getFireSizes();
+    statFires.textContent = sizes.length.toLocaleString();
+
+    var bins = buildBins(sizes);
+    if (bins.length < 2) {
+      statSlope.innerHTML = '&mdash;';
+      gDots.selectAll('*').remove();
+      gLine.selectAll('*').remove();
+      return;
+    }
+
+    // Scales
+    var xExt = d3.extent(bins, function (d) { return d.size; });
+    var yExt = d3.extent(bins, function (d) { return d.count; });
+
+    var x = d3.scaleLog()
+      .domain([Math.max(0.5, xExt[0] * 0.5), xExt[1] * 2])
+      .range([0, width]).nice();
+
+    var y = d3.scaleLog()
+      .domain([0.5, yExt[1] * 2])
+      .range([height, 0]).nice();
+
+    // Axes
+    gXAxis.call(d3.axisBottom(x).ticks(5, '~s'))
+      .selectAll('text').attr('font-size', '0.72rem');
+    gYAxis.call(d3.axisLeft(y).ticks(4, '~s'))
+      .selectAll('text').attr('font-size', '0.72rem');
+
+    // Dots
+    var circles = gDots.selectAll('circle')
+      .data(bins, function (d, i) { return i; });
+
+    circles.exit().remove();
+
+    circles.enter().append('circle')
+      .attr('r', 3.5)
+      .attr('fill', '#2563eb')
+      .attr('fill-opacity', 0.75)
+      .attr('stroke', '#1d4ed8')
+      .attr('stroke-width', 0.5)
+    .merge(circles)
+      .attr('cx', function (d) { return x(d.size); })
+      .attr('cy', function (d) { return y(d.count); });
+
+    // Fit line
+    gLine.selectAll('*').remove();
+    var fit = fitLine(bins);
+    if (fit && bins.length >= 5) {
+      var lx1 = fit.xMin, lx2 = fit.xMax;
+      var ly1 = fit.intercept + fit.slope * lx1;
+      var ly2 = fit.intercept + fit.slope * lx2;
+      var px1 = Math.pow(10, lx1), px2 = Math.pow(10, lx2);
+      var py1 = Math.pow(10, ly1), py2 = Math.pow(10, ly2);
+
+      py1 = Math.max(0.5, py1);
+      py2 = Math.max(0.5, py2);
+
+      gLine.append('line')
+        .attr('x1', x(px1)).attr('y1', y(py1))
+        .attr('x2', x(px2)).attr('y2', y(py2))
+        .attr('stroke', '#dc2626')
+        .attr('stroke-width', 1.5)
+        .attr('stroke-dasharray', '6,4')
+        .attr('opacity', 0.85);
+
+      statSlope.textContent = fit.slope.toFixed(2);
+    } else {
+      statSlope.innerHTML = '&mdash;';
+    }
+  };
+
+  window.resetFireHistogram = function () {
+    gDots.selectAll('*').remove();
+    gLine.selectAll('*').remove();
+    gXAxis.selectAll('*').remove();
+    gYAxis.selectAll('*').remove();
+    statFires.textContent = '0';
+    statSlope.innerHTML = '&mdash;';
+  };
+})();
+</script>
+
+</body>
+</html>

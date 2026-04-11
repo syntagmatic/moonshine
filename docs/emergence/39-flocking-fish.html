@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Schooling Fish: Underwater Flocking</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;1,8..60,400&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root { --article-width: 740px; --body-font: 'Source Serif 4', Georgia, serif; --heading-font: 'Source Sans 3', system-ui, sans-serif; --mono-font: 'Source Code Pro', monospace; --body-size: 1.125rem; --line-height: 1.6; --text: #1a1a2e; --text-2: #4a4a6a; --accent: #2563eb; --accent-light: #dbeafe; --bg: #fafafa; --fig-bg: #ffffff; --border: #e2e2e8; }
+body { font-family: var(--body-font); font-size: var(--body-size); line-height: var(--line-height); color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased; }
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
+h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+p { margin: 0 0 1rem; }
+a { color: var(--accent); }
+.header { padding: 4rem 0 2rem; border-bottom: 1px solid var(--border); margin-bottom: 2.5rem; }
+.header .back { font-family: var(--heading-font); font-size: 0.85rem; display: inline-block; margin-bottom: 1.5rem; }
+.header .subtitle { font-family: var(--heading-font); font-size: 1.15rem; color: var(--text-2); max-width: 580px; }
+.figure { margin: 2rem 0; padding: 1.5rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; }
+.insight { background: var(--accent-light); border-left: 3px solid var(--accent); padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 4px 4px 0; }
+.controls { display: flex; flex-wrap: wrap; gap: 1rem; margin-top: 1rem; font-family: var(--heading-font); font-size: 0.85rem; }
+.control-group label { color: var(--text-2); font-weight: 600; }
+.control-group { display: flex; flex-direction: column; gap: 0.25rem; }
+svg text { font-family: var(--heading-font); }
+canvas { display: block; width: 100%; border-radius: 4px; cursor: crosshair; }
+input[type="range"] { width: 120px; }
+.val { font-family: var(--mono-font); font-size: 0.8rem; min-width: 2.5em; display: inline-block; }
+.stats-row { font-family: var(--mono-font); font-size: 0.8rem; color: var(--text-2); margin-top: 0.5rem; }
+@media (prefers-reduced-motion: reduce) {
+  .reduced-motion-msg { display: block !important; }
+  canvas { opacity: 0.7; }
+}
+.reduced-motion-msg {
+  display: none; font-family: var(--heading-font);
+  font-size: 0.85rem; color: var(--text-2); margin-top: 0.5rem;
+}
+</style>
+</head>
+<body>
+<div class="article">
+
+<div class="header">
+  <a class="back" href="index.html">&larr; Back to index</a>
+  <h1>Schooling Fish: Underwater Flocking</h1>
+  <p class="subtitle">Fish schools move as one liquid body, splitting around predators and reforming seamlessly</p>
+</div>
+
+<p>A school of herring can number in the hundreds of millions, yet the group moves as if it were a single organism. No fish is in charge. Each individual follows three local rules: stay close to neighbors, match their heading, and avoid collisions. These are the same separation/alignment/cohesion rules that Craig Reynolds described for bird flocks in 1986. But fish live in water, and that changes everything.</p>
+
+<p>Water is roughly 800 times denser than air. A fish pushing forward creates a pressure bow wave. A fish turning sends vortices spinning outward. Every movement broadcasts a signal that nearby fish can detect without looking. This is the key difference between fish schools and bird flocks: fish have a sense organ that birds lack, and it rewires the entire collective behavior.</p>
+
+<h2>1. The School Simulation</h2>
+
+<p>Below, roughly 150 fish swim using the three classic boid rules. Each fish is drawn as an elongated body aligned with its heading. Drag the sliders to change how strongly each rule pulls on a fish's steering. When separation dominates, the school scatters into a loose cloud. When cohesion dominates, they compress into a tight ball. Alignment is what makes them flow in a common direction, producing the smooth, river-like motion that real schools exhibit.</p>
+
+<div class="figure">
+  <canvas id="schoolCanvas" height="440"></canvas>
+  <div class="controls">
+    <div class="control-group">
+      <label>Separation <span class="val" id="sepVal">1.0</span></label>
+      <input type="range" id="sepSlider" min="0" max="3" step="0.1" value="1.0">
+    </div>
+    <div class="control-group">
+      <label>Alignment <span class="val" id="aliVal">1.0</span></label>
+      <input type="range" id="aliSlider" min="0" max="3" step="0.1" value="1.0">
+    </div>
+    <div class="control-group">
+      <label>Cohesion <span class="val" id="cohVal">1.0</span></label>
+      <input type="range" id="cohSlider" min="0" max="3" step="0.1" value="1.0">
+    </div>
+  </div>
+  <div class="stats-row" id="schoolStats">School polarity: -- | NND: --</div>
+  <div class="figure-caption">Each fish steers according to three local rules applied to its nearest neighbors. Try maxing out one slider while zeroing the others. The stats show school polarity (how aligned the headings are) and average nearest-neighbor distance (NND).</div>
+  <div class="reduced-motion-msg">Animation paused (reduced motion preferred).</div>
+</div>
+
+<p>Notice how the balanced state (all sliders near 1.0) produces the most lifelike schooling. The fish maintain a roughly constant spacing, flow together, and occasionally wheel around in collective turns. Real fish schools show exactly this kind of motion, and biologists measure it with the same statistics you see in the readout: polarity (how aligned the headings are, from 0 = random to 1 = perfect) and NND (nearest-neighbor distance, how tightly packed the school is).</p>
+
+<h2>2. Predator Attack: Flash Expansion</h2>
+
+<p>Click anywhere on the simulation below to spawn a predator (the red shape). Watch the school split apart in a "flash expansion," then reform once the threat passes. Real schools perform this maneuver in under 100 milliseconds per fish, fast enough that predators often come away empty-jawed. The splitting creates a "vacuole," a hole in the school that the predator sails through without catching anyone.</p>
+
+<p>The flash expansion is not simple fleeing. Each fish does not just swim away from the predator. Instead it turns away from the approaching threat at a sharp angle, and the geometry of many fish doing this simultaneously produces the splitting pattern. The two halves of the school stream past the predator on either side, then rejoin behind it. You can spawn multiple predators to see how the school handles compound threats.</p>
+
+<div class="figure">
+  <canvas id="predatorCanvas" height="440"></canvas>
+  <div class="stats-row" id="predStats">Click to spawn a predator. Predators alive: 0</div>
+  <div class="figure-caption">Click to place a predator. The school splits around the threat. The predator fades after a few seconds and the school reforms. Fish near a predator turn gold with alarm.</div>
+  <div class="reduced-motion-msg">Animation paused (reduced motion preferred).</div>
+</div>
+
+<p>The speed of the flash expansion is remarkable. Each fish reacts to the neighbor that reacted to the neighbor that saw the predator. The panic propagates outward faster than any single fish swims. This is not just a metaphor. Measurements of real herring schools show the "startle wave" traveling at 5 to 15 body lengths per second, while an individual fish's top speed is about 10 body lengths per second. The collective response outruns any individual.</p>
+
+<h2>3. Information Wave</h2>
+
+<p>Click near the school below. The fish closest to your click will turn sharply, and that turn propagates through the school as a visible wave. The wave moves faster than any individual fish because each fish begins its turn before the neighbor that triggered it has finished turning. It is predictive, not reactive: each fish anticipates the next fish's movement using the pressure signals it detects, and begins turning early.</p>
+
+<div class="figure">
+  <canvas id="waveCanvas" height="440"></canvas>
+  <div class="controls">
+    <div class="control-group">
+      <label>Wave speed factor <span class="val" id="waveVal">1.5</span></label>
+      <input type="range" id="waveSlider" min="1.0" max="3.0" step="0.1" value="1.5">
+    </div>
+  </div>
+  <div class="stats-row" id="waveStats">Click near the school to trigger a turning wave.</div>
+  <div class="figure-caption">Click near the school to trigger a turning wave. The wave front (highlighted fish) travels faster than individual swim speed. The slider controls the propagation speed multiplier.</div>
+  <div class="reduced-motion-msg">Animation paused (reduced motion preferred).</div>
+</div>
+
+<div class="insight">
+  <strong>The lateral line organ.</strong> Fish do not need to see their neighbors to school. The lateral line, a row of pressure-sensitive cells running along each side of the body, detects tiny pressure changes in the surrounding water. This gives fish a 360-degree sense of their neighbors' positions and velocities, working even in murky water and total darkness. It is why blind cave fish can still school, and why fish schools are packed more tightly than bird flocks: the lateral line provides faster, denser neighbor information than vision alone.
+</div>
+
+<p>Water's incompressibility means pressure signals travel nearly instantaneously compared to a fish's reaction time. When one fish accelerates, the pressure wave reaches its neighbors in microseconds. The bottleneck is neural processing, not signal travel. This is fundamentally different from bird flocks, where each bird must visually track its neighbors and information propagates at the speed of a wingbeat reaction.</p>
+
+<p>The result: fish schools are some of the fastest collective decision-makers in biology. A school of anchovies can reverse direction in about 15 milliseconds per fish in the chain, far quicker than any individual fish's full sensory-to-motor reaction time. The school, in a real sense, thinks faster than any of its members. The collective processes information at a rate that no individual nervous system can match on its own.</p>
+
+</div>
+
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script>
+(function() {
+  "use strict";
+
+  var reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var FISH_COUNT = 150;
+  var PERCEPTION = 65;
+  var MAX_SPEED = 2.5;
+  var MIN_SPEED = 0.8;
+  var MAX_FORCE = 0.45;
+
+  /* ---- Fish creation ---- */
+  function createFish(x, y) {
+    var angle = Math.random() * Math.PI * 2;
+    var speed = MIN_SPEED + Math.random() * 0.5;
+    return {
+      x: x, y: y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      ax: 0, ay: 0,
+      turnWave: 0,
+      waveHit: false,
+      hue: 195 + Math.random() * 20
+    };
+  }
+
+  function vecLimit(vx, vy, max) {
+    var mag = Math.sqrt(vx * vx + vy * vy);
+    if (mag > max) { var s = max / mag; return [vx * s, vy * s]; }
+    return [vx, vy];
+  }
+
+  function vecMag(vx, vy) {
+    return Math.sqrt(vx * vx + vy * vy);
+  }
+
+  /* ---- Boid steering ---- */
+  function computeSteering(fishes, i, sepW, aliW, cohW, perception, avoidList) {
+    var f = fishes[i];
+    var sx = 0, sy = 0, sc = 0;
+    var ax = 0, ay = 0, ac = 0;
+    var cx = 0, cy = 0, cc = 0;
+
+    for (var j = 0; j < fishes.length; j++) {
+      if (j === i) continue;
+      var dx = fishes[j].x - f.x;
+      var dy = fishes[j].y - f.y;
+      var d = Math.sqrt(dx * dx + dy * dy);
+      if (d < perception && d > 0) {
+        // separation: inversely proportional to distance squared
+        var invD2 = 1.0 / (d * d);
+        sx -= dx * invD2;
+        sy -= dy * invD2;
+        sc++;
+        // alignment: average neighbor velocity
+        ax += fishes[j].vx;
+        ay += fishes[j].vy;
+        ac++;
+        // cohesion: average neighbor position
+        cx += fishes[j].x;
+        cy += fishes[j].y;
+        cc++;
+      }
+    }
+
+    var fx = 0, fy = 0;
+    if (sc > 0) {
+      fx += (sx / sc) * sepW * 0.6;
+      fy += (sy / sc) * sepW * 0.6;
+    }
+    if (ac > 0) {
+      fx += (ax / ac - f.vx) * aliW * 0.15;
+      fy += (ay / ac - f.vy) * aliW * 0.15;
+    }
+    if (cc > 0) {
+      var tx = cx / cc - f.x;
+      var ty = cy / cc - f.y;
+      fx += tx * cohW * 0.005;
+      fy += ty * cohW * 0.005;
+    }
+
+    // avoid predators / threat points
+    if (avoidList) {
+      for (var k = 0; k < avoidList.length; k++) {
+        var p = avoidList[k];
+        var pdx = f.x - p.x;
+        var pdy = f.y - p.y;
+        var pd = Math.sqrt(pdx * pdx + pdy * pdy);
+        if (pd < p.radius && pd > 0) {
+          var strength = (p.radius - pd) / pd * 2.5;
+          fx += (pdx / pd) * strength;
+          fy += (pdy / pd) * strength;
+        }
+      }
+    }
+    return vecLimit(fx, fy, MAX_FORCE);
+  }
+
+  /* ---- Integration step ---- */
+  function updateFishes(fishes, w, h, sepW, aliW, cohW, perception, avoidList) {
+    for (var i = 0; i < fishes.length; i++) {
+      var s = computeSteering(fishes, i, sepW, aliW, cohW, perception, avoidList);
+      fishes[i].ax = s[0];
+      fishes[i].ay = s[1];
+    }
+    for (var i = 0; i < fishes.length; i++) {
+      var f = fishes[i];
+      f.vx += f.ax;
+      f.vy += f.ay;
+      var v = vecLimit(f.vx, f.vy, MAX_SPEED);
+      var mag = vecMag(v[0], v[1]);
+      if (mag < MIN_SPEED) {
+        var boost = MIN_SPEED / Math.max(mag, 0.001);
+        v[0] *= boost;
+        v[1] *= boost;
+      }
+      f.vx = v[0];
+      f.vy = v[1];
+      f.x += f.vx;
+      f.y += f.vy;
+      // wrap edges with margin
+      if (f.x < -10) f.x += w + 20;
+      if (f.x > w + 10) f.x -= w + 20;
+      if (f.y < -10) f.y += h + 20;
+      if (f.y > h + 10) f.y -= h + 20;
+    }
+  }
+
+  /* ---- Fish rendering ---- */
+  function drawFishBody(ctx, f, color, glow) {
+    var angle = Math.atan2(f.vy, f.vx);
+    var speed = vecMag(f.vx, f.vy);
+    var bodyLen = 7 + speed * 1.2;
+    var bodyWid = 2.8;
+
+    ctx.save();
+    ctx.translate(f.x, f.y);
+    ctx.rotate(angle);
+
+    // optional glow for wave-hit fish
+    if (glow) {
+      ctx.shadowColor = "rgba(255,220,100,0.6)";
+      ctx.shadowBlur = 8;
+    }
+
+    // body: tapered ellipse via bezier
+    ctx.beginPath();
+    ctx.moveTo(bodyLen, 0);
+    ctx.bezierCurveTo(bodyLen * 0.3, bodyWid * 1.3, -bodyLen * 0.3, bodyWid * 1.1, -bodyLen * 0.5, 0);
+    ctx.bezierCurveTo(-bodyLen * 0.3, -bodyWid * 1.1, bodyLen * 0.3, -bodyWid * 1.3, bodyLen, 0);
+    ctx.fillStyle = color;
+    ctx.fill();
+
+    // tail fork
+    ctx.beginPath();
+    ctx.moveTo(-bodyLen * 0.45, 0);
+    ctx.lineTo(-bodyLen * 0.75, bodyWid * 1.4);
+    ctx.lineTo(-bodyLen * 0.55, 0);
+    ctx.lineTo(-bodyLen * 0.75, -bodyWid * 1.4);
+    ctx.closePath();
+    ctx.fillStyle = color;
+    ctx.fill();
+
+    ctx.restore();
+    if (glow) {
+      ctx.shadowColor = "transparent";
+      ctx.shadowBlur = 0;
+    }
+  }
+
+  /* ---- School initialization ---- */
+  function initSchool(n, w, h) {
+    var fishes = [];
+    var cx = w / 2, cy = h / 2;
+    for (var i = 0; i < n; i++) {
+      fishes.push(createFish(
+        cx + (Math.random() - 0.5) * w * 0.35,
+        cy + (Math.random() - 0.5) * h * 0.35
+      ));
+    }
+    return fishes;
+  }
+
+  /* ---- Stats computation ---- */
+  function computeSchoolStats(fishes) {
+    var n = fishes.length;
+    // polarity: average of unit heading vectors
+    var hx = 0, hy = 0;
+    for (var i = 0; i < n; i++) {
+      var mag = vecMag(fishes[i].vx, fishes[i].vy);
+      if (mag > 0.01) {
+        hx += fishes[i].vx / mag;
+        hy += fishes[i].vy / mag;
+      }
+    }
+    var polarity = vecMag(hx / n, hy / n);
+
+    // average nearest-neighbor distance
+    var totalNND = 0;
+    for (var i = 0; i < n; i++) {
+      var minD = Infinity;
+      for (var j = 0; j < n; j++) {
+        if (i === j) continue;
+        var dx = fishes[j].x - fishes[i].x;
+        var dy = fishes[j].y - fishes[i].y;
+        var d = dx * dx + dy * dy;
+        if (d < minD) minD = d;
+      }
+      totalNND += Math.sqrt(minD);
+    }
+    var nnd = totalNND / n;
+    return { polarity: polarity, nnd: nnd };
+  }
+
+  /* ---- Draw water background ---- */
+  function drawWater(ctx, w, h, time) {
+    ctx.fillStyle = "#091829";
+    ctx.fillRect(0, 0, w, h);
+
+    // drifting caustic light patches
+    ctx.globalAlpha = 0.035;
+    for (var i = 0; i < 10; i++) {
+      var cx = w * 0.3 + Math.sin(time * 0.0003 + i * 1.3) * w * 0.35;
+      var cy = h * 0.35 + Math.cos(time * 0.00035 + i * 2.1) * h * 0.3;
+      var r = 60 + Math.sin(time * 0.0008 + i * 0.7) * 30;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fillStyle = "#3a7ec8";
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1.0;
+
+    // subtle particle drift
+    ctx.fillStyle = "rgba(160,200,230,0.06)";
+    for (var i = 0; i < 20; i++) {
+      var px = ((time * 0.02 + i * 137) % (w + 40)) - 20;
+      var py = ((time * 0.015 + i * 97) % (h + 40)) - 20;
+      ctx.beginPath();
+      ctx.arc(px, py, 1.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  /* ---- Canvas setup helper ---- */
+  function setupCanvas(canvasId) {
+    var canvas = document.getElementById(canvasId);
+    var ctx = canvas.getContext("2d");
+    var dpr = window.devicePixelRatio || 1;
+    var w = 600, h = 440;
+
+    function resize() {
+      var rect = canvas.parentElement.getBoundingClientRect();
+      w = rect.width - 48;
+      h = 440;
+      canvas.width = w * dpr;
+      canvas.height = h * dpr;
+      canvas.style.width = w + "px";
+      canvas.style.height = h + "px";
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    var ro = new ResizeObserver(resize);
+    ro.observe(canvas.parentElement);
+    resize();
+
+    return { canvas: canvas, ctx: ctx, w: function() { return w; }, h: function() { return h; } };
+  }
+
+  /* ========== SIM 1: Basic school ========== */
+  (function() {
+    var S = setupCanvas("schoolCanvas");
+    var fishes = initSchool(FISH_COUNT, S.w(), S.h());
+
+    var sepSlider = document.getElementById("sepSlider");
+    var aliSlider = document.getElementById("aliSlider");
+    var cohSlider = document.getElementById("cohSlider");
+    var sepVal = document.getElementById("sepVal");
+    var aliVal = document.getElementById("aliVal");
+    var cohVal = document.getElementById("cohVal");
+    var statsEl = document.getElementById("schoolStats");
+
+    sepSlider.oninput = function() { sepVal.textContent = (+this.value).toFixed(1); };
+    aliSlider.oninput = function() { aliVal.textContent = (+this.value).toFixed(1); };
+    cohSlider.oninput = function() { cohVal.textContent = (+this.value).toFixed(1); };
+
+    var frameNum = 0;
+    function frame(time) {
+      if (reducedMotion) return;
+      var w = S.w(), h = S.h();
+      var sep = +sepSlider.value, ali = +aliSlider.value, coh = +cohSlider.value;
+
+      updateFishes(fishes, w, h, sep, ali, coh, PERCEPTION, null);
+      drawWater(S.ctx, w, h, time);
+
+      for (var i = 0; i < fishes.length; i++) {
+        var f = fishes[i];
+        var hsl = "hsla(" + Math.round(f.hue) + ",70%,72%,0.9)";
+        drawFishBody(S.ctx, f, hsl, false);
+      }
+
+      // stats every 15 frames
+      if (frameNum % 15 === 0) {
+        var st = computeSchoolStats(fishes);
+        statsEl.textContent = "School polarity: " + st.polarity.toFixed(2) +
+          " | NND: " + st.nnd.toFixed(1) + "px";
+      }
+      frameNum++;
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  })();
+
+  /* ========== SIM 2: Predator attack ========== */
+  (function() {
+    var S = setupCanvas("predatorCanvas");
+    var fishes = initSchool(FISH_COUNT, S.w(), S.h());
+    var predators = [];
+    var predStats = document.getElementById("predStats");
+
+    S.canvas.addEventListener("click", function(e) {
+      var rect = S.canvas.getBoundingClientRect();
+      var mx = (e.clientX - rect.left) * (S.w() / rect.width);
+      var my = (e.clientY - rect.top) * (S.h() / rect.height);
+      // aim predator toward school center of mass
+      var cx = 0, cy = 0;
+      for (var i = 0; i < fishes.length; i++) {
+        cx += fishes[i].x; cy += fishes[i].y;
+      }
+      cx /= fishes.length; cy /= fishes.length;
+      var angle = Math.atan2(cy - my, cx - mx);
+      predators.push({
+        x: mx, y: my,
+        vx: Math.cos(angle) * 3.8,
+        vy: Math.sin(angle) * 3.8,
+        life: 200,
+        maxLife: 200,
+        radius: 110
+      });
+    });
+
+    function frame(time) {
+      if (reducedMotion) return;
+      var w = S.w(), h = S.h();
+
+      // build avoid list
+      var avoidList = [];
+      for (var k = 0; k < predators.length; k++) {
+        if (predators[k].life > 0) avoidList.push(predators[k]);
+      }
+      updateFishes(fishes, w, h, 1.2, 1.0, 1.0, PERCEPTION, avoidList);
+
+      // update predators
+      for (var k = predators.length - 1; k >= 0; k--) {
+        var p = predators[k];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.life--;
+        p.vx *= 0.994;
+        p.vy *= 0.994;
+        if (p.life <= 0) predators.splice(k, 1);
+      }
+
+      drawWater(S.ctx, w, h, time);
+
+      // draw fish, with alarm coloring
+      for (var i = 0; i < fishes.length; i++) {
+        var alarmed = false;
+        for (var k = 0; k < predators.length; k++) {
+          var dx = fishes[i].x - predators[k].x;
+          var dy = fishes[i].y - predators[k].y;
+          if (Math.sqrt(dx * dx + dy * dy) < predators[k].radius * 0.65) {
+            alarmed = true;
+            break;
+          }
+        }
+        var col = alarmed
+          ? "rgba(255, 220, 120, 0.95)"
+          : "hsla(" + Math.round(fishes[i].hue) + ",70%,72%,0.9)";
+        drawFishBody(S.ctx, fishes[i], col, false);
+      }
+
+      // draw predators
+      for (var k = 0; k < predators.length; k++) {
+        var p = predators[k];
+        var angle = Math.atan2(p.vy, p.vx);
+        var alpha = Math.min(1.0, p.life / 50);
+        var ctx = S.ctx;
+
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(angle);
+
+        // predator body: bigger, more menacing shape
+        ctx.beginPath();
+        ctx.moveTo(22, 0);
+        ctx.lineTo(-14, 11);
+        ctx.lineTo(-9, 0);
+        ctx.lineTo(-14, -11);
+        ctx.closePath();
+        ctx.fillStyle = "rgba(200, 40, 40, " + alpha + ")";
+        ctx.fill();
+
+        // eye
+        ctx.beginPath();
+        ctx.arc(8, -2, 2, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(255,255,100," + alpha + ")";
+        ctx.fill();
+
+        // danger radius ring
+        ctx.beginPath();
+        ctx.arc(0, 0, p.radius, 0, Math.PI * 2);
+        ctx.strokeStyle = "rgba(200, 40, 40, " + (alpha * 0.12) + ")";
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([4, 6]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        ctx.restore();
+      }
+
+      predStats.textContent = "Click to spawn a predator. Predators alive: " + predators.length;
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  })();
+
+  /* ========== SIM 3: Information wave ========== */
+  (function() {
+    var S = setupCanvas("waveCanvas");
+    var fishes = initSchool(FISH_COUNT, S.w(), S.h());
+    var waveSlider = document.getElementById("waveSlider");
+    var waveValEl = document.getElementById("waveVal");
+    var waveStatsEl = document.getElementById("waveStats");
+    waveSlider.oninput = function() { waveValEl.textContent = (+this.value).toFixed(1); };
+
+    var waveActive = false;
+    var waveOriginX = 0, waveOriginY = 0;
+    var waveTime = 0;
+    var waveFishHit = 0;
+
+    S.canvas.addEventListener("click", function(e) {
+      var rect = S.canvas.getBoundingClientRect();
+      waveOriginX = (e.clientX - rect.left) * (S.w() / rect.width);
+      waveOriginY = (e.clientY - rect.top) * (S.h() / rect.height);
+      waveActive = true;
+      waveTime = 0;
+      waveFishHit = 0;
+      for (var i = 0; i < fishes.length; i++) {
+        fishes[i].waveHit = false;
+        fishes[i].turnWave = 0;
+      }
+    });
+
+    function frame(time) {
+      if (reducedMotion) return;
+      var w = S.w(), h = S.h();
+      var waveFactor = +waveSlider.value;
+
+      updateFishes(fishes, w, h, 1.0, 1.0, 1.0, PERCEPTION, null);
+
+      // propagate wave
+      if (waveActive) {
+        waveTime++;
+        var waveRadius = waveTime * 2.8 * waveFactor;
+        var anyActive = false;
+
+        for (var i = 0; i < fishes.length; i++) {
+          var f = fishes[i];
+          if (!f.waveHit) {
+            var dx = f.x - waveOriginX;
+            var dy = f.y - waveOriginY;
+            var d = Math.sqrt(dx * dx + dy * dy);
+            if (d < waveRadius) {
+              f.waveHit = true;
+              f.turnWave = 55;
+              waveFishHit++;
+              // sharp turn away from wave origin
+              var awayAngle = Math.atan2(dy, dx);
+              var turnMag = 1.8;
+              f.vx += Math.cos(awayAngle + Math.PI * 0.5) * turnMag;
+              f.vy += Math.sin(awayAngle + Math.PI * 0.5) * turnMag;
+              var v = vecLimit(f.vx, f.vy, MAX_SPEED);
+              f.vx = v[0]; f.vy = v[1];
+            }
+          }
+          if (f.turnWave > 0) {
+            f.turnWave--;
+            anyActive = true;
+          }
+        }
+        if (!anyActive && waveTime > 30) waveActive = false;
+      }
+
+      drawWater(S.ctx, w, h, time);
+
+      // draw expanding wave front ring
+      if (waveActive) {
+        var waveRadius = waveTime * 2.8 * waveFactor;
+        S.ctx.beginPath();
+        S.ctx.arc(waveOriginX, waveOriginY, waveRadius, 0, Math.PI * 2);
+        S.ctx.strokeStyle = "rgba(255, 255, 200, 0.1)";
+        S.ctx.lineWidth = 2;
+        S.ctx.stroke();
+
+        // inner ring
+        if (waveRadius > 10) {
+          S.ctx.beginPath();
+          S.ctx.arc(waveOriginX, waveOriginY, waveRadius - 8, 0, Math.PI * 2);
+          S.ctx.strokeStyle = "rgba(255, 255, 200, 0.05)";
+          S.ctx.lineWidth = 6;
+          S.ctx.stroke();
+        }
+      }
+
+      // draw fish
+      for (var i = 0; i < fishes.length; i++) {
+        var f = fishes[i];
+        var col, glow = false;
+        if (f.turnWave > 0) {
+          var t = f.turnWave / 55;
+          var r = 255, g = Math.round(180 + 75 * t), b = Math.round(60 + 120 * t);
+          col = "rgba(" + r + "," + g + "," + b + ",0.95)";
+          glow = t > 0.4;
+        } else {
+          col = "hsla(" + Math.round(f.hue) + ",70%,72%,0.9)";
+        }
+        drawFishBody(S.ctx, f, col, glow);
+      }
+
+      // stats
+      if (waveActive) {
+        waveStatsEl.textContent = "Wave propagating: " + waveFishHit +
+          "/" + fishes.length + " fish hit | Wave radius: " +
+          Math.round(waveTime * 2.8 * waveFactor) + "px";
+      } else if (waveFishHit > 0) {
+        waveStatsEl.textContent = "Wave complete. " + waveFishHit +
+          "/" + fishes.length + " fish were turned. Click to trigger another.";
+      }
+
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  })();
+
+})();
+</script>
+</body>
+</html>
