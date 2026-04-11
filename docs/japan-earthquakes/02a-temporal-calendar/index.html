@@ -47,6 +47,9 @@ svg .axis line, svg .axis path { stroke: var(--border); }
 .day-info strong { font-weight: 700; }
 .map-container { margin-top: 1rem; position: relative; }
 .map-container .no-data { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); text-align: center; padding: 2rem; }
+.japan-land { fill: #e8e8e0; stroke: #bbb; stroke-width: 0.5px; }
+.cal-annotation { font-size: 9px; fill: var(--accent); pointer-events: none; }
+.tooltip-map { position: absolute; background: rgba(26,26,46,0.92); color: #fff; border-radius: 4px; padding: 5px 8px; font-family: var(--heading-font); font-size: 0.78rem; pointer-events: none; opacity: 0; transition: opacity 0.15s; z-index: 10; }
 .quake-dot { fill: #e63946; fill-opacity: 0.7; stroke: #fff; stroke-width: 0.5px; }
 .japan-land { fill: #e8e8e0; stroke: #bbb; stroke-width: 0.5px; }
 .tooltip-map { position: absolute; background: white; border: 1px solid var(--border); border-radius: 4px; padding: 0.4rem 0.6rem; font-family: var(--heading-font); font-size: 0.75rem; pointer-events: none; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
@@ -80,6 +83,7 @@ svg .axis line, svg .axis path { stroke: var(--border); }
     <div id="map"></div>
   </div>
   <div class="figure-caption">Earthquake locations for the selected day. Circle size corresponds to magnitude.</div>
+  <div class="tooltip-map" id="map-tooltip"></div>
 </div>
 
 <h2>Aftershock sequences light up the calendar</h2>
@@ -313,6 +317,23 @@ async function initMap() {
     .attr("stroke", "#ddd")
     .attr("stroke-width", 0.5);
 
+  // City labels
+  const mapCities = [
+    { name: "Tokyo", lat: 35.68, lon: 139.77 },
+    { name: "Osaka", lat: 34.69, lon: 135.50 },
+    { name: "Sendai", lat: 38.27, lon: 140.87 },
+    { name: "Sapporo", lat: 43.06, lon: 141.35 },
+  ];
+  mapCities.forEach(c => {
+    const [cx, cy] = projection([c.lon, c.lat]);
+    mapSvg.append("circle").attr("cx", cx).attr("cy", cy).attr("r", 2)
+      .attr("fill", "var(--text)").attr("pointer-events", "none");
+    mapSvg.append("text").attr("x", cx + 5).attr("y", cy + 3)
+      .style("font-size", "9px").style("fill", "var(--text)")
+      .style("font-weight", "600").attr("pointer-events", "none")
+      .text(c.name);
+  });
+
   mapReady = true;
 }
 
@@ -339,6 +360,8 @@ async function showMap(dateStr, quakes) {
     .attr("fill", "var(--text)")
     .text(`${formatted} — top events by magnitude`);
 
+  const mapTip = document.getElementById("map-tooltip");
+
   mapSvg.selectAll(".quake-dot")
     .data(quakes.sort((a, b) => a[2] - b[2]))
     .join("circle")
@@ -346,8 +369,19 @@ async function showMap(dateStr, quakes) {
     .attr("cx", d => projection([d[1], d[0]])[0])
     .attr("cy", d => projection([d[1], d[0]])[1])
     .attr("r", d => magScale(d[2]))
-    .append("title")
-    .text(d => `M${d[2]} at ${d[0]}°N, ${d[1]}°E`);
+    .on("pointerenter", function(event, d) {
+      d3.select(this).attr("fill-opacity", 1).attr("stroke-width", 1.5);
+      mapTip.textContent = `M${d[2]} at ${d[0].toFixed(1)}°N, ${d[1].toFixed(1)}°E`;
+      mapTip.style.opacity = 1;
+    })
+    .on("pointermove", function(event) {
+      mapTip.style.left = (event.offsetX + 12) + "px";
+      mapTip.style.top = (event.offsetY - 12) + "px";
+    })
+    .on("pointerleave", function() {
+      d3.select(this).attr("fill-opacity", 0.7).attr("stroke-width", 0.5);
+      mapTip.style.opacity = 0;
+    });
 }
 
 function clearMap() {
@@ -358,6 +392,27 @@ function clearMap() {
   }
   document.getElementById("map-placeholder").style.display = "block";
 }
+
+// Calendar annotations for key events
+const calAnnotations = [
+  { date: "2011-03-11", label: "Tohoku M9.1", dx: 4, dy: -6 },
+  { date: "2016-04-16", label: "Kumamoto M7.0", dx: 4, dy: -6 },
+  { date: "2024-01-01", label: "Noto M7.6", dx: 4, dy: -6 },
+];
+calAnnotations.forEach(a => {
+  const cell = cellData.find(d => d.date === a.date);
+  if (!cell) return;
+  const cx = marginLeft + cell.weekOfYear * totalCell + cellSize / 2;
+  const cy = marginTop + cell.yi * totalCell + cellSize / 2;
+  svg.append("line")
+    .attr("x1", cx).attr("y1", cy)
+    .attr("x2", cx + a.dx).attr("y2", cy + a.dy)
+    .attr("stroke", "var(--accent)").attr("stroke-width", 0.7);
+  svg.append("text")
+    .attr("class", "cal-annotation")
+    .attr("x", cx + a.dx + 2).attr("y", cy + a.dy - 1)
+    .text(a.label);
+});
 
 initMap().then(() => {
   // Auto-select Tohoku day

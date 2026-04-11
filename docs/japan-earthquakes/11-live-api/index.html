@@ -144,6 +144,12 @@ li { margin-bottom: 0.3rem; }
   <div class="figure-caption" id="map-caption">Loading...</div>
 </div>
 
+<div class="figure">
+  <div id="timeline-viz"></div>
+  <div class="tooltip" id="timeline-tooltip"></div>
+  <div class="figure-caption" id="timeline-caption">Magnitude over time. Larger circles indicate stronger earthquakes. Hover for details.</div>
+</div>
+
 <p id="data-narrative">The map above is populating now. If the USGS API responded, you're seeing earthquakes that actually happened in the last 30 days. If the API was unreachable (maybe you're offline, or reading a cached copy) the page fell back to data embedded in this HTML file from the last time it was built.</p>
 
 <div class="insight">
@@ -215,7 +221,7 @@ li { margin-bottom: 0.3rem; }
   </div>
   <div class="url-preview" id="url-preview"></div>
   <div style="display:flex; align-items:center; gap:1rem;">
-    <button class="fetch-btn" id="fetch-btn">Fetch</button>
+    <button class="fetch-btn" id="fetch-btn" title="Send a live request to the USGS API with the parameters above">Fetch</button>
     <span class="fetch-result" id="fetch-result"></span>
   </div>
   <div class="figure-caption">All parameters are passed as URL query strings. The API does the filtering server-side and returns only matching events.</div>
@@ -487,8 +493,8 @@ function drawMap(data, source) {
       .join("path")
       .attr("class", "prefecture")
       .attr("d", geoPath)
-      .attr("fill", "#f0f0f0")
-      .attr("stroke", "#ccc")
+      .attr("fill", "#e8e8e0")
+      .attr("stroke", "#bbb")
       .attr("stroke-width", 0.5);
 
     landG.append("path")
@@ -497,6 +503,31 @@ function drawMap(data, source) {
       .attr("fill", "none")
       .attr("stroke", "#ddd")
       .attr("stroke-width", 0.5);
+
+    // City labels
+    const cities = [
+      { name: "Tokyo", lon: 139.6917, lat: 35.6895 },
+      { name: "Osaka", lon: 135.5023, lat: 34.6937 },
+      { name: "Sendai", lon: 140.8719, lat: 38.2682 },
+      { name: "Sapporo", lon: 141.3469, lat: 43.0621 }
+    ];
+
+    const cityG = svg.append("g").attr("class", "city-labels");
+    cities.forEach(c => {
+      const [cx, cy] = projection([c.lon, c.lat]);
+      if (cx < 0 || cx > width || cy < 0 || cy > height) return;
+      cityG.append("circle")
+        .attr("cx", cx).attr("cy", cy).attr("r", 2.5)
+        .attr("fill", "#1a1a2e").attr("stroke", "#fff").attr("stroke-width", 0.8);
+      cityG.append("text")
+        .attr("x", cx + 5).attr("y", cy + 1)
+        .text(c.name)
+        .attr("font-size", 10).attr("font-weight", 600)
+        .attr("fill", "#1a1a2e")
+        .attr("paint-order", "stroke")
+        .attr("stroke", "#fff").attr("stroke-width", 2.5)
+        .attr("stroke-linejoin", "round");
+    });
 
     drawQuakes();
   });
@@ -534,25 +565,63 @@ function drawMap(data, source) {
     return cx < -20 || cx > width + 20 || cy < -20 || cy > height + 20;
   }).remove();
 
-  // Tooltip
-  circles.on("mouseenter", function(event, d) {
+  // Tooltip (pointer events for touch support)
+  circles.on("pointerenter", function(event, d) {
     const date = new Date(d.time);
     const dateStr = date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
     const timeStr = date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+    const depthLabel = d.depth < 30 ? "Shallow" : d.depth < 70 ? "Intermediate" : "Deep";
     tooltip
       .style("opacity", 1)
-      .html(`<strong>M${d.mag.toFixed(1)}</strong> &mdash; ${d.place}<br>${dateStr} ${timeStr}<br>Depth: ${d.depth.toFixed(0)} km`);
-    d3.select(this).attr("stroke", "#1a1a2e").attr("stroke-width", 1.5);
+      .html(`<strong>M${d.mag.toFixed(1)}</strong> &mdash; ${d.place}<br>${dateStr} ${timeStr}<br>Depth: ${d.depth.toFixed(0)} km (${depthLabel})`);
+    d3.select(this).attr("stroke", "#1a1a2e").attr("stroke-width", 1.5).raise();
   })
-  .on("mousemove", function(event) {
+  .on("pointermove", function(event) {
     const fig = d3.select("#map-viz").node().getBoundingClientRect();
+    const left = event.clientX - fig.left + 12;
+    const top = event.clientY - fig.top - 10;
+    // Clamp tooltip to viewport
     tooltip
-      .style("left", (event.clientX - fig.left + 12) + "px")
-      .style("top", (event.clientY - fig.top - 10) + "px");
+      .style("left", Math.min(left, fig.width - 200) + "px")
+      .style("top", Math.max(top, 0) + "px");
   })
-  .on("mouseleave", function() {
+  .on("pointerleave", function() {
     tooltip.style("opacity", 0);
     d3.select(this).attr("stroke", "#fff").attr("stroke-width", 0.5);
+  });
+
+  // Annotations with leader lines on notable quakes
+  const maxQuake = data.reduce((a, b) => a.mag > b.mag ? a : b);
+  const deepestQuake = data.reduce((a, b) => a.depth > b.depth ? a : b);
+
+  const annotations = [
+    { d: maxQuake, label: `M${maxQuake.mag} — largest event`, dx: -60, dy: -40 },
+  ];
+
+  // Only annotate deepest quake if it's meaningfully different from the largest
+  if (deepestQuake !== maxQuake && deepestQuake.depth > 100) {
+    annotations.push({ d: deepestQuake, label: `${deepestQuake.depth.toFixed(0)} km deep`, dx: 40, dy: -35 });
+  }
+
+  const annoG = svg.append("g").attr("class", "annotations");
+  annotations.forEach(a => {
+    const [ax, ay] = projection([a.d.lon, a.d.lat]);
+    if (ax < 0 || ax > width || ay < 0 || ay > height) return;
+    const tx = ax + a.dx, ty = ay + a.dy;
+    // Leader line
+    annoG.append("line")
+      .attr("x1", ax).attr("y1", ay).attr("x2", tx).attr("y2", ty)
+      .attr("stroke", "#1a1a2e").attr("stroke-width", 1).attr("stroke-dasharray", "3,2");
+    // Label background + text
+    annoG.append("text")
+      .attr("x", tx).attr("y", ty - 4)
+      .text(a.label)
+      .attr("font-size", 10).attr("font-weight", 600)
+      .attr("fill", "#1a1a2e")
+      .attr("text-anchor", a.dx < 0 ? "end" : "start")
+      .attr("paint-order", "stroke")
+      .attr("stroke", "#fff").attr("stroke-width", 2.5)
+      .attr("stroke-linejoin", "round");
   });
 
   // Legend
@@ -580,6 +649,121 @@ function drawMap(data, source) {
   depthLegG.append("text").attr("y", 32).text("0 km").attr("font-size", 9).attr("fill", "var(--text-2)");
   depthLegG.append("text").attr("x", 80).attr("y", 32).text("200+").attr("font-size", 9).attr("fill", "var(--text-2)").attr("text-anchor", "end");
   } // end drawQuakes
+}
+
+// ============================================================
+// TIMELINE VISUALIZATION
+// ============================================================
+function drawTimeline(data) {
+  const container = d3.select("#timeline-viz");
+  const width = container.node().getBoundingClientRect().width;
+  const height = 200;
+  const margin = { top: 20, right: 20, bottom: 30, left: 45 };
+  const w = width - margin.left - margin.right;
+  const h = height - margin.top - margin.bottom;
+
+  const svg = container.append("svg")
+    .attr("width", width).attr("height", height)
+    .attr("viewBox", `0 0 ${width} ${height}`);
+
+  const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+
+  const x = d3.scaleUtc()
+    .domain(d3.extent(data, d => new Date(d.time)))
+    .range([0, w]).nice();
+
+  const y = d3.scaleLinear()
+    .domain([4, d3.max(data, d => d.mag) + 0.3])
+    .range([h, 0]);
+
+  const magR = d3.scaleSqrt().domain([4.5, 7]).range([2.5, 12]);
+
+  // Depth color (reuse same scheme as map)
+  const depthColor = d3.scaleSequential(d3.interpolateYlOrRd).domain([200, 0]);
+
+  // X axis
+  g.append("g")
+    .attr("class", "axis")
+    .attr("transform", `translate(0,${h})`)
+    .call(d3.axisBottom(x).ticks(Math.max(3, w / 100)).tickSizeOuter(0));
+
+  // Y axis
+  g.append("g")
+    .attr("class", "axis")
+    .call(d3.axisLeft(y).ticks(4).tickSizeOuter(0).tickFormat(d => `M${d}`));
+
+  // M5 reference line
+  const refY = y(5);
+  g.append("line")
+    .attr("x1", 0).attr("y1", refY).attr("x2", w).attr("y2", refY)
+    .attr("stroke", "var(--border)").attr("stroke-dasharray", "4,3").attr("stroke-width", 1);
+  g.append("text")
+    .attr("x", w).attr("y", refY - 4)
+    .text("M5 threshold")
+    .attr("text-anchor", "end").attr("font-size", 9).attr("fill", "var(--text-2)");
+
+  // Dots
+  const tooltip = d3.select("#timeline-tooltip");
+
+  g.selectAll("circle.tl-dot")
+    .data(data.sort((a, b) => b.depth - a.depth))
+    .join("circle")
+    .attr("class", "tl-dot")
+    .attr("cx", d => x(new Date(d.time)))
+    .attr("cy", d => y(d.mag))
+    .attr("r", d => magR(d.mag))
+    .attr("fill", d => depthColor(Math.min(d.depth, 200)))
+    .attr("fill-opacity", 0.75)
+    .attr("stroke", "#fff").attr("stroke-width", 0.5)
+    .style("cursor", "pointer")
+    .on("pointerenter", function(event, d) {
+      const date = new Date(d.time);
+      const dateStr = date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      tooltip.style("opacity", 1)
+        .html(`<strong>M${d.mag.toFixed(1)}</strong> &mdash; ${d.place}<br>${dateStr} &middot; ${d.depth.toFixed(0)} km deep`);
+      d3.select(this).attr("stroke", "#1a1a2e").attr("stroke-width", 1.5).raise();
+    })
+    .on("pointermove", function(event) {
+      const fig = container.node().getBoundingClientRect();
+      tooltip
+        .style("left", Math.min(event.clientX - fig.left + 12, fig.width - 200) + "px")
+        .style("top", Math.max(event.clientY - fig.top - 10, 0) + "px");
+    })
+    .on("pointerleave", function() {
+      tooltip.style("opacity", 0);
+      d3.select(this).attr("stroke", "#fff").attr("stroke-width", 0.5);
+    });
+
+  // Annotation: largest event
+  const maxQ = data.reduce((a, b) => a.mag > b.mag ? a : b);
+  const ax = x(new Date(maxQ.time)), ay = y(maxQ.mag);
+  const annoX = Math.min(ax + 50, w - 60), annoY = Math.max(ay - 30, 10);
+
+  g.append("line")
+    .attr("x1", ax).attr("y1", ay).attr("x2", annoX).attr("y2", annoY)
+    .attr("stroke", "#1a1a2e").attr("stroke-width", 1).attr("stroke-dasharray", "3,2");
+  g.append("text")
+    .attr("x", annoX + 4).attr("y", annoY)
+    .text(`M${maxQ.mag} mainshock`)
+    .attr("font-size", 10).attr("font-weight", 600).attr("fill", "#1a1a2e")
+    .attr("paint-order", "stroke").attr("stroke", "#fff").attr("stroke-width", 2.5)
+    .attr("stroke-linejoin", "round");
+
+  // Annotation: aftershock cluster (count events within 48h of max)
+  const maxTime = maxQ.time;
+  const aftershocks = data.filter(d => d !== maxQ && Math.abs(d.time - maxTime) < 48 * 3600 * 1000);
+  if (aftershocks.length >= 3) {
+    const clusterEndX = x(new Date(maxTime + 48 * 3600 * 1000));
+    const clusterStartX = x(new Date(maxTime - 6 * 3600 * 1000));
+    // Bracket
+    g.append("line")
+      .attr("x1", clusterStartX).attr("y1", h - 2).attr("x2", Math.min(clusterEndX, w)).attr("y2", h - 2)
+      .attr("stroke", "var(--accent)").attr("stroke-width", 1.5);
+    g.append("text")
+      .attr("x", (clusterStartX + Math.min(clusterEndX, w)) / 2).attr("y", h - 6)
+      .text(`${aftershocks.length} aftershocks`)
+      .attr("text-anchor", "middle").attr("font-size", 9).attr("fill", "var(--accent)").attr("font-weight", 600);
+  }
 }
 
 // ============================================================
@@ -657,8 +841,9 @@ function setupUrlBuilder() {
     caption.textContent = `Cached fallback data (API unavailable). ${count} events from March-April 2026. Hover for details.`;
   }
 
-  // Draw map
+  // Draw map and timeline
   drawMap(data, source);
+  drawTimeline(data);
 
   // Update narrative paragraph
   const narrative = document.getElementById("data-narrative");

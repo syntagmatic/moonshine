@@ -70,7 +70,7 @@ svg .axis line, svg .axis path { stroke: var(--border); }
 }
 
 /* Tooltip */
-.tooltip { position: absolute; pointer-events: none; background: rgba(26,26,46,0.92); color: #fff; font-family: var(--heading-font); font-size: 0.8rem; padding: 0.5rem 0.7rem; border-radius: 4px; line-height: 1.4; z-index: 10; }
+.tooltip { position: absolute; pointer-events: none; background: rgba(26,26,46,0.94); color: #fff; font-family: var(--heading-font); font-size: 0.8rem; padding: 0.5rem 0.75rem; border-radius: 5px; line-height: 1.5; z-index: 10; box-shadow: 0 2px 8px rgba(0,0,0,0.18); max-width: 220px; }
 </style>
 </head>
 <body>
@@ -497,8 +497,8 @@ const aggCells = [
       .join("path")
       .attr("class", "prefecture")
       .attr("d", geoPath)
-      .attr("fill", "#f0f0f0")
-      .attr("stroke", "#ccc")
+      .attr("fill", "#e8e8e0")
+      .attr("stroke", "#bbb")
       .attr("stroke-width", 0.5);
 
     landGroup.append("path")
@@ -507,6 +507,36 @@ const aggCells = [
       .attr("fill", "none")
       .attr("stroke", "#ddd")
       .attr("stroke-width", 0.5);
+
+    // City labels
+    const cities = [
+      { name: "Tokyo", lat: 35.68, lon: 139.69 },
+      { name: "Osaka", lat: 34.69, lon: 135.50 },
+      { name: "Sendai", lat: 38.27, lon: 140.87 },
+      { name: "Sapporo", lat: 43.06, lon: 141.35 }
+    ];
+    const cityGroup = svg.append("g").attr("class", "city-labels");
+    cityGroup.selectAll("g.city")
+      .data(cities)
+      .join("g")
+        .attr("class", "city")
+        .attr("transform", d => {
+          const [x, y] = projection([d.lon, d.lat]);
+          return `translate(${x},${y})`;
+        })
+        .each(function(d) {
+          const g = d3.select(this);
+          g.append("circle").attr("r", 2.5).attr("fill", "#444");
+          g.append("text")
+            .attr("x", 5).attr("y", -5)
+            .text(d.name)
+            .style("font-size", "10px")
+            .style("font-weight", "600")
+            .attr("fill", "#444")
+            .attr("paint-order", "stroke")
+            .attr("stroke", "var(--fig-bg)")
+            .attr("stroke-width", 3);
+        });
 
     drawOverlays();
   });
@@ -555,6 +585,41 @@ const aggCells = [
       .attr("stroke", "#fff")
       .attr("stroke-width", 1.5);
 
+  // Annotations with leader lines (visible in aggregated view)
+  const annotations = [
+    { cell: aggCells.find(c => c.avgMag >= 5.5 && c.lon > 142), label: "Offshore Pacific\nhighest magnitude", dx: -60, dy: -40 },
+    { cell: aggCells.find(c => Math.abs(c.lat - 37.52) < 0.1 && Math.abs(c.lon - 137.28) < 0.1), label: "2024 Noto\nearthquake cluster", dx: -70, dy: -35 },
+    { cell: aggCells.find(c => c.count >= 24), label: "Densest cluster\n24 events", dx: 30, dy: -45 }
+  ];
+  const annoGroup = svg.append("g").attr("class", "annotations").style("opacity", 0);
+  annotations.forEach(a => {
+    if (!a.cell) return;
+    const [cx, cy] = projection([a.cell.lon, a.cell.lat]);
+    const tx = cx + a.dx, ty = cy + a.dy;
+    const g = annoGroup.append("g");
+    g.append("line")
+      .attr("x1", cx).attr("y1", cy)
+      .attr("x2", tx).attr("y2", ty)
+      .attr("stroke", "#555").attr("stroke-width", 1)
+      .attr("stroke-dasharray", "3,2");
+    g.append("circle")
+      .attr("cx", cx).attr("cy", cy).attr("r", 3)
+      .attr("fill", "none").attr("stroke", "#555").attr("stroke-width", 1.5);
+    const lines = a.label.split("\n");
+    lines.forEach((line, i) => {
+      g.append("text")
+        .attr("x", tx).attr("y", ty - 4 + i * 13)
+        .text(line)
+        .style("font-size", "10px")
+        .style("font-weight", i === 0 ? "600" : "400")
+        .attr("fill", "#333")
+        .attr("text-anchor", a.dx < 0 ? "end" : "start")
+        .attr("paint-order", "stroke")
+        .attr("stroke", "var(--fig-bg)")
+        .attr("stroke-width", 3);
+    });
+  });
+
   // Legends
   const legendY = H - 50;
 
@@ -600,21 +665,51 @@ const aggCells = [
   });
   sizeLegend.append("text").attr("y", -16).text("Count").style("font-size", "11px").attr("fill", "var(--text-2)");
 
-  // Tooltip for hexagons
+  // Tooltip shared helper
   const tooltip = document.getElementById("tooltip");
+  function showTooltip(event, html) {
+    tooltip.style.display = "block";
+    tooltip.innerHTML = html;
+    const tx = Math.min(event.pageX + 12, window.innerWidth - 180);
+    tooltip.style.left = tx + "px";
+    tooltip.style.top = (event.pageY - 28) + "px";
+  }
+  function hideTooltip() { tooltip.style.display = "none"; }
+
+  // Tooltip for hexagons
   aggGroup.selectAll("path")
-    .on("mouseenter", function(event, d) {
+    .on("pointerenter", function(event, d) {
       d3.select(this).attr("fill-opacity", 1).attr("stroke", "#333");
-      tooltip.style.display = "block";
-      tooltip.innerHTML = `<strong>${d.count} earthquakes</strong><br>Avg magnitude: M${d.avgMag.toFixed(1)}<br>Avg depth: ${d.avgDepth} km`;
+      showTooltip(event,
+        `<strong>${d.count} earthquakes</strong><br>` +
+        `<span style="color:#fab387">M${d.avgMag.toFixed(1)}</span> avg magnitude<br>` +
+        `${d.avgDepth} km avg depth<br>` +
+        `<span style="opacity:0.7">${d.lat.toFixed(1)}\u00b0N, ${d.lon.toFixed(1)}\u00b0E</span>`);
     })
-    .on("mousemove", function(event) {
-      tooltip.style.left = (event.pageX + 12) + "px";
-      tooltip.style.top = (event.pageY - 28) + "px";
+    .on("pointermove", function(event) {
+      showTooltip(event, tooltip.innerHTML);
     })
-    .on("mouseleave", function() {
+    .on("pointerleave", function() {
       d3.select(this).attr("fill-opacity", 0.75).attr("stroke", "#fff");
-      tooltip.style.display = "none";
+      hideTooltip();
+    });
+
+  // Tooltip for raw dots
+  rawGroup.selectAll("circle")
+    .on("pointerenter", function(event, d) {
+      d3.select(this).attr("r", 4.5).attr("fill-opacity", 0.8);
+      showTooltip(event,
+        `<strong>M${d[2].toFixed(1)}</strong> earthquake<br>` +
+        `Depth: ${d[3]} km<br>` +
+        `${d[4]}<br>` +
+        `<span style="opacity:0.7">${d[0].toFixed(2)}\u00b0N, ${d[1].toFixed(2)}\u00b0E</span>`);
+    })
+    .on("pointermove", function(event) {
+      showTooltip(event, tooltip.innerHTML);
+    })
+    .on("pointerleave", function() {
+      d3.select(this).attr("r", 2.5).attr("fill-opacity", 0.4);
+      hideTooltip();
     });
 
   // Toggle logic
@@ -633,11 +728,12 @@ const aggCells = [
     statRaw.classList.toggle("active", !agg);
     statAgg.classList.toggle("active", agg);
 
-    rawGroup.transition().duration(600).style("opacity", agg ? 0 : 1);
-    aggGroup.transition().duration(600).style("opacity", agg ? 1 : 0);
-    svg.select(".raw-legend").transition().duration(400).style("opacity", agg ? 0 : 1);
-    svg.select(".agg-legend").transition().duration(400).style("opacity", agg ? 1 : 0);
-    svg.select(".size-legend").transition().duration(400).style("opacity", agg ? 1 : 0);
+    rawGroup.transition().duration(600).ease(d3.easeCubicInOut).style("opacity", agg ? 0 : 1);
+    aggGroup.transition().duration(600).ease(d3.easeCubicInOut).style("opacity", agg ? 1 : 0);
+    svg.select(".raw-legend").transition().duration(400).ease(d3.easeCubicInOut).style("opacity", agg ? 0 : 1);
+    svg.select(".agg-legend").transition().duration(400).ease(d3.easeCubicInOut).style("opacity", agg ? 1 : 0);
+    svg.select(".size-legend").transition().duration(400).ease(d3.easeCubicInOut).style("opacity", agg ? 1 : 0);
+    svg.select(".annotations").transition().duration(400).ease(d3.easeCubicInOut).style("opacity", agg ? 1 : 0);
   }
 
   toggle.addEventListener("click", () => setView(!isAggregated));
@@ -688,7 +784,7 @@ const aggCells = [
 
     // Y axis
     g.append("g").attr("class", "axis")
-      .call(d3.axisLeft(y).ticks(4).tickSize(-iw))
+      .call(d3.axisLeft(y).ticks(4).tickSize(-iw).tickSizeOuter(0))
       .call(g => g.select(".domain").remove())
       .call(g => g.selectAll(".tick line").attr("stroke-dasharray", "2,3").attr("stroke-opacity", 0.4));
 
@@ -696,7 +792,7 @@ const aggCells = [
     const tickInterval = type === "bar" ? 6 : 4;
     const xAxis = g.append("g").attr("class", "axis")
       .attr("transform", `translate(0,${ih})`)
-      .call(d3.axisBottom(x).tickValues(data.filter((_, i) => i % tickInterval === 0).map(d => d[xKey])));
+      .call(d3.axisBottom(x).tickValues(data.filter((_, i) => i % tickInterval === 0).map(d => d[xKey])).tickSizeOuter(0));
     xAxis.selectAll("text").attr("transform", "rotate(-45)").attr("text-anchor", "end").attr("dx", "-0.5em");
 
     if (type === "bar") {
@@ -709,7 +805,19 @@ const aggCells = [
           .attr("height", d => ih - y(d[yKey]))
           .attr("fill", "var(--accent)")
           .attr("fill-opacity", 0.6)
-          .attr("rx", 1);
+          .attr("rx", 1)
+          .on("pointerenter", function(event, d) {
+            d3.select(this).attr("fill-opacity", 0.9);
+            const tt = document.getElementById("tooltip");
+            tt.style.display = "block";
+            tt.innerHTML = `<strong>${d[xKey]}</strong><br>${Math.round(d[yKey])} earthquakes`;
+            tt.style.left = (event.pageX + 10) + "px";
+            tt.style.top = (event.pageY - 28) + "px";
+          })
+          .on("pointerleave", function() {
+            d3.select(this).attr("fill-opacity", 0.6);
+            document.getElementById("tooltip").style.display = "none";
+          });
     } else {
       const line = d3.line()
         .x(d => x(d[xKey]) + x.bandwidth() / 2)
@@ -729,7 +837,19 @@ const aggCells = [
           .attr("cx", d => x(d[xKey]) + x.bandwidth() / 2)
           .attr("cy", d => y(d[yKey]))
           .attr("r", 3)
-          .attr("fill", "var(--accent)");
+          .attr("fill", "var(--accent)")
+          .on("pointerenter", function(event, d) {
+            d3.select(this).attr("r", 5);
+            const tt = document.getElementById("tooltip");
+            tt.style.display = "block";
+            tt.innerHTML = `<strong>${d[xKey]}</strong><br>${d[yKey].toFixed(1)} avg earthquakes/month`;
+            tt.style.left = (event.pageX + 10) + "px";
+            tt.style.top = (event.pageY - 28) + "px";
+          })
+          .on("pointerleave", function() {
+            d3.select(this).attr("r", 3);
+            document.getElementById("tooltip").style.display = "none";
+          });
     }
   }
 

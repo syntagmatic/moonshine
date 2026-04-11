@@ -60,16 +60,24 @@ svg .axis line, svg .axis path { stroke: var(--border); }
 /* Map styles */
 .map-container { background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; padding: 1rem; }
 .map-container svg { display: block; }
-.land { fill: #e8e5df; stroke: #ccc; stroke-width: 0.5; }
-.coastline { fill: none; stroke: #bbb; stroke-width: 0.5; }
+.land { fill: #e8e8e0; stroke: #bbb; stroke-width: 0.5; }
+.coastline { fill: none; stroke: #aaa; stroke-width: 0.5; }
 .ocean { fill: #f0f4f8; }
 .quake-dot { stroke: #fff; stroke-width: 0.3; cursor: pointer; }
 .plate-label { font-family: var(--heading-font); font-size: 11px; font-weight: 600; fill: var(--text-2); pointer-events: none; }
 .plate-boundary { fill: none; stroke-dasharray: 6 3; stroke-width: 1.5; opacity: 0.6; }
 .trench-label { font-family: var(--heading-font); font-size: 9px; fill: var(--text-2); font-style: italic; }
+.city-label { font-family: var(--heading-font); font-size: 10px; fill: #333; pointer-events: none; }
+.city-dot { fill: #333; stroke: #fff; stroke-width: 0.8; pointer-events: none; }
+.annotation-line { stroke: #555; stroke-width: 1; fill: none; }
+.annotation-text { font-family: var(--heading-font); font-size: 9.5px; fill: #333; pointer-events: none; }
+.annotation-bg { fill: var(--fig-bg); stroke: none; opacity: 0.85; }
 
 /* Tooltip */
-.tooltip { position: fixed; pointer-events: none; background: rgba(26, 26, 46, 0.92); color: #fff; font-family: var(--heading-font); font-size: 0.8rem; padding: 8px 12px; border-radius: 4px; line-height: 1.4; z-index: 100; max-width: 260px; display: none; }
+.tooltip { position: fixed; pointer-events: none; background: rgba(26, 26, 46, 0.94); color: #fff; font-family: var(--heading-font); font-size: 0.8rem; padding: 10px 14px; border-radius: 5px; line-height: 1.5; z-index: 100; max-width: 280px; display: none; box-shadow: 0 3px 12px rgba(0,0,0,0.2); }
+.tooltip strong { color: #fbbf24; }
+.tooltip .tt-depth { color: #93c5fd; }
+.tooltip .tt-region { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; opacity: 0.7; margin-top: 3px; }
 
 /* Legend */
 .legend { font-family: var(--heading-font); font-size: 0.75rem; }
@@ -515,6 +523,9 @@ d3.json(japanTopoUrl).then(topoData => {
     .attr("text-anchor", "middle")
     .attr("opacity", 0);
 
+  // Track currently highlighted regions for tooltip restore
+  let highlightedRegions = null;
+
   // Earthquake dots
   const dotsG = svg.append("g").attr("class", "dots");
 
@@ -527,16 +538,123 @@ d3.json(japanTopoUrl).then(topoData => {
     .attr("r", d => rScale(d.mag))
     .attr("fill", d => regionColors[d.region])
     .attr("fill-opacity", 0.6)
-    .on("mouseover", (event, d) => {
+    .on("pointerenter", (event, d) => {
+      d3.select(event.currentTarget)
+        .raise()
+        .transition().duration(150)
+        .attr("stroke-width", 1.5)
+        .attr("fill-opacity", 0.95);
       tooltip.style("display", "block")
-        .html(`<strong>M${d.mag}</strong> &middot; ${d.time}<br>${d.place}<br>Depth: ${d.depth} km`);
+        .html(`<strong>M${d.mag}</strong> &middot; ${d.time}<br>${d.place}<br><span class="tt-depth">Depth: ${d.depth} km</span><div class="tt-region">${regionLabels[d.region]}</div>`);
     })
-    .on("mousemove", event => {
+    .on("pointermove", event => {
+      const tx = Math.min(event.clientX + 14, window.innerWidth - 290);
+      const ty = Math.max(event.clientY - 14, 10);
       tooltip
-        .style("left", (event.clientX + 14) + "px")
-        .style("top", (event.clientY - 14) + "px");
+        .style("left", tx + "px")
+        .style("top", ty + "px");
     })
-    .on("mouseout", () => tooltip.style("display", "none"));
+    .on("pointerleave", (event, d) => {
+      d3.select(event.currentTarget)
+        .transition().duration(150)
+        .attr("stroke-width", 0.3)
+        .attr("fill-opacity", highlightedRegions ? (highlightedRegions.includes(d.region) ? 0.75 : 0.06) : 0.6);
+      tooltip.style("display", "none");
+    });
+
+  // ── City labels ──────────────────────────────────────────────────
+  const cities = [
+    { name: "Tokyo",   lon: 139.69, lat: 35.68, anchor: "end",    dx: -6, dy: 4 },
+    { name: "Osaka",   lon: 135.50, lat: 34.69, anchor: "end",    dx: -6, dy: 4 },
+    { name: "Sendai",  lon: 140.87, lat: 38.27, anchor: "end",    dx: -6, dy: 4 },
+    { name: "Sapporo", lon: 141.35, lat: 43.06, anchor: "start",  dx: 6,  dy: 4 },
+  ];
+
+  const cityG = svg.append("g").attr("class", "city-markers");
+
+  cityG.selectAll("circle")
+    .data(cities)
+    .join("circle")
+    .attr("class", "city-dot")
+    .attr("cx", d => projection([d.lon, d.lat])[0])
+    .attr("cy", d => projection([d.lon, d.lat])[1])
+    .attr("r", 3);
+
+  cityG.selectAll("text")
+    .data(cities)
+    .join("text")
+    .attr("class", "city-label")
+    .attr("x", d => projection([d.lon, d.lat])[0] + d.dx)
+    .attr("y", d => projection([d.lon, d.lat])[1] + d.dy)
+    .attr("text-anchor", d => d.anchor)
+    .text(d => d.name);
+
+  // ── Annotations with leader lines ──────────────────────────────
+  const annotations = [
+    {
+      // 2011 Tohoku M9.0 epicenter area (largest quake in dataset area)
+      dataLon: 142.37, dataLat: 38.32,
+      labelLon: 146, labelLat: 36,
+      text: "2011 Tohoku M9.0",
+      text2: "epicenter region",
+      region: "tohoku", step: 4
+    },
+    {
+      // 2024 Noto Peninsula M7.5 (step 3 highlight)
+      dataLon: 137.40, dataLat: 37.50,
+      labelLon: 133.5, labelLat: 39,
+      text: "2024 Noto M7.5",
+      text2: "shallow inland",
+      region: "inland", step: 3
+    },
+    {
+      // M6.7 off Makurazaki — largest Philippine Sea event
+      dataLon: 128.87, dataLat: 31.00,
+      labelLon: 128, labelLat: 28.5,
+      text: "M6.7, Nov 2015",
+      text2: "largest in dataset",
+      region: "philippine", step: 2
+    }
+  ];
+
+  const annotG = svg.append("g").attr("class", "annotations");
+
+  annotations.forEach(a => {
+    const g = annotG.append("g")
+      .attr("class", `annotation annotation-step-${a.step}`)
+      .attr("opacity", 0);
+
+    g.append("line")
+      .attr("class", "annotation-line")
+      .attr("x1", projection([a.dataLon, a.dataLat])[0])
+      .attr("y1", projection([a.dataLon, a.dataLat])[1])
+      .attr("x2", projection([a.labelLon, a.labelLat])[0])
+      .attr("y2", projection([a.labelLon, a.labelLat])[1]);
+
+    const lx = projection([a.labelLon, a.labelLat])[0];
+    const ly = projection([a.labelLon, a.labelLat])[1];
+
+    // Background rect (will be sized after text render)
+    g.append("rect").attr("class", "annotation-bg");
+
+    g.append("text")
+      .attr("class", "annotation-text")
+      .attr("x", lx)
+      .attr("y", ly)
+      .attr("text-anchor", "middle")
+      .text(a.text);
+
+    if (a.text2) {
+      g.append("text")
+        .attr("class", "annotation-text")
+        .attr("x", lx)
+        .attr("y", ly + 13)
+        .attr("text-anchor", "middle")
+        .attr("font-size", "8.5px")
+        .attr("fill", "#666")
+        .text(a.text2);
+    }
+  });
 
   // Build legend
   buildLegend();
@@ -637,6 +755,42 @@ d3.json(japanTopoUrl).then(topoData => {
         if (stepIndex === 4 && d.region === "pacific" && d.text.includes("Trench")) return 0.8;
         return 0;
       });
+
+    // Transition city markers
+    cityG.selectAll("circle")
+      .transition(t)
+      .attr("cx", d => projection([d.lon, d.lat])[0])
+      .attr("cy", d => projection([d.lon, d.lat])[1]);
+
+    cityG.selectAll("text")
+      .transition(t)
+      .attr("x", d => projection([d.lon, d.lat])[0] + d.dx)
+      .attr("y", d => projection([d.lon, d.lat])[1] + d.dy);
+
+    // Transition annotations — show only on matching step
+    annotations.forEach(a => {
+      const sel = annotG.select(`.annotation-step-${a.step}`);
+      const show = stepIndex === a.step;
+
+      sel.select("line")
+        .transition(t)
+        .attr("x1", projection([a.dataLon, a.dataLat])[0])
+        .attr("y1", projection([a.dataLon, a.dataLat])[1])
+        .attr("x2", projection([a.labelLon, a.labelLat])[0])
+        .attr("y2", projection([a.labelLon, a.labelLat])[1]);
+
+      const lx = projection([a.labelLon, a.labelLat])[0];
+      const ly = projection([a.labelLon, a.labelLat])[1];
+      sel.selectAll(".annotation-text")
+        .transition(t)
+        .attr("x", function(_, i) { return lx; })
+        .attr("y", function(_, i) { return ly + i * 13; });
+
+      sel.transition(t).attr("opacity", show ? 1 : 0);
+    });
+
+    // Track highlighted regions for tooltip restore
+    highlightedRegions = highlightRegions;
   }
 
   // ── IntersectionObserver for scroll steps ─────────────────────────

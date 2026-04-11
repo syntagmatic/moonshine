@@ -70,7 +70,8 @@ svg .axis line, svg .axis path { stroke: var(--border); }
   position: absolute; pointer-events: none; background: rgba(26,26,46,0.92);
   color: #fff; padding: 0.4rem 0.6rem; border-radius: 4px;
   font-family: var(--heading-font); font-size: 0.78rem; line-height: 1.4;
-  opacity: 0; transition: opacity 0.15s;
+  opacity: 0; transition: opacity 0.15s; white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.25);
 }
 </style>
 </head>
@@ -191,7 +192,7 @@ d3.json("../shared/japan.topojson").then(topoData => {
     .attr("class", "prefecture")
     .attr("d", path)
     .attr("fill", "#e8e8e0")
-    .attr("stroke", "#ccc")
+    .attr("stroke", "#bbb")
     .attr("stroke-width", 0.5);
 
   landG.append("path")
@@ -200,6 +201,27 @@ d3.json("../shared/japan.topojson").then(topoData => {
     .attr("stroke", "#ddd")
     .attr("stroke-width", 0.5)
     .attr("d", path);
+
+  // City labels
+  const cities = [
+    { name: "Tokyo", lon: 139.69, lat: 35.69, dx: 8, dy: 4 },
+    { name: "Osaka", lon: 135.50, lat: 34.69, dx: -30, dy: 12 },
+    { name: "Sendai", lon: 140.87, lat: 38.27, dx: 8, dy: 4 },
+    { name: "Sapporo", lon: 141.35, lat: 43.06, dx: 8, dy: 4 }
+  ];
+
+  const cityG = landG.append("g").attr("class", "city-labels");
+  cities.forEach(c => {
+    const [cx, cy] = projection([c.lon, c.lat]);
+    cityG.append("circle")
+      .attr("cx", cx).attr("cy", cy).attr("r", 2.5)
+      .attr("fill", "#444").attr("stroke", "#fff").attr("stroke-width", 0.8);
+    cityG.append("text")
+      .attr("x", cx + c.dx).attr("y", cy + c.dy)
+      .attr("font-size", "10px").attr("fill", "#333")
+      .attr("font-weight", 600)
+      .text(c.name);
+  });
 });
 
 // Color scale
@@ -258,12 +280,13 @@ sparkG.append("g")
   .call(d3.axisBottom(sparkX)
     .tickValues(yearTicks)
     .tickFormat(d => new Date(d).getFullYear())
-    .tickSize(-sparkInnerH))
+    .tickSize(-sparkInnerH)
+    .tickSizeOuter(0))
   .selectAll("line").attr("stroke-opacity", 0.15);
 
 sparkG.append("g")
   .attr("class", "axis")
-  .call(d3.axisLeft(sparkY).ticks(3, ".0e").tickSize(-sparkInnerW))
+  .call(d3.axisLeft(sparkY).ticks(3, ".0e").tickSize(-sparkInnerW).tickSizeOuter(0))
   .selectAll("line").attr("stroke-opacity", 0.15);
 
 // Energy label
@@ -283,6 +306,26 @@ sparkG.append("path")
   .attr("stroke", "var(--accent)")
   .attr("stroke-width", 1.5)
   .attr("d", line);
+
+// Annotations for key seismic events
+const annotations = [
+  { date: new Date(2011, 2, 11), label: "Tōhoku M9.1", dy: -6 },
+  { date: new Date(2016, 3, 16), label: "Kumamoto M7.3", dy: -6 },
+  { date: new Date(2024, 0, 1), label: "Noto M7.6", dy: -6 }
+];
+annotations.forEach(a => {
+  const ax = sparkX(a.date.getTime());
+  sparkG.append("line")
+    .attr("x1", ax).attr("x2", ax)
+    .attr("y1", 0).attr("y2", sparkInnerH)
+    .attr("stroke", "#999").attr("stroke-width", 0.7)
+    .attr("stroke-dasharray", "2,2");
+  sparkG.append("text")
+    .attr("x", ax).attr("y", a.dy)
+    .attr("text-anchor", "middle")
+    .attr("font-size", "9px").attr("fill", "#666")
+    .text(a.label);
+});
 
 // Cursor line
 const cursorLine = sparkG.append("line")
@@ -342,7 +385,11 @@ function render() {
   const circles = dotsG.selectAll("circle")
     .data(visible, d => d.time + "_" + d.lat);
 
-  circles.exit().remove();
+  circles.exit()
+    .transition().duration(150).ease(d3.easeCubicInOut)
+    .attr("r", 0)
+    .attr("opacity", 0)
+    .remove();
 
   const entered = circles.enter().append("circle")
     .attr("cx", d => projection([d.lon, d.lat])[0])
@@ -353,15 +400,25 @@ function render() {
     .attr("stroke-width", d => d.mag >= 7 ? 1.5 : 0)
     .on("mouseenter", function(event, d) {
       tooltipEl.style.opacity = 1;
-      tooltipEl.innerHTML = `M${d.mag.toFixed(1)} &mdash; ${formatDate(d.time)}<br>Depth: ${d.depth} km`;
+      const depthLabel = d.depth < 30 ? "Shallow" : d.depth < 70 ? "Intermediate" : "Deep";
+      const magBar = "▮".repeat(Math.round(d.mag - 3));
+      tooltipEl.innerHTML = [
+        `<strong style="font-size:0.9rem">M${d.mag.toFixed(1)}</strong> <span style="color:#aaa;letter-spacing:-1px">${magBar}</span>`,
+        `${formatDate(d.time)}`,
+        `${depthLabel} — ${d.depth} km depth`,
+        `${d.lat.toFixed(2)}°N, ${d.lon.toFixed(2)}°E`
+      ].join("<br>");
       const rect = document.getElementById("map").getBoundingClientRect();
       const px = projection([d.lon, d.lat]);
-      tooltipEl.style.left = (px[0] * rect.width / mapW + 10) + "px";
-      tooltipEl.style.top = (px[1] * rect.height / mapH - 10) + "px";
+      let left = px[0] * rect.width / mapW + 14;
+      if (left + 160 > rect.width) left = px[0] * rect.width / mapW - 170;
+      tooltipEl.style.left = left + "px";
+      tooltipEl.style.top = (px[1] * rect.height / mapH - 20) + "px";
     })
     .on("mouseleave", () => { tooltipEl.style.opacity = 0; });
 
-  entered.transition().duration(200).attr("r", d => magRadius(d.mag));
+  entered.transition().duration(250).ease(d3.easeLinear)
+    .attr("r", d => magRadius(d.mag));
 
   // Update opacity based on age
   dotsG.selectAll("circle")
@@ -411,7 +468,7 @@ speedSlider.addEventListener("input", () => {
 
 magSlider.addEventListener("input", () => {
   minMag = +magSlider.value / 10;
-  magLabel.textContent = minMag.toFixed(1);
+  magLabel.textContent = "≥ " + minMag.toFixed(1);
   render();
 });
 

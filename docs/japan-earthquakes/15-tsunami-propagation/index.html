@@ -54,6 +54,16 @@ svg .axis line, svg .axis path { stroke: var(--border); }
 .step-btn:hover { background: var(--accent-light); }
 .step-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
 
+.map-tooltip {
+  position: absolute; pointer-events: none; background: rgba(255,255,255,0.95);
+  border: 1px solid var(--border); border-radius: 4px; padding: 0.4rem 0.6rem;
+  font-family: var(--heading-font); font-size: 0.8rem; color: var(--text);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.12); z-index: 10; opacity: 0;
+  transition: opacity 0.15s;
+  max-width: 200px; line-height: 1.4;
+}
+.map-tooltip.visible { opacity: 1; }
+
 .quake-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; margin-top: 1rem; }
 @media (max-width: 600px) { .quake-grid { grid-template-columns: 1fr; } }
 .quake-card { text-align: center; }
@@ -64,6 +74,7 @@ svg .axis line, svg .axis path { stroke: var(--border); }
 </style>
 </head>
 <body>
+<div class="map-tooltip" id="map-tooltip"></div>
 <div class="article">
 
 <h1>Tsunami Propagation</h1>
@@ -424,10 +435,16 @@ const arrivals = [
 
   d3.selectAll("#cross-section-steps .step-btn").on("click", function() {
     const step = +this.dataset.step;
+    if (step === currentStep) return;
     currentStep = step;
     d3.selectAll("#cross-section-steps .step-btn").classed("active", false);
     d3.select(this).classed("active", true);
-    draw(step);
+    // Fade out, redraw, fade in with cubicInOut easing
+    svg.transition().duration(200).ease(d3.easeCubicInOut).style("opacity", 0)
+      .on("end", function() {
+        draw(step, false);
+        svg.transition().duration(300).ease(d3.easeCubicInOut).style("opacity", 1);
+      });
   });
 })();
 
@@ -476,8 +493,8 @@ const arrivals = [
       .y(d => projLat(d[1]));
     const g = coastGroup.append("path")
       .attr("d", line(points) + (close ? " Z" : ""))
-      .attr("fill", close ? "#d4d4d8" : "none")
-      .attr("stroke", "#a1a1aa")
+      .attr("fill", close ? "#e8e8e0" : "none")
+      .attr("stroke", "#bbb")
       .attr("stroke-width", 1.2);
     return g;
   }
@@ -507,15 +524,59 @@ const arrivals = [
       .data(japanFeatures.features)
       .join("path")
       .attr("d", japanPath)
-      .attr("fill", "#e8e8e8")
-      .attr("stroke", "#999")
+      .attr("fill", "#e8e8e0")
+      .attr("stroke", "#bbb")
       .attr("stroke-width", 0.5);
   });
+
+  // City labels on Japan
+  const cities = [
+    { name: "Tokyo", lon: 139.69, lat: 35.69, dx: -18, dy: -6 },
+    { name: "Osaka", lon: 135.50, lat: 34.69, dx: -18, dy: 10 },
+    { name: "Sendai", lon: 140.87, lat: 38.27, dx: 6, dy: -4 },
+    { name: "Sapporo", lon: 141.35, lat: 43.06, dx: 6, dy: -4 }
+  ];
+  const cityGroup = svg.append("g").attr("class", "city-labels");
+  const cityDetails = {
+    "Tokyo": "Capital, 35.7\u00b0N — tsunami reached Tokyo Bay ~1h after quake",
+    "Osaka": "34.7\u00b0N — sheltered by Shikoku from direct Pacific waves",
+    "Sendai": "38.3\u00b0N — nearest major city, devastated by 2011 tsunami",
+    "Sapporo": "43.1\u00b0N — Hokkaido's capital, waves arrived ~1h"
+  };
+  cities.forEach(c => {
+    const cx = projLon(c.lon), cy = projLat(c.lat);
+    cityGroup.append("circle").attr("cx", cx).attr("cy", cy)
+      .attr("r", 2.5).attr("fill", "#1a1a2e").attr("stroke", "#fff").attr("stroke-width", 0.8)
+      .style("cursor", "pointer")
+      .on("pointerenter", function(event) {
+        tooltip.html(`<strong>${c.name}</strong><br>${cityDetails[c.name]}`)
+          .classed("visible", true);
+      })
+      .on("pointermove", function(event) {
+        tooltip.style("left", (event.pageX + 12) + "px").style("top", (event.pageY - 20) + "px");
+      })
+      .on("pointerleave", function() { tooltip.classed("visible", false); });
+    cityGroup.append("text").attr("x", cx + c.dx).attr("y", cy + c.dy)
+      .text(c.name).attr("fill", "#1a1a2e").attr("font-size", 9).attr("font-weight", 600)
+      .attr("text-anchor", c.dx < 0 ? "end" : "start");
+  });
+
+  // Tooltip reference
+  const tooltip = d3.select("#map-tooltip");
 
   // Epicenter
   const epX = projLon(epicenter.lon), epY = projLat(epicenter.lat);
   svg.append("circle").attr("cx", epX).attr("cy", epY)
-    .attr("r", 5).attr("fill", "#ef4444").attr("stroke", "#fff").attr("stroke-width", 1.5);
+    .attr("r", 5).attr("fill", "#ef4444").attr("stroke", "#fff").attr("stroke-width", 1.5)
+    .style("cursor", "pointer")
+    .on("pointerenter", function(event) {
+      tooltip.html("<strong>M9.0 Epicenter</strong><br>38.3\u00b0N, 142.4\u00b0E<br>Depth: 24 km<br>March 11, 2011 14:46 JST")
+        .classed("visible", true);
+    })
+    .on("pointermove", function(event) {
+      tooltip.style("left", (event.pageX + 12) + "px").style("top", (event.pageY - 20) + "px");
+    })
+    .on("pointerleave", function() { tooltip.classed("visible", false); });
   svg.append("text").attr("x", epX + 8).attr("y", epY - 8)
     .text("M9.0 Epicenter").attr("fill", "#ef4444").attr("font-size", 10).attr("font-weight", 700);
 
@@ -545,6 +606,23 @@ const arrivals = [
   // Convert to degrees (approximate)
   const cumDeg = cumDist.map(d => d / kmPerDegree);
 
+  // Isochrone overlay (static arrival time contours, drawn as dashed ellipses)
+  const isoGroup = svg.insert("g", ".city-labels").attr("class", "isochrones");
+  const isochrones = [1, 2, 3, 5, 7, 10, 15, 20];
+  isochrones.forEach(h => {
+    const r = cumDeg[h];
+    const rx = Math.abs(xScale(lonMin + r) - xScale(lonMin));
+    const ry = Math.abs(yScale(latMax - r) - yScale(latMax));
+    isoGroup.append("ellipse")
+      .attr("cx", epX).attr("cy", epY)
+      .attr("rx", rx).attr("ry", ry)
+      .attr("fill", "none")
+      .attr("stroke", "#93c5fd")
+      .attr("stroke-width", 0.5)
+      .attr("stroke-dasharray", "4,3")
+      .attr("stroke-opacity", 0.5);
+  });
+
   // Animation state
   let playing = true;
   let currentTime = 0; // in hours (fractional)
@@ -569,7 +647,17 @@ const arrivals = [
         .attr("fill", "none")
         .attr("stroke", "#2563eb")
         .attr("stroke-width", h === nRings ? 1.8 : 0.8)
-        .attr("stroke-opacity", opacity);
+        .attr("stroke-opacity", opacity)
+        .style("cursor", "pointer")
+        .on("pointerenter", function(event) {
+          const dist = Math.round(cumDist[h]);
+          tooltip.html(`<strong>T + ${h}h</strong><br>Radius: ~${dist.toLocaleString()} km<br>Wave speed: ~700 km/h`)
+            .classed("visible", true);
+        })
+        .on("pointermove", function(event) {
+          tooltip.style("left", (event.pageX + 12) + "px").style("top", (event.pageY - 20) + "px");
+        })
+        .on("pointerleave", function() { tooltip.classed("visible", false); });
 
       // Hour label on the ring (right side)
       const labelAngle = -15 * Math.PI / 180;
@@ -606,9 +694,20 @@ const arrivals = [
     arrivals.forEach(a => {
       if (t >= a.hours) {
         const ax = projLon(a.lon), ay = projLat(a.lat);
-        // Marker
+        // Marker with tooltip
         labelGroup.append("circle").attr("cx", ax).attr("cy", ay)
-          .attr("r", 3).attr("fill", "#ef4444");
+          .attr("r", 4).attr("fill", "#ef4444").attr("stroke", "#fff").attr("stroke-width", 1)
+          .style("cursor", "pointer")
+          .on("pointerenter", function(event) {
+            const hrs = Math.floor(a.hours);
+            const mins = Math.round((a.hours - hrs) * 60);
+            tooltip.html(`<strong>${a.name}</strong><br>Arrival: T + ${hrs}h ${String(mins).padStart(2,'0')}m<br>Distance: ~${Math.round(a.hours * 700)} km`)
+              .classed("visible", true);
+          })
+          .on("pointermove", function(event) {
+            tooltip.style("left", (event.pageX + 12) + "px").style("top", (event.pageY - 20) + "px");
+          })
+          .on("pointerleave", function() { tooltip.classed("visible", false); });
         // Label
         const dx = a.dx || 0, dy = a.dy || 0;
         labelGroup.append("text")
@@ -616,6 +715,34 @@ const arrivals = [
           .text(`${a.name} ~${a.hours}h`)
           .attr("fill", "#1a1a2e").attr("font-size", 10).attr("font-weight", 600)
           .attr("text-anchor", a.anchor || "start");
+      }
+    });
+
+    // Chart annotations with leader lines (shown once animation passes the moment)
+    const annotations = [
+      { triggerH: 0.5, lon: 141.5, lat: 39.5, text: "Only 30 min warning",
+        lx: -55, ly: -35, anchor: "end" },
+      { triggerH: 7, lon: -157.0, lat: 20.5, text: "7 hours across 6,200 km of open ocean",
+        lx: 10, ly: 30, anchor: "start" },
+      { triggerH: 22, lon: -72.0, lat: -33.0, text: "22 h later — still destructive at 15,000 km",
+        lx: -10, ly: 25, anchor: "end" }
+    ];
+    annotations.forEach(ann => {
+      if (t >= ann.triggerH) {
+        const ax = projLon(ann.lon), ay = projLat(ann.lat);
+        const tx = ax + ann.lx, ty = ay + ann.ly;
+        // Leader line
+        labelGroup.append("line")
+          .attr("x1", ax).attr("y1", ay)
+          .attr("x2", tx).attr("y2", ty)
+          .attr("stroke", "#ef4444").attr("stroke-width", 0.8)
+          .attr("stroke-dasharray", "2,2").attr("opacity", 0.7);
+        // Annotation text
+        labelGroup.append("text")
+          .attr("x", tx).attr("y", ty - 3)
+          .text(ann.text)
+          .attr("fill", "#ef4444").attr("font-size", 8.5).attr("font-style", "italic")
+          .attr("font-weight", 600).attr("text-anchor", ann.anchor);
       }
     });
 
@@ -805,10 +932,16 @@ const arrivals = [
 
   d3.selectAll("#shoaling-steps .step-btn").on("click", function() {
     const step = +this.dataset.step;
+    if (step === currentStep) return;
     currentStep = step;
     d3.selectAll("#shoaling-steps .step-btn").classed("active", false);
     d3.select(this).classed("active", true);
-    draw(step);
+    // Fade transition with cubicInOut easing for state changes
+    svg.transition().duration(200).ease(d3.easeCubicInOut).style("opacity", 0)
+      .on("end", function() {
+        draw(step);
+        svg.transition().duration(300).ease(d3.easeCubicInOut).style("opacity", 1);
+      });
   });
 })();
 

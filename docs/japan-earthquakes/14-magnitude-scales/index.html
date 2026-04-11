@@ -57,6 +57,16 @@ svg .axis line, svg .axis path { stroke: var(--border); }
 
 .energy-label { font-size: 11px; fill: var(--text-2); text-anchor: middle; }
 .energy-value { font-size: 10px; fill: var(--text-2); text-anchor: middle; font-family: var(--mono-font); }
+
+.tooltip {
+  position: fixed; pointer-events: none; z-index: 100;
+  background: #fff; border: 1px solid var(--border); border-radius: 4px;
+  padding: 0.5rem 0.7rem; font-family: var(--heading-font); font-size: 0.8rem;
+  color: var(--text); box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+  max-width: 240px; line-height: 1.4; opacity: 0; transition: opacity 0.12s;
+}
+.tooltip.visible { opacity: 1; }
+.tooltip strong { font-weight: 700; }
 </style>
 </head>
 <body>
@@ -150,7 +160,20 @@ svg .axis line, svg .axis path { stroke: var(--border); }
 
 </div>
 
+<div class="tooltip" id="tooltip"></div>
 <script>
+// ── Tooltip helper ──
+const tooltip = document.getElementById('tooltip');
+function showTooltip(html, event) {
+  tooltip.innerHTML = html;
+  tooltip.classList.add('visible');
+  const x = Math.min(event.clientX + 12, window.innerWidth - 260);
+  const y = event.clientY - 10;
+  tooltip.style.left = x + 'px';
+  tooltip.style.top = y + 'px';
+}
+function hideTooltip() { tooltip.classList.remove('visible'); }
+
 // ── Data ──
 const shindoLevels = [
   { label: '0', value: 0, color: '#b0b0b0' },
@@ -224,7 +247,7 @@ const events = [
 
     // Vertical track
     cg.append('line').attr('x1', 0).attr('y1', 0).attr('x2', 0).attr('y2', innerH)
-      .attr('stroke', '#ccc').attr('stroke-width', 2);
+      .attr('stroke', '#bbb').attr('stroke-width', 2);
 
     // Ticks
     const shindoLabels = { 0:'0', 1:'1', 2:'2', 3:'3', 4:'4', 4.5:'5-', 5:'5+', 5.5:'6-', 6:'6+', 6.5:'7' };
@@ -278,7 +301,14 @@ const events = [
       eventGroup.append('circle')
         .attr('cx', pt.x).attr('cy', pt.y).attr('r', highlight ? 6 : 4)
         .attr('fill', color).attr('opacity', opacity)
-        .attr('class', `ev-dot ev-${idx} event-dot`);
+        .attr('class', `ev-dot ev-${idx} event-dot`)
+        .on('pointerenter', function(event) {
+          showTooltip(`<strong>${ev.name} (${ev.year})</strong><br>Mw ${ev.mw} · ML ${ev.ml} · Shindo ${ev.shindo}<br>Depth: ${ev.depth} km<br>${ev.notes}`, event);
+        })
+        .on('pointermove', function(event) {
+          showTooltip(`<strong>${ev.name} (${ev.year})</strong><br>Mw ${ev.mw} · ML ${ev.ml} · Shindo ${ev.shindo}<br>Depth: ${ev.depth} km<br>${ev.notes}`, event);
+        })
+        .on('pointerleave', hideTooltip);
     });
 
     // Label on middle column
@@ -321,6 +351,43 @@ const events = [
     d3.select(this).classed('active', true);
     renderEvents(activeIdx);
   });
+
+  // Annotations — "annotate the surprising, not the obvious"
+  const anno = g.append('g').attr('class', 'annotations');
+
+  // 1) Tohoku: Richter saturates at ~8.4 but Mw reads 9.1
+  const tohokuMlY = yScales[0](8.4);
+  const tohokuMwY = yScales[1](9.1);
+  const annoX1 = cols[0].x + 16;
+  const annoY1 = (tohokuMlY + tohokuMwY) / 2 - 10;
+  anno.append('line')
+    .attr('x1', annoX1 + 2).attr('y1', annoY1 + 4)
+    .attr('x2', cols[0].x + 10).attr('y2', tohokuMlY)
+    .attr('stroke', '#888').attr('stroke-width', 0.8);
+  anno.append('text')
+    .attr('x', annoX1 + 4).attr('y', annoY1)
+    .attr('font-size', '9px').attr('fill', '#4a4a6a')
+    .text('Richter reads only ~8.4');
+  anno.append('text')
+    .attr('x', annoX1 + 4).attr('y', annoY1 + 12)
+    .attr('font-size', '9px').attr('fill', '#4a4a6a')
+    .text('for this M9.1 event');
+
+  // 2) Kumamoto foreshock: M6.2 but shindo 7
+  const kumaY = yScales[2](6.5);
+  const kumaX = cols[2].x + 16;
+  anno.append('line')
+    .attr('x1', kumaX).attr('y1', kumaY + 4)
+    .attr('x2', cols[2].x + 8).attr('y2', kumaY)
+    .attr('stroke', '#888').attr('stroke-width', 0.8);
+  anno.append('text')
+    .attr('x', kumaX + 2).attr('y', kumaY - 2)
+    .attr('font-size', '9px').attr('fill', '#4a4a6a')
+    .text('M6.2 quake hit shindo 7');
+  anno.append('text')
+    .attr('x', kumaX + 2).attr('y', kumaY + 10)
+    .attr('font-size', '9px').attr('fill', '#4a4a6a')
+    .text('(11 km depth)');
 })();
 
 // ── Fig 2: Energy comparison ──
@@ -358,7 +425,17 @@ const events = [
       .attr('fill', d3.interpolateOranges(0.2 + i * 0.18))
       .attr('opacity', 0.8)
       .attr('stroke', d3.interpolateOranges(0.4 + i * 0.15))
-      .attr('stroke-width', 1);
+      .attr('stroke-width', 1)
+      .style('cursor', 'default')
+      .on('pointerenter', function(event) {
+        const multText = i === 0 ? '1×' : d3.format(',.0f')(energies[i]) + '×';
+        showTooltip(`<strong>Magnitude ${m}</strong><br>Energy: ${multText} relative to M5<br>${i > 0 ? 'Each whole number = 31.6× more energy' : 'Baseline'}`, event);
+      })
+      .on('pointermove', function(event) {
+        const multText = i === 0 ? '1×' : d3.format(',.0f')(energies[i]) + '×';
+        showTooltip(`<strong>Magnitude ${m}</strong><br>Energy: ${multText} relative to M5<br>${i > 0 ? 'Each whole number = 31.6× more energy' : 'Baseline'}`, event);
+      })
+      .on('pointerleave', hideTooltip);
 
     // Magnitude label
     g.append('text').attr('class', 'energy-label')
@@ -377,6 +454,22 @@ const events = [
   g.append('text').attr('x', innerW / 2).attr('y', -10)
     .attr('text-anchor', 'middle').attr('font-size', '13px').attr('fill', '#4a4a6a')
     .text('Energy released (relative to M5)');
+
+  // Annotation: M9 energy
+  const m9cx = xStep * (4 + 0.5);
+  const m9cy = innerH / 2 + 10;
+  const m9r = Math.min(areaScale(energies[4]), maxR);
+  const annoX = m9cx - m9r - 40;
+  const annoY = m9cy - m9r + 10;
+  g.append('line')
+    .attr('x1', annoX + 50).attr('y1', annoY + 4)
+    .attr('x2', m9cx - 4).attr('y2', m9cy - m9r + 4)
+    .attr('stroke', '#888').attr('stroke-width', 0.8);
+  g.append('text')
+    .attr('x', annoX).attr('y', annoY)
+    .attr('font-size', '9px').attr('fill', '#4a4a6a')
+    .attr('text-anchor', 'start')
+    .text('~1 million × the energy of M5');
 })();
 
 // ── Fig 3: Shindo map ──
@@ -408,8 +501,8 @@ const events = [
     .data(japanFeatures.features)
     .join('path')
       .attr('d', path)
-      .attr('fill', '#f0f0f0')
-      .attr('stroke', '#ccc')
+      .attr('fill', '#e8e8e0')
+      .attr('stroke', '#bbb')
       .attr('stroke-width', 0.5);
 
   // Internal borders
@@ -419,6 +512,26 @@ const events = [
     .attr('fill', 'none')
     .attr('stroke', '#ddd')
     .attr('stroke-width', 0.5);
+
+  // City labels
+  const cities = [
+    { name: 'Tokyo', lon: 139.69, lat: 35.69 },
+    { name: 'Osaka', lon: 135.50, lat: 34.69 },
+    { name: 'Sendai', lon: 140.87, lat: 38.27 },
+    { name: 'Sapporo', lon: 141.35, lat: 43.06 },
+  ];
+  const cityGroup = svg.append('g').attr('class', 'city-labels');
+  cities.forEach(c => {
+    const pt = projection([c.lon, c.lat]);
+    cityGroup.append('circle')
+      .attr('cx', pt[0]).attr('cy', pt[1]).attr('r', 3)
+      .attr('fill', '#1a1a2e').attr('stroke', '#fff').attr('stroke-width', 1);
+    cityGroup.append('text')
+      .attr('x', pt[0] + 6).attr('y', pt[1] + 4)
+      .attr('font-size', '11px').attr('fill', '#1a1a2e').attr('font-weight', 600)
+      .attr('paint-order', 'stroke').attr('stroke', '#fff').attr('stroke-width', 3)
+      .text(c.name);
+  });
 
   // Shindo overlay (canvas-like grid using rects)
   const gridGroup = svg.append('g').attr('class', 'shindo-grid');
@@ -471,15 +584,21 @@ const events = [
         const s = calcShindo(mw, depth, dist);
         if (s < 0.5) continue; // below shindo 1 threshold
 
+        const sLabel = shindoLabel(s);
         gridGroup.append('rect')
           .attr('x', px).attr('y', py)
           .attr('width', cellSize).attr('height', cellSize)
           .attr('fill', shindoColor(s))
-          .attr('opacity', 0.6);
+          .attr('opacity', 0.6)
+          .on('pointerenter', function(event) {
+            showTooltip(`Shindo <strong>${sLabel}</strong><br>Distance from epicenter: ${Math.round(dist)} km`, event);
+          })
+          .on('pointerleave', hideTooltip);
       }
     }
 
-    // Redraw epicenter on top
+    // Raise city labels and epicenter above the grid
+    cityGroup.raise();
     drawEpicenter();
   }
 

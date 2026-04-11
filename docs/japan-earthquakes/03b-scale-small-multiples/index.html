@@ -33,10 +33,7 @@ svg text { font-family: var(--heading-font); }
 svg .axis text { font-size: 11px; fill: var(--text-2); }
 svg .axis line, svg .axis path { stroke: var(--border); }
 .subtitle { font-family: var(--heading-font); font-size: 1.1rem; color: var(--text-2); margin-bottom: 2rem; }
-.figure-wide { max-width: 900px; margin-left: auto; margin-right: auto; }
-.grid-container { display: flex; gap: 1.5rem; flex-wrap: wrap; align-items: flex-start; }
-.map-col { flex: 0 0 260px; }
-.grid-col { flex: 1; min-width: 400px; }
+.figure-wide { max-width: 900px; margin-left: -40px; margin-right: -40px; }
 .panel-label { font-family: var(--heading-font); font-size: 12px; font-weight: 600; }
 .gr-line { fill: none; stroke-width: 2; }
 .gr-dot { stroke: #fff; stroke-width: 0.5; }
@@ -53,6 +50,9 @@ svg .axis line, svg .axis path { stroke: var(--border); }
 .b-label { font-family: var(--mono-font); font-size: 9px; fill: var(--text-2); }
 .axis-label { font-family: var(--heading-font); font-size: 11px; fill: var(--text-2); }
 .map-label { font-family: var(--heading-font); font-size: 9px; fill: var(--text-2); pointer-events: none; }
+.tooltip { position: absolute; pointer-events: none; background: #fff; border: 1px solid var(--border); border-radius: 5px; padding: 0.5rem 0.7rem; font-family: var(--heading-font); font-size: 0.8rem; line-height: 1.4; box-shadow: 0 2px 8px rgba(0,0,0,0.12); max-width: 260px; opacity: 0; transition: opacity 0.15s; z-index: 10; }
+.tooltip strong { font-weight: 700; }
+.ref-slope { stroke: var(--border); stroke-width: 1; stroke-dasharray: 3,2; }
 </style>
 </head>
 <body>
@@ -68,11 +68,8 @@ svg .axis line, svg .axis path { stroke: var(--border); }
 <h2>Eight regions, one visual language</h2>
 
 <div class="figure figure-wide" id="main-figure">
-  <div class="grid-container">
-    <div class="map-col" id="map-container"></div>
-    <div class="grid-col" id="grid-container"></div>
-  </div>
-  <p class="figure-caption">Hover any panel to highlight that region on the map. Each plot shows cumulative earthquake count (log scale) versus magnitude for M4.5+ quakes, 2000-2025. USGS catalog.</p>
+  <div id="combined-viz"></div>
+  <p class="figure-caption">Hover any panel to highlight that region on the map. Each plot shows cumulative earthquake count (log scale) versus magnitude for M4.5+ quakes, 2000-2025. The dashed line in each panel shows a reference b=1.0 slope for comparison. Computed b-values are labeled per panel. USGS catalog.</p>
 </div>
 
 <p>The panels are arranged roughly north-to-south: Hokkaido at the top left, Okinawa at the bottom right. The y-axis is shared across all panels on a logarithmic scale, and the x-axis covers magnitudes 4.5 through 8.0, so you are always comparing like with like.</p>
@@ -106,6 +103,8 @@ svg .axis line, svg .axis path { stroke: var(--border); }
 <p>Edward Tufte popularized the term "small multiples" for this layout: the same chart structure repeated across panels, each showing a different slice of the data. Once you learn to read one panel, you can read all eight. Your eye starts comparing slopes, line lengths, and vertical positions without needing a legend or color key to decode overlapping lines.</p>
 
 <p>For earthquake data, this approach works particularly well. When all regions share the same axes, differences in seismic activity become differences in visual position rather than differences in labeling. Tohoku's line sits far above Kansai's and stretches further to the right. Those are facts about the geology, and the shared visual language makes them obvious at a glance.</p>
+
+<div class="tooltip" id="tooltip"></div>
 
 <p style="color: var(--text-2); font-size: 0.9rem; margin-top: 3rem;">Data: USGS earthquake catalog, M4.5+, 2000-2025. Region classification by latitude/longitude bounding boxes. B-values computed by least-squares fit to log<sub>10</sub>(cumulative count) vs. magnitude.</p>
 
@@ -141,31 +140,37 @@ const regionCenters = {
   'Okinawa': [127.5, 26.5]
 };
 
-// ---- MAP ----
-const mapW = 240, mapH = 520;
-const mapMargin = {top: 10, right: 10, bottom: 10, left: 10};
-const mapInnerW = mapW - mapMargin.left - mapMargin.right;
-const mapInnerH = mapH - mapMargin.top - mapMargin.bottom;
+// ---- UNIFIED LAYOUT ----
+const mapW = 240, mapH = 500;
+const gridGap = 20;
+const cols = 2, rows = 4;
+const panelW = 195, panelH = 110;
+const panelPad = {top: 20, right: 12, bottom: 22, left: 38};
+const gapX = 10, gapY = 10;
+const gridW = cols * panelW + (cols - 1) * gapX;
+const gridH = rows * panelH + (rows - 1) * gapY;
+const totalW = mapW + gridGap + gridW;
+const totalH = Math.max(mapH, gridH) + 20;
 
-const mapSvg = d3.select('#map-container').append('svg')
-  .attr('width', mapW).attr('height', mapH)
-  .attr('viewBox', `0 0 ${mapW} ${mapH}`);
+const svg = d3.select('#combined-viz').append('svg')
+  .attr('viewBox', `0 0 ${totalW} ${totalH}`)
+  .attr('width', '100%')
+  .style('display', 'block');
 
-const mapG = mapSvg.append('g')
-  .attr('transform', `translate(${mapMargin.left},${mapMargin.top})`);
+// Map group on the left
+const mapG = svg.append('g').attr('transform', 'translate(0, 10)');
 
 // Projection: geoMercator centered on Japan
 const mapProjection = d3.geoMercator()
   .center([137, 37])
   .scale(550)
-  .translate([mapInnerW / 2, mapInnerH / 2]);
+  .translate([mapW / 2, mapH / 2]);
 
 const mapPathGen = d3.geoPath().projection(mapProjection);
 
-// Prefecture geography layer (drawn first as background)
+// Prefecture geography layer
 const landG = mapG.append('g');
 
-// Load TopoJSON prefecture geography
 d3.json("../shared/japan.topojson").then(topoData => {
   const prefectures = topojson.feature(topoData, topoData.objects.japan);
   const prefBorders = topojson.mesh(topoData, topoData.objects.japan, (a, b) => a !== b);
@@ -175,8 +180,8 @@ d3.json("../shared/japan.topojson").then(topoData => {
     .join("path")
     .attr("class", "prefecture")
     .attr("d", mapPathGen)
-    .attr("fill", "#f0f0f0")
-    .attr("stroke", "#ccc")
+    .attr("fill", "#e8e8e0")
+    .attr("stroke", "#bbb")
     .attr("stroke-width", 0.5);
 
   landG.append("path")
@@ -224,23 +229,17 @@ const dots = mapG.selectAll('.map-dot')
   .attr('fill', d => regionColors[d[3]]);
 
 // Map title
-mapSvg.append('text')
-  .attr('x', mapW / 2).attr('y', mapH - 2)
+mapG.append('text')
+  .attr('x', mapW / 2).attr('y', mapH + 14)
   .attr('text-anchor', 'middle')
   .attr('class', 'axis-label')
   .text('M4.5+ earthquakes, 2000-2025');
 
-// ---- SMALL MULTIPLES GRID ----
-const cols = 2, rows = 4;
-const panelW = 185, panelH = 110;
-const panelPad = {top: 20, right: 12, bottom: 22, left: 38};
-const gapX = 8, gapY = 8;
-const gridW = cols * panelW + (cols - 1) * gapX;
-const gridH = rows * panelH + (rows - 1) * gapY;
-
-const gridSvg = d3.select('#grid-container').append('svg')
-  .attr('width', gridW).attr('height', gridH)
-  .attr('viewBox', `0 0 ${gridW} ${gridH}`);
+// ---- SMALL MULTIPLES GRID (inside unified SVG) ----
+const gridOffsetX = mapW + gridGap;
+const gridOffsetY = 10;
+const gridSvg = svg.append('g')
+  .attr('transform', `translate(${gridOffsetX}, ${gridOffsetY})`);
 
 // Shared scales
 const xScale = d3.scaleLinear().domain([4.5, 8.0]).range([panelPad.left, panelW - panelPad.right]);
@@ -348,6 +347,36 @@ regions.forEach((region, i) => {
     .attr('class', 'count-label')
     .text(`n=${data[0][1].toLocaleString()}`);
 
+  // Compute and display b-value (slope of log10(N) vs M)
+  if (data.length >= 3) {
+    const pts = data.filter(d => d[1] > 0).map(d => [d[0], Math.log10(d[1])]);
+    const n = pts.length;
+    const sumX = pts.reduce((s, p) => s + p[0], 0);
+    const sumY = pts.reduce((s, p) => s + p[1], 0);
+    const sumXY = pts.reduce((s, p) => s + p[0] * p[1], 0);
+    const sumX2 = pts.reduce((s, p) => s + p[0] * p[0], 0);
+    const bVal = -((n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX));
+    g.append('text')
+      .attr('x', panelW - panelPad.right - 2).attr('y', panelPad.top + 22)
+      .attr('text-anchor', 'end')
+      .attr('class', 'b-label')
+      .text(`b≈${bVal.toFixed(2)}`);
+  }
+
+  // Reference line for b=1.0 (dashed, from first data point)
+  if (data.length > 0) {
+    const startM = data[0][0];
+    const startN = data[0][1];
+    const endM = data[data.length - 1][0];
+    const refEndN = startN * Math.pow(10, -(endM - startM));
+    if (refEndN >= 1) {
+      g.append('line')
+        .attr('class', 'ref-slope')
+        .attr('x1', xScale(startM)).attr('y1', yScale(startN))
+        .attr('x2', xScale(endM)).attr('y2', yScale(Math.max(1, refEndN)));
+    }
+  }
+
   panels.push({region, g, col, row});
 });
 
@@ -404,9 +433,43 @@ gridSvg.selectAll('.small-panel')
   .on('mouseenter', function() { highlight(d3.select(this).attr('data-region')); })
   .on('mouseleave', function() { highlight(null); });
 
-// Also allow hovering map dots
-dots.on('mouseenter', function(e, d) { highlight(d[3]); })
-  .on('mouseleave', function() { highlight(null); });
+// Region labels on map
+const regionLabelData = [
+  { name: "Hokkaido", pos: [144.5, 43.8] },
+  { name: "Tohoku", pos: [142, 39.5] },
+  { name: "Kanto", pos: [141, 35.5] },
+  { name: "Kyushu", pos: [130, 31.5] },
+];
+regionLabelData.forEach(r => {
+  const [px, py] = mapProjection(r.pos);
+  mapG.append('text')
+    .attr('x', px).attr('y', py)
+    .attr('class', 'map-label')
+    .style('font-size', '8px')
+    .style('fill', regionColors[r.name] || 'var(--text-2)')
+    .text(r.name);
+});
+
+// Tooltips on map dots
+const tooltipEl = document.getElementById('tooltip');
+
+dots.on('pointerenter', function(e, d) {
+    highlight(d[3]);
+    d3.select(this).attr('opacity', 0.9).attr('stroke', '#333').attr('stroke-width', 1);
+    tooltipEl.innerHTML = `<strong>M${d[2].toFixed(1)}</strong> — ${d[3]}<br>Lat ${d[0].toFixed(1)}°, Lon ${d[1].toFixed(1)}°`;
+    tooltipEl.style.opacity = 1;
+  })
+  .on('pointermove', function(e) {
+    let left = e.pageX + 12, top = e.pageY - 12;
+    if (left + 260 > window.innerWidth) left = e.pageX - 270;
+    tooltipEl.style.left = left + 'px';
+    tooltipEl.style.top = top + 'px';
+  })
+  .on('pointerleave', function() {
+    highlight(null);
+    d3.select(this).attr('opacity', 0.6).attr('stroke', 'none');
+    tooltipEl.style.opacity = 0;
+  });
 
 </script>
 </body>

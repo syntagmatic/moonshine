@@ -63,7 +63,7 @@ h1 { font-family: var(--heading-font); font-weight: 700; line-height: 1.15; font
   padding: 1.25rem 1.5rem;
   border-top: 1px solid var(--border);
   min-height: 160px;
-  transition: opacity 0.4s ease;
+  transition: opacity 0.5s cubic-bezier(0.65, 0, 0.35, 1);
 }
 .stats-panel.hidden { opacity: 0; }
 
@@ -120,7 +120,7 @@ h1 { font-family: var(--heading-font); font-weight: 700; line-height: 1.15; font
   height: 100%;
   background: #b91c1c;
   border-radius: 4px;
-  transition: width 0.8s ease;
+  transition: width 0.8s cubic-bezier(0.65, 0, 0.35, 1);
 }
 
 /* Timeline in stats panel */
@@ -141,7 +141,7 @@ h1 { font-family: var(--heading-font); font-weight: 700; line-height: 1.15; font
   padding: 2rem 1.5rem;
   margin-bottom: 1rem;
   opacity: 0.25;
-  transition: opacity 0.5s ease;
+  transition: opacity 0.5s cubic-bezier(0.65, 0, 0.35, 1);
 }
 .step.active {
   opacity: 1;
@@ -185,7 +185,7 @@ h1 { font-family: var(--heading-font); font-weight: 700; line-height: 1.15; font
 .article-footer h2 { font-family: var(--heading-font); font-weight: 700; font-size: 1.5rem; margin: 0 0 1rem; }
 
 /* --- Map styling --- */
-.japan-land { fill: #f0f0f0; stroke: #ccc; stroke-width: 0.5; }
+.japan-land { fill: #e8e8e0; stroke: #bbb; stroke-width: 0.5; }
 .pref-borders { fill: none; stroke: #ddd; stroke-width: 0.5; }
 .quake-dot { fill: var(--accent); fill-opacity: 0.7; stroke: var(--accent); stroke-width: 1; }
 .quake-dot-bg { fill: none; stroke: var(--accent); stroke-opacity: 0.3; }
@@ -220,6 +220,35 @@ h1 { font-family: var(--heading-font); font-weight: 700; line-height: 1.15; font
 }
 
 svg text { font-family: var(--heading-font); }
+
+/* City labels */
+.city-label { font-size: 9px; fill: var(--text-2); pointer-events: none; }
+.city-dot { fill: var(--text-2); r: 2; pointer-events: none; }
+
+/* Annotations */
+.annotation-line { stroke: var(--text-2); stroke-width: 1; stroke-dasharray: 3,2; pointer-events: none; }
+.annotation-text { font-size: 10px; fill: var(--text-2); pointer-events: none; }
+.annotation-bg { fill: var(--fig-bg); fill-opacity: 0.85; stroke: none; pointer-events: none; }
+
+/* Tooltips */
+.quake-tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: var(--fig-bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.5rem 0.75rem;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+  font-family: var(--heading-font);
+  font-size: 0.8rem;
+  color: var(--text);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  white-space: nowrap;
+  z-index: 10;
+}
+.quake-tooltip .tt-name { font-weight: 700; margin-bottom: 2px; }
+.quake-tooltip .tt-detail { color: var(--text-2); font-size: 0.75rem; }
 </style>
 </head>
 <body>
@@ -237,7 +266,9 @@ svg text { font-family: var(--heading-font); }
 
 <section class="scroll-container">
   <div class="sticky-panel" id="sticky">
-    <div class="map-container" id="map-container"></div>
+    <div class="map-container" id="map-container">
+      <div class="quake-tooltip" id="quake-tooltip"></div>
+    </div>
     <div class="stats-panel hidden" id="stats-panel">
       <div class="stat-row">
         <span class="stat-label">Magnitude</span>
@@ -381,9 +412,22 @@ g.append("rect")
   .attr("x", -500)
   .attr("y", -500);
 
-// Groups for layering: land first, then dots on top
+// Groups for layering: land first, cities, then dots on top
 const landGroup = g.append("g");
+const cityGroup = g.append("g");
+const annotGroup = g.append("g");
 const dotsGroup = g.append("g");
+
+// City data for labels
+const cities = [
+  { name: "Tokyo", lat: 35.68, lon: 139.69, anchor: "start", dx: 5, dy: 3 },
+  { name: "Osaka", lat: 34.69, lon: 135.50, anchor: "end", dx: -5, dy: 3 },
+  { name: "Sendai", lat: 38.27, lon: 140.87, anchor: "start", dx: 5, dy: 3 },
+  { name: "Sapporo", lat: 43.06, lon: 141.35, anchor: "start", dx: 5, dy: 3 }
+];
+
+// Tooltip element
+const tooltip = d3.select("#quake-tooltip");
 
 // Active dot elements (appended early, will be on top after dots)
 const pulseRing = dotsGroup.append("circle").attr("class", "pulse-ring").attr("r", 0).style("display", "none");
@@ -417,12 +461,79 @@ d3.json("../shared/japan.topojson").then(topoData => {
     .attr("class", "pref-borders")
     .attr("d", path);
 
+  // Draw city labels
+  drawCityLabels();
+
   // Initial quake dots (all inactive)
   drawInactiveDots();
 
   // Initial state
   setStep(0);
 });
+
+function drawCityLabels() {
+  cityGroup.selectAll(".city-dot").remove();
+  cityGroup.selectAll(".city-label").remove();
+
+  cityGroup.selectAll(".city-dot")
+    .data(cities)
+    .join("circle")
+    .attr("class", "city-dot")
+    .attr("cx", d => projection([d.lon, d.lat])[0])
+    .attr("cy", d => projection([d.lon, d.lat])[1])
+    .attr("r", 2);
+
+  cityGroup.selectAll(".city-label")
+    .data(cities)
+    .join("text")
+    .attr("class", "city-label")
+    .attr("x", d => projection([d.lon, d.lat])[0] + d.dx)
+    .attr("y", d => projection([d.lon, d.lat])[1] + d.dy)
+    .attr("text-anchor", d => d.anchor)
+    .text(d => d.name);
+}
+
+// Annotations drawn on overview steps
+function drawAnnotations(step) {
+  annotGroup.selectAll("*").remove();
+  if (step !== 0 && step !== 8) return;
+
+  const annotations = [
+    { quakeIdx: 0, label: "105k deaths — firestorm", dx: -40, dy: -30, align: "end" },
+    { quakeIdx: 4, label: "9.1 — strongest recorded in Japan", dx: 30, dy: -25, align: "start" },
+    { quakeIdx: 6, label: "2024 — rural isolation crisis", dx: -35, dy: 25, align: "end" }
+  ];
+
+  annotations.forEach(a => {
+    const q = quakes[a.quakeIdx];
+    const [cx, cy] = projection([q.lon, q.lat]);
+    const r = Math.sqrt(q.deaths / maxDeaths) * 18 + 3;
+    const tx = cx + a.dx;
+    const ty = cy + a.dy;
+
+    // Leader line
+    annotGroup.append("line")
+      .attr("class", "annotation-line")
+      .attr("x1", cx).attr("y1", cy - r - 1)
+      .attr("x2", tx).attr("y2", ty + 4);
+
+    // Background rect (will be sized after text)
+    const bg = annotGroup.append("rect").attr("class", "annotation-bg");
+
+    // Label
+    const text = annotGroup.append("text")
+      .attr("class", "annotation-text")
+      .attr("x", tx).attr("y", ty)
+      .attr("text-anchor", a.align)
+      .text(a.label);
+
+    // Size background to text
+    const bbox = text.node().getBBox();
+    bg.attr("x", bbox.x - 2).attr("y", bbox.y - 1)
+      .attr("width", bbox.width + 4).attr("height", bbox.height + 2)
+      .attr("rx", 2);
+  });
+}
 
 // Initial quake dots (all inactive)
 function drawInactiveDots() {
@@ -433,7 +544,29 @@ function drawInactiveDots() {
     .attr("class", "quake-dot-inactive")
     .attr("cx", d => projection([d.lon, d.lat])[0])
     .attr("cy", d => projection([d.lon, d.lat])[1])
-    .attr("r", d => Math.sqrt(d.deaths / maxDeaths) * 18 + 3);
+    .attr("r", d => Math.sqrt(d.deaths / maxDeaths) * 18 + 3)
+    .style("pointer-events", "all")
+    .style("cursor", "default")
+    .on("mouseenter", function(event, d) {
+      const rect = mapContainer.getBoundingClientRect();
+      tooltip.html(`<div class="tt-name">${d.name} (${d.year})</div><div class="tt-detail">M${d.mag} · ${d.deaths.toLocaleString()} deaths</div>${d.damage_b_usd ? `<div class="tt-detail">$${d.damage_b_usd}B damage</div>` : ""}`);
+      tooltip.style("opacity", 1);
+      const ttNode = tooltip.node();
+      const ttW = ttNode.offsetWidth;
+      const cx = event.clientX - rect.left;
+      const cy = event.clientY - rect.top;
+      tooltip.style("left", (cx - ttW / 2) + "px").style("top", (cy - ttNode.offsetHeight - 10) + "px");
+    })
+    .on("mousemove", function(event) {
+      const rect = mapContainer.getBoundingClientRect();
+      const ttNode = tooltip.node();
+      const cx = event.clientX - rect.left;
+      const cy = event.clientY - rect.top;
+      tooltip.style("left", (cx - ttNode.offsetWidth / 2) + "px").style("top", (cy - ttNode.offsetHeight - 10) + "px");
+    })
+    .on("mouseleave", function() {
+      tooltip.style("opacity", 0);
+    });
 
   // Re-raise active dot elements so they stay on top
   pulseRing.raise();
@@ -459,11 +592,11 @@ function drawTimeline() {
   // Axes
   tgInner.append("g")
     .attr("transform", `translate(0,${th})`)
-    .call(d3.axisBottom(x).tickFormat(d3.format("d")).tickValues([1923,1948,1995,2004,2011,2016,2024]))
+    .call(d3.axisBottom(x).tickFormat(d3.format("d")).tickValues([1923,1948,1995,2004,2011,2016,2024]).tickSizeOuter(0))
     .selectAll("text").style("font-size", "11px").style("fill", "var(--text-2)");
 
   tgInner.append("g")
-    .call(d3.axisLeft(y).tickValues([100,1000,10000,100000]).tickFormat(d3.format(",")))
+    .call(d3.axisLeft(y).tickValues([100,1000,10000,100000]).tickFormat(d3.format(",")).tickSizeOuter(0))
     .selectAll("text").style("font-size", "11px").style("fill", "var(--text-2)");
 
   // Axis styling
@@ -494,7 +627,19 @@ function drawTimeline() {
     .attr("fill", "var(--accent)")
     .attr("fill-opacity", 0.6)
     .attr("stroke", "var(--accent)")
-    .attr("stroke-width", 1);
+    .attr("stroke-width", 1)
+    .style("pointer-events", "all")
+    .style("cursor", "default")
+    .on("mouseenter", function(event, d) {
+      const rect = mapContainer.getBoundingClientRect();
+      tooltip.html(`<div class="tt-name">${d.name} (${d.year})</div><div class="tt-detail">M${d.mag} · ${d.deaths.toLocaleString()} deaths</div>${d.insight ? `<div class="tt-detail" style="white-space:normal;max-width:200px">${d.insight}</div>` : ""}`);
+      tooltip.style("opacity", 1);
+      const ttNode = tooltip.node();
+      const cx = event.clientX - rect.left;
+      const cy = event.clientY - rect.top;
+      tooltip.style("left", (cx - ttNode.offsetWidth / 2) + "px").style("top", (cy - ttNode.offsetHeight - 10) + "px");
+    })
+    .on("mouseleave", function() { tooltip.style("opacity", 0); });
 
   // Labels
   tgInner.selectAll(".tl-label")
@@ -529,12 +674,14 @@ function zoomToQuake(quake, duration = 800) {
 
   g.transition()
     .duration(duration)
+    .ease(d3.easeCubicInOut)
     .attr("transform", `translate(${tx},${ty}) scale(${ratio})`);
 }
 
 function zoomToOverview(duration = 800) {
   g.transition()
     .duration(duration)
+    .ease(d3.easeCubicInOut)
     .attr("transform", "translate(0,0) scale(1)");
 }
 
@@ -608,8 +755,11 @@ function setStep(idx) {
     zoomToOverview();
     hideActiveDot();
     hideStats();
+    drawAnnotations(idx);
     // Dim inactive dots
-    dotsGroup.selectAll(".quake-dot-inactive").attr("fill-opacity", 0.15);
+    dotsGroup.selectAll(".quake-dot-inactive")
+      .transition().duration(600).ease(d3.easeCubicInOut)
+      .attr("fill-opacity", 0.15);
   } else if (idx >= 1 && idx <= 7) {
     // Individual quake
     timelineSvg.style("display", "none");
@@ -617,8 +767,10 @@ function setStep(idx) {
     zoomToQuake(q);
     showActiveDot(q);
     showStats(q);
+    drawAnnotations(idx);
     // Show inactive dots dimly
     dotsGroup.selectAll(".quake-dot-inactive")
+      .transition().duration(600).ease(d3.easeCubicInOut)
       .attr("fill-opacity", (d, i) => i === idx - 1 ? 0 : 0.2);
   } else if (idx === 8) {
     // Pattern / conclusion
@@ -627,7 +779,10 @@ function setStep(idx) {
     zoomToOverview();
     hideActiveDot();
     hideStats();
-    dotsGroup.selectAll(".quake-dot-inactive").attr("fill-opacity", 0.35);
+    drawAnnotations(idx);
+    dotsGroup.selectAll(".quake-dot-inactive")
+      .transition().duration(600).ease(d3.easeCubicInOut)
+      .attr("fill-opacity", 0.35);
   }
 }
 
@@ -659,6 +814,8 @@ function handleResize() {
   dotsGroup.selectAll(".quake-dot-inactive")
     .attr("cx", d => projection([d.lon, d.lat])[0])
     .attr("cy", d => projection([d.lon, d.lat])[1]);
+
+  drawCityLabels();
 
   // Re-trigger current step
   const prev = currentStep;

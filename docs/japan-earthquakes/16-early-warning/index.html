@@ -67,9 +67,28 @@ svg .axis line, svg .axis path { stroke: var(--border); }
 .action-chart .bar-group { cursor: default; }
 .action-chart .bar-label { font-size: 0.8rem; fill: var(--text); }
 .action-chart .bar-time { font-size: 0.75rem; fill: var(--text-2); }
+
+.tooltip {
+  position: fixed; pointer-events: none; font-family: var(--heading-font);
+  font-size: 0.8rem; background: rgba(26,26,46,0.92); color: #fff;
+  padding: 0.35rem 0.6rem; border-radius: 4px; white-space: nowrap;
+  opacity: 0; transition: opacity 0.15s;
+  z-index: 10;
+}
+.tooltip.visible { opacity: 1; }
+
+.slider-container {
+  font-family: var(--heading-font); font-size: 0.85rem; margin-top: 0.5rem;
+  display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;
+}
+.slider-container label { color: var(--text-2); }
+.slider-container input[type=range] { width: 200px; }
+.slider-container .slider-value { font-weight: 600; color: var(--text); min-width: 3em; }
+.slider-container .slider-result { color: var(--text-2); }
 </style>
 </head>
 <body>
+<div class="tooltip" id="tooltip"></div>
 <div class="article">
 
 <h1>Earthquake Early Warning</h1>
@@ -120,7 +139,13 @@ svg .axis line, svg .axis path { stroke: var(--border); }
     <span class="legend-item"><span class="legend-swatch" style="background:#ef4444;opacity:0.5;"></span> S-wave (shear, ~3.5 km/s)</span>
     <span class="legend-item"><span class="legend-swatch" style="background:#22c55e;"></span> Seismometer station</span>
   </div>
-  <div class="figure-caption">Seismic wave propagation from the epicenter. The gap between the blue and red circles is the warning window. After 3+ stations detect the P-wave, a warning is issued. City labels show remaining warning time before S-wave arrival.</div>
+  <div class="slider-container">
+    <label>Distance from epicenter:</label>
+    <input type="range" id="dist-slider" min="50" max="600" value="370" step="10">
+    <span class="slider-value" id="dist-value">370 km</span>
+    <span class="slider-result" id="dist-result"></span>
+  </div>
+  <div class="figure-caption">Seismic wave propagation from the epicenter. The gap between the blue and red circles is the warning window. After 3+ stations detect the P-wave, a warning is issued. City labels show remaining warning time before S-wave arrival. Use the distance slider to explore how warning time changes with distance.</div>
 </div>
 
 <h2>The Timeline</h2>
@@ -325,7 +350,7 @@ function drawTimeline(events) {
 
   // Axis
   tlG.append("g").attr("class", "axis").attr("transform", `translate(0,${tlInner.h})`)
-    .call(d3.axisBottom(tlScale).ticks(8).tickFormat(d => `${d}s`));
+    .call(d3.axisBottom(tlScale).ticks(8).tickFormat(d => `${d}s`).tickSizeOuter(0));
 
   // axis label
   tlG.append("text").attr("x", tlInner.w / 2).attr("y", tlInner.h + 28)
@@ -390,7 +415,7 @@ const acX = d3.scaleLinear().domain([0, 70]).range([0, acInner.w]);
 const acY = d3.scaleBand().domain(actions.map(d => d.label)).range([0, acInner.h]).padding(0.3);
 
 acG.append("g").attr("class", "axis").attr("transform", `translate(0,${acInner.h})`)
-  .call(d3.axisBottom(acX).ticks(5).tickFormat(d => `${d}s`));
+  .call(d3.axisBottom(acX).ticks(5).tickFormat(d => `${d}s`).tickSizeOuter(0));
 
 acG.selectAll(".bar-group").data(actions).join("g").attr("class","bar-group").each(function(d) {
   const g = d3.select(this);
@@ -450,6 +475,8 @@ function reset() {
   warningIssued = false;
   stationsDetected = 0;
   lastFrameTime = null;
+  stationDots.attr("data-active", "0");
+  warningFlash.attr("data-shown", "0");
   updateVis();
 }
 
@@ -481,16 +508,22 @@ function updateVis() {
   const sortedTimes = [...staDists].sort((a,b) => a - b);
   if (sortedTimes.length >= 3) thirdDetectTime = sortedTimes[2];
 
-  stationDots.attr("fill", (d, i) => {
+  stationDots.each(function(d, i) {
     const dist = haversine(epi[1], epi[0], d.lat, d.lon);
     const arrivalTime = dist / VP;
-    if (simTime >= arrivalTime) { detected++; return "#f59e0b"; }
-    return "#22c55e";
-  }).attr("r", (d, i) => {
-    const dist = haversine(epi[1], epi[0], d.lat, d.lon);
-    const arrivalTime = dist / VP;
-    if (simTime >= arrivalTime) return 6;
-    return 4;
+    const active = simTime >= arrivalTime;
+    if (active) detected++;
+    const el = d3.select(this);
+    const wasActive = el.attr("data-active") === "1";
+    if (active && !wasActive) {
+      el.attr("data-active", "1")
+        .transition().duration(300).ease(d3.easeCubicInOut)
+        .attr("fill", "#f59e0b").attr("r", 6);
+    } else if (!active && wasActive) {
+      el.attr("data-active", "0").attr("fill", "#22c55e").attr("r", 4);
+    } else if (!active) {
+      el.attr("fill", "#22c55e").attr("r", 4);
+    }
   });
 
   stationsDetected = detected;
@@ -510,7 +543,15 @@ function updateVis() {
   }
 
   // Warning flash
-  warningFlash.attr("opacity", warningIssued ? 1 : 0);
+  const prevFlash = warningFlash.attr("data-shown") === "1";
+  if (warningIssued && !prevFlash) {
+    warningFlash.attr("data-shown", "1")
+      .transition().duration(400).ease(d3.easeCubicInOut).attr("opacity", 1);
+  } else if (!warningIssued && prevFlash) {
+    warningFlash.attr("data-shown", "0").attr("opacity", 0);
+  } else if (!warningIssued) {
+    warningFlash.attr("opacity", 0);
+  }
 
   // City warning labels
   cityWarningLabels.text(d => {
@@ -588,8 +629,8 @@ d3.json("../shared/japan.topojson").then(topoData => {
     .join("path")
       .attr("class", "prefecture")
       .attr("d", geoPath)
-      .attr("fill", "#f0f0f0")
-      .attr("stroke", "#ccc")
+      .attr("fill", "#e8e8e0")
+      .attr("stroke", "#bbb")
       .attr("stroke-width", 0.5);
 
   // Internal borders
@@ -607,6 +648,112 @@ d3.json("../shared/japan.topojson").then(topoData => {
   // Auto-start after brief pause
   setTimeout(startPlaying, 800);
 });
+
+// ─── TOOLTIP ───────────────────────────────────────────────────────────
+const tooltip = d3.select("#tooltip");
+
+function showTip(event, html) {
+  tooltip.html(html).classed("visible", true);
+  const box = tooltip.node().getBoundingClientRect();
+  let x = event.clientX + 12, y = event.clientY - 10;
+  if (x + box.width > window.innerWidth - 8) x = event.clientX - box.width - 8;
+  if (y < 4) y = event.clientY + 18;
+  tooltip.style("left", x + "px").style("top", y + "px");
+}
+function hideTip() { tooltip.classed("visible", false); }
+
+// Station tooltips
+stationDots
+  .on("pointerenter", function(event, d) {
+    const sc = getScenario();
+    const dist = haversine(sc.epicenter[1], sc.epicenter[0], d.lat, d.lon);
+    const pArr = (dist / VP).toFixed(1);
+    const sArr = (dist / VS).toFixed(1);
+    const gap = (sArr - pArr).toFixed(1);
+    showTip(event, `<strong>Seismometer</strong><br>Dist: ${dist.toFixed(0)} km<br>P-wave: ${pArr}s · S-wave: ${sArr}s<br>Warning gap: ${gap}s`);
+  })
+  .on("pointermove", function(event) {
+    const box = tooltip.node().getBoundingClientRect();
+    tooltip.style("left", (event.clientX + 12) + "px").style("top", (event.clientY - 10) + "px");
+  })
+  .on("pointerleave", hideTip);
+
+// City tooltips
+cityGroups
+  .on("pointerenter", function(event, d) {
+    const sc = getScenario();
+    const dist = haversine(sc.epicenter[1], sc.epicenter[0], d.lat, d.lon);
+    const pArr = (dist / VP).toFixed(1);
+    const sArr = (dist / VS).toFixed(1);
+    const gap = (sArr - pArr).toFixed(1);
+    showTip(event, `<strong>${d.name}</strong><br>Dist: ${dist.toFixed(0)} km<br>P-wave: ${pArr}s · S-wave: ${sArr}s<br>Warning window: ${gap}s`);
+  })
+  .on("pointermove", function(event) {
+    tooltip.style("left", (event.clientX + 12) + "px").style("top", (event.clientY - 10) + "px");
+  })
+  .on("pointerleave", hideTip);
+
+// Actions chart bar tooltips
+acG.selectAll(".bar-group")
+  .on("pointerenter", function(event, d) {
+    showTip(event, `<strong>${d.label}</strong><br>Needs ≥${d.time}s warning`);
+  })
+  .on("pointermove", function(event) {
+    tooltip.style("left", (event.clientX + 12) + "px").style("top", (event.clientY - 10) + "px");
+  })
+  .on("pointerleave", hideTip);
+
+// ─── ACTIONS CHART ANNOTATIONS ─────────────────────────────────────────
+// Annotate the 5-second "drop, cover" action — surprisingly little time needed
+(function() {
+  const a5 = actions[0]; // 5s - drop, cover
+  const x1 = acMargin.left + acX(a5.time);
+  const y1 = acMargin.top + acY(a5.label) + acY.bandwidth() / 2;
+  const xEnd = acMargin.left + acX(35);
+  const yEnd = acMargin.top + 8;
+  const ag = acSvg.append("g").attr("class", "annotation");
+  ag.append("line")
+    .attr("x1", x1).attr("y1", y1)
+    .attr("x2", xEnd).attr("y2", yEnd)
+    .attr("stroke", "#4a4a6a").attr("stroke-width", 1).attr("stroke-dasharray", "3,2");
+  ag.append("circle").attr("cx", x1).attr("cy", y1).attr("r", 3).attr("fill", "none").attr("stroke", "#4a4a6a").attr("stroke-width", 1);
+  ag.append("text").attr("x", xEnd + 4).attr("y", yEnd + 1)
+    .attr("font-size", 10).attr("fill", "#4a4a6a").attr("dominant-baseline", "central")
+    .text("Just 5s saves lives");
+
+  // Annotate the 30s bullet train stop — automated infrastructure response
+  const a30 = actions[3]; // 30s
+  const x30 = acMargin.left + acX(a30.time);
+  const y30 = acMargin.top + acY(a30.label) + acY.bandwidth() / 2;
+  const xEnd30 = acMargin.left + acX(55);
+  const yEnd30 = acMargin.top + acInner.h - 4;
+  ag.append("line")
+    .attr("x1", x30).attr("y1", y30)
+    .attr("x2", xEnd30).attr("y2", yEnd30)
+    .attr("stroke", "#4a4a6a").attr("stroke-width", 1).attr("stroke-dasharray", "3,2");
+  ag.append("circle").attr("cx", x30).attr("cy", y30).attr("r", 3).attr("fill", "none").attr("stroke", "#4a4a6a").attr("stroke-width", 1);
+  ag.append("text").attr("x", xEnd30 + 4).attr("y", yEnd30 + 1)
+    .attr("font-size", 10).attr("fill", "#4a4a6a").attr("dominant-baseline", "central")
+    .text("Automated: no human needed");
+})();
+
+// ─── DISTANCE SLIDER ───────────────────────────────────────────────────
+const distSlider = d3.select("#dist-slider");
+const distValue = d3.select("#dist-value");
+const distResult = d3.select("#dist-result");
+
+function updateDistSlider() {
+  const km = +distSlider.node().value;
+  distValue.text(km + " km");
+  const pTime = km / VP;
+  const sTime = km / VS;
+  const gap = sTime - pTime;
+  // Subtract ~8s for detection + processing
+  const usable = Math.max(0, gap - 8);
+  distResult.text(`P-wave: ${pTime.toFixed(1)}s · S-wave: ${sTime.toFixed(1)}s · gap: ${gap.toFixed(1)}s · usable warning: ~${usable.toFixed(0)}s`);
+}
+distSlider.on("input", updateDistSlider);
+updateDistSlider();
 </script>
 </body>
 </html>

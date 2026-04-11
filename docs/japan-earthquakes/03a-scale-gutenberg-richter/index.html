@@ -56,16 +56,41 @@ svg .axis line, svg .axis path { stroke: var(--border); }
 }
 .threshold-label { font-size: 12px; fill: #e74c3c; font-weight: 600; }
 
-.map-land { fill: #e8e8e0; stroke: #ccc; stroke-width: 0.5; }
+.map-land { fill: #e8e8e0; stroke: #bbb; stroke-width: 0.5; }
 .map-boundary { fill: none; stroke: #bbb; stroke-width: 0.3; }
 
 .quake-dot { stroke: #fff; stroke-width: 0.3; opacity: 0.75; }
 .quake-dot:hover { opacity: 1; stroke-width: 1; }
 
 .axis-label { font-size: 12px; fill: var(--text-2); font-weight: 600; }
+
+.tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: rgba(26,26,46,0.92);
+  color: #fff;
+  font-family: var(--heading-font);
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 4px;
+  line-height: 1.4;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.15s;
+  z-index: 10;
+}
+
+.annotation-line { stroke: #666; stroke-width: 1; fill: none; }
+.annotation-text { font-size: 10px; fill: #555; }
+.annotation-text-bold { font-size: 10px; fill: #555; font-weight: 600; }
+.ref-line-75 { stroke: #888; stroke-width: 1; stroke-dasharray: 3 3; }
+
+.city-label { font-size: 9px; fill: #666; font-weight: 600; letter-spacing: 0.03em; }
+.city-dot { fill: #444; }
 </style>
 </head>
 <body>
+<div class="tooltip" id="tooltip"></div>
 <div class="article">
 
 <h1>Scale &amp; Frequency</h1>
@@ -209,10 +234,10 @@ const quakes = [[24.684,122.035,6.6],[40.890,142.813,6.7],[40.976,143.150,6.6],[
   // Axes
   g.append("g").attr("class", "axis")
     .attr("transform", `translate(0,${h})`)
-    .call(d3.axisBottom(x).ticks(10));
+    .call(d3.axisBottom(x).ticks(10).tickSizeOuter(0));
 
   g.append("g").attr("class", "axis")
-    .call(d3.axisLeft(y).ticks(5, "~s"));
+    .call(d3.axisLeft(y).ticks(5, "~s").tickSizeOuter(0));
 
   // Axis labels
   g.append("text").attr("class", "axis-label")
@@ -270,13 +295,68 @@ const quakes = [[24.684,122.035,6.6],[40.890,142.813,6.7],[40.976,143.150,6.6],[
     .attr("class", "gr-line")
     .attr("d", line);
 
+  const tooltip = d3.select("#tooltip");
+
   g.selectAll(".gr-dot")
     .data(grData)
     .enter().append("circle")
     .attr("class", "gr-dot")
     .attr("cx", d => x(d.mag))
     .attr("cy", d => y(d.cumulative))
-    .attr("r", 3);
+    .attr("r", 3)
+    .on("mouseenter", function(event, d) {
+      tooltip.style("opacity", 1)
+        .html(`<strong>M${d.mag.toFixed(1)}</strong><br>${d.cumulative.toLocaleString()} earthquakes ≥ this magnitude`);
+      d3.select(this).attr("r", 5);
+    })
+    .on("mousemove", function(event) {
+      tooltip.style("left", (event.pageX + 12) + "px")
+        .style("top", (event.pageY - 28) + "px");
+    })
+    .on("mouseleave", function(event, d) {
+      tooltip.style("opacity", 0);
+      d3.select(this).attr("r", 3);
+    });
+
+  // --- M7.5 reference line ---
+  const m75x = x(7.5);
+  g.append("line")
+    .attr("class", "ref-line-75")
+    .attr("x1", m75x).attr("x2", m75x)
+    .attr("y1", 0).attr("y2", h);
+  g.append("text")
+    .attr("x", m75x + 4).attr("y", 12)
+    .attr("class", "annotation-text")
+    .text("M7.5 threshold");
+
+  // --- Annotation 1: high-mag tail deviation ---
+  // M9.1 (Tohoku) is a notable outlier — 1 event but the GR fit predicts < 1
+  const m91 = grData.find(d => d.mag === 9.1);
+  if (m91) {
+    const ax = x(m91.mag), ay = y(m91.cumulative);
+    const tx = ax - 50, ty = ay - 30;
+    g.append("line").attr("class", "annotation-line")
+      .attr("x1", ax).attr("y1", ay).attr("x2", tx).attr("y2", ty);
+    g.append("text").attr("class", "annotation-text-bold")
+      .attr("x", tx).attr("y", ty - 5).attr("text-anchor", "end")
+      .text("2011 Tōhoku M9.1");
+    g.append("text").attr("class", "annotation-text")
+      .attr("x", tx).attr("y", ty + 7).attr("text-anchor", "end")
+      .text("single event above the fit line");
+  }
+
+  // --- Annotation 2: where the GR law breaks down at high magnitudes ---
+  const m78 = grData.find(d => d.mag === 7.8);
+  if (m78) {
+    const ax2 = x(m78.mag), ay2 = y(m78.cumulative);
+    const predicted78 = Math.pow(10, aVal - bValue * 7.8);
+    const tx2 = ax2 + 8, ty2 = ay2 + 40;
+    g.append("line").attr("class", "annotation-line")
+      .attr("x1", ax2).attr("y1", ay2).attr("x2", tx2).attr("y2", ty2);
+    g.append("text").attr("class", "annotation-text")
+      .attr("x", tx2 + 3).attr("y", ty2 + 4)
+      .text(`observed ${m78.cumulative} vs fit ≈${Math.round(predicted78)}`);
+  }
 
   // Threshold interaction
   let threshold = 4.5;
@@ -319,6 +399,7 @@ const quakes = [[24.684,122.035,6.6],[40.890,142.813,6.7],[40.976,143.150,6.6],[
 
     // Highlight dots at or above threshold
     g.selectAll(".gr-dot")
+      .transition().duration(200).ease(d3.easeCubicInOut)
       .attr("fill", d => d.mag >= threshold ? "var(--accent)" : "#ccc")
       .attr("r", d => d.mag >= threshold ? 3.5 : 2.5);
 
@@ -363,25 +444,46 @@ const mapColor = d3.scaleSequential()
   .domain([4.5, 9.0])
   .interpolator(d3.interpolateYlOrRd);
 
+const mapTooltip = d3.select("#tooltip");
+
 function updateMap(threshold) {
   const filtered = quakes.filter(d => d.mag >= threshold);
   const dots = mapG.selectAll(".quake-dot").data(filtered, d => `${d.lat}-${d.lon}-${d.mag}`);
 
-  dots.exit().transition().duration(200).attr("r", 0).remove();
+  dots.exit()
+    .transition().duration(250).ease(d3.easeCubicInOut)
+    .attr("r", 0).attr("opacity", 0)
+    .remove();
 
-  dots.enter().append("circle")
+  const entering = dots.enter().append("circle")
     .attr("class", "quake-dot")
     .attr("cx", d => mapProjection([d.lon, d.lat])[0])
     .attr("cy", d => mapProjection([d.lon, d.lat])[1])
     .attr("fill", d => mapColor(d.mag))
     .attr("r", 0)
+    .attr("opacity", 0)
     .sort((a, b) => b.mag - a.mag)
-    .transition().duration(300)
-    .attr("r", d => magRadius(d.mag));
+    .on("mouseenter", function(event, d) {
+      mapTooltip.style("opacity", 1)
+        .html(`<strong>M${d.mag.toFixed(1)}</strong><br>${d.lat.toFixed(1)}°N, ${d.lon.toFixed(1)}°E`);
+      d3.select(this).attr("opacity", 1).attr("stroke-width", 1.5);
+    })
+    .on("mousemove", function(event) {
+      mapTooltip.style("left", (event.pageX + 12) + "px")
+        .style("top", (event.pageY - 28) + "px");
+    })
+    .on("mouseleave", function() {
+      mapTooltip.style("opacity", 0);
+      d3.select(this).attr("opacity", 0.75).attr("stroke-width", 0.3);
+    });
+
+  entering.transition().duration(350).ease(d3.easeCubicInOut)
+    .attr("r", d => magRadius(d.mag))
+    .attr("opacity", 0.75);
 
   dots
     .attr("fill", d => mapColor(d.mag))
-    .transition().duration(200)
+    .transition().duration(250).ease(d3.easeCubicInOut)
     .attr("r", d => magRadius(d.mag));
 }
 
@@ -464,6 +566,26 @@ plateLabels.forEach(pl => {
     .attr("font-style", "italic")
     .attr("transform", `rotate(${pl.angle},${px},${py})`)
     .text(pl.text);
+});
+
+// City labels
+const cities = [
+  {name: "Tokyo", lon: 139.692, lat: 35.690, dx: 8, dy: -6},
+  {name: "Osaka", lon: 135.502, lat: 34.694, dx: -8, dy: 10},
+  {name: "Sendai", lon: 140.872, lat: 38.268, dx: 8, dy: -6},
+  {name: "Sapporo", lon: 141.347, lat: 43.064, dx: 8, dy: -6}
+];
+const cityG = mapSvg.append("g");
+cities.forEach(c => {
+  const [cx, cy] = mapProjection([c.lon, c.lat]);
+  cityG.append("circle")
+    .attr("class", "city-dot")
+    .attr("cx", cx).attr("cy", cy).attr("r", 2.5);
+  cityG.append("text")
+    .attr("class", "city-label")
+    .attr("x", cx + c.dx).attr("y", cy + c.dy)
+    .attr("text-anchor", c.dx < 0 ? "end" : "start")
+    .text(c.name);
 });
 
 // Legend

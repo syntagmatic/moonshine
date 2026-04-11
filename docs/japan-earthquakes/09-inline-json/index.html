@@ -35,9 +35,13 @@ svg .axis text { font-size: 11px; fill: var(--text-2); }
 svg .axis line, svg .axis path { stroke: var(--border); }
 
 /* Map styles */
-.land { fill: #e8e8e8; stroke: #ccc; stroke-width: 0.5; }
+.land { fill: #e8e8e0; stroke: #bbb; stroke-width: 0.5; }
 .quake-dot { stroke: #fff; stroke-width: 0.5; cursor: pointer; }
 .quake-dot:hover { stroke: var(--text); stroke-width: 1.5; }
+.annotation-line { stroke: var(--text-2); stroke-width: 1; fill: none; }
+.annotation-label { font-family: var(--heading-font); font-size: 11px; fill: var(--text); }
+.city-label { font-family: var(--heading-font); font-size: 10px; fill: var(--text-2); pointer-events: none; }
+.city-dot { fill: var(--text-2); pointer-events: none; }
 .tooltip { position: absolute; font-family: var(--heading-font); font-size: 0.8rem; background: #fff; border: 1px solid var(--border); border-radius: 4px; padding: 0.5rem 0.7rem; pointer-events: none; box-shadow: 0 2px 6px rgba(0,0,0,0.12); max-width: 240px; }
 .tooltip strong { display: block; margin-bottom: 2px; }
 
@@ -47,13 +51,15 @@ svg .axis line, svg .axis path { stroke: var(--border); }
 .legend-swatch { width: 12px; height: 12px; border-radius: 50%; border: 1px solid rgba(0,0,0,0.15); }
 
 /* Toggle button */
-.toggle-btn { font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600; background: var(--accent); color: #fff; border: none; border-radius: 4px; padding: 0.5rem 1rem; cursor: pointer; transition: background 0.15s; }
+.toggle-btn { font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600; background: var(--accent); color: #fff; border: none; border-radius: 4px; padding: 0.5rem 1rem; cursor: pointer; }
 .toggle-btn:hover { background: #1d4ed8; }
 .toggle-btn.active { background: #1e40af; }
 
 /* Source view */
 .source-panel { display: none; margin-top: 1rem; max-height: 400px; overflow: auto; background: #1e1e2e; border-radius: 6px; padding: 1rem; }
 .source-panel.visible { display: block; }
+.source-panel { transition: max-height 0.4s cubic-bezier(0.65, 0, 0.35, 1), opacity 0.4s cubic-bezier(0.65, 0, 0.35, 1); }
+.toggle-btn { transition: background 0.25s cubic-bezier(0.65, 0, 0.35, 1); }
 .source-panel pre { font-family: var(--mono-font); font-size: 0.78rem; line-height: 1.5; color: #cdd6f4; margin: 0; white-space: pre; }
 .source-panel .kw { color: #cba6f7; }
 .source-panel .str { color: #a6e3a1; }
@@ -389,8 +395,8 @@ const quakes = [
       .data(prefectures.features)
       .join("path")
       .attr("d", path)
-      .attr("fill", "#f0f0f0")
-      .attr("stroke", "#ccc")
+      .attr("fill", "#e8e8e0")
+      .attr("stroke", "#bbb")
       .attr("stroke-width", 0.5);
 
     // Draw internal borders
@@ -414,21 +420,73 @@ const quakes = [
       .attr("r", d => magRadius(d.mag))
       .attr("fill", d => magColor(d.mag))
       .attr("opacity", 0.75)
-      .on("mouseover", (event, d) => {
-        tooltip.transition().duration(100).style("opacity", 1);
+      .on("pointerenter", (event, d) => {
+        d3.select(event.currentTarget).raise();
+        tooltip.transition().duration(100).ease(d3.easeCubicInOut).style("opacity", 1);
         tooltip.html(`<strong>M${d.mag} — ${d.place}</strong>
-          ${d.date} &middot; Depth: ${d.depth} km`)
+          ${d.date} · Depth: ${d.depth} km`)
           .style("left", (event.pageX + 12) + "px")
           .style("top", (event.pageY - 12) + "px");
       })
-      .on("mousemove", (event) => {
+      .on("pointermove", (event) => {
         tooltip
           .style("left", (event.pageX + 12) + "px")
           .style("top", (event.pageY - 12) + "px");
       })
-      .on("mouseout", () => {
-        tooltip.transition().duration(200).style("opacity", 0);
+      .on("pointerleave", () => {
+        tooltip.transition().duration(200).ease(d3.easeCubicInOut).style("opacity", 0);
       });
+
+    // ── City labels ──
+    const cities = [
+      { name: "Tokyo", lat: 35.6762, lon: 139.6503, dx: -30, dy: 14 },
+      { name: "Osaka", lat: 34.6937, lon: 135.5023, dx: -32, dy: 12 },
+      { name: "Sendai", lat: 38.2682, lon: 140.8694, dx: -36, dy: -8 },
+      { name: "Sapporo", lat: 43.0618, lon: 141.3545, dx: -38, dy: -8 }
+    ];
+
+    const cityG = svg.append("g").attr("class", "city-labels");
+    cities.forEach(c => {
+      const [cx, cy] = projection([c.lon, c.lat]);
+      cityG.append("circle")
+        .attr("class", "city-dot")
+        .attr("cx", cx).attr("cy", cy).attr("r", 2.5);
+      cityG.append("text")
+        .attr("class", "city-label")
+        .attr("x", cx + c.dx).attr("y", cy + c.dy)
+        .text(c.name);
+    });
+
+    // ── Annotations with leader lines (annotate the surprising) ──
+    const annotations = [
+      { quake: sorted.find(d => d.mag === 9.1), label: "M9.1 Tohoku, 2011", dx: -120, dy: -40 },
+      { quake: sorted.find(d => d.mag === 8.16), label: "M8.2 Tokachi-Oki, 2003", dx: 40, dy: -50 }
+    ];
+
+    const annoG = svg.append("g").attr("class", "annotations");
+    annotations.forEach(a => {
+      if (!a.quake) return;
+      const [px, py] = projection([a.quake.lon, a.quake.lat]);
+      const lx = px + a.dx, ly = py + a.dy;
+
+      // Leader line
+      annoG.append("line")
+        .attr("class", "annotation-line")
+        .attr("x1", px).attr("y1", py)
+        .attr("x2", lx).attr("y2", ly);
+
+      // Label background for legibility
+      annoG.append("rect")
+        .attr("x", lx - 2).attr("y", ly - 12)
+        .attr("width", a.label.length * 6.2 + 4).attr("height", 15)
+        .attr("fill", "#fff").attr("opacity", 0.85).attr("rx", 2);
+
+      // Label text
+      annoG.append("text")
+        .attr("class", "annotation-label")
+        .attr("x", lx).attr("y", ly)
+        .text(a.label);
+    });
   });
 
   // Legend
@@ -501,9 +559,9 @@ const quakes = [
   const markupPct = (100 - dataPct - codePct);
 
   sizeBar.innerHTML = `
-    <div style="width:${markupPct}%;background:#6366f1;">HTML + CSS</div>
-    <div style="width:${codePct}%;background:#2563eb;">JS Code</div>
-    <div style="width:${dataPct}%;background:#f59e0b;">Data</div>
+    <div style="width:${markupPct}%;background:#6366f1;cursor:default;" title="HTML + CSS: ${(markupSize / 1024).toFixed(1)} KB (${markupPct}%)">HTML + CSS</div>
+    <div style="width:${codePct}%;background:#2563eb;cursor:default;" title="JS Code: ${(codeSize / 1024).toFixed(1)} KB (${codePct}%)">JS Code</div>
+    <div style="width:${dataPct}%;background:#f59e0b;cursor:default;" title="Inline Data: ${(dataSize / 1024).toFixed(1)} KB (${dataPct}%)">Data</div>
   `;
 
   sizeLabels.innerHTML = `

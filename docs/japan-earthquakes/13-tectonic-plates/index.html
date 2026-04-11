@@ -232,6 +232,11 @@ const plateBoundaries = [
     name: "Suruga Trough",
     color: "#e67e22",
     points: [[34.0,138.0],[34.2,138.5]]
+  },
+  {
+    name: "Ryukyu Trench",
+    color: "#e67e22",
+    points: [[31.5,131.0],[30.5,130.0],[29.5,129.0],[28.5,128.5]]
   }
 ];
 
@@ -356,8 +361,8 @@ d3.json("../shared/japan.topojson").then(topoData => {
     .join("path")
     .attr("class", "prefecture")
     .attr("d", path)
-    .attr("fill", "#f0f0f0")
-    .attr("stroke", "#ccc")
+    .attr("fill", "#e8e8e0")
+    .attr("stroke", "#bbb")
     .attr("stroke-width", 0.5);
 
   landG.append("path")
@@ -405,8 +410,42 @@ plateLabels.forEach(pl => {
     .text(pl.text);
 });
 
+// City labels
+const cities = [
+  { name: "Tokyo", lat: 35.68, lon: 139.69, anchor: "end", dx: -6, dy: 3 },
+  { name: "Osaka", lat: 34.69, lon: 135.50, anchor: "end", dx: -6, dy: 3 },
+  { name: "Sendai", lat: 38.27, lon: 140.87, anchor: "end", dx: -6, dy: 3 },
+  { name: "Sapporo", lat: 43.06, lon: 141.35, anchor: "start", dx: 6, dy: 3 }
+];
+cities.forEach(c => {
+  const [cx, cy] = projection([c.lon, c.lat]);
+  mapG.append("circle")
+    .attr("cx", cx).attr("cy", cy).attr("r", 2.5)
+    .attr("fill", "#1a1a2e").attr("stroke", "#fff").attr("stroke-width", 0.8);
+  mapG.append("text")
+    .attr("x", cx + c.dx).attr("y", cy + c.dy)
+    .attr("text-anchor", c.anchor)
+    .attr("font-size", "10px")
+    .attr("font-family", "var(--heading-font)")
+    .attr("fill", "#1a1a2e")
+    .attr("font-weight", 600)
+    .text(c.name);
+});
+
 // Earthquake dots on map
 const magScale = d3.scaleSqrt().domain([3, 8]).range([1.5, 6]);
+
+const mapTooltip = d3.select("body").selectAll(".map-tooltip").data([0]).join("div")
+  .attr("class", "map-tooltip")
+  .style("position", "absolute")
+  .style("pointer-events", "none")
+  .style("background", "rgba(0,0,0,0.8)")
+  .style("color", "#fff")
+  .style("padding", "4px 8px")
+  .style("border-radius", "4px")
+  .style("font-size", "12px")
+  .style("font-family", "var(--heading-font)")
+  .style("display", "none");
 
 mapG.selectAll(".quake-dot-map")
   .data(earthquakes.sort((a,b) => b.depth - a.depth))
@@ -415,7 +454,19 @@ mapG.selectAll(".quake-dot-map")
   .attr("cx", d => projection([d.lon, d.lat])[0])
   .attr("cy", d => projection([d.lon, d.lat])[1])
   .attr("r", d => magScale(d.mag))
-  .attr("fill", d => depthColor(d.depth));
+  .attr("fill", d => depthColor(d.depth))
+  .on("mouseenter", function(event, d) {
+    d3.select(this).attr("opacity", 1).attr("stroke", "#333").attr("stroke-width", 1.5);
+    mapTooltip.style("display", "block")
+      .html(`M${d.mag.toFixed(1)} · Depth: ${Math.round(d.depth)} km`);
+  })
+  .on("mousemove", function(event) {
+    mapTooltip.style("left", (event.pageX + 12) + "px").style("top", (event.pageY - 20) + "px");
+  })
+  .on("mouseleave", function() {
+    d3.select(this).attr("opacity", 0.55).attr("stroke", "none");
+    mapTooltip.style("display", "none");
+  });
 
 // Transect lines on map
 Object.entries(transects).forEach(([key, t]) => {
@@ -570,8 +621,8 @@ function showCrossSection(key) {
   });
 
   // Axes
-  const xAxis = d3.axisBottom(xScale).ticks(8).tickFormat(d => d + " km");
-  const yAxis = d3.axisLeft(yScale).ticks(key === "C" ? 5 : 8).tickFormat(d => d + " km");
+  const xAxis = d3.axisBottom(xScale).ticks(8).tickFormat(d => d + " km").tickSizeOuter(0);
+  const yAxis = d3.axisLeft(yScale).ticks(key === "C" ? 5 : 8).tickFormat(d => d + " km").tickSizeOuter(0);
 
   g.append("g").attr("class", "axis").attr("transform", `translate(0,${height})`).call(xAxis);
   g.append("g").attr("class", "axis").call(yAxis);
@@ -696,8 +747,72 @@ function showCrossSection(key) {
       tooltip.style("display", "none");
     });
 
-  // Wadati-Benioff zone annotation
+  // Slab depth labels along the subducting slab
+  function addSlabDepthLabels(slabFn, trenchFrac, color) {
+    const trenchKm = trenchFrac * totalDist;
+    const depthMarks = key === "C" ? [50, 100, 150, 200] : [100, 200, 400, 600];
+    depthMarks.forEach(depthVal => {
+      if (depthVal > maxDepth) return;
+      // Find distance from trench where slab reaches this depth
+      for (let dkm = 0; dkm < trenchKm + 20; dkm += 2) {
+        const d = slabFn(dkm);
+        if (d !== null && Math.abs(d - depthVal) < 5) {
+          const xKm = trenchKm - dkm;
+          if (xKm < 0 || xKm > totalDist) break;
+          const sx = xScale(xKm);
+          const sy = yScale(depthVal);
+          // Small tick mark
+          g.append("line")
+            .attr("x1", sx - 4).attr("y1", sy)
+            .attr("x2", sx + 4).attr("y2", sy)
+            .attr("stroke", color).attr("stroke-width", 1).attr("opacity", 0.6);
+          g.append("text")
+            .attr("x", sx + 7).attr("y", sy + 3)
+            .attr("font-size", "9px")
+            .attr("fill", color)
+            .attr("opacity", 0.7)
+            .text(depthVal + " km");
+          break;
+        }
+      }
+    });
+  }
+
+  addSlabDepthLabels(t.plates.slabCurve, t.plates.trenchDist, t.color);
+  if (t.plates.slabCurve2) {
+    addSlabDepthLabels(t.plates.slabCurve2, t.plates.trenchDist2, "#9b59b6");
+  }
+
+  // Annotations with leader lines — "annotate the surprising, not the obvious"
+  function addAnnotation(xKm, depthVal, text, anchorSide) {
+    const sx = xScale(xKm);
+    const sy = yScale(depthVal);
+    const offsetX = anchorSide === "left" ? -60 : 60;
+    const offsetY = -30;
+    const tx = sx + offsetX;
+    const ty = sy + offsetY;
+
+    // Leader line
+    g.append("line")
+      .attr("x1", sx).attr("y1", sy)
+      .attr("x2", tx).attr("y2", ty)
+      .attr("stroke", "#666").attr("stroke-width", 0.8).attr("stroke-dasharray", "3,2");
+    // Dot at data point
+    g.append("circle")
+      .attr("cx", sx).attr("cy", sy).attr("r", 3)
+      .attr("fill", "none").attr("stroke", "#666").attr("stroke-width", 1.2);
+    // Label
+    g.append("text")
+      .attr("x", tx).attr("y", ty - 4)
+      .attr("text-anchor", anchorSide === "left" ? "end" : "start")
+      .attr("font-size", "10px")
+      .attr("fill", "#444")
+      .attr("font-weight", 600)
+      .text(text);
+  }
+
   if (key === "A") {
+    // Wadati-Benioff zone label
     const annotX = xScale(totalDist * 0.35);
     const annotY = yScale(250);
     g.append("text")
@@ -708,6 +823,25 @@ function showCrossSection(key) {
       .attr("font-style", "italic")
       .attr("opacity", 0.8)
       .text("← Wadati-Benioff Zone");
+
+    // Annotation: deep quakes far from trench
+    addAnnotation(totalDist * 0.12, 500, "Deep quakes: slab at 500 km", "right");
+    // Annotation: shallow cluster near trench
+    addAnnotation(totalDist * 0.68, 30, "Locked interface — tsunami risk", "left");
+  }
+
+  if (key === "B") {
+    // Annotation: double slab crossing
+    addAnnotation(totalDist * 0.42, 80, "Philippine Sea slab above Pacific slab", "right");
+    // Annotation: deep Pacific slab
+    addAnnotation(totalDist * 0.2, 300, "Pacific slab continues to 350 km", "right");
+  }
+
+  if (key === "C") {
+    // Annotation: gentle angle
+    addAnnotation(totalDist * 0.35, 80, "Shallow subduction angle (~15°)", "right");
+    // Annotation: slab terminates
+    addAnnotation(totalDist * 0.15, 180, "Slab fades ~200 km — too warm to fracture", "right");
   }
 }
 

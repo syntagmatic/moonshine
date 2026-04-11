@@ -45,6 +45,8 @@ svg .axis line, svg .axis path { stroke: var(--border); }
 
 code { font-family: var(--mono-font); font-size: 0.88em; background: #f0f0f5; padding: 0.15em 0.35em; border-radius: 3px; }
 a { color: var(--accent); }
+.tooltip { position: absolute; pointer-events: none; background: rgba(26,26,46,0.92); color: #fff; padding: 6px 10px; border-radius: 4px; font-family: var(--heading-font); font-size: 0.78rem; box-shadow: 0 2px 8px rgba(0,0,0,0.2); opacity: 0; transition: opacity 0.15s; z-index: 10; }
+.leader { stroke: var(--text-2); stroke-width: 0.7; }
 </style>
 </head>
 <body>
@@ -212,6 +214,7 @@ a { color: var(--accent); }
 <p>The USGS Earthquake Catalog is solid, free, and well-structured. For M4.5+ events globally, it is the standard reference. For Japan, it captures all the significant events but is not as granular as JMA's local catalog. The fields that matter most (time, location, depth, magnitude, magnitude type, review status) are enough for serious analysis, as long as you watch for the quirks: default depths, magnitude type mixing, and completeness boundaries.</p>
 
 </div>
+<div class="tooltip" id="tooltip"></div>
 
 <script>
 // --- Inline data ---
@@ -293,6 +296,7 @@ const gridDensity = [
 ];
 
 // --- Shared ---
+const tipEl = document.getElementById("tooltip");
 const accentColor = "#2563eb";
 const textColor = "#1a1a2e";
 const text2Color = "#4a4a6a";
@@ -386,7 +390,7 @@ const borderColor = "#e2e2e8";
       .data(prefectures.features)
       .join("path")
       .attr("d", geoPath)
-      .attr("fill", "#f0f0f0")
+      .attr("fill", "#e8e8e0")
       .attr("stroke", "#ccc")
       .attr("stroke-width", 0.5);
 
@@ -415,8 +419,53 @@ const borderColor = "#e2e2e8";
       .attr("stroke", "#fff")
       .attr("stroke-width", 0.5)
       .attr("opacity", 0.85)
-      .attr("rx", 2);
+      .attr("rx", 2)
+      .style("cursor", "pointer")
+      .on("mouseenter", function(event) {
+        d3.select(this).attr("stroke", "#333").attr("stroke-width", 1.5);
+        tipEl.style.opacity = 1;
+        tipEl.textContent = `${d.count.toLocaleString()} events (${d.latMin}°-${d.latMin+2}°N, ${d.lonMin}°-${d.lonMin+2}°E)`;
+      })
+      .on("mousemove", function(event) {
+        tipEl.style.left = (event.pageX + 12) + "px";
+        tipEl.style.top = (event.pageY - 12) + "px";
+      })
+      .on("mouseleave", function() {
+        d3.select(this).attr("stroke", "#fff").attr("stroke-width", 0.5);
+        tipEl.style.opacity = 0;
+      });
   });
+
+  // City labels
+  const cities = [
+    { name: "Tokyo", lat: 35.68, lon: 139.77 },
+    { name: "Sendai", lat: 38.27, lon: 140.87 },
+    { name: "Sapporo", lat: 43.06, lon: 141.35 },
+    { name: "Osaka", lat: 34.69, lon: 135.50 },
+    { name: "Naha", lat: 26.33, lon: 127.68 },
+  ];
+  cities.forEach(c => {
+    const [cx, cy] = projection([c.lon, c.lat]);
+    g.append("circle").attr("cx", cx).attr("cy", cy).attr("r", 2.5)
+      .attr("fill", "var(--text)").attr("pointer-events", "none");
+    g.append("text").attr("x", cx + 5).attr("y", cy + 3)
+      .style("font-size", "10px").style("fill", "var(--text-2)")
+      .attr("pointer-events", "none")
+      .text(c.name);
+  });
+
+  // Annotate the hotspot (Tohoku offshore)
+  const hotspot = gridDensity.find(d => d.count === 2100);
+  if (hotspot) {
+    const hc = projection([hotspot.lonMin + 1, hotspot.latMin + 1]);
+    g.append("line").attr("class", "leader")
+      .attr("x1", hc[0]).attr("y1", hc[1])
+      .attr("x2", hc[0] + 40).attr("y2", hc[1] - 30);
+    g.append("text")
+      .attr("x", hc[0] + 43).attr("y", hc[1] - 32)
+      .style("font-size", "10px").style("fill", "var(--text)")
+      .text("2,100 events (Tohoku offshore)");
+  }
 
   // Color legend
   const legendW = 14, legendH = 180;
@@ -482,7 +531,8 @@ const borderColor = "#e2e2e8";
     .attr("opacity", 0.8)
     .attr("rx", 2);
 
-  // Labels on bars
+  // Labels on bars (count + percentage)
+  const totalMag = sorted.reduce((s, d) => s + d.count, 0);
   g.selectAll(".bar-label")
     .data(sorted)
     .join("text")
@@ -491,7 +541,7 @@ const borderColor = "#e2e2e8";
     .attr("dy", "0.35em")
     .attr("font-size", "11px")
     .attr("fill", text2Color)
-    .text(d => d.count.toLocaleString());
+    .text(d => `${d.count.toLocaleString()} (${(d.count/totalMag*100).toFixed(1)}%)`);
 
   // Y axis with type + description
   g.append("g").attr("class", "axis")

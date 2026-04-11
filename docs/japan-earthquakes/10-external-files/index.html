@@ -267,6 +267,11 @@ by double-clicking the HTML file, the fetch will probably fail (more on that bel
 
 <div class="tooltip" id="tooltip"></div>
 
+<div class="figure" id="timeline-container" style="display:none;">
+  <div id="timeline-viz"></div>
+  <div class="figure-caption">Earthquake magnitude over time. Larger events cluster around the 2011 Tōhoku sequence. Hover any dot for details.</div>
+</div>
+
 <h2>Loading states: never show a blank page</h2>
 
 <p>
@@ -522,8 +527,8 @@ function drawMap(data, isFallback) {
       .data(prefectures.features)
       .join("path")
       .attr("d", geoPath)
-      .attr("fill", "#f0f0f0")
-      .attr("stroke", "#ccc")
+      .attr("fill", "#e8e8e0")
+      .attr("stroke", "#bbb")
       .attr("stroke-width", 0.5);
 
     // Draw internal borders
@@ -550,20 +555,92 @@ function drawMap(data, isFallback) {
       .attr("stroke", "#333")
       .attr("stroke-width", 0.3)
       .style("cursor", "pointer")
-      .on("mouseenter", function(event, d) {
+      .on("pointerenter", function(event, d) {
         d3.select(this).attr("stroke-width", 1.5).attr("fill-opacity", 1);
-        const date = d.time.slice(0, 10);
-        tooltip.innerHTML = `<strong>M${d.mag}</strong> — ${d.place}<br>${date}<br>Depth: ${d.depth} km`;
+        const date = new Date(d.time);
+        const fmt = date.toLocaleDateString("en-US", {year: "numeric", month: "short", day: "numeric"});
+        const depthLabel = d.depth < 70 ? "Shallow" : d.depth < 300 ? "Intermediate" : "Deep";
+        tooltip.innerHTML = `<strong>M${d.mag}</strong> — ${d.place}<br>${fmt}<br>Depth: ${d.depth} km (${depthLabel})`;
         tooltip.style.opacity = 1;
       })
-      .on("mousemove", function(event) {
+      .on("pointermove", function(event) {
         tooltip.style.left = (event.pageX + 12) + "px";
         tooltip.style.top = (event.pageY - 10) + "px";
       })
-      .on("mouseleave", function() {
+      .on("pointerleave", function() {
         d3.select(this).attr("stroke-width", 0.3).attr("fill-opacity", 0.7);
         tooltip.style.opacity = 0;
       });
+
+    // City labels
+    const cities = [
+      {name: "Tokyo", lon: 139.69, lat: 35.69, anchor: "start", dx: 5, dy: 3},
+      {name: "Osaka", lon: 135.50, lat: 34.69, anchor: "end", dx: -5, dy: 3},
+      {name: "Sendai", lon: 140.87, lat: 38.27, anchor: "start", dx: 5, dy: 3},
+      {name: "Sapporo", lon: 141.35, lat: 43.06, anchor: "start", dx: 5, dy: 3}
+    ];
+
+    const cityG = svg.append("g").attr("class", "city-labels");
+    cities.forEach(c => {
+      const [cx, cy] = projection([c.lon, c.lat]);
+      cityG.append("circle")
+        .attr("cx", cx).attr("cy", cy).attr("r", 2.5)
+        .attr("fill", "#1a1a2e").attr("stroke", "#fff").attr("stroke-width", 0.8);
+      cityG.append("text")
+        .attr("x", cx + c.dx).attr("y", cy + c.dy)
+        .attr("text-anchor", c.anchor)
+        .attr("font-size", 10).attr("font-weight", 600)
+        .attr("fill", "#1a1a2e")
+        .attr("paint-order", "stroke")
+        .attr("stroke", "#fff").attr("stroke-width", 2.5).attr("stroke-linejoin", "round")
+        .text(c.name);
+    });
+
+    // Annotations for notable earthquakes (annotate the surprising)
+    const annotations = data.filter(d =>
+      (d.mag >= 9.0) ||
+      (d.place && d.place.includes("Noto")) ||
+      (d.depth >= 600)
+    ).slice(0, 3);
+
+    const annoG = svg.append("g").attr("class", "annotations");
+    const annoOffsets = {
+      "Tohoku": {dx: -70, dy: -40},
+      "Noto Peninsula": {dx: -80, dy: 30},
+      "Ogasawara": {dx: -90, dy: -25}
+    };
+
+    annotations.forEach(d => {
+      const [px, py] = projection([d.lon, d.lat]);
+      const key = Object.keys(annoOffsets).find(k => d.place && d.place.includes(k));
+      const off = key ? annoOffsets[key] : {dx: -60, dy: -30};
+      const tx = px + off.dx, ty = py + off.dy;
+
+      // Leader line
+      annoG.append("line")
+        .attr("x1", px).attr("y1", py)
+        .attr("x2", tx).attr("y2", ty)
+        .attr("stroke", "#1a1a2e").attr("stroke-width", 0.8)
+        .attr("stroke-dasharray", "3,2");
+
+      // Dot at anchor
+      annoG.append("circle")
+        .attr("cx", tx).attr("cy", ty).attr("r", 2)
+        .attr("fill", "#1a1a2e");
+
+      // Label
+      const label = d.mag >= 9 ? `M${d.mag} Tōhoku (2011)`
+        : d.place && d.place.includes("Noto") ? `M${d.mag} Noto (2024)`
+        : `M${d.mag} at ${d.depth} km depth`;
+      annoG.append("text")
+        .attr("x", tx).attr("y", ty - 6)
+        .attr("text-anchor", "middle")
+        .attr("font-size", 10).attr("font-weight", 600)
+        .attr("fill", "#1a1a2e")
+        .attr("paint-order", "stroke")
+        .attr("stroke", "#fff").attr("stroke-width", 2.5).attr("stroke-linejoin", "round")
+        .text(label);
+    });
 
     // Magnitude legend
     const legendMags = [5.0, 6.0, 7.0];
@@ -605,17 +682,127 @@ function drawMap(data, isFallback) {
   captionEl.innerHTML = `${data.length} earthquakes (M4.5+) around Japan, colored by depth. ${badge}`;
 }
 
+// --- Timeline chart ---
+function drawTimeline(data) {
+  const container = document.getElementById("timeline-container");
+  container.style.display = "block";
+
+  const margin = {top: 20, right: 20, bottom: 35, left: 50};
+  const w = 700, h = 260;
+  const innerW = w - margin.left - margin.right;
+  const innerH = h - margin.top - margin.bottom;
+
+  const svg = d3.select("#timeline-viz")
+    .append("svg")
+    .attr("viewBox", `0 0 ${w} ${h}`)
+    .attr("width", "100%")
+    .style("display", "block");
+
+  const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+
+  const parsed = data.map(d => ({...d, date: new Date(d.time)}));
+  parsed.sort((a, b) => a.date - b.date);
+
+  const x = d3.scaleUtc()
+    .domain(d3.extent(parsed, d => d.date))
+    .range([0, innerW])
+    .nice();
+
+  const y = d3.scaleLinear()
+    .domain([4, d3.max(parsed, d => d.mag) + 0.3])
+    .range([innerH, 0]);
+
+  const colorScale = d3.scaleSequential(d3.interpolateYlOrRd).domain([0, 600]);
+
+  // Axes with tickSizeOuter(0)
+  g.append("g")
+    .attr("class", "axis")
+    .attr("transform", `translate(0,${innerH})`)
+    .call(d3.axisBottom(x).ticks(6).tickSizeOuter(0));
+
+  g.append("g")
+    .attr("class", "axis")
+    .call(d3.axisLeft(y).ticks(5).tickSizeOuter(0));
+
+  // Y-axis label
+  g.append("text")
+    .attr("transform", "rotate(-90)")
+    .attr("x", -innerH / 2).attr("y", -36)
+    .attr("text-anchor", "middle")
+    .attr("font-size", 11).attr("fill", "#4a4a6a")
+    .text("Magnitude");
+
+  // M7 reference line
+  g.append("line")
+    .attr("x1", 0).attr("x2", innerW)
+    .attr("y1", y(7)).attr("y2", y(7))
+    .attr("stroke", "#4a4a6a").attr("stroke-width", 0.7)
+    .attr("stroke-dasharray", "4,3");
+  g.append("text")
+    .attr("x", innerW - 2).attr("y", y(7) - 4)
+    .attr("text-anchor", "end")
+    .attr("font-size", 9).attr("fill", "#4a4a6a")
+    .text("M7.0 threshold");
+
+  // Dots
+  g.selectAll("circle")
+    .data(parsed)
+    .join("circle")
+    .attr("cx", d => x(d.date))
+    .attr("cy", d => y(d.mag))
+    .attr("r", d => d.mag >= 7 ? 5 : 3)
+    .attr("fill", d => colorScale(d.depth))
+    .attr("fill-opacity", 0.75)
+    .attr("stroke", "#333")
+    .attr("stroke-width", 0.3)
+    .style("cursor", "pointer")
+    .on("pointerenter", function(event, d) {
+      d3.select(this).attr("stroke-width", 1.5).attr("fill-opacity", 1).attr("r", d.mag >= 7 ? 7 : 5);
+      const fmt = d.date.toLocaleDateString("en-US", {year: "numeric", month: "short", day: "numeric"});
+      const depthLabel = d.depth < 70 ? "Shallow" : d.depth < 300 ? "Intermediate" : "Deep";
+      tooltip.innerHTML = `<strong>M${d.mag}</strong> — ${d.place}<br>${fmt}<br>Depth: ${d.depth} km (${depthLabel})`;
+      tooltip.style.opacity = 1;
+    })
+    .on("pointermove", function(event) {
+      tooltip.style.left = (event.pageX + 12) + "px";
+      tooltip.style.top = (event.pageY - 10) + "px";
+    })
+    .on("pointerleave", function(event, d) {
+      d3.select(this).attr("stroke-width", 0.3).attr("fill-opacity", 0.75).attr("r", d.mag >= 7 ? 5 : 3);
+      tooltip.style.opacity = 0;
+    });
+
+  // Annotation: Tōhoku
+  const tohoku = parsed.find(d => d.mag >= 9);
+  if (tohoku) {
+    const tx = x(tohoku.date), ty = y(tohoku.mag);
+    const lx = tx + 40, ly = ty - 20;
+    g.append("line")
+      .attr("x1", tx).attr("y1", ty)
+      .attr("x2", lx).attr("y2", ly)
+      .attr("stroke", "#1a1a2e").attr("stroke-width", 0.8)
+      .attr("stroke-dasharray", "3,2");
+    g.append("text")
+      .attr("x", lx + 4).attr("y", ly + 3)
+      .attr("font-size", 10).attr("font-weight", 600)
+      .attr("fill", "#1a1a2e")
+      .text("M9.1 Tōhoku");
+  }
+}
+
 // --- Load data with fallback ---
 d3.json("data/earthquakes.json")
   .then(data => {
     hideLoading();
     drawMap(data, false);
+    drawTimeline(data);
   })
   .catch(err => {
     hideLoading();
     showError(err);
     showFallbackNotice();
     drawMap(FALLBACK_DATA, true);
+    drawTimeline(FALLBACK_DATA);
   });
 </script>
 </body>
