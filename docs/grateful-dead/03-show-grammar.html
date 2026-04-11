@@ -797,7 +797,7 @@ function hideTip() { tip.classed("visible", false); }
 (function() {
   const container = d3.select("#fig-sequence");
   const W = 700, H = 520;
-  const margin = { top: 50, right: 10, bottom: 20, left: 10 };
+  const margin = { top: 50, right: 100, bottom: 30, left: 100 };
   const iw = W - margin.left - margin.right;
   const ih = H - margin.top - margin.bottom;
 
@@ -817,9 +817,9 @@ function hideTip() { tip.classed("visible", false); }
     { key: "encore", label: "Encore", data: DATA.closers["3"] }
   ];
 
-  // Top 10 songs per axis
+  // Top 8 songs per axis
   const axisSlots = axes.map(a => {
-    const sorted = Object.entries(a.data).sort((b, c) => c[1] - b[1]).slice(0, 10);
+    const sorted = Object.entries(a.data).sort((b, c) => c[1] - b[1]).slice(0, 8);
     return { ...a, songs: sorted.map(d => d[0]), counts: Object.fromEntries(sorted) };
   });
 
@@ -844,33 +844,30 @@ function hideTip() { tip.classed("visible", false); }
       .attr("stroke", "var(--border)").attr("stroke-width", 1.5);
 
     g.append("text")
-      .attr("x", ax).attr("y", -20)
+      .attr("x", ax).attr("y", -25)
       .attr("text-anchor", "middle")
       .attr("font-family", "var(--heading-font)")
       .attr("font-size", 12).attr("font-weight", 600)
       .attr("fill", "var(--text)")
       .text(a.label);
 
-    // Song labels
+    // Song labels — always left of axis for first, right for last, alternating for middle
     a.songs.forEach(song => {
       const sy = yScales[a.key](song);
-      // Dot on the axis
       g.append("circle")
         .attr("cx", ax).attr("cy", sy)
         .attr("r", 3.5)
         .attr("fill", TYPE_COLORS[songType(song)])
         .attr("stroke", "#fff").attr("stroke-width", 1);
 
-      // Truncate long names
-      const displayName = song.length > 18 ? song.slice(0, 16) + "…" : song;
-      const textAnchor = a.key === "s1open" ? "end" :
-                          a.key === "encore" ? "start" : "middle";
-      const dx = a.key === "s1open" ? -8 :
-                 a.key === "encore" ? 8 : 0;
-      const dy2 = (textAnchor === "middle") ? -10 : 0;
+      const displayName = song.length > 20 ? song.slice(0, 18) + "…" : song;
+      const isLeft = (a.key === "s1open" || a.key === "s1close");
+      const isRight = (a.key === "s2close" || a.key === "encore");
+      const textAnchor = isLeft ? "end" : isRight ? "start" : "end";
+      const dx = isLeft ? -8 : isRight ? 8 : -8;
 
       g.append("text")
-        .attr("x", ax + dx).attr("y", sy + dy2)
+        .attr("x", ax + dx).attr("y", sy)
         .attr("text-anchor", textAnchor)
         .attr("dy", "0.35em")
         .attr("font-family", "var(--heading-font)")
@@ -880,52 +877,92 @@ function hideTip() { tip.classed("visible", false); }
     });
   });
 
-  // Build lines: connect every adjacent pair with count-weighted paths
-  // For realism, create synthetic show-paths from the co-occurrence of top songs
-  // We weight each full path by the product of relative frequencies
-  const paths = [];
-  const s1o = axisSlots[0], s1c = axisSlots[1], s2o = axisSlots[2],
-        s2c = axisSlots[3], enc = axisSlots[4];
+  // Build paths: only connect adjacent axes using actual frequency pairs.
+  // For each adjacent axis pair, create weighted edges between top songs.
+  // Then trace the top ~30 plausible full paths by greedy chaining.
 
-  // Top 5 per axis for paths (keeps visual clean)
-  const top5 = axisSlots.map(a => a.songs.slice(0, 5));
-
-  top5[0].forEach(a => {
-    top5[1].forEach(b => {
-      top5[2].forEach(c => {
-        top5[3].forEach(d => {
-          top5[4].forEach(e => {
-            const w = (s1o.counts[a] || 0) * (s1c.counts[b] || 0) *
-                      (s2o.counts[c] || 0) * (s2c.counts[d] || 0) *
-                      (enc.counts[e] || 0);
-            if (w > 0) {
-              paths.push({ slots: [a, b, c, d, e], weight: w });
-            }
-          });
-        });
+  // Step 1: Build pairwise edge weights between adjacent axes.
+  // Weight = geometric mean of the two endpoint frequencies (approximates co-occurrence).
+  const pairEdges = []; // [{from, to, axisIdx, weight}]
+  for (let i = 0; i < 4; i++) {
+    const aSlot = axisSlots[i];
+    const bSlot = axisSlots[i + 1];
+    const aTop = aSlot.songs.slice(0, 5);
+    const bTop = bSlot.songs.slice(0, 5);
+    aTop.forEach(a => {
+      bTop.forEach(b => {
+        const w = Math.sqrt((aSlot.counts[a] || 0) * (bSlot.counts[b] || 0));
+        if (w > 0) pairEdges.push({ from: a, to: b, axisIdx: i, weight: w });
       });
     });
+  }
+
+  // Step 2: Build full paths by greedy forward chaining from top Set 1 openers.
+  // For each s1 opener, pick the strongest s1 closer, then strongest s2 opener, etc.
+  const paths = [];
+  const s1Openers = axisSlots[0].songs.slice(0, 5);
+
+  s1Openers.forEach(opener => {
+    // For each opener, build multiple paths by following top-N edges at each step
+    function buildPaths(currentSong, axisIdx, pathSoFar) {
+      if (axisIdx >= 4) {
+        // Compute total path weight
+        let totalW = 1;
+        for (let i = 0; i < pathSoFar.length - 1; i++) {
+          const edge = pairEdges.find(e =>
+            e.axisIdx === i && e.from === pathSoFar[i] && e.to === pathSoFar[i + 1]);
+          totalW *= (edge ? edge.weight : 1);
+        }
+        paths.push({ slots: [...pathSoFar], weight: totalW });
+        return;
+      }
+      // Follow top 2 edges from current song to next axis
+      const edges = pairEdges
+        .filter(e => e.axisIdx === axisIdx && e.from === currentSong)
+        .sort((a, b) => b.weight - a.weight)
+        .slice(0, 2);
+      if (edges.length === 0) return;
+      edges.forEach(e => {
+        buildPaths(e.to, axisIdx + 1, [...pathSoFar, e.to]);
+      });
+    }
+    buildPaths(opener, 0, [opener]);
   });
 
-  // Normalize weights
-  const maxW = d3.max(paths, d => d.weight);
-  const opacityScale = d3.scalePow().exponent(0.25)
-    .domain([0, maxW]).range([0.01, 0.35]);
-  const widthScale = d3.scalePow().exponent(0.25)
-    .domain([0, maxW]).range([0.3, 3.5]);
+  // Deduplicate paths (same slot sequence)
+  const seen = new Set();
+  const uniquePaths = paths.filter(p => {
+    const key = p.slots.join("|");
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 
-  // Sort: thinnest first, so thick lines draw on top
-  paths.sort((a, b) => a.weight - b.weight);
+  // Take top 40 by weight
+  uniquePaths.sort((a, b) => b.weight - a.weight);
+  const displayPaths = uniquePaths.slice(0, 40);
+
+  const maxW = d3.max(displayPaths, d => d.weight) || 1;
+  const opacityScale = d3.scalePow().exponent(0.3)
+    .domain([0, maxW]).range([0.06, 0.5]);
+  const widthScale = d3.scalePow().exponent(0.3)
+    .domain([0, maxW]).range([0.8, 4]);
+
+  // Sort: thinnest first
+  displayPaths.sort((a, b) => a.weight - b.weight);
 
   const lineGen = d3.line().curve(d3.curveBasis);
-
   const pathEls = g.append("g").attr("class", "paths");
 
-  paths.forEach(p => {
+  displayPaths.forEach(p => {
     const points = p.slots.map((song, i) => {
       const axisKey = axisSlots[i].key;
-      return [xScale(axisKey), yScales[axisKey](song)];
+      const yVal = yScales[axisKey](song);
+      // If song not in this axis scale, skip path
+      if (yVal === undefined) return null;
+      return [xScale(axisKey), yVal];
     });
+    if (points.some(pt => pt === null)) return;
 
     pathEls.append("path")
       .datum(p)
@@ -936,45 +973,50 @@ function hideTip() { tip.classed("visible", false); }
       .attr("stroke-opacity", opacityScale(p.weight))
       .attr("stroke-linecap", "round")
       .on("mousemove", function(evt) {
+        // Dim all others, highlight this one
+        pathEls.selectAll("path").attr("stroke-opacity", 0.03);
         d3.select(this)
-          .attr("stroke-opacity", 0.85)
-          .attr("stroke-width", Math.max(widthScale(p.weight), 2.5))
+          .attr("stroke-opacity", 0.9)
+          .attr("stroke-width", Math.max(widthScale(p.weight), 3))
           .attr("stroke", "var(--set1)");
         showTip(evt, p.slots.map((s, i) => `<strong>${axisSlots[i].label}:</strong> ${s}`).join("<br>"));
       })
       .on("mouseleave", function() {
-        d3.select(this)
-          .attr("stroke-opacity", opacityScale(p.weight))
-          .attr("stroke-width", widthScale(p.weight))
-          .attr("stroke", "var(--set2)");
+        pathEls.selectAll("path").each(function(d) {
+          d3.select(this)
+            .attr("stroke-opacity", opacityScale(d.weight))
+            .attr("stroke-width", widthScale(d.weight))
+            .attr("stroke", "var(--set2)");
+        });
         hideTip();
       });
   });
 
   // Highlight the single most common path
-  const topPath = paths[paths.length - 1];
-  const topPoints = topPath.slots.map((song, i) => {
-    const axisKey = axisSlots[i].key;
-    return [xScale(axisKey), yScales[axisKey](song)];
-  });
-  pathEls.append("path")
-    .attr("d", lineGen(topPoints))
-    .attr("fill", "none")
-    .attr("stroke", "var(--encore)")
-    .attr("stroke-width", 3.5)
-    .attr("stroke-opacity", 0.7)
-    .attr("stroke-linecap", "round")
-    .style("pointer-events", "none");
+  const topPath = displayPaths[displayPaths.length - 1];
+  if (topPath) {
+    const topPoints = topPath.slots.map((song, i) => {
+      const axisKey = axisSlots[i].key;
+      return [xScale(axisKey), yScales[axisKey](song)];
+    });
+    pathEls.append("path")
+      .attr("d", lineGen(topPoints))
+      .attr("fill", "none")
+      .attr("stroke", "var(--encore)")
+      .attr("stroke-width", 4)
+      .attr("stroke-opacity", 0.75)
+      .attr("stroke-linecap", "round")
+      .style("pointer-events", "none");
 
-  // Legend for highlighted path
-  g.append("text")
-    .attr("x", iw / 2).attr("y", ih + 16)
-    .attr("text-anchor", "middle")
-    .attr("font-family", "var(--heading-font)")
-    .attr("font-size", 10)
-    .attr("fill", "var(--encore)")
-    .attr("font-weight", 600)
-    .text(`Most common arc: ${topPath.slots.join(" → ")}`);
+    g.append("text")
+      .attr("x", iw / 2).attr("y", ih + 20)
+      .attr("text-anchor", "middle")
+      .attr("font-family", "var(--heading-font)")
+      .attr("font-size", 10)
+      .attr("fill", "var(--encore)")
+      .attr("font-weight", 600)
+      .text(`Most common arc: ${topPath.slots.join(" → ")}`);
+  }
 })();
 
 // ── Figure 5: Set Length Over Time ─────────────────────────────────
