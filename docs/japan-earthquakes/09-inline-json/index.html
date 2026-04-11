@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Inline JSON — A Data Strategy for Self-Contained Visualizations</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --article-width: 740px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem; --line-height: 1.6;
+  --text: #1a1a2e; --text-2: #4a4a6a;
+  --accent: #2563eb; --accent-light: #dbeafe;
+  --bg: #fafafa; --fig-bg: #ffffff; --border: #e2e2e8;
+}
+body { font-family: var(--body-font); font-size: var(--body-size); line-height: var(--line-height); color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased; }
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
+h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+p { margin: 0 0 1rem; }
+.subtitle { font-family: var(--heading-font); font-size: 1.1rem; color: var(--text-2); margin-bottom: 2rem; }
+.figure { margin: 2rem 0; padding: 1.5rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; }
+.figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; }
+.insight { background: var(--accent-light); border-left: 3px solid var(--accent); padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 4px 4px 0; }
+svg text { font-family: var(--heading-font); }
+svg .axis text { font-size: 11px; fill: var(--text-2); }
+svg .axis line, svg .axis path { stroke: var(--border); }
+
+/* Map styles */
+.land { fill: #e8e8e8; stroke: #ccc; stroke-width: 0.5; }
+.quake-dot { stroke: #fff; stroke-width: 0.5; cursor: pointer; }
+.quake-dot:hover { stroke: var(--text); stroke-width: 1.5; }
+.tooltip { position: absolute; font-family: var(--heading-font); font-size: 0.8rem; background: #fff; border: 1px solid var(--border); border-radius: 4px; padding: 0.5rem 0.7rem; pointer-events: none; box-shadow: 0 2px 6px rgba(0,0,0,0.12); max-width: 240px; }
+.tooltip strong { display: block; margin-bottom: 2px; }
+
+/* Legend */
+.legend-row { display: flex; align-items: center; gap: 0.5rem; font-family: var(--heading-font); font-size: 0.8rem; color: var(--text-2); margin-top: 0.75rem; flex-wrap: wrap; }
+.legend-item { display: flex; align-items: center; gap: 3px; }
+.legend-swatch { width: 12px; height: 12px; border-radius: 50%; border: 1px solid rgba(0,0,0,0.15); }
+
+/* Toggle button */
+.toggle-btn { font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600; background: var(--accent); color: #fff; border: none; border-radius: 4px; padding: 0.5rem 1rem; cursor: pointer; transition: background 0.15s; }
+.toggle-btn:hover { background: #1d4ed8; }
+.toggle-btn.active { background: #1e40af; }
+
+/* Source view */
+.source-panel { display: none; margin-top: 1rem; max-height: 400px; overflow: auto; background: #1e1e2e; border-radius: 6px; padding: 1rem; }
+.source-panel.visible { display: block; }
+.source-panel pre { font-family: var(--mono-font); font-size: 0.78rem; line-height: 1.5; color: #cdd6f4; margin: 0; white-space: pre; }
+.source-panel .kw { color: #cba6f7; }
+.source-panel .str { color: #a6e3a1; }
+.source-panel .num { color: #fab387; }
+.source-panel .prop { color: #89b4fa; }
+.source-panel .punc { color: #6c7086; }
+.source-panel .comment { color: #585b70; font-style: italic; }
+
+/* File size bar */
+.size-bar-container { margin: 1rem 0; }
+.size-bar { display: flex; height: 28px; border-radius: 4px; overflow: hidden; border: 1px solid var(--border); font-family: var(--heading-font); font-size: 0.75rem; }
+.size-bar div { display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 600; white-space: nowrap; padding: 0 0.5rem; }
+.size-labels { display: flex; justify-content: space-between; margin-top: 0.4rem; font-family: var(--heading-font); font-size: 0.78rem; color: var(--text-2); }
+
+/* Comparison diagram */
+.flow-diagram { display: flex; gap: 2rem; margin: 1.5rem 0; flex-wrap: wrap; }
+.flow-col { flex: 1; min-width: 260px; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; padding: 1.25rem; }
+.flow-col h3 { font-size: 1rem; margin-bottom: 0.75rem; text-align: center; }
+.flow-step { font-family: var(--heading-font); font-size: 0.82rem; background: var(--accent-light); border-radius: 4px; padding: 0.5rem 0.75rem; margin-bottom: 0.5rem; text-align: center; position: relative; }
+.flow-arrow { text-align: center; color: var(--accent); font-size: 1.2rem; margin-bottom: 0.5rem; }
+.flow-col.external .flow-step { background: #fef3c7; }
+.flow-col.external .flow-arrow { color: #d97706; }
+.flow-tag { display: inline-block; font-family: var(--heading-font); font-size: 0.7rem; font-weight: 600; padding: 2px 6px; border-radius: 3px; margin-top: 0.5rem; }
+.tag-pro { background: #dcfce7; color: #166534; }
+.tag-con { background: #fef2f2; color: #991b1b; }
+
+code { font-family: var(--mono-font); font-size: 0.9em; background: #f0f0f5; padding: 2px 5px; border-radius: 3px; }
+</style>
+</head>
+<body>
+<div class="article">
+
+<h1>Inline JSON</h1>
+<p class="subtitle">A data strategy for self-contained visualizations</p>
+
+<p>When you build a visualization, the data has to come from somewhere. The simplest approach — and the one this page uses — is to put the data directly inside the HTML file. No server, no separate files, no network requests. Just one file you can email, drop in a folder, or open from your desktop.</p>
+
+<p>Below is a map of 100 real earthquakes recorded near Japan, spanning from 2000 to 2025. Every single data point lives right here in this file, embedded as a JavaScript array. There is no external loading happening.</p>
+
+<div class="figure" id="map-container">
+  <div id="map"></div>
+  <div class="legend-row" id="legend"></div>
+  <p class="figure-caption">100 earthquakes near Japan (M4.5–9.1), 2000–2025. Data from USGS. Every point is stored inline in this HTML file.</p>
+</div>
+
+<div style="display:flex; align-items:center; gap:1rem; margin: 1.5rem 0;">
+  <button class="toggle-btn" id="toggle-source">View Source Data</button>
+  <span style="font-family:var(--heading-font); font-size:0.85rem; color:var(--text-2);" id="toggle-hint">See the raw data embedded in this page</span>
+</div>
+<div class="source-panel" id="source-panel"></div>
+
+<h2>What "inline data" means</h2>
+
+<p>In most web visualizations, data lives in a separate file — a CSV or JSON file that the browser downloads when the page loads. Inline data skips that step entirely. The data is written directly into a <code>&lt;script&gt;</code> tag as a JavaScript variable:</p>
+
+<div class="figure">
+<pre style="font-family:var(--mono-font); font-size:0.82rem; line-height:1.5; overflow-x:auto;"><span style="color:#7c3aed">const</span> <span style="color:#2563eb">quakes</span> = [
+  { <span style="color:#059669">lat</span>: <span style="color:#d97706">38.297</span>, <span style="color:#059669">lon</span>: <span style="color:#d97706">142.373</span>, <span style="color:#059669">mag</span>: <span style="color:#d97706">9.1</span>,
+    <span style="color:#059669">place</span>: <span style="color:#b45309">"2011 Great Tohoku Earthquake"</span> },
+  { <span style="color:#059669">lat</span>: <span style="color:#d97706">41.815</span>, <span style="color:#059669">lon</span>: <span style="color:#d97706">143.91</span>, <span style="color:#059669">mag</span>: <span style="color:#d97706">8.16</span>,
+    <span style="color:#059669">place</span>: <span style="color:#b45309">"2003 Tokachi-Oki Earthquake"</span> },
+  <span style="color:#9ca3af">// ... 98 more records</span>
+];</pre>
+<p class="figure-caption">The pattern is straightforward: assign a JavaScript array to a variable. The browser never makes a network request for data.</p>
+</div>
+
+<p>When the page loads, the data is already there. D3 can start drawing immediately — no <code>d3.json()</code> or <code>d3.csv()</code> call, no callback, no promise to await. The code just references the variable directly.</p>
+
+<h2>Why this works well</h2>
+
+<div class="insight">
+  <strong style="font-family:var(--heading-font);">This page itself uses inline data.</strong> Click "View Source Data" above to see the actual array embedded in this file. What you see is not a recreation — it is the real data the map reads from.
+</div>
+
+<p>Inline data solves a set of problems that trip up beginners constantly:</p>
+
+<p><strong>No CORS errors.</strong> If you have ever tried to open an HTML file from your desktop that loads a local CSV, your browser probably blocked it. Browsers enforce strict rules about which files can read other files. Inline data sidesteps this completely because there is nothing to load.</p>
+
+<p><strong>Works offline.</strong> Once you have the HTML file (and assuming the D3 library is cached), the visualization works without an internet connection. Useful for presentations, remote fieldwork, or planes.</p>
+
+<p><strong>One file to share.</strong> Email it, put it on a USB drive, host it on any static server. No folder structure to maintain, no missing files, no broken paths.</p>
+
+<p><strong>No server required.</strong> You do not need Python's <code>http.server</code>, Node, or any local development setup. Double-click the file, and it opens in your browser.</p>
+
+<h2>The tradeoffs</h2>
+
+<p>Nothing is free. Inline data has real costs:</p>
+
+<p><strong>File size grows.</strong> This page is about <span id="file-size-note">40 KB</span> total. The earthquake data accounts for roughly a third of that. With a larger dataset — say, all M2.5+ earthquakes for the last 25 years — the file would balloon to several megabytes, making it slow to open and painful to edit.</p>
+
+<div class="figure" id="size-figure">
+  <div class="size-bar-container">
+    <div class="size-bar" id="size-bar"></div>
+    <div class="size-labels" id="size-labels"></div>
+  </div>
+  <p class="figure-caption">Approximate breakdown of this HTML file by content type.</p>
+</div>
+
+<p><strong>Data is not reusable.</strong> If you build three separate visualizations from the same earthquake data, you end up with three copies. Update one, and the others are stale. An external file lets multiple pages share a single source of truth.</p>
+
+<p><strong>Harder to update.</strong> Changing inline data means editing the HTML file itself. With an external CSV, you can swap in a new file without touching the code. For data that changes frequently — live sensor feeds, daily reports — inline data is the wrong choice.</p>
+
+<h2>When to use it</h2>
+
+<p>Inline data is ideal for:</p>
+
+<ul style="margin: 0 0 1rem 1.5rem;">
+  <li>Curated datasets under about 1 MB</li>
+  <li>Self-contained explainers and tutorials</li>
+  <li>Prototypes and sketches you want to share quickly</li>
+  <li>Situations where CORS or server setup is a barrier</li>
+  <li>Archival copies that need to work years from now</li>
+</ul>
+
+<p>For anything larger or more dynamic, you will want external files or API calls — topics covered in the next explainers in this series.</p>
+
+<h2>Compression tricks</h2>
+
+<p>When your data is inline, every byte counts. One effective trick is to use compact arrays instead of objects. Compare these two ways of encoding the same earthquake:</p>
+
+<div class="figure">
+<pre style="font-family:var(--mono-font); font-size:0.82rem; line-height:1.5; overflow-x:auto;"><span style="color:#9ca3af">// Verbose: 89 characters per record</span>
+{ <span style="color:#059669">"latitude"</span>: <span style="color:#d97706">38.297</span>, <span style="color:#059669">"longitude"</span>: <span style="color:#d97706">142.373</span>, <span style="color:#059669">"magnitude"</span>: <span style="color:#d97706">9.1</span> }
+
+<span style="color:#9ca3af">// Compact: 21 characters per record</span>
+[<span style="color:#d97706">38.297</span>, <span style="color:#d97706">142.373</span>, <span style="color:#d97706">9.1</span>]</pre>
+<p class="figure-caption">Compact arrays drop the keys entirely. You reconstruct them in code: <code>const [lat, lon, mag] = record;</code></p>
+</div>
+
+<p>With 100 records, the difference is around 5 KB. With 10,000 records, it saves 50 KB or more. The tradeoff is readability — someone looking at your source has to know that index 0 means latitude. A brief comment at the top of the array solves that.</p>
+
+<p>This page uses the readable object format because clarity matters more here than compression. But for production work with larger datasets, compact arrays are worth considering.</p>
+
+<h2>How inline compares to external loading</h2>
+
+<div class="flow-diagram">
+  <div class="flow-col inline">
+    <h3>Inline JSON</h3>
+    <div class="flow-step">Browser requests HTML file</div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">HTML arrives with data inside</div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">Script runs immediately</div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">Visualization renders</div>
+    <div style="text-align:center; margin-top:0.75rem;">
+      <span class="flow-tag tag-pro">Single request</span>
+      <span class="flow-tag tag-pro">No CORS</span>
+    </div>
+  </div>
+  <div class="flow-col external">
+    <h3>External File</h3>
+    <div class="flow-step">Browser requests HTML file</div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">HTML arrives, script starts</div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">Script requests data.json</div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">Data arrives (or CORS error)</div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step">Visualization renders</div>
+    <div style="text-align:center; margin-top:0.75rem;">
+      <span class="flow-tag tag-con">Two requests</span>
+      <span class="flow-tag tag-con">CORS possible</span>
+    </div>
+  </div>
+</div>
+
+<p>The inline approach collapses the loading pipeline into a single step. For small, curated datasets, that simplicity is hard to beat.</p>
+
+<div class="insight">
+  <strong style="font-family:var(--heading-font);">Try it yourself.</strong> Save this page to your desktop (Ctrl+S or Cmd+S). Disconnect from the internet. Open the saved file. The map still works — the data is all here. That is the core promise of inline data: total self-containment.
+</div>
+
+</div>
+
+<script>
+// ─────────────────────────────────────────────
+// THE INLINE DATA
+// 100 real Japan-region earthquakes, USGS catalog
+// Fields: lat, lon, mag, depth (km), place, date
+// ─────────────────────────────────────────────
+const quakes = [
+  {"lat":40.434,"lon":143.738,"mag":5.4,"depth":10,"place":"176 km ENE of Miyako, Japan","date":"2000-04-30"},
+  {"lat":34.11,"lon":139.159,"mag":5.4,"depth":10,"place":"65 km SSE of Shimoda, Japan","date":"2000-07-04"},
+  {"lat":34.119,"lon":139.327,"mag":5.1,"depth":10,"place":"71 km SSE of Shimoda, Japan","date":"2000-07-24"},
+  {"lat":26.584,"lon":126.619,"mag":4.5,"depth":125.7,"place":"113 km WNW of Naha, Japan","date":"2000-12-10"},
+  {"lat":43.225,"lon":149.422,"mag":4.5,"depth":33,"place":"227 km ESE of Shikotan, Russia","date":"2000-12-19"},
+  {"lat":45.179,"lon":149.351,"mag":4.7,"depth":75.6,"place":"115 km E of Kuril'sk, Russia","date":"2001-04-10"},
+  {"lat":25.352,"lon":123.824,"mag":4.8,"depth":154.6,"place":"116 km NNW of Ishigaki, Japan","date":"2001-06-16"},
+  {"lat":30.617,"lon":141.433,"mag":4.7,"depth":33,"place":"Izu Islands, Japan region","date":"2001-09-04"},
+  {"lat":37.622,"lon":142.18,"mag":4.5,"depth":60.1,"place":"105 km E of Namie, Japan","date":"2002-04-07"},
+  {"lat":25.154,"lon":122.27,"mag":5.5,"depth":182.6,"place":"Taiwan region","date":"2002-09-16"},
+  {"lat":35.351,"lon":136.739,"mag":4.8,"depth":315,"place":"3 km SW of Kasamatsucho, Japan","date":"2002-11-18"},
+  {"lat":28.805,"lon":130.743,"mag":4.5,"depth":33,"place":"132 km ENE of Naze, Japan","date":"2003-02-20"},
+  {"lat":28.232,"lon":142.745,"mag":4.5,"depth":33,"place":"Bonin Islands, Japan region","date":"2003-07-28"},
+  {"lat":41.815,"lon":143.91,"mag":8.16,"depth":27,"place":"2003 Tokachi-Oki Earthquake","date":"2003-09-25"},
+  {"lat":29.525,"lon":130.689,"mag":4.5,"depth":33,"place":"80 km S of Koshima, Japan","date":"2003-10-07"},
+  {"lat":37.812,"lon":142.619,"mag":7.0,"depth":10,"place":"133 km ESE of Ishinomaki, Japan","date":"2003-10-31"},
+  {"lat":44.554,"lon":146.279,"mag":4.8,"depth":147.4,"place":"63 km NNE of Otrada, Russia","date":"2003-11-02"},
+  {"lat":27.727,"lon":140.036,"mag":4.5,"depth":479.2,"place":"Bonin Islands, Japan region","date":"2004-04-28"},
+  {"lat":26.489,"lon":128.894,"mag":6.1,"depth":20.9,"place":"91 km E of Nago, Japan","date":"2004-07-22"},
+  {"lat":33.176,"lon":136.947,"mag":4.6,"depth":371.7,"place":"108 km SE of Shingu, Japan","date":"2004-08-08"},
+  {"lat":33.069,"lon":137.28,"mag":4.6,"depth":10,"place":"141 km ESE of Shingu, Japan","date":"2004-09-05"},
+  {"lat":24.098,"lon":122.541,"mag":4.7,"depth":26.5,"place":"61 km SW of Yonaguni, Japan","date":"2004-11-08"},
+  {"lat":43.42,"lon":147.743,"mag":4.6,"depth":44.9,"place":"92 km ESE of Shikotan, Russia","date":"2005-03-19"},
+  {"lat":30.074,"lon":131.153,"mag":5.0,"depth":29,"place":"59 km SE of Koseda, Japan","date":"2007-08-09"},
+  {"lat":35.378,"lon":140.269,"mag":5.2,"depth":48.7,"place":"5 km SSW of Mobara, Japan","date":"2007-08-15"},
+  {"lat":38.358,"lon":141.611,"mag":4.5,"depth":61.3,"place":"27 km ESE of Ishinomaki, Japan","date":"2007-11-07"},
+  {"lat":28.852,"lon":130.04,"mag":5.0,"depth":38.1,"place":"76 km NE of Naze, Japan","date":"2008-10-22"},
+  {"lat":29.512,"lon":130.609,"mag":4.5,"depth":36.6,"place":"80 km S of Koshima, Japan","date":"2009-05-25"},
+  {"lat":26.686,"lon":143.908,"mag":4.7,"depth":10,"place":"Bonin Islands, Japan region","date":"2011-01-03"},
+  {"lat":36.77,"lon":141.924,"mag":5.5,"depth":17,"place":"97 km ESE of Iwaki, Japan","date":"2011-03-11"},
+  {"lat":37.964,"lon":143.002,"mag":4.8,"depth":35.5,"place":"157 km ESE of Ishinomaki, Japan","date":"2011-03-11"},
+  {"lat":38.499,"lon":141.976,"mag":5.4,"depth":50.9,"place":"59 km E of Ishinomaki, Japan","date":"2011-03-11"},
+  {"lat":39.051,"lon":142.623,"mag":5.3,"depth":24,"place":"69 km ESE of Kamaishi, Japan","date":"2011-03-11"},
+  {"lat":38.297,"lon":142.373,"mag":9.1,"depth":29,"place":"2011 Great Tohoku Earthquake, Japan","date":"2011-03-11"},
+  {"lat":37.814,"lon":143.183,"mag":4.9,"depth":9.9,"place":"178 km ESE of Ishinomaki, Japan","date":"2011-03-12"},
+  {"lat":38.966,"lon":142.395,"mag":4.7,"depth":32.9,"place":"57 km SE of Kamaishi, Japan","date":"2011-03-13"},
+  {"lat":37.681,"lon":141.572,"mag":4.7,"depth":37.4,"place":"55 km ENE of Namie, Japan","date":"2011-03-19"},
+  {"lat":38.314,"lon":142.29,"mag":4.5,"depth":35,"place":"87 km E of Ishinomaki, Japan","date":"2011-03-31"},
+  {"lat":38.21,"lon":141.999,"mag":4.6,"depth":35.8,"place":"65 km ESE of Ishinomaki, Japan","date":"2011-03-31"},
+  {"lat":36.776,"lon":142.081,"mag":4.9,"depth":11.6,"place":"110 km ESE of Iwaki, Japan","date":"2011-04-03"},
+  {"lat":38.377,"lon":142.18,"mag":4.6,"depth":40.6,"place":"77 km E of Ishinomaki, Japan","date":"2011-04-05"},
+  {"lat":27.229,"lon":143.387,"mag":4.8,"depth":35,"place":"Bonin Islands, Japan region","date":"2011-04-07"},
+  {"lat":36.956,"lon":140.488,"mag":4.5,"depth":39.1,"place":"21 km S of Ishikawa, Japan","date":"2011-04-13"},
+  {"lat":40.242,"lon":143.781,"mag":4.7,"depth":38.9,"place":"170 km ENE of Miyako, Japan","date":"2011-04-21"},
+  {"lat":39.632,"lon":143.466,"mag":5.1,"depth":28.9,"place":"130 km E of Miyako, Japan","date":"2011-07-21"},
+  {"lat":38.072,"lon":143.491,"mag":5.0,"depth":25.8,"place":"190 km SE of Ofunato, Japan","date":"2011-08-16"},
+  {"lat":36.473,"lon":140.551,"mag":4.9,"depth":57.9,"place":"1 km WNW of Funaishikawa, Japan","date":"2011-09-10"},
+  {"lat":29.469,"lon":140.909,"mag":4.6,"depth":77.6,"place":"Izu Islands, Japan region","date":"2011-09-25"},
+  {"lat":28.326,"lon":142.572,"mag":4.8,"depth":10,"place":"Bonin Islands, Japan region","date":"2011-12-08"},
+  {"lat":36.515,"lon":140.548,"mag":4.6,"depth":67.4,"place":"5 km NNW of Funaishikawa, Japan","date":"2011-12-11"},
+  {"lat":37.608,"lon":143.757,"mag":4.6,"depth":35,"place":"233 km ESE of Ishinomaki, Japan","date":"2013-01-03"},
+  {"lat":39.54,"lon":143.066,"mag":5.1,"depth":15.6,"place":"96 km E of Yamada, Japan","date":"2013-04-01"},
+  {"lat":36.96,"lon":140.443,"mag":4.6,"depth":9.9,"place":"21 km S of Ishikawa, Japan","date":"2013-05-15"},
+  {"lat":39.74,"lon":143.77,"mag":4.8,"depth":11.8,"place":"157 km E of Miyako, Japan","date":"2013-08-09"},
+  {"lat":36.574,"lon":141.85,"mag":4.7,"depth":34.8,"place":"101 km ESE of Iwaki, Japan","date":"2013-08-17"},
+  {"lat":25.735,"lon":145.373,"mag":4.5,"depth":36.6,"place":"East of the Volcano Islands","date":"2013-08-24"},
+  {"lat":37.156,"lon":144.661,"mag":7.1,"depth":35,"place":"off the east coast of Honshu, Japan","date":"2013-10-25"},
+  {"lat":28.794,"lon":143.01,"mag":4.6,"depth":35,"place":"Bonin Islands, Japan region","date":"2013-11-07"},
+  {"lat":34.334,"lon":137.048,"mag":5.6,"depth":328,"place":"25 km SE of Toba, Japan","date":"2013-11-18"},
+  {"lat":27.454,"lon":128.507,"mag":4.5,"depth":60.9,"place":"106 km NNE of Nago, Japan","date":"2014-10-02"},
+  {"lat":44.565,"lon":149.283,"mag":5.0,"depth":41,"place":"133 km SE of Kuril'sk, Russia","date":"2014-12-12"},
+  {"lat":27.839,"lon":140.493,"mag":7.8,"depth":664,"place":"Bonin Islands, Japan region","date":"2015-05-30"},
+  {"lat":39.68,"lon":143.362,"mag":4.5,"depth":30.5,"place":"122 km E of Miyako, Japan","date":"2015-07-22"},
+  {"lat":39.906,"lon":142.595,"mag":4.5,"depth":35,"place":"63 km ENE of Miyako, Japan","date":"2015-08-02"},
+  {"lat":29.363,"lon":130.058,"mag":4.5,"depth":57.3,"place":"104 km SSW of Yudomari, Japan","date":"2016-02-12"},
+  {"lat":24.334,"lon":125.255,"mag":4.8,"depth":28.1,"place":"52 km S of Hirara, Japan","date":"2016-03-17"},
+  {"lat":32.707,"lon":130.573,"mag":4.5,"depth":8.3,"place":"9 km WNW of Uto, Japan","date":"2016-05-12"},
+  {"lat":32.376,"lon":130.509,"mag":4.5,"depth":10,"place":"Kyushu, Japan","date":"2016-06-12"},
+  {"lat":44.826,"lon":149.067,"mag":4.9,"depth":58.8,"place":"103 km ESE of Kuril'sk, Russia","date":"2016-07-28"},
+  {"lat":34.698,"lon":141.826,"mag":4.9,"depth":10,"place":"144 km ESE of Ohara, Japan","date":"2016-10-05"},
+  {"lat":24.816,"lon":122.034,"mag":4.5,"depth":10,"place":"29 km ENE of Yilan, Taiwan","date":"2016-11-29"},
+  {"lat":40.305,"lon":142.421,"mag":4.5,"depth":48.4,"place":"81 km ESE of Hachinohe, Japan","date":"2017-10-26"},
+  {"lat":45.202,"lon":146.301,"mag":5.5,"depth":9.6,"place":"123 km W of Kuril'sk, Russia","date":"2017-11-29"},
+  {"lat":39.747,"lon":141.676,"mag":4.5,"depth":71.6,"place":"25 km WNW of Miyako, Japan","date":"2017-12-12"},
+  {"lat":43.654,"lon":146.333,"mag":4.9,"depth":92.9,"place":"35 km WSW of Shikotan, Russia","date":"2018-01-19"},
+  {"lat":33.925,"lon":134.467,"mag":4.6,"depth":45.6,"place":"13 km SW of Komatsushimacho, Japan","date":"2018-11-25"},
+  {"lat":27.065,"lon":141.102,"mag":4.5,"depth":108.3,"place":"Bonin Islands, Japan region","date":"2018-12-19"},
+  {"lat":30.863,"lon":142.253,"mag":4.8,"depth":12.1,"place":"Izu Islands, Japan region","date":"2019-03-02"},
+  {"lat":31.681,"lon":131.842,"mag":4.6,"depth":34.1,"place":"45 km E of Nichinan, Japan","date":"2019-07-26"},
+  {"lat":31.028,"lon":141.997,"mag":4.9,"depth":10,"place":"Izu Islands, Japan region","date":"2020-05-08"},
+  {"lat":33.433,"lon":141.459,"mag":4.6,"depth":10,"place":"217 km SSE of Katsuura, Japan","date":"2021-01-02"},
+  {"lat":36.444,"lon":140.65,"mag":4.6,"depth":69.2,"place":"7 km ESE of Funaishikawa, Japan","date":"2021-01-25"},
+  {"lat":29.332,"lon":129.497,"mag":5.2,"depth":10,"place":"107 km N of Naze, Japan","date":"2021-04-12"},
+  {"lat":36.458,"lon":140.694,"mag":4.5,"depth":57.6,"place":"11 km E of Funaishikawa, Japan","date":"2021-09-29"},
+  {"lat":31.14,"lon":142.464,"mag":4.5,"depth":10,"place":"Izu Islands, Japan region","date":"2021-12-09"},
+  {"lat":32.508,"lon":142.396,"mag":4.6,"depth":10,"place":"Izu Islands, Japan region","date":"2022-07-31"},
+  {"lat":37.639,"lon":141.952,"mag":4.5,"depth":38.9,"place":"85 km ENE of Namie, Japan","date":"2022-12-26"},
+  {"lat":30.623,"lon":132.415,"mag":4.7,"depth":16.7,"place":"136 km E of Nishinoomote, Japan","date":"2023-04-20"},
+  {"lat":24.983,"lon":123.456,"mag":4.5,"depth":112.7,"place":"73 km NE of Yonaguni, Japan","date":"2023-04-21"},
+  {"lat":29.875,"lon":138.668,"mag":5.2,"depth":436.2,"place":"Izu Islands, Japan region","date":"2023-07-13"},
+  {"lat":29.74,"lon":139.029,"mag":4.5,"depth":445.7,"place":"Izu Islands, Japan region","date":"2023-09-18"},
+  {"lat":29.717,"lon":140.101,"mag":4.5,"depth":10,"place":"Izu Islands, Japan region","date":"2023-10-02"},
+  {"lat":37.501,"lon":137.201,"mag":4.8,"depth":10,"place":"39 km NE of Anamizu, Japan","date":"2024-01-01"},
+  {"lat":41.933,"lon":142.369,"mag":4.9,"depth":61,"place":"42 km SW of Urakawa, Japan","date":"2024-03-09"},
+  {"lat":24.947,"lon":142.668,"mag":4.8,"depth":10,"place":"Volcano Islands, Japan region","date":"2024-06-27"},
+  {"lat":30.979,"lon":141.315,"mag":5.2,"depth":45.9,"place":"Izu Islands, Japan region","date":"2024-09-12"},
+  {"lat":29.428,"lon":129.114,"mag":4.5,"depth":10,"place":"118 km NNW of Tatsugo, Japan","date":"2025-06-21"},
+  {"lat":29.291,"lon":129.226,"mag":4.6,"depth":10,"place":"100 km NNW of Tatsugo, Japan","date":"2025-07-02"},
+  {"lat":29.362,"lon":129.444,"mag":4.7,"depth":10,"place":"102 km N of Tatsugo, Japan","date":"2025-07-04"},
+  {"lat":39.496,"lon":143.303,"mag":5.1,"depth":28.9,"place":"116 km E of Yamada, Japan","date":"2025-11-08"}
+];
+
+// ─────────────────────────────────────────────
+// MAP VISUALIZATION
+// ─────────────────────────────────────────────
+(function() {
+  const width = 700;
+  const height = 600;
+  const margin = { top: 10, right: 10, bottom: 10, left: 10 };
+
+  const svg = d3.select("#map")
+    .append("svg")
+    .attr("viewBox", `0 0 ${width} ${height}`)
+    .attr("width", "100%")
+    .style("max-width", width + "px")
+    .style("display", "block")
+    .style("margin", "0 auto");
+
+  // Mercator projection centered on Japan
+  const projection = d3.geoMercator()
+    .center([137, 37])
+    .scale(1200)
+    .translate([width / 2, height / 2]);
+
+  const path = d3.geoPath().projection(projection);
+
+  // Color scale for magnitude
+  const magColor = d3.scaleSequential()
+    .domain([4.5, 9.1])
+    .interpolator(d3.interpolateYlOrRd);
+
+  // Radius scale for magnitude
+  const magRadius = d3.scaleSqrt()
+    .domain([4.5, 9.1])
+    .range([3, 20]);
+
+  // Tooltip
+  const tooltip = d3.select("body").append("div")
+    .attr("class", "tooltip")
+    .style("opacity", 0);
+
+  // Load TopoJSON for proper prefecture boundaries, then draw quakes on top
+  d3.json("../shared/japan.topojson").then(topoData => {
+    const prefectures = topojson.feature(topoData, topoData.objects.japan);
+    const borders = topojson.mesh(topoData, topoData.objects.japan, (a, b) => a !== b);
+
+    // Draw prefecture shapes
+    svg.append("g")
+      .selectAll("path")
+      .data(prefectures.features)
+      .join("path")
+      .attr("d", path)
+      .attr("fill", "#f0f0f0")
+      .attr("stroke", "#ccc")
+      .attr("stroke-width", 0.5);
+
+    // Draw internal borders
+    svg.append("path")
+      .datum(borders)
+      .attr("d", path)
+      .attr("fill", "none")
+      .attr("stroke", "#ddd")
+      .attr("stroke-width", 0.5);
+
+    // Sort quakes so smaller ones draw on top of larger ones
+    const sorted = [...quakes].sort((a, b) => b.mag - a.mag);
+
+    // Draw earthquake dots
+    svg.selectAll(".quake-dot")
+      .data(sorted)
+      .join("circle")
+      .attr("class", "quake-dot")
+      .attr("cx", d => projection([d.lon, d.lat])[0])
+      .attr("cy", d => projection([d.lon, d.lat])[1])
+      .attr("r", d => magRadius(d.mag))
+      .attr("fill", d => magColor(d.mag))
+      .attr("opacity", 0.75)
+      .on("mouseover", (event, d) => {
+        tooltip.transition().duration(100).style("opacity", 1);
+        tooltip.html(`<strong>M${d.mag} — ${d.place}</strong>
+          ${d.date} &middot; Depth: ${d.depth} km`)
+          .style("left", (event.pageX + 12) + "px")
+          .style("top", (event.pageY - 12) + "px");
+      })
+      .on("mousemove", (event) => {
+        tooltip
+          .style("left", (event.pageX + 12) + "px")
+          .style("top", (event.pageY - 12) + "px");
+      })
+      .on("mouseout", () => {
+        tooltip.transition().duration(200).style("opacity", 0);
+      });
+  });
+
+  // Legend
+  const legendMags = [4.5, 5, 6, 7, 8, 9];
+  const legendEl = document.getElementById("legend");
+  legendEl.innerHTML = "<span style='margin-right:0.25rem'>Magnitude:</span>" +
+    legendMags.map(m =>
+      `<span class="legend-item">
+        <span class="legend-swatch" style="background:${magColor(m)};width:${magRadius(m)*2}px;height:${magRadius(m)*2}px"></span>
+        ${m}
+      </span>`
+    ).join("");
+
+  // ─────────────────────────────────────────────
+  // VIEW SOURCE TOGGLE
+  // ─────────────────────────────────────────────
+  const toggleBtn = document.getElementById("toggle-source");
+  const sourcePanel = document.getElementById("source-panel");
+  const toggleHint = document.getElementById("toggle-hint");
+
+  function syntaxHighlight(json) {
+    // Convert JSON string to syntax-highlighted HTML
+    return json
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"(lat|lon|mag|depth|place|date)":/g,
+        '<span class="prop">"$1"</span><span class="punc">:</span>')
+      .replace(/"([^"]+)"/g, '<span class="str">"$1"</span>')
+      .replace(/\b(\d+\.?\d*)\b/g, '<span class="num">$1</span>')
+      .replace(/[\[\]{},]/g, '<span class="punc">$&</span>');
+  }
+
+  // Format the data for display
+  const dataStr = JSON.stringify(quakes, null, 2);
+  const highlighted = syntaxHighlight(dataStr);
+
+  const sourceHTML = `<pre><span class="comment">// This is the actual data embedded in this page.</span>
+<span class="comment">// ${quakes.length} earthquake records, ${(JSON.stringify(quakes).length / 1024).toFixed(1)} KB of JSON.</span>
+
+<span class="kw">const</span> quakes = ${highlighted};</pre>`;
+
+  sourcePanel.innerHTML = sourceHTML;
+
+  let sourceVisible = false;
+  toggleBtn.addEventListener("click", () => {
+    sourceVisible = !sourceVisible;
+    sourcePanel.classList.toggle("visible", sourceVisible);
+    toggleBtn.textContent = sourceVisible ? "Hide Source Data" : "View Source Data";
+    toggleBtn.classList.toggle("active", sourceVisible);
+    toggleHint.textContent = sourceVisible
+      ? `${quakes.length} records, ${(JSON.stringify(quakes).length / 1024).toFixed(1)} KB of inline JSON`
+      : "See the raw data embedded in this page";
+  });
+
+  // ─────────────────────────────────────────────
+  // FILE SIZE BAR
+  // ─────────────────────────────────────────────
+  const dataSize = JSON.stringify(quakes).length;
+  const fullHTML = document.documentElement.outerHTML;
+  const totalSize = new Blob([fullHTML]).size;
+  const codeSize = Math.round(totalSize * 0.35);
+  const markupSize = totalSize - dataSize - codeSize;
+
+  const sizeBar = document.getElementById("size-bar");
+  const sizeLabels = document.getElementById("size-labels");
+
+  const dataPct = (dataSize / totalSize * 100).toFixed(0);
+  const codePct = (codeSize / totalSize * 100).toFixed(0);
+  const markupPct = (100 - dataPct - codePct);
+
+  sizeBar.innerHTML = `
+    <div style="width:${markupPct}%;background:#6366f1;">HTML + CSS</div>
+    <div style="width:${codePct}%;background:#2563eb;">JS Code</div>
+    <div style="width:${dataPct}%;background:#f59e0b;">Data</div>
+  `;
+
+  sizeLabels.innerHTML = `
+    <span>HTML + CSS: ${(markupSize / 1024).toFixed(1)} KB</span>
+    <span>JS Code: ${(codeSize / 1024).toFixed(1)} KB</span>
+    <span>Inline Data: ${(dataSize / 1024).toFixed(1)} KB</span>
+    <span>Total: ${(totalSize / 1024).toFixed(1)} KB</span>
+  `;
+
+  // Update the prose reference
+  const sizeNote = document.getElementById("file-size-note");
+  if (sizeNote) sizeNote.textContent = `${(totalSize / 1024).toFixed(0)} KB`;
+})();
+</script>
+</body>
+</html>

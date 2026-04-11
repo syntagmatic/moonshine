@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Human Impact — Linked Map + Casualty/Damage Charts</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --article-width: 740px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem; --line-height: 1.6;
+  --text: #1a1a2e; --text-2: #4a4a6a;
+  --accent: #2563eb; --accent-light: #dbeafe;
+  --bg: #fafafa; --fig-bg: #ffffff; --border: #e2e2e8;
+}
+body { font-family: var(--body-font); font-size: var(--body-size); line-height: var(--line-height); color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased; }
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
+h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+p { margin: 0 0 1rem; }
+.figure { margin: 2rem 0; padding: 1.5rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; }
+.figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; }
+.insight { background: var(--accent-light); border-left: 3px solid var(--accent); padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 4px 4px 0; }
+svg text { font-family: var(--heading-font); }
+svg .axis text { font-size: 11px; fill: var(--text-2); }
+svg .axis line, svg .axis path { stroke: var(--border); }
+
+.subtitle { font-family: var(--heading-font); font-size: 1.1rem; color: var(--text-2); margin-bottom: 2rem; font-weight: 400; }
+.chart-row { display: flex; gap: 1rem; flex-wrap: wrap; }
+.chart-row .chart-col { flex: 1; min-width: 200px; }
+.chart-col h3 { font-size: 0.9rem; margin-bottom: 0.5rem; color: var(--text-2); }
+
+.tooltip {
+  position: absolute; pointer-events: none;
+  background: rgba(26,26,46,0.92); color: #fff;
+  padding: 8px 12px; border-radius: 4px;
+  font-family: var(--heading-font); font-size: 0.78rem;
+  line-height: 1.45; max-width: 260px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  opacity: 0; transition: opacity 0.15s;
+}
+.tooltip.show { opacity: 1; }
+.tooltip .tt-name { font-weight: 700; font-size: 0.85rem; }
+.tooltip .tt-row { margin-top: 2px; }
+
+.map-dot { cursor: pointer; stroke: #fff; stroke-width: 0.5; }
+.map-dot.ghost { opacity: 0.12; }
+.bar-rect { cursor: pointer; }
+.bar-rect.ghost { opacity: 0.15; }
+.bar-label { font-size: 10px; fill: var(--text); }
+.bar-label.ghost { opacity: 0.2; }
+
+.brush-hint { font-family: var(--heading-font); font-size: 0.75rem; fill: var(--text-2); }
+
+.legend { font-family: var(--heading-font); font-size: 0.72rem; }
+.legend text { fill: var(--text-2); }
+</style>
+</head>
+<body>
+<div class="article">
+
+<h1>Human Impact</h1>
+<p class="subtitle">Significant earthquakes in Japan, 1900 &ndash; 2024. Brush or click any view to cross-filter.</p>
+
+<p>Magnitude gets the headlines, but it is a crude predictor of human suffering. A shallow M6.9 under a dense city at dinner time &mdash; when gas stoves are lit &mdash; can kill far more people than a deep M8.0 offshore. Building codes, soil type, distance from population centers, and time of day all shape whether an earthquake becomes a disaster or a statistic.</p>
+
+<p>Japan offers a compelling case study. Over the past century it has invested more than any other nation in earthquake engineering, early warning systems, and public preparedness. The result is visible in the data: modern earthquakes of similar magnitude kill dramatically fewer people than their early-twentieth-century counterparts. The 1923 Kant&#333; earthquake (M7.9, roughly 105,000 dead) and the 1995 Kobe earthquake (M6.9, 6,434 dead) struck comparably dense areas, yet the death toll differed by an order of magnitude &mdash; a testament to decades of improved construction standards.</p>
+
+<div class="figure" id="viz">
+  <div id="map-container"></div>
+  <div class="figure-caption">Map: circles sized by magnitude, colored by death toll. Drag to brush-select; click background to clear.</div>
+  <div class="chart-row" id="charts-row" style="margin-top:1.25rem;">
+    <div class="chart-col" id="deaths-chart"><h3>Deaths</h3></div>
+    <div class="chart-col" id="damage-chart"><h3>Damage ($ millions)</h3></div>
+    <div class="chart-col" id="timeline-chart"><h3>Year vs Magnitude</h3></div>
+  </div>
+</div>
+
+<p>The glaring outlier is the 2011 T&#333;hoku earthquake. At M9.1 it was the most powerful earthquake ever recorded in Japan, but the shaking itself caused relatively few structural collapses thanks to modern engineering. The catastrophe came from the tsunami: waves over 10 meters high overwhelmed coastal defenses and killed roughly 19,700 people. Magnitude <em>does</em> matter for tsunamis &mdash; larger rupture areas displace more ocean &mdash; but even here, the critical variable was not the shaking but the wave.</p>
+
+<div class="insight">
+<strong>Try it:</strong> Brush-select only earthquakes after 1960 on the timeline chart. Notice how deaths drop even as magnitudes remain high. Then select only pre-1950 events to see how devastating similar magnitudes were before modern building codes. The cross-filter reveals what a static table cannot: the <em>era</em> of an earthquake shapes its human toll at least as much as its magnitude.
+</div>
+
+<h2>Why magnitude alone fails</h2>
+
+<p>Five factors consistently decouple magnitude from damage:</p>
+<p><strong>Depth.</strong> Shallow earthquakes (&lt;20 km) concentrate energy near the surface. The 1995 Kobe quake ruptured at just 16 km depth directly beneath the city, producing extreme ground acceleration despite its moderate magnitude.</p>
+<p><strong>Distance to population.</strong> The 1933 Sanriku earthquake (M8.4) struck offshore and killed roughly 3,000 people, mostly via tsunami. A quake of similar energy beneath central Tokyo would have been orders of magnitude worse.</p>
+<p><strong>Soil conditions.</strong> Soft alluvial soils amplify shaking. Much of Tokyo, Osaka, and Kobe sit on reclaimed land or river deltas &mdash; areas that liquefy during strong shaking, toppling buildings that might survive on bedrock.</p>
+<p><strong>Building codes and enforcement.</strong> Japan overhauled its seismic code after the 1923 Kant&#333; disaster, again after 1968 Tokachi-Oki, and fundamentally in 1981. Each revision dramatically cut casualties in subsequent quakes of comparable magnitude.</p>
+<p><strong>Time of day and season.</strong> The 1923 Kant&#333; quake struck at 11:58 AM on September 1st, when charcoal cooking fires were active across the city. The resulting firestorm killed more people than the shaking itself.</p>
+
+<h2>Reading the visualization</h2>
+
+<p>The map shows each earthquake as a circle. Size encodes magnitude; color encodes deaths &mdash; gray for zero, deepening red for larger tolls. The three charts below sort the same events by deaths, economic damage, and chronological position. Brush any view to cross-filter the others: selected earthquakes stay vivid while unselected ones fade to ghosts. This linked highlighting lets you ask questions the data cannot answer in a table &mdash; like whether the costliest earthquakes were also the deadliest (often not), or how the timeline of casualties relates to the adoption of modern building codes.</p>
+
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+// ── Data ──────────────────────────────────────────────────────────
+const quakes = [
+  {id:"kanto1923",year:1923,name:"Kantō",lat:35.4,lon:139.1,mag:7.9,deaths:105000,injuries:104000,damage:2800,houses:128266,tsunami:true},
+  {id:"tango1927",year:1927,name:"Tango",lat:35.6,lon:134.9,mag:7.3,deaths:3020,injuries:7806,damage:260,houses:12584,tsunami:false},
+  {id:"sanriku1933",year:1933,name:"Sanriku",lat:39.2,lon:144.6,mag:8.4,deaths:3064,injuries:1000,damage:180,houses:7563,tsunami:true},
+  {id:"tottori1943",year:1943,name:"Tottori",lat:35.5,lon:134.1,mag:7.2,deaths:1083,injuries:3259,damage:150,houses:7485,tsunami:false},
+  {id:"tonankai1944",year:1944,name:"Tōnankai",lat:33.7,lon:136.2,mag:8.1,deaths:1223,injuries:2147,damage:400,houses:26130,tsunami:true},
+  {id:"mikawa1945",year:1945,name:"Mikawa",lat:34.7,lon:137.1,mag:6.8,deaths:2306,injuries:3866,damage:320,houses:7221,tsunami:false},
+  {id:"nankai1946",year:1946,name:"Nankai",lat:33.0,lon:135.6,mag:8.1,deaths:1362,injuries:2598,damage:500,houses:35000,tsunami:true},
+  {id:"fukui1948",year:1948,name:"Fukui",lat:36.2,lon:136.3,mag:7.1,deaths:3769,injuries:21750,damage:600,houses:36184,tsunami:false},
+  {id:"niigata1964",year:1964,name:"Niigata",lat:38.4,lon:139.2,mag:7.5,deaths:26,injuries:447,damage:600,houses:1960,tsunami:true},
+  {id:"miyagi1978",year:1978,name:"Miyagi-Oki",lat:38.2,lon:142.2,mag:7.4,deaths:28,injuries:1325,damage:2700,houses:1183,tsunami:false},
+  {id:"okushiri1993",year:1993,name:"Okushiri",lat:42.8,lon:139.2,mag:7.8,deaths:230,injuries:323,damage:600,houses:601,tsunami:true},
+  {id:"kobe1995",year:1995,name:"Kobe",lat:34.6,lon:135.0,mag:6.9,deaths:6434,injuries:43792,damage:100000,houses:111025,tsunami:false},
+  {id:"chuetsu2004",year:2004,name:"Chūetsu",lat:37.3,lon:138.9,mag:6.8,deaths:68,injuries:4805,damage:28000,houses:3175,tsunami:false},
+  {id:"chuetsu_oki2007",year:2007,name:"Chūetsu-oki",lat:37.5,lon:138.6,mag:6.8,deaths:15,injuries:2346,damage:12500,houses:1331,tsunami:false},
+  {id:"iwate2008",year:2008,name:"Iwate-Miyagi",lat:39.0,lon:140.9,mag:6.9,deaths:23,injuries:450,damage:1000,houses:176,tsunami:false},
+  {id:"tohoku2011",year:2011,name:"Tōhoku",lat:38.3,lon:142.4,mag:9.1,deaths:19747,injuries:6242,damage:235000,houses:127830,tsunami:true},
+  {id:"kumamoto2016",year:2016,name:"Kumamoto",lat:32.8,lon:130.8,mag:7.0,deaths:273,injuries:2809,damage:20000,houses:8667,tsunami:false},
+  {id:"osaka2018",year:2018,name:"Osaka",lat:34.8,lon:135.6,mag:6.1,deaths:6,injuries:462,damage:3000,houses:21,tsunami:false},
+  {id:"hokkaido2018",year:2018,name:"Hokkaido Eastern Iburi",lat:42.7,lon:142.0,mag:6.7,deaths:43,injuries:782,damage:1500,houses:462,tsunami:false},
+  {id:"noto2024",year:2024,name:"Noto",lat:37.5,lon:137.3,mag:7.6,deaths:245,injuries:1300,damage:18000,houses:8700,tsunami:true}
+];
+
+// ── Dispatch ──────────────────────────────────────────────────────
+const dispatch = d3.dispatch("filter");
+let selectedIds = null; // null = all selected
+let filterSource = null; // which view initiated filter
+
+function isSelected(d) {
+  return selectedIds === null || selectedIds.has(d.id);
+}
+
+// ── Tooltip ──────────────────────────────────────────────────────
+const tip = d3.select("#tooltip");
+function showTip(event, d) {
+  const fmt = d3.format(",");
+  tip.classed("show", true).html(
+    `<div class="tt-name">${d.year} ${d.name}</div>
+     <div class="tt-row">M${d.mag}${d.tsunami ? " + tsunami" : ""}</div>
+     <div class="tt-row">Deaths: ${fmt(d.deaths)} · Injuries: ${fmt(d.injuries)}</div>
+     <div class="tt-row">Damage: $${fmt(d.damage)}M · Houses destroyed: ${fmt(d.houses)}</div>`
+  );
+  moveTip(event);
+}
+function moveTip(event) {
+  const pad = 14;
+  let x = event.pageX + pad, y = event.pageY + pad;
+  const rect = tip.node().getBoundingClientRect();
+  if (x + rect.width > window.innerWidth - 10) x = event.pageX - rect.width - pad;
+  if (y + rect.height > window.innerHeight - 10) y = event.pageY - rect.height - pad;
+  tip.style("left", x + "px").style("top", y + "px");
+}
+function hideTip() { tip.classed("show", false); }
+
+// ── Color scale for deaths ───────────────────────────────────────
+const deathMax = d3.max(quakes, d => d.deaths);
+const deathColor = d => {
+  if (d.deaths === 0) return "#bbb";
+  const t = Math.log1p(d.deaths) / Math.log1p(deathMax);
+  return d3.interpolate("#fca5a5", "#7f1d1d")(t);
+};
+
+// ── Map ──────────────────────────────────────────────────────────
+const mapW = 700, mapH = 480;
+const mapSvg = d3.select("#map-container").append("svg")
+  .attr("viewBox", `0 0 ${mapW} ${mapH}`)
+  .attr("width", "100%")
+  .style("display", "block");
+
+const projection = d3.geoMercator()
+  .center([137, 37])
+  .scale(1200)
+  .translate([mapW / 2, mapH / 2]);
+
+const geoPath = d3.geoPath().projection(projection);
+
+const gMap = mapSvg.append("g");
+
+// Water background
+gMap.append("rect")
+  .attr("width", mapW).attr("height", mapH)
+  .attr("fill", "#e8f0fe").attr("rx", 4);
+
+// Groups for layering
+const landGroup = gMap.append("g");
+const dotsGroupMap = gMap.append("g");
+
+// Size scale
+const magScale = d3.scaleSqrt().domain([6, 9.5]).range([4, 28]);
+
+// Placeholder for dots selection (populated after TopoJSON loads)
+let dots;
+
+// Load TopoJSON then draw map
+d3.json("../shared/japan.topojson").then(topoData => {
+  const prefectures = topojson.feature(topoData, topoData.objects.japan);
+  const prefBorders = topojson.mesh(topoData, topoData.objects.japan, (a, b) => a !== b);
+
+  // Draw prefecture shapes
+  landGroup.selectAll(".japan-land")
+    .data(prefectures.features)
+    .join("path")
+    .attr("class", "japan-land")
+    .attr("d", geoPath)
+    .attr("fill", "#f0f0f0")
+    .attr("stroke", "#ccc")
+    .attr("stroke-width", 0.5);
+
+  // Draw internal prefecture borders
+  landGroup.append("path")
+    .datum(prefBorders)
+    .attr("class", "pref-borders")
+    .attr("d", geoPath)
+    .attr("fill", "none")
+    .attr("stroke", "#ddd")
+    .attr("stroke-width", 0.5);
+
+  // Quake dots (drawn after land)
+  dots = dotsGroupMap.selectAll(".map-dot")
+    .data(quakes, d => d.id)
+    .join("circle")
+    .attr("class", "map-dot")
+    .attr("cx", d => projection([d.lon, d.lat])[0])
+    .attr("cy", d => projection([d.lon, d.lat])[1])
+    .attr("r", d => magScale(d.mag))
+    .attr("fill", deathColor)
+    .attr("fill-opacity", 0.8)
+    .on("mouseover", showTip).on("mousemove", moveTip).on("mouseout", hideTip)
+    .on("click", (event, d) => {
+      event.stopPropagation();
+      if (selectedIds && selectedIds.has(d.id) && selectedIds.size === 1) {
+        selectedIds = null; filterSource = null;
+      } else {
+        selectedIds = new Set([d.id]); filterSource = "map";
+      }
+      dispatch.call("filter");
+    });
+});
+
+// Map brush
+const brush = d3.brush()
+  .extent([[0, 0], [mapW, mapH]])
+  .on("end", function(event) {
+    if (!event.selection) {
+      selectedIds = null; filterSource = null;
+      dispatch.call("filter");
+      return;
+    }
+    const [[x0, y0], [x1, y1]] = event.selection;
+    const ids = new Set();
+    quakes.forEach(d => {
+      const [px, py] = projection([d.lon, d.lat]);
+      if (px >= x0 && px <= x1 && py >= y0 && py <= y1) ids.add(d.id);
+    });
+    if (ids.size === 0) { selectedIds = null; filterSource = null; }
+    else { selectedIds = ids; filterSource = "map"; }
+    dispatch.call("filter");
+    // Clear the brush visual
+    d3.select(this).call(brush.move, null);
+  });
+
+mapSvg.append("g").attr("class", "brush-layer").call(brush);
+
+// Click background to clear
+mapSvg.on("click", () => {
+  selectedIds = null; filterSource = null;
+  dispatch.call("filter");
+});
+
+// Legend
+const legend = mapSvg.append("g").attr("class", "legend").attr("transform", `translate(12, ${mapH - 110})`);
+legend.append("text").text("Magnitude").attr("font-weight", 600).attr("y", 0);
+[6.5, 7.5, 8.5].forEach((m, i) => {
+  const cy = 22 + i * 24;
+  legend.append("circle").attr("cx", 14).attr("cy", cy).attr("r", magScale(m)).attr("fill", "none").attr("stroke", "#999");
+  legend.append("text").attr("x", 32).attr("y", cy + 4).text(`M${m}`).attr("font-size", "11px");
+});
+legend.append("text").text("Deaths").attr("font-weight", 600).attr("y", 102);
+const deathLegendVals = [0, 100, 1000, 10000, 100000];
+const lw = 20;
+deathLegendVals.forEach((v, i) => {
+  legend.append("rect").attr("x", i * (lw + 2)).attr("y", 110).attr("width", lw).attr("height", 10)
+    .attr("fill", deathColor({deaths: v})).attr("rx", 1);
+});
+legend.append("text").attr("y", 134).text("0").attr("font-size", "9px");
+legend.append("text").attr("x", (deathLegendVals.length - 1) * (lw + 2)).attr("y", 134).text("100k+").attr("font-size", "9px");
+
+// ── Bar chart helper ─────────────────────────────────────────────
+function barChart(container, data, valueAccessor, formatVal, chartId) {
+  const margin = {top: 4, right: 50, bottom: 20, left: 100};
+  const rowH = 18;
+  const w = 220, h = margin.top + margin.bottom + data.length * rowH;
+
+  const svg = d3.select(container).append("svg")
+    .attr("viewBox", `0 0 ${w} ${h}`)
+    .attr("width", "100%")
+    .style("display", "block");
+
+  const sorted = [...data].sort((a, b) => d3.descending(valueAccessor(a), valueAccessor(b)));
+
+  const x = d3.scaleLinear()
+    .domain([0, d3.max(sorted, valueAccessor)])
+    .range([margin.left, w - margin.right]);
+
+  const y = d3.scaleBand()
+    .domain(sorted.map(d => d.id))
+    .range([margin.top, h - margin.bottom])
+    .padding(0.2);
+
+  // Axis
+  svg.append("g")
+    .attr("class", "axis")
+    .attr("transform", `translate(0,${h - margin.bottom})`)
+    .call(d3.axisBottom(x).ticks(4).tickFormat(d3.format(".2s")).tickSize(-(h - margin.top - margin.bottom)))
+    .call(g => g.select(".domain").remove())
+    .call(g => g.selectAll(".tick line").attr("stroke-opacity", 0.15));
+
+  // Bars
+  const bars = svg.selectAll(".bar-rect")
+    .data(sorted, d => d.id)
+    .join("rect")
+    .attr("class", "bar-rect")
+    .attr("x", margin.left)
+    .attr("y", d => y(d.id))
+    .attr("width", d => Math.max(0, x(valueAccessor(d)) - margin.left))
+    .attr("height", y.bandwidth())
+    .attr("fill", deathColor)
+    .attr("rx", 2)
+    .on("mouseover", showTip).on("mousemove", moveTip).on("mouseout", hideTip)
+    .on("click", (event, d) => {
+      event.stopPropagation();
+      if (selectedIds && selectedIds.has(d.id) && selectedIds.size === 1) {
+        selectedIds = null; filterSource = null;
+      } else {
+        selectedIds = new Set([d.id]); filterSource = chartId;
+      }
+      dispatch.call("filter");
+    });
+
+  // Labels
+  const labels = svg.selectAll(".bar-label")
+    .data(sorted, d => d.id)
+    .join("text")
+    .attr("class", "bar-label")
+    .attr("x", margin.left - 4)
+    .attr("y", d => y(d.id) + y.bandwidth() / 2)
+    .attr("dy", "0.35em")
+    .attr("text-anchor", "end")
+    .text(d => `${d.year} ${d.name}`);
+
+  // Value labels
+  const valLabels = svg.selectAll(".val-label")
+    .data(sorted, d => d.id)
+    .join("text")
+    .attr("class", "bar-label")
+    .attr("x", d => x(valueAccessor(d)) + 3)
+    .attr("y", d => y(d.id) + y.bandwidth() / 2)
+    .attr("dy", "0.35em")
+    .attr("font-size", "9px")
+    .attr("fill", "var(--text-2)")
+    .text(d => valueAccessor(d) > 0 ? formatVal(valueAccessor(d)) : "");
+
+  return { bars, labels, valLabels };
+}
+
+// ── Deaths chart ─────────────────────────────────────────────────
+const deathsData = quakes.filter(d => d.deaths > 0);
+const deathsChart = barChart("#deaths-chart", deathsData, d => d.deaths, d3.format(","), "deaths");
+
+// ── Damage chart ─────────────────────────────────────────────────
+const damageData = quakes.filter(d => d.damage > 0);
+const damageChart = barChart("#damage-chart", damageData, d => d.damage, d => "$" + d3.format(",.0f")(d) + "M", "damage");
+
+// ── Timeline scatter ─────────────────────────────────────────────
+const tlMargin = {top: 10, right: 16, bottom: 26, left: 40};
+const tlW = 220, tlH = 220;
+const tlSvg = d3.select("#timeline-chart").append("svg")
+  .attr("viewBox", `0 0 ${tlW} ${tlH}`)
+  .attr("width", "100%")
+  .style("display", "block");
+
+const tlX = d3.scaleLinear().domain([1920, 2026]).range([tlMargin.left, tlW - tlMargin.right]);
+const tlY = d3.scaleLinear().domain([5.8, 9.5]).range([tlH - tlMargin.bottom, tlMargin.top]);
+
+tlSvg.append("g").attr("class", "axis")
+  .attr("transform", `translate(0,${tlH - tlMargin.bottom})`)
+  .call(d3.axisBottom(tlX).ticks(5).tickFormat(d3.format("d")));
+
+tlSvg.append("g").attr("class", "axis")
+  .attr("transform", `translate(${tlMargin.left},0)`)
+  .call(d3.axisLeft(tlY).ticks(5))
+  .call(g => g.select(".domain").remove());
+
+tlSvg.append("text")
+  .attr("transform", `rotate(-90)`)
+  .attr("x", -(tlH / 2))
+  .attr("y", 12)
+  .attr("text-anchor", "middle")
+  .attr("font-size", "10px")
+  .attr("fill", "var(--text-2)")
+  .text("Magnitude");
+
+const tlDots = tlSvg.selectAll(".tl-dot")
+  .data(quakes, d => d.id)
+  .join("circle")
+  .attr("class", "map-dot")
+  .attr("cx", d => tlX(d.year))
+  .attr("cy", d => tlY(d.mag))
+  .attr("r", 5)
+  .attr("fill", deathColor)
+  .attr("fill-opacity", 0.85)
+  .attr("stroke", "#fff")
+  .attr("stroke-width", 0.5)
+  .on("mouseover", showTip).on("mousemove", moveTip).on("mouseout", hideTip)
+  .on("click", (event, d) => {
+    event.stopPropagation();
+    if (selectedIds && selectedIds.has(d.id) && selectedIds.size === 1) {
+      selectedIds = null; filterSource = null;
+    } else {
+      selectedIds = new Set([d.id]); filterSource = "timeline";
+    }
+    dispatch.call("filter");
+  });
+
+// Timeline brush
+const tlBrush = d3.brushX()
+  .extent([[tlMargin.left, tlMargin.top], [tlW - tlMargin.right, tlH - tlMargin.bottom]])
+  .on("end", function(event) {
+    if (!event.selection) {
+      selectedIds = null; filterSource = null;
+      dispatch.call("filter");
+      return;
+    }
+    const [x0, x1] = event.selection;
+    const ids = new Set();
+    quakes.forEach(d => {
+      const px = tlX(d.year);
+      if (px >= x0 && px <= x1) ids.add(d.id);
+    });
+    if (ids.size === 0) { selectedIds = null; filterSource = null; }
+    else { selectedIds = ids; filterSource = "timeline"; }
+    dispatch.call("filter");
+    d3.select(this).call(tlBrush.move, null);
+  });
+
+tlSvg.append("g").call(tlBrush);
+
+// ── Filter update ────────────────────────────────────────────────
+dispatch.on("filter", () => {
+  // Map dots
+  if (dots) dots.classed("ghost", d => !isSelected(d))
+    .attr("fill-opacity", d => isSelected(d) ? 0.8 : undefined);
+
+  // Deaths chart
+  deathsChart.bars.classed("ghost", d => !isSelected(d));
+  deathsChart.labels.classed("ghost", d => !isSelected(d));
+  deathsChart.valLabels.classed("ghost", d => !isSelected(d));
+
+  // Damage chart
+  damageChart.bars.classed("ghost", d => !isSelected(d));
+  damageChart.labels.classed("ghost", d => !isSelected(d));
+  damageChart.valLabels.classed("ghost", d => !isSelected(d));
+
+  // Timeline dots
+  tlDots.classed("ghost", d => !isSelected(d));
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Live API Fetching — Data Strategy Explainer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --article-width: 740px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem;
+  --line-height: 1.6;
+  --text: #1a1a2e;
+  --text-2: #4a4a6a;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --bg: #fafafa;
+  --fig-bg: #ffffff;
+  --border: #e2e2e8;
+}
+body { font-family: var(--body-font); font-size: var(--body-size); line-height: var(--line-height); color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased; }
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
+h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+p { margin: 0 0 1rem; }
+.subtitle { font-family: var(--heading-font); font-size: 1.1rem; color: var(--text-2); margin-bottom: 2rem; font-weight: 400; }
+.figure { margin: 2rem 0; padding: 1.5rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; position: relative; }
+.figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; }
+.insight { background: var(--accent-light); border-left: 3px solid var(--accent); padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 4px 4px 0; }
+svg text { font-family: var(--heading-font); }
+svg .axis text { font-size: 11px; fill: var(--text-2); }
+svg .axis line, svg .axis path { stroke: var(--border); }
+
+code, pre { font-family: var(--mono-font); }
+code { background: #f0f0f5; padding: 0.15em 0.4em; border-radius: 3px; font-size: 0.9em; }
+pre { background: #1a1a2e; color: #e2e2e8; padding: 1.25rem; border-radius: 6px; overflow-x: auto; font-size: 0.85rem; line-height: 1.5; margin: 0 0 1rem; }
+pre code { background: none; padding: 0; color: inherit; }
+.kw { color: #c792ea; }
+.str { color: #c3e88d; }
+.cm { color: #7a7a9a; }
+.fn { color: #82aaff; }
+.num { color: #f78c6c; }
+
+.status-bar {
+  font-family: var(--heading-font); font-size: 0.85rem;
+  padding: 0.6rem 1rem; border-radius: 4px; margin-bottom: 1rem;
+  display: flex; align-items: center; gap: 0.5rem;
+}
+.status-bar .dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  display: inline-block; flex-shrink: 0;
+}
+.status-loading { background: #fef3c7; color: #92400e; }
+.status-loading .dot { background: #f59e0b; animation: pulse 1s infinite; }
+.status-live { background: #d1fae5; color: #065f46; }
+.status-live .dot { background: #10b981; }
+.status-cached { background: #fee2e2; color: #991b1b; }
+.status-cached .dot { background: #ef4444; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.tooltip {
+  position: absolute; pointer-events: none;
+  background: rgba(26,26,46,0.92); color: #fff;
+  padding: 6px 10px; border-radius: 4px;
+  font-family: var(--heading-font); font-size: 0.78rem;
+  line-height: 1.4; max-width: 260px;
+  opacity: 0; transition: opacity 0.15s;
+  z-index: 10;
+}
+
+.url-builder { margin: 1rem 0; }
+.param-row {
+  display: flex; align-items: center; gap: 0.75rem;
+  margin: 0.5rem 0; flex-wrap: wrap;
+}
+.param-row label {
+  font-family: var(--heading-font); font-size: 0.85rem;
+  font-weight: 600; min-width: 120px; color: var(--text-2);
+}
+.param-row input[type="date"],
+.param-row input[type="number"] {
+  font-family: var(--mono-font); font-size: 0.85rem;
+  padding: 0.3rem 0.5rem; border: 1px solid var(--border);
+  border-radius: 4px; background: var(--fig-bg);
+}
+.param-row input[type="number"] { width: 80px; }
+.param-row input[type="date"] { width: 150px; }
+.url-preview {
+  font-family: var(--mono-font); font-size: 0.78rem;
+  background: #1a1a2e; color: #c3e88d; padding: 0.75rem 1rem;
+  border-radius: 4px; word-break: break-all; line-height: 1.5;
+  margin: 0.75rem 0;
+}
+.fetch-btn {
+  font-family: var(--heading-font); font-weight: 600;
+  padding: 0.5rem 1.25rem; background: var(--accent);
+  color: #fff; border: none; border-radius: 4px; cursor: pointer;
+  font-size: 0.9rem; transition: background 0.15s;
+}
+.fetch-btn:hover { background: #1d4ed8; }
+.fetch-btn:disabled { background: #94a3b8; cursor: not-allowed; }
+.fetch-result {
+  font-family: var(--heading-font); font-size: 0.85rem;
+  color: var(--text-2); margin-top: 0.5rem; min-height: 1.2em;
+}
+ul, ol { margin: 0 0 1rem 1.5rem; }
+li { margin-bottom: 0.3rem; }
+</style>
+</head>
+<body>
+<div class="article">
+
+<h1>Ask the Server, Right Now</h1>
+<p class="subtitle">How live API fetching pulls earthquake data from USGS at the moment you open this page</p>
+
+<p>Every visualization needs data. So far in this series, we have looked at embedding data directly in a page (inline JSON) and loading it from separate files. Both approaches share a trait: the data is fixed at the time you publish. If an earthquake hits Osaka tonight, your visualization will not show it until you manually update the file.</p>
+
+<p>There is a third strategy. Instead of shipping data with the page, you ask a server for it <em>at runtime</em> -- the moment a reader opens the page, your code reaches out over the network, requests fresh data, and renders whatever comes back. This is <strong>live API fetching</strong>.</p>
+
+<p>This page demonstrates the technique on itself. When you loaded it a moment ago, it attempted to fetch earthquake data from the USGS. Scroll down to see whether it succeeded.</p>
+
+<h2>What happened when you opened this page</h2>
+
+<div class="status-bar status-loading" id="status">
+  <span class="dot"></span>
+  <span id="status-text">Fetching live data from USGS...</span>
+</div>
+
+<div class="figure">
+  <div id="map-viz"></div>
+  <div class="tooltip" id="tooltip"></div>
+  <div class="figure-caption" id="map-caption">Loading...</div>
+</div>
+
+<p id="data-narrative">The map above is populating now. If the USGS API responded, you are seeing earthquakes that actually happened in the last 30 days. If the API was unreachable -- maybe you are offline, or reading a cached copy -- the page fell back to data embedded in this HTML file, from the last time it was built.</p>
+
+<div class="insight">
+<strong>Check the status bar.</strong> Green means the data is live from the USGS server. Red means you are viewing fallback data baked into this page. Either way, the visualization works. That is the whole point of the fallback pattern.
+</div>
+
+<h2>The USGS Earthquake API</h2>
+
+<p>The United States Geological Survey runs a free, public API for earthquake data. No registration, no API key, no authentication. You construct a URL with query parameters describing what you want, and the server returns GeoJSON.</p>
+
+<p>The base URL is:</p>
+<pre><code>https://earthquake.usgs.gov/fdsnws/event/1/query</code></pre>
+
+<p>You append parameters to narrow the results. Here are the ones that matter for Japan:</p>
+
+<ul>
+  <li><code>format=geojson</code> -- return GeoJSON (also supports csv, xml, text)</li>
+  <li><code>starttime</code> / <code>endtime</code> -- date range, in YYYY-MM-DD format</li>
+  <li><code>minmagnitude</code> -- ignore anything smaller than this</li>
+  <li><code>minlatitude</code>, <code>maxlatitude</code>, <code>minlongitude</code>, <code>maxlongitude</code> -- bounding box</li>
+</ul>
+
+<p>For M4.5+ earthquakes around Japan, that bounding box is roughly 24-46N latitude, 122-150E longitude. Combine everything and you get a URL like this:</p>
+
+<pre><code>https://earthquake.usgs.gov/fdsnws/event/1/query
+  ?format=geojson
+  &starttime=2026-03-12
+  &endtime=2026-04-11
+  &minmagnitude=4.5
+  &minlatitude=24&maxlatitude=46
+  &minlongitude=122&maxlongitude=150</code></pre>
+
+<p>Paste that into a browser and you get raw JSON back. Every programming language has tools to make that same request programmatically.</p>
+
+<h2>Try it: build a URL</h2>
+
+<p>Adjust the parameters below and watch the URL update. Hit Fetch to actually call the API and see the result count.</p>
+
+<div class="figure">
+  <div class="url-builder">
+    <div class="param-row">
+      <label>Start date</label>
+      <input type="date" id="param-start" value="2026-03-12">
+    </div>
+    <div class="param-row">
+      <label>End date</label>
+      <input type="date" id="param-end" value="2026-04-11">
+    </div>
+    <div class="param-row">
+      <label>Min magnitude</label>
+      <input type="number" id="param-mag" value="4.5" min="0" max="10" step="0.5">
+    </div>
+    <div class="param-row">
+      <label>Min latitude</label>
+      <input type="number" id="param-minlat" value="24" min="-90" max="90" step="1">
+    </div>
+    <div class="param-row">
+      <label>Max latitude</label>
+      <input type="number" id="param-maxlat" value="46" min="-90" max="90" step="1">
+    </div>
+    <div class="param-row">
+      <label>Min longitude</label>
+      <input type="number" id="param-minlon" value="122" min="-180" max="180" step="1">
+    </div>
+    <div class="param-row">
+      <label>Max longitude</label>
+      <input type="number" id="param-maxlon" value="150" min="-180" max="180" step="1">
+    </div>
+  </div>
+  <div class="url-preview" id="url-preview"></div>
+  <div style="display:flex; align-items:center; gap:1rem;">
+    <button class="fetch-btn" id="fetch-btn">Fetch</button>
+    <span class="fetch-result" id="fetch-result"></span>
+  </div>
+  <div class="figure-caption">All parameters are passed as URL query strings. The API does the filtering server-side and returns only matching events.</div>
+</div>
+
+<h2>What comes back: GeoJSON</h2>
+
+<p>The API returns a <strong>GeoJSON FeatureCollection</strong>. If you have worked with JSON before, GeoJSON is just JSON with a geographic convention. The structure looks like this:</p>
+
+<pre><code>{
+  <span class="str">"type"</span>: <span class="str">"FeatureCollection"</span>,
+  <span class="str">"metadata"</span>: { <span class="str">"count"</span>: <span class="num">52</span>, ... },
+  <span class="str">"features"</span>: [
+    {
+      <span class="str">"type"</span>: <span class="str">"Feature"</span>,
+      <span class="str">"properties"</span>: {
+        <span class="str">"mag"</span>: <span class="num">6.5</span>,
+        <span class="str">"place"</span>: <span class="str">"122 km E of Yamada, Japan"</span>,
+        <span class="str">"time"</span>: <span class="num">1774534730947</span>
+      },
+      <span class="str">"geometry"</span>: {
+        <span class="str">"type"</span>: <span class="str">"Point"</span>,
+        <span class="str">"coordinates"</span>: [<span class="num">143.37</span>, <span class="num">39.45</span>, <span class="num">9.5</span>]
+      }
+    },
+    ...
+  ]
+}</code></pre>
+
+<p>Each feature has <code>properties</code> (magnitude, place name, timestamp) and <code>geometry</code> (longitude, latitude, depth in km). The coordinates array is [lon, lat, depth] -- note that longitude comes first, which trips up everyone at least once.</p>
+
+<h2>The fetch pattern with fallback</h2>
+
+<p>Here is the actual pattern this page uses. The key idea: try the live API first, and if anything goes wrong, fall back to cached data embedded in the page itself.</p>
+
+<pre><code><span class="kw">const</span> USGS_URL = <span class="str">`https://earthquake.usgs.gov/fdsnws/event/1/query`</span>
+    + <span class="str">`?format=geojson&starttime=...&minmagnitude=4.5`</span>
+    + <span class="str">`&minlatitude=24&maxlatitude=46`</span>
+    + <span class="str">`&minlongitude=122&maxlongitude=150`</span>;
+
+<span class="kw">async function</span> <span class="fn">loadData</span>() {
+  <span class="kw">try</span> {
+    <span class="cm">// AbortController lets us set a timeout</span>
+    <span class="kw">const</span> controller = <span class="kw">new</span> AbortController();
+    <span class="kw">const</span> timeout = setTimeout(() => controller.<span class="fn">abort</span>(), <span class="num">8000</span>);
+
+    <span class="kw">const</span> resp = <span class="kw">await</span> <span class="fn">fetch</span>(USGS_URL, {
+      signal: controller.signal
+    });
+    clearTimeout(timeout);
+
+    <span class="kw">if</span> (!resp.ok) <span class="kw">throw new</span> Error(<span class="str">`HTTP </span>${resp.status}<span class="str">`</span>);
+
+    <span class="kw">const</span> json = <span class="kw">await</span> resp.<span class="fn">json</span>();
+    <span class="kw">return</span> { data: json.features, source: <span class="str">"live"</span> };
+
+  } <span class="kw">catch</span> (err) {
+    console.<span class="fn">warn</span>(<span class="str">"API unavailable, using fallback:"</span>, err);
+    <span class="kw">return</span> { data: FALLBACK_DATA, source: <span class="str">"cached"</span> };
+  }
+}</code></pre>
+
+<p>A few things to notice:</p>
+
+<ul>
+  <li><strong>AbortController timeout.</strong> Without this, a fetch to a slow or hung server could leave your page stuck indefinitely. Eight seconds is generous; five is reasonable for most uses.</li>
+  <li><strong>Check <code>resp.ok</code>.</strong> A 404 or 500 response is still a "successful" HTTP request from <code>fetch</code>'s perspective. You have to check the status yourself.</li>
+  <li><strong>The catch block does not crash.</strong> It returns fallback data with a flag, so the rest of your code does not need to know where the data came from.</li>
+</ul>
+
+<div class="insight">
+<strong>Why embed fallback data?</strong> Because an explainer that shows a blank map half the time is a bad explainer. The fallback is a snapshot from the last time you built the page -- slightly stale, but far better than nothing. Think of it as insurance.
+</div>
+
+<h2>Rate limits: be a good neighbor</h2>
+
+<p>The USGS API is free and public. It has no authentication. That is unusual and generous. The implicit contract is that you do not abuse it.</p>
+
+<p>In practice, this means:</p>
+
+<ul>
+  <li><strong>Do not poll rapidly.</strong> Fetching once on page load is fine. Fetching every 5 seconds is not.</li>
+  <li><strong>Do not request everything.</strong> Use the query parameters to narrow your results. Asking for all earthquakes worldwide with no magnitude filter will return enormous payloads and stress the server.</li>
+  <li><strong>Cache when you can.</strong> If your page does not need real-time data, consider fetching once and caching the result in memory or localStorage rather than hitting the API on every page navigation.</li>
+  <li><strong>Respect HTTP headers.</strong> If the API sends <code>Retry-After</code> or returns 429 (Too Many Requests), back off.</li>
+</ul>
+
+<p>For a visualization like this one -- fetching 30 days of M4.5+ earthquakes in a regional bounding box -- the response is small (a few dozen KB) and the load is negligible. You are fine.</p>
+
+<h2>Advantages of live fetching</h2>
+
+<ul>
+  <li><strong>Always current.</strong> If an earthquake strikes while you are reading this, refreshing the page will show it (assuming the USGS has processed it, which usually takes 5-20 minutes for significant events).</li>
+  <li><strong>Smallest possible HTML file.</strong> The data is not embedded in the page, so the file itself is lightweight. Only the code and the fallback data ship with the page.</li>
+  <li><strong>Single source of truth.</strong> Everyone who loads the page sees the same live data. No version drift between your local file and the server.</li>
+</ul>
+
+<h2>Disadvantages</h2>
+
+<ul>
+  <li><strong>Requires internet.</strong> Open this page on an airplane without Wi-Fi and the live fetch will fail. (The fallback saves you here, but the data will be stale.)</li>
+  <li><strong>Slower initial load.</strong> There is a network round-trip before anything renders. On slow connections, the user stares at a loading state. Inline data renders instantly.</li>
+  <li><strong>API can change or go down.</strong> The USGS could change their response format, deprecate the endpoint, or have an outage. Your page would break in ways that are invisible until someone loads it.</li>
+  <li><strong>CORS restrictions.</strong> Not all APIs allow requests from a browser. The USGS does, but many APIs require a backend proxy. If you see <code>Access-Control-Allow-Origin</code> errors in the console, that is CORS blocking you.</li>
+</ul>
+
+<h2>When to use live fetching</h2>
+
+<p>Live fetching makes sense when freshness matters more than reliability. Dashboards, monitoring displays, "what is happening right now" views -- these all benefit from live data. If you are building a static analysis of historical trends, bake the data into the page instead. You will get faster loads, offline support, and no API dependency.</p>
+
+<p>The best approach for an explainer or article is often what this page does: try live, fall back to cached. You get freshness when the network cooperates and reliability when it does not.</p>
+
+<div class="insight">
+<strong>The spectrum of data strategies.</strong> Inline JSON is fully self-contained but stale. External files separate data from code but still require a build step to update. Live API fetching is always current but depends on the network. Most real projects use a combination -- live data with cached fallbacks, or periodic builds that fetch and embed fresh data.
+</div>
+
+</div>
+
+<script>
+// ============================================================
+// FALLBACK DATA: 52 real earthquakes, Japan region, M4.5+
+// Fetched from USGS on 2026-04-11. Used when the live API is
+// unreachable (offline, API down, timeout, CORS, etc.)
+// ============================================================
+const FALLBACK_DATA = [
+  {mag:4.6,place:"Izu Islands, Japan region",time:1775787871120,lon:141.9062,lat:30.7991,depth:29.8},
+  {mag:5.1,place:"Izu Islands, Japan region",time:1775760864963,lon:141.9379,lat:30.8731,depth:10},
+  {mag:4.7,place:"41 km N of Hirara, Japan",time:1775698465998,lon:125.3016,lat:25.1804,depth:10},
+  {mag:4.7,place:"Bonin Islands, Japan region",time:1775630927047,lon:142.3651,lat:28.8971,depth:10},
+  {mag:4.7,place:"75 km ESE of Katsuren-haebaru, Japan",time:1775593717440,lon:128.5094,lat:25.9617,depth:10},
+  {mag:4.7,place:"88 km ESE of Taira, Japan",time:1775584997990,lon:128.9458,lat:26.2685,depth:10},
+  {mag:4.6,place:"91 km SE of Hiroo, Japan",time:1775579781858,lon:144.1764,lat:41.7819,depth:49.6},
+  {mag:4.6,place:"116 km SE of Koshima, Japan",time:1775481291680,lon:131.5275,lat:29.6412,depth:10},
+  {mag:4.9,place:"190 km S of Kushimoto, Japan",time:1775457910543,lon:135.8854,lat:31.7549,depth:10},
+  {mag:4.6,place:"43 km N of Yonakuni, Japan",time:1775403241749,lon:123.066,lat:24.8579,depth:135.2},
+  {mag:5.1,place:"Bonin Islands, Japan region",time:1775355482073,lon:142.6478,lat:28.4548,depth:10},
+  {mag:4.6,place:"54 km SE of Koseda, Japan",time:1775319253452,lon:131.1042,lat:30.0884,depth:42.3},
+  {mag:5.0,place:"41 km E of Onagawa Cho, Japan",time:1775299006191,lon:141.9269,lat:38.4373,depth:68},
+  {mag:5.0,place:"33 km SSE of Onagawa Cho, Japan",time:1775091172373,lon:141.6037,lat:38.167,depth:66.6},
+  {mag:4.9,place:"2 km E of Ishige, Japan",time:1775005578554,lon:139.9992,lat:36.1161,depth:63.1},
+  {mag:4.5,place:"117 km S of Tateyama, Japan",time:1774971528865,lon:139.9842,lat:33.9265,depth:116.4},
+  {mag:4.5,place:"90 km ENE of Kuji, Japan",time:1774856819029,lon:142.7159,lat:40.5605,depth:35.4},
+  {mag:4.7,place:"83 km ESE of Taira, Japan",time:1774843451234,lon:128.9058,lat:26.3013,depth:10},
+  {mag:4.7,place:"84 km ESE of Taira, Japan",time:1774841478179,lon:128.9301,lat:26.3319,depth:10},
+  {mag:4.6,place:"84 km SE of Taira, Japan",time:1774836764937,lon:128.8256,lat:26.1678,depth:10},
+  {mag:5.1,place:"81 km SE of Taira, Japan",time:1774833150840,lon:128.8262,lat:26.2155,depth:10},
+  {mag:5.1,place:"77 km WNW of Amagi, Japan",time:1774768074743,lon:128.1503,lat:28.0229,depth:10},
+  {mag:4.7,place:"36 km N of Hirara, Japan",time:1774676055781,lon:125.3134,lat:25.1366,depth:10},
+  {mag:5.1,place:"107 km E of Yamada, Japan",time:1774625073227,lon:143.1958,lat:39.3975,depth:16.1},
+  {mag:4.7,place:"Izu Islands, Japan region",time:1774594669565,lon:141.7473,lat:31.3684,depth:10},
+  {mag:4.9,place:"118 km E of Yamada, Japan",time:1774554991413,lon:143.3275,lat:39.4245,depth:10},
+  {mag:4.8,place:"122 km E of Miyako, Japan",time:1774542032961,lon:143.3643,lat:39.5986,depth:10},
+  {mag:4.6,place:"117 km E of Yamada, Japan",time:1774540785355,lon:143.3051,lat:39.5827,depth:10},
+  {mag:4.6,place:"127 km E of Yamada, Japan",time:1774536425243,lon:143.4321,lat:39.3964,depth:10},
+  {mag:4.6,place:"107 km E of Yamada, Japan",time:1774535826227,lon:143.1955,lat:39.5022,depth:10},
+  {mag:6.5,place:"122 km E of Yamada, Japan",time:1774534730947,lon:143.3717,lat:39.4462,depth:9.5},
+  {mag:4.7,place:"79 km ESE of Taira, Japan",time:1774523601743,lon:128.874,lat:26.3306,depth:10},
+  {mag:4.6,place:"106 km E of Yamada, Japan",time:1774515114941,lon:143.1921,lat:39.4982,depth:45.3},
+  {mag:4.9,place:"88 km NE of Kuji, Japan",time:1774510674346,lon:142.5182,lat:40.744,depth:48.1},
+  {mag:4.9,place:"Izu Islands, Japan region",time:1774309750553,lon:142.4471,lat:32.3287,depth:10},
+  {mag:4.5,place:"Izu Islands, Japan region",time:1774309637583,lon:142.6257,lat:32.3148,depth:10},
+  {mag:4.6,place:"91 km S of Koshima, Japan",time:1774269586121,lon:130.6161,lat:29.4145,depth:39.9},
+  {mag:4.7,place:"64 km S of Miyakojima, Japan",time:1774259978778,lon:125.2661,lat:24.2077,depth:10.4},
+  {mag:4.6,place:"92 km S of Koshima, Japan",time:1774093996953,lon:130.6401,lat:29.404,depth:39.7},
+  {mag:5.4,place:"84 km S of Koshima, Japan",time:1774091524314,lon:130.6689,lat:29.4858,depth:21.7},
+  {mag:4.6,place:"14 km WNW of Naze, Japan",time:1774041561348,lon:129.343,lat:28.3965,depth:59.7},
+  {mag:4.7,place:"77 km SE of Taira, Japan",time:1773977707903,lon:128.6326,lat:26.0876,depth:10},
+  {mag:4.6,place:"49 km E of Yokohama, Japan",time:1773868982426,lon:141.8326,lat:41.0185,depth:66.7},
+  {mag:4.8,place:"Izu Islands, Japan region",time:1773828523614,lon:141.733,lat:32.3944,depth:10},
+  {mag:4.6,place:"99 km ENE of Yokohama, Japan",time:1773808427331,lon:142.4066,lat:41.2644,depth:58.3},
+  {mag:4.5,place:"17 km SSE of Ito, Japan",time:1773661071538,lon:139.152,lat:34.8208,depth:143.1},
+  {mag:4.9,place:"84 km SSW of Honcho, Japan",time:1773601014260,lon:142.6224,lat:41.3983,depth:41.4},
+  {mag:4.7,place:"28 km SE of Nichinan, Japan",time:1773599954090,lon:131.5527,lat:31.4027,depth:49.1},
+  {mag:4.8,place:"139 km SSE of Honcho, Japan",time:1773592362266,lon:143.2879,lat:40.9072,depth:42.9},
+  {mag:4.8,place:"56 km SSE of Yilan, Taiwan",time:1773562496417,lon:122.0493,lat:24.3272,depth:32.1},
+  {mag:4.9,place:"1 km SW of Kiryu, Japan",time:1773551166748,lon:139.3174,lat:36.3911,depth:95.6},
+  {mag:5.0,place:"122 km E of Yamada, Japan",time:1773431724163,lon:143.3754,lat:39.418,depth:32.9}
+];
+
+// ============================================================
+// CONFIG
+// ============================================================
+const FETCH_TIMEOUT = 8000;
+
+function buildApiUrl(start, end, minMag, minLat, maxLat, minLon, maxLon) {
+  return `https://earthquake.usgs.gov/fdsnws/event/1/query`
+    + `?format=geojson`
+    + `&starttime=${start}&endtime=${end}`
+    + `&minmagnitude=${minMag}`
+    + `&minlatitude=${minLat}&maxlatitude=${maxLat}`
+    + `&minlongitude=${minLon}&maxlongitude=${maxLon}`;
+}
+
+// Compute default date range: last 30 days
+function defaultDates() {
+  const end = new Date();
+  const start = new Date(end);
+  start.setDate(start.getDate() - 30);
+  const fmt = d => d.toISOString().slice(0, 10);
+  return { start: fmt(start), end: fmt(end) };
+}
+
+// ============================================================
+// DATA LOADING
+// ============================================================
+function parseFeatures(features) {
+  return features.map(f => ({
+    mag: f.properties.mag,
+    place: f.properties.place,
+    time: f.properties.time,
+    lon: f.geometry.coordinates[0],
+    lat: f.geometry.coordinates[1],
+    depth: f.geometry.coordinates[2]
+  }));
+}
+
+async function loadData() {
+  const { start, end } = defaultDates();
+  const url = buildApiUrl(start, end, 4.5, 24, 46, 122, 150);
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
+    const resp = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeout);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const json = await resp.json();
+    return { data: parseFeatures(json.features), source: "live", count: json.metadata.count };
+  } catch (err) {
+    console.warn("USGS API unavailable, using fallback:", err.message);
+    return { data: FALLBACK_DATA, source: "cached", count: FALLBACK_DATA.length };
+  }
+}
+
+// ============================================================
+// MAP VISUALIZATION
+// ============================================================
+function drawMap(data, source) {
+  const container = d3.select("#map-viz");
+  const width = container.node().getBoundingClientRect().width;
+  const height = Math.min(width * 0.75, 500);
+
+  // Japan-centered projection
+  const projection = d3.geoMercator()
+    .center([137, 37])
+    .scale(1200)
+    .translate([width / 2, height / 2]);
+
+  const svg = container.append("svg")
+    .attr("width", width)
+    .attr("height", height)
+    .attr("viewBox", `0 0 ${width} ${height}`);
+
+  // Water background
+  svg.append("rect")
+    .attr("width", width).attr("height", height)
+    .attr("fill", "#e8f0fe").attr("rx", 4);
+
+  // Prefecture-level Japan map from shared TopoJSON
+  const geoPath = d3.geoPath().projection(projection);
+  const landG = svg.append("g").attr("class", "land");
+
+  d3.json("../shared/japan.topojson").then(topoData => {
+    const japanGeo = topojson.feature(topoData, topoData.objects.japan);
+    const borders = topojson.mesh(topoData, topoData.objects.japan, (a, b) => a !== b);
+
+    landG.selectAll("path.prefecture")
+      .data(japanGeo.features)
+      .join("path")
+      .attr("class", "prefecture")
+      .attr("d", geoPath)
+      .attr("fill", "#f0f0f0")
+      .attr("stroke", "#ccc")
+      .attr("stroke-width", 0.5);
+
+    landG.append("path")
+      .datum(borders)
+      .attr("d", geoPath)
+      .attr("fill", "none")
+      .attr("stroke", "#ddd")
+      .attr("stroke-width", 0.5);
+
+    drawQuakes();
+  });
+
+  function drawQuakes() {
+  // Magnitude scale
+  const magScale = d3.scaleSqrt()
+    .domain([4.5, 7])
+    .range([3, 18]);
+
+  // Depth color
+  const depthColor = d3.scaleSequential(d3.interpolateYlOrRd)
+    .domain([200, 0]);
+
+  const tooltip = d3.select("#tooltip");
+
+  // Plot quakes
+  const circles = svg.selectAll("circle.quake")
+    .data(data.sort((a, b) => b.depth - a.depth)) // draw deep first
+    .join("circle")
+    .attr("class", "quake")
+    .attr("cx", d => projection([d.lon, d.lat])[0])
+    .attr("cy", d => projection([d.lon, d.lat])[1])
+    .attr("r", d => magScale(d.mag))
+    .attr("fill", d => depthColor(Math.min(d.depth, 200)))
+    .attr("fill-opacity", 0.7)
+    .attr("stroke", "#fff")
+    .attr("stroke-width", 0.5)
+    .style("cursor", "pointer");
+
+  // Filter out circles outside the SVG viewport
+  circles.filter(function() {
+    const cx = +d3.select(this).attr("cx");
+    const cy = +d3.select(this).attr("cy");
+    return cx < -20 || cx > width + 20 || cy < -20 || cy > height + 20;
+  }).remove();
+
+  // Tooltip
+  circles.on("mouseenter", function(event, d) {
+    const date = new Date(d.time);
+    const dateStr = date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    const timeStr = date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+    tooltip
+      .style("opacity", 1)
+      .html(`<strong>M${d.mag.toFixed(1)}</strong> &mdash; ${d.place}<br>${dateStr} ${timeStr}<br>Depth: ${d.depth.toFixed(0)} km`);
+    d3.select(this).attr("stroke", "#1a1a2e").attr("stroke-width", 1.5);
+  })
+  .on("mousemove", function(event) {
+    const fig = d3.select("#map-viz").node().getBoundingClientRect();
+    tooltip
+      .style("left", (event.clientX - fig.left + 12) + "px")
+      .style("top", (event.clientY - fig.top - 10) + "px");
+  })
+  .on("mouseleave", function() {
+    tooltip.style("opacity", 0);
+    d3.select(this).attr("stroke", "#fff").attr("stroke-width", 0.5);
+  });
+
+  // Legend
+  const legendG = svg.append("g").attr("transform", `translate(${width - 130}, 20)`);
+
+  // Magnitude legend
+  legendG.append("text").text("Magnitude").attr("font-size", 11).attr("font-weight", 600).attr("fill", "var(--text)");
+  [4.5, 5.5, 6.5].forEach((m, i) => {
+    legendG.append("circle")
+      .attr("cx", 0).attr("cy", 22 + i * 22)
+      .attr("r", magScale(m))
+      .attr("fill", "none").attr("stroke", "#999").attr("stroke-width", 0.8);
+    legendG.append("text")
+      .attr("x", 24).attr("y", 26 + i * 22)
+      .text(`M${m}`).attr("font-size", 10).attr("fill", "var(--text-2)");
+  });
+
+  // Depth legend
+  const depthLegG = legendG.append("g").attr("transform", "translate(0, 95)");
+  depthLegG.append("text").text("Depth").attr("font-size", 11).attr("font-weight", 600).attr("fill", "var(--text)");
+  const depthGrad = depthLegG.append("defs").append("linearGradient").attr("id", "depth-grad");
+  depthGrad.append("stop").attr("offset", "0%").attr("stop-color", depthColor(0));
+  depthGrad.append("stop").attr("offset", "100%").attr("stop-color", depthColor(200));
+  depthLegG.append("rect").attr("y", 10).attr("width", 80).attr("height", 10).attr("rx", 2).attr("fill", "url(#depth-grad)");
+  depthLegG.append("text").attr("y", 32).text("0 km").attr("font-size", 9).attr("fill", "var(--text-2)");
+  depthLegG.append("text").attr("x", 80).attr("y", 32).text("200+").attr("font-size", 9).attr("fill", "var(--text-2)").attr("text-anchor", "end");
+  } // end drawQuakes
+}
+
+// ============================================================
+// URL BUILDER UI
+// ============================================================
+function setupUrlBuilder() {
+  const ids = ["param-start", "param-end", "param-mag", "param-minlat", "param-maxlat", "param-minlon", "param-maxlon"];
+  const inputs = ids.map(id => document.getElementById(id));
+  const preview = document.getElementById("url-preview");
+  const fetchBtn = document.getElementById("fetch-btn");
+  const fetchResult = document.getElementById("fetch-result");
+
+  function updatePreview() {
+    const [start, end, mag, minLat, maxLat, minLon, maxLon] = inputs.map(i => i.value);
+    const url = buildApiUrl(start, end, mag, minLat, maxLat, minLon, maxLon);
+    preview.textContent = url;
+    return url;
+  }
+
+  inputs.forEach(i => i.addEventListener("input", () => {
+    updatePreview();
+    fetchResult.textContent = "";
+  }));
+
+  updatePreview();
+
+  fetchBtn.addEventListener("click", async () => {
+    const url = updatePreview();
+    fetchBtn.disabled = true;
+    fetchResult.textContent = "Fetching...";
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
+      const resp = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeout);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const json = await resp.json();
+      fetchResult.textContent = `Got ${json.metadata.count} earthquake${json.metadata.count !== 1 ? "s" : ""}.`;
+      fetchResult.style.color = "#065f46";
+    } catch (err) {
+      fetchResult.textContent = `Error: ${err.message}`;
+      fetchResult.style.color = "#991b1b";
+    } finally {
+      fetchBtn.disabled = false;
+    }
+  });
+}
+
+// ============================================================
+// INIT
+// ============================================================
+(async function init() {
+  setupUrlBuilder();
+
+  const { data, source, count } = await loadData();
+
+  // Update status bar
+  const statusBar = document.getElementById("status");
+  const statusText = document.getElementById("status-text");
+  statusBar.classList.remove("status-loading");
+
+  if (source === "live") {
+    statusBar.classList.add("status-live");
+    statusText.textContent = `Live data loaded -- ${count} earthquakes from USGS (last 30 days, M4.5+)`;
+  } else {
+    statusBar.classList.add("status-cached");
+    statusText.textContent = `Using cached data (${count} earthquakes) -- API was unreachable`;
+  }
+
+  // Update caption
+  const caption = document.getElementById("map-caption");
+  if (source === "live") {
+    caption.textContent = `Live data from USGS Earthquake API. ${count} events, M4.5+, last 30 days. Hover for details.`;
+  } else {
+    caption.textContent = `Cached fallback data (API unavailable). ${count} events from March-April 2026. Hover for details.`;
+  }
+
+  // Draw map
+  drawMap(data, source);
+
+  // Update narrative paragraph
+  const narrative = document.getElementById("data-narrative");
+  if (source === "live") {
+    narrative.innerHTML = `The map above shows <strong>${count} earthquakes</strong> fetched live from the USGS API moments ago. This is real, current data -- not a pre-built snapshot. If you refresh the page tomorrow, the 30-day window will shift forward and you may see different events.`;
+  } else {
+    narrative.innerHTML = `The map above is showing <strong>cached fallback data</strong> -- ${count} earthquakes embedded in this page's source code. The live API call failed, most likely because you are offline or the USGS server was temporarily unavailable. The visualization still works; the data is just from the last time this page was built rather than from right now.`;
+  }
+})();
+</script>
+</body>
+</html>

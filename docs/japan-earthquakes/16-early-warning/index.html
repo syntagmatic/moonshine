@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Earthquake Early Warning Systems</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --article-width: 740px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem; --line-height: 1.6;
+  --text: #1a1a2e; --text-2: #4a4a6a;
+  --accent: #2563eb; --accent-light: #dbeafe;
+  --bg: #fafafa; --fig-bg: #ffffff; --border: #e2e2e8;
+}
+body { font-family: var(--body-font); font-size: var(--body-size); line-height: var(--line-height); color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased; }
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
+h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+h3 { font-size: 1.15rem; margin: 2rem 0 0.75rem; }
+p { margin: 0 0 1rem; }
+.subtitle { font-family: var(--heading-font); font-size: 1.15rem; color: var(--text-2); margin-bottom: 2rem; font-weight: 400; }
+.figure { margin: 2rem 0; padding: 1.5rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; }
+.figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; }
+.insight { background: var(--accent-light); border-left: 3px solid var(--accent); padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 4px 4px 0; }
+svg text { font-family: var(--heading-font); }
+svg .axis text { font-size: 11px; fill: var(--text-2); }
+svg .axis line, svg .axis path { stroke: var(--border); }
+
+.controls { font-family: var(--heading-font); font-size: 0.85rem; display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap; }
+.controls button {
+  font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600;
+  padding: 0.35rem 1rem; border: 1px solid var(--border); border-radius: 4px;
+  background: var(--fig-bg); color: var(--text); cursor: pointer;
+  transition: background 0.15s;
+}
+.controls button:hover { background: var(--accent-light); }
+.controls button.active { background: var(--accent); color: white; border-color: var(--accent); }
+.controls select {
+  font-family: var(--heading-font); font-size: 0.85rem;
+  padding: 0.35rem 0.5rem; border: 1px solid var(--border); border-radius: 4px;
+  background: var(--fig-bg); color: var(--text);
+}
+.controls label { color: var(--text-2); }
+
+.status-bar {
+  font-family: var(--heading-font); font-size: 0.9rem; font-weight: 600;
+  padding: 0.5rem 1rem; border-radius: 4px; text-align: center;
+  margin-bottom: 0.75rem; transition: background 0.3s, color 0.3s;
+}
+.status-idle { background: #f1f5f9; color: var(--text-2); }
+.status-detecting { background: #dbeafe; color: #1e40af; }
+.status-warning { background: #fef3c7; color: #92400e; }
+.status-alert { background: #fee2e2; color: #991b1b; }
+
+.legend-item { display: inline-flex; align-items: center; gap: 0.3rem; margin-right: 1.25rem; font-size: 0.8rem; color: var(--text-2); }
+.legend-swatch { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+
+.action-chart .bar-group { cursor: default; }
+.action-chart .bar-label { font-size: 0.8rem; fill: var(--text); }
+.action-chart .bar-time { font-size: 0.75rem; fill: var(--text-2); }
+</style>
+</head>
+<body>
+<div class="article">
+
+<h1>Earthquake Early Warning</h1>
+<p class="subtitle">How Japan's system buys you seconds that save lives</p>
+
+<p>If you've lived in Japan for any length of time, you know the sound. That urgent, warbling tone from your phone&mdash;<em>tididididi, tididididi</em>&mdash;sometimes arriving seconds before the ground starts to shake. It's the sound of one of the most sophisticated disaster warning systems ever built, and it runs on a surprisingly simple piece of physics.</p>
+
+<h2>Two Waves, One Earthquake</h2>
+
+<p>When a fault ruptures, it sends out two kinds of seismic waves. <strong>P-waves</strong> (primary, or compression waves) move fast&mdash;about 6 km/s through the crust. They're the first to arrive, but they're relatively gentle: a jolt, a rattling of dishes. <strong>S-waves</strong> (secondary, or shear waves) are slower, around 3.5 km/s, but they carry the real destructive energy. They're the ones that throw you off your feet and bring down buildings.</p>
+
+<p>The gap between these two waves is the whole game. Every second that the fast-but-weak P-wave is ahead of the slow-but-violent S-wave is a second of warning you can use.</p>
+
+<div class="insight">
+<strong>The key insight:</strong> The farther you are from the epicenter, the bigger the gap between P-wave and S-wave arrival. Tokyo, 373 km from the 2011 Tohoku epicenter, got roughly a minute of warning. Sendai, just 130 km away, got far less.
+</div>
+
+<h2>Watch It Happen</h2>
+
+<p>This simulation shows how the system works. The blue circle is the P-wave front; the red circle is the S-wave front. The gap between them is your warning window. Watch the seismometer stations light up as the P-wave reaches them, and see when the system has enough data to issue a warning.</p>
+
+<div class="figure" id="fig-simulation">
+  <div class="controls">
+    <button id="btn-play" class="active">Play</button>
+    <button id="btn-pause">Pause</button>
+    <button id="btn-reset">Reset</button>
+    <label>Speed:
+      <select id="sel-speed">
+        <option value="0.5">0.5x</option>
+        <option value="1" selected>1x</option>
+        <option value="2">2x</option>
+        <option value="5">5x</option>
+        <option value="10">10x</option>
+      </select>
+    </label>
+    <label>Scenario:
+      <select id="sel-scenario">
+        <option value="tohoku" selected>2011 Tohoku M9.0</option>
+        <option value="nankai">Nankai Trough (hypothetical)</option>
+        <option value="noto">2024 Noto M7.6</option>
+      </select>
+    </label>
+  </div>
+  <div id="status-bar" class="status-bar status-idle">Earthquake has not occurred yet</div>
+  <div id="map-container"></div>
+  <div style="margin-top:0.5rem;">
+    <span class="legend-item"><span class="legend-swatch" style="background:#3b82f6;opacity:0.5;"></span> P-wave (compression, ~6 km/s)</span>
+    <span class="legend-item"><span class="legend-swatch" style="background:#ef4444;opacity:0.5;"></span> S-wave (shear, ~3.5 km/s)</span>
+    <span class="legend-item"><span class="legend-swatch" style="background:#22c55e;"></span> Seismometer station</span>
+  </div>
+  <div class="figure-caption">Seismic wave propagation from the epicenter. The gap between the blue and red circles is the warning window. After 3+ stations detect the P-wave, a warning is issued. City labels show remaining warning time before S-wave arrival.</div>
+</div>
+
+<h2>The Timeline</h2>
+
+<p>Here's what happens in those critical seconds after the fault ruptures. The system is fast&mdash;JMA can issue a preliminary warning within about 3&ndash;8 seconds of detecting the first P-wave. But even so, nearby areas may already be shaking before the alert goes out.</p>
+
+<div class="figure" id="fig-timeline">
+  <div id="timeline-container"></div>
+  <div class="figure-caption">Timeline of the 2011 Tohoku earthquake early warning sequence. The cursor tracks the simulation above. Events before the dashed line happen underground and in JMA's computers; events after affect real people.</div>
+</div>
+
+<h2>How JMA's System Works</h2>
+
+<p>Japan's Earthquake Early Warning system, operated by the Japan Meteorological Agency, is among the fastest in the world. The process goes roughly like this:</p>
+
+<p><strong>1. Detect.</strong> A dense network of over 1,000 seismometers blankets Japan. When the P-wave from an earthquake reaches the nearest station, it's detected within a fraction of a second.</p>
+
+<p><strong>2. Triangulate.</strong> Once three or more stations have picked up the P-wave, the system can triangulate the epicenter and estimate the depth. This happens within about 3&ndash;5 seconds of the first detection.</p>
+
+<p><strong>3. Estimate.</strong> Using the initial waveform data, algorithms estimate the earthquake's magnitude. This is the trickiest part&mdash;early estimates can be significantly off, especially for very large events. In 2011, the initial estimate was M7.2; the actual magnitude turned out to be M9.0.</p>
+
+<p><strong>4. Predict shaking.</strong> Based on magnitude, depth, and distance, the system predicts the seismic intensity at locations across the country. Areas expected to experience shaking of intensity 4 or above on the JMA scale receive warnings.</p>
+
+<p><strong>5. Broadcast.</strong> Alerts go out simultaneously through TV, radio, cell phones (that distinctive sound), factory control systems, train operations centers, and elevator controllers. The whole chain from detection to broadcast can take as little as 3 seconds.</p>
+
+<div class="insight">
+<strong>The 2011 test:</strong> On March 11, 2011, the system detected the Tohoku earthquake and issued warnings before the devastating S-waves reached most of Honshu. Tokyo residents got roughly 60 seconds of warning. Bullet trains along the Tohoku Shinkansen line received automatic stop commands and began braking before the shaking hit&mdash;not a single one derailed. Factories initiated emergency shutdowns. That said, areas closest to the epicenter, including much of the Miyagi coast, had almost no warning time at all.
+</div>
+
+<h2>What Can You Do With a Warning?</h2>
+
+<p>A few seconds doesn't sound like much, but structured response makes an enormous difference. Here's roughly what becomes possible as the warning window grows:</p>
+
+<div class="figure" id="fig-actions">
+  <div id="actions-container"></div>
+  <div class="figure-caption">Minimum warning time needed for various protective actions. Even 5 seconds is enough to drop under a desk. Longer warnings allow infrastructure-level responses.</div>
+</div>
+
+<h2>Limitations Worth Knowing</h2>
+
+<p>The system is remarkable, but it has real limits. The most fundamental: if you're close to the epicenter, the P-wave and S-wave arrive almost simultaneously. There's no gap, so there's no warning. For a shallow earthquake directly beneath a city, the phone alert might arrive <em>after</em> the shaking has already started.</p>
+
+<p>Magnitude estimation is another weak point. The system uses the first few seconds of P-wave data to guess how big the earthquake is, but very large earthquakes don't reveal their full size immediately. The initial M7.2 estimate for the 2011 Tohoku event meant early warnings significantly underestimated the shaking intensity. JMA has since updated its algorithms to better handle cascading ruptures.</p>
+
+<p>False alarms happen too, though JMA has worked hard to reduce them. A false alarm that sends factory workers scrambling or stops trains costs money and erodes trust in the system. The balance between speed and accuracy is a constant engineering tension.</p>
+
+<h2>Why It Matters</h2>
+
+<p>Japan's earthquake early warning system is a product of hard-won experience, massive public investment, and a culture that takes disaster preparedness seriously. Other countries are building similar systems&mdash;Mexico's SASMEX, the US ShakeAlert along the West Coast, systems in China and Taiwan&mdash;but Japan's remains the gold standard in terms of speed and coverage.</p>
+
+<p>The next time that sound hits your phone, you'll know what's happening in the background: P-waves racing ahead through the crust, seismometers lighting up one by one, algorithms crunching triangulation and magnitude in milliseconds, and a broadcast system pushing the result to every phone in the affected zone. All to buy you those few seconds to get under the table.</p>
+
+</div>
+
+<script>
+// ─── DATA ───────────────────────────────────────────────────────────────
+const VP = 6;    // P-wave speed km/s
+const VS = 3.5;  // S-wave speed km/s
+
+const SCENARIOS = {
+  tohoku: { name: "2011 Tohoku M9.0", epicenter: [142.4, 38.3], mag: 9.0 },
+  nankai: { name: "Nankai Trough (hyp.)", epicenter: [135.8, 33.0], mag: 8.5 },
+  noto:   { name: "2024 Noto M7.6", epicenter: [137.27, 37.50], mag: 7.6 }
+};
+
+const CITIES = [
+  { name: "Tokyo", lon: 139.77, lat: 35.68 },
+  { name: "Sendai", lon: 140.87, lat: 38.27 },
+  { name: "Osaka", lon: 135.50, lat: 34.69 },
+  { name: "Sapporo", lon: 141.35, lat: 43.06 },
+  { name: "Fukuoka", lon: 130.40, lat: 33.59 }
+];
+
+const STATIONS = [
+  { lon: 141.0, lat: 38.9 }, { lon: 141.5, lat: 39.5 }, { lon: 140.5, lat: 37.8 },
+  { lon: 142.0, lat: 39.8 }, { lon: 141.8, lat: 37.5 }, { lon: 140.0, lat: 39.2 },
+  { lon: 139.5, lat: 36.5 }, { lon: 140.3, lat: 36.0 }, { lon: 139.0, lat: 35.3 },
+  { lon: 138.0, lat: 34.7 }, { lon: 137.0, lat: 35.2 }, { lon: 136.0, lat: 34.5 },
+  { lon: 134.5, lat: 34.0 }, { lon: 133.0, lat: 33.5 }, { lon: 131.5, lat: 33.2 },
+  { lon: 130.5, lat: 32.8 }, { lon: 141.0, lat: 41.0 }, { lon: 140.5, lat: 42.5 },
+  { lon: 143.0, lat: 42.0 }, { lon: 135.5, lat: 35.5 }
+];
+
+// ─── MAP VISUALIZATION ──────────────────────────────────────────────────
+const mapW = 700, mapH = 560;
+const projection = d3.geoMercator()
+  .center([138.5, 37.5])
+  .scale(2200)
+  .translate([mapW / 2, mapH / 2]);
+
+const geoPath = d3.geoPath(projection);
+
+const mapSvg = d3.select("#map-container")
+  .append("svg")
+  .attr("viewBox", `0 0 ${mapW} ${mapH}`)
+  .attr("width", "100%")
+  .style("display", "block");
+
+// Japan base map (drawn first, data layers on top)
+const japanBaseGroup = mapSvg.append("g").attr("class", "japan-base");
+
+// Wave circles group (behind everything else interactive)
+const waveGroup = mapSvg.append("g");
+const pWaveCircle = waveGroup.append("circle").attr("fill", "none").attr("stroke", "#3b82f6").attr("stroke-width", 2).attr("stroke-opacity", 0.6).attr("r", 0).style("display","none");
+const pWaveFill = waveGroup.append("circle").attr("fill", "#3b82f6").attr("fill-opacity", 0.06).attr("stroke", "none").attr("r", 0).style("display","none");
+const sWaveCircle = waveGroup.append("circle").attr("fill", "none").attr("stroke", "#ef4444").attr("stroke-width", 2.5).attr("stroke-opacity", 0.7).attr("r", 0).style("display","none");
+const sWaveFill = waveGroup.append("circle").attr("fill", "#ef4444").attr("fill-opacity", 0.05).attr("stroke", "none").attr("r", 0).style("display","none");
+
+// Stations
+const stationDots = mapSvg.selectAll(".station")
+  .data(STATIONS)
+  .join("circle")
+  .attr("class", "station")
+  .attr("cx", d => projection([d.lon, d.lat])[0])
+  .attr("cy", d => projection([d.lon, d.lat])[1])
+  .attr("r", 4)
+  .attr("fill", "#22c55e")
+  .attr("stroke", "#fff")
+  .attr("stroke-width", 1.5)
+  .attr("opacity", 0.7);
+
+// Cities
+const cityGroups = mapSvg.selectAll(".city")
+  .data(CITIES)
+  .join("g")
+  .attr("class", "city")
+  .attr("transform", d => `translate(${projection([d.lon, d.lat])})`);
+
+cityGroups.append("circle").attr("r", 4).attr("fill", "#1a1a2e").attr("stroke", "#fff").attr("stroke-width", 1.5);
+cityGroups.append("text")
+  .attr("x", d => (d.name === "Sendai" || d.name === "Sapporo") ? -8 : 8)
+  .attr("y", d => d.name === "Osaka" ? 16 : -8)
+  .attr("text-anchor", d => (d.name === "Sendai" || d.name === "Sapporo") ? "end" : "start")
+  .attr("font-size", 12).attr("font-weight", 600).attr("fill", "#1a1a2e")
+  .text(d => d.name);
+
+// Warning time labels for cities
+const cityWarningLabels = cityGroups.append("text")
+  .attr("x", d => (d.name === "Sendai" || d.name === "Sapporo") ? -8 : 8)
+  .attr("y", d => d.name === "Osaka" ? 29 : 5)
+  .attr("text-anchor", d => (d.name === "Sendai" || d.name === "Sapporo") ? "end" : "start")
+  .attr("font-size", 10).attr("fill", "#ef4444").attr("font-weight", 600)
+  .text("");
+
+// Epicenter marker
+const epicenterMarker = mapSvg.append("g").style("display", "none");
+epicenterMarker.append("line").attr("x1",-8).attr("y1",-8).attr("x2",8).attr("y2",8).attr("stroke","#991b1b").attr("stroke-width",2.5);
+epicenterMarker.append("line").attr("x1",8).attr("y1",-8).attr("x2",-8).attr("y2",8).attr("stroke","#991b1b").attr("stroke-width",2.5);
+epicenterMarker.append("circle").attr("r",12).attr("fill","none").attr("stroke","#991b1b").attr("stroke-width",1.5);
+
+// Warning issued flash
+const warningFlash = mapSvg.append("text")
+  .attr("x", mapW / 2).attr("y", 30)
+  .attr("text-anchor", "middle").attr("font-size", 16).attr("font-weight", 700)
+  .attr("fill", "#991b1b").attr("opacity", 0).text("⚠ WARNING ISSUED");
+
+// ─── TIMELINE VISUALIZATION ─────────────────────────────────────────────
+const tlW = 700, tlH = 140;
+const tlMargin = { top: 20, right: 30, bottom: 30, left: 30 };
+const tlInner = { w: tlW - tlMargin.left - tlMargin.right, h: tlH - tlMargin.top - tlMargin.bottom };
+
+const tlSvg = d3.select("#timeline-container")
+  .append("svg")
+  .attr("viewBox", `0 0 ${tlW} ${tlH}`)
+  .attr("width", "100%")
+  .style("display", "block");
+
+const tlG = tlSvg.append("g").attr("transform", `translate(${tlMargin.left},${tlMargin.top})`);
+
+let tlScale = d3.scaleLinear().domain([0, 90]).range([0, tlInner.w]);
+
+function buildTimelineEvents(scenario) {
+  const epi = scenario.epicenter;
+  // compute distances
+  const sendaiDist = haversine(epi[1], epi[0], 38.27, 140.87);
+  const tokyoDist = haversine(epi[1], epi[0], 35.68, 139.77);
+
+  // station distances
+  const staDists = STATIONS.map(s => haversine(epi[1], epi[0], s.lat, s.lon)).sort((a,b) => a - b);
+  const firstDetect = staDists[0] / VP;
+  const thirdDetect = staDists[2] / VP;
+  const warningIssued = thirdDetect + 3; // processing time
+
+  const sendaiS = sendaiDist / VS;
+  const tokyoS = tokyoDist / VS;
+
+  return [
+    { t: 0, label: "Fault ruptures", color: "#991b1b" },
+    { t: firstDetect, label: "First P-wave detection", color: "#3b82f6" },
+    { t: thirdDetect, label: "3 stations detect", color: "#3b82f6" },
+    { t: warningIssued, label: "Warning issued", color: "#f59e0b" },
+    { t: sendaiS, label: `S-wave hits Sendai`, color: "#ef4444" },
+    { t: tokyoS, label: `S-wave hits Tokyo`, color: "#ef4444" }
+  ].filter(d => d.t <= 120);
+}
+
+function drawTimeline(events) {
+  const maxT = Math.max(90, ...events.map(d => d.t + 5));
+  tlScale.domain([0, maxT]);
+
+  tlG.selectAll("*").remove();
+
+  // Axis
+  tlG.append("g").attr("class", "axis").attr("transform", `translate(0,${tlInner.h})`)
+    .call(d3.axisBottom(tlScale).ticks(8).tickFormat(d => `${d}s`));
+
+  // axis label
+  tlG.append("text").attr("x", tlInner.w / 2).attr("y", tlInner.h + 28)
+    .attr("text-anchor", "middle").attr("font-size", 10).attr("fill", "#4a4a6a")
+    .text("Time after earthquake (seconds)");
+
+  // Main line
+  tlG.append("line").attr("x1", 0).attr("y1", tlInner.h / 2)
+    .attr("x2", tlInner.w).attr("y2", tlInner.h / 2)
+    .attr("stroke", "#c8c8d4").attr("stroke-width", 2);
+
+  // Events
+  const evG = tlG.selectAll(".tl-event").data(events).join("g").attr("class", "tl-event");
+  evG.append("circle")
+    .attr("cx", d => tlScale(d.t)).attr("cy", tlInner.h / 2)
+    .attr("r", 5).attr("fill", d => d.color);
+  evG.append("line")
+    .attr("x1", d => tlScale(d.t)).attr("x2", d => tlScale(d.t))
+    .attr("y1", (d, i) => i % 2 === 0 ? tlInner.h / 2 - 8 : tlInner.h / 2 + 8)
+    .attr("y2", (d, i) => i % 2 === 0 ? 2 : tlInner.h - 4)
+    .attr("stroke", d => d.color).attr("stroke-width", 1).attr("stroke-dasharray", "2,2");
+  evG.append("text")
+    .attr("x", d => tlScale(d.t)).attr("y", (d, i) => i % 2 === 0 ? -1 : tlInner.h + 1)
+    .attr("text-anchor", (d, i) => {
+      const x = tlScale(d.t);
+      if (x < 60) return "start";
+      if (x > tlInner.w - 60) return "end";
+      return "middle";
+    })
+    .attr("font-size", 9.5).attr("fill", "#1a1a2e").attr("font-weight", 500)
+    .text(d => `${d.label} (${d.t.toFixed(0)}s)`);
+
+  // Cursor
+  tlG.append("line").attr("class", "tl-cursor")
+    .attr("x1", 0).attr("x2", 0)
+    .attr("y1", 0).attr("y2", tlInner.h)
+    .attr("stroke", "#2563eb").attr("stroke-width", 1.5).attr("opacity", 0.8);
+}
+
+// ─── ACTIONS CHART ──────────────────────────────────────────────────────
+const actions = [
+  { time: 5,  label: "Drop, cover, hold on" },
+  { time: 10, label: "Move away from windows / shelves" },
+  { time: 15, label: "Stop elevator at nearest floor" },
+  { time: 30, label: "Slow bullet trains to safe speed" },
+  { time: 60, label: "Factory emergency shutdown procedures" }
+];
+
+const acW = 700, acH = 200;
+const acMargin = { top: 10, right: 40, bottom: 30, left: 230 };
+const acInner = { w: acW - acMargin.left - acMargin.right, h: acH - acMargin.top - acMargin.bottom };
+
+const acSvg = d3.select("#actions-container")
+  .append("svg").attr("class","action-chart")
+  .attr("viewBox", `0 0 ${acW} ${acH}`)
+  .attr("width", "100%")
+  .style("display", "block");
+
+const acG = acSvg.append("g").attr("transform", `translate(${acMargin.left},${acMargin.top})`);
+
+const acX = d3.scaleLinear().domain([0, 70]).range([0, acInner.w]);
+const acY = d3.scaleBand().domain(actions.map(d => d.label)).range([0, acInner.h]).padding(0.3);
+
+acG.append("g").attr("class", "axis").attr("transform", `translate(0,${acInner.h})`)
+  .call(d3.axisBottom(acX).ticks(5).tickFormat(d => `${d}s`));
+
+acG.selectAll(".bar-group").data(actions).join("g").attr("class","bar-group").each(function(d) {
+  const g = d3.select(this);
+  const grad = `grad-${d.time}`;
+  const defs = acSvg.append("defs");
+  const lg = defs.append("linearGradient").attr("id", grad);
+  lg.append("stop").attr("offset","0%").attr("stop-color","#3b82f6");
+  lg.append("stop").attr("offset","100%").attr("stop-color","#60a5fa");
+
+  g.append("rect")
+    .attr("x", 0).attr("y", acY(d.label))
+    .attr("width", acX(d.time)).attr("height", acY.bandwidth())
+    .attr("fill", `url(#${grad})`).attr("rx", 3);
+  g.append("text").attr("class","bar-label")
+    .attr("x", -8).attr("y", acY(d.label) + acY.bandwidth() / 2)
+    .attr("text-anchor", "end").attr("dominant-baseline", "central")
+    .text(d.label);
+  g.append("text").attr("class","bar-time")
+    .attr("x", acX(d.time) + 5).attr("y", acY(d.label) + acY.bandwidth() / 2)
+    .attr("dominant-baseline", "central")
+    .text(`${d.time}s`);
+});
+
+// ─── ANIMATION STATE ────────────────────────────────────────────────────
+let currentScenario = "tohoku";
+let simTime = 0;
+let playing = true;
+let speed = 1;
+let animFrame = null;
+let lastFrameTime = null;
+let warningIssued = false;
+let stationsDetected = 0;
+const WARNING_STATIONS_NEEDED = 3;
+const PROCESSING_TIME = 3; // seconds after 3rd detection
+
+function haversine(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function distToPixels(km) {
+  // Use projection to estimate pixel scale at center
+  const c1 = projection([138.5, 37.5]);
+  const c2 = projection([139.5, 37.5]);
+  const lonDist = haversine(37.5, 138.5, 37.5, 139.5);
+  const pixPerKm = Math.abs(c2[0] - c1[0]) / lonDist;
+  return km * pixPerKm;
+}
+
+function getScenario() { return SCENARIOS[currentScenario]; }
+
+function reset() {
+  simTime = 0;
+  warningIssued = false;
+  stationsDetected = 0;
+  lastFrameTime = null;
+  updateVis();
+}
+
+function updateVis() {
+  const sc = getScenario();
+  const epi = sc.epicenter;
+  const epiPx = projection(epi);
+
+  // Epicenter
+  epicenterMarker.style("display", null).attr("transform", `translate(${epiPx})`);
+
+  const pRadius = VP * simTime; // km
+  const sRadius = VS * simTime; // km
+  const pPx = distToPixels(pRadius);
+  const sPx = distToPixels(sRadius);
+
+  // Wave circles
+  if (simTime > 0) {
+    [pWaveCircle, pWaveFill].forEach(c => c.style("display", null).attr("cx", epiPx[0]).attr("cy", epiPx[1]).attr("r", pPx));
+    [sWaveCircle, sWaveFill].forEach(c => c.style("display", null).attr("cx", epiPx[0]).attr("cy", epiPx[1]).attr("r", sPx));
+  } else {
+    [pWaveCircle, pWaveFill, sWaveCircle, sWaveFill].forEach(c => c.style("display", "none"));
+  }
+
+  // Stations
+  let detected = 0;
+  let thirdDetectTime = Infinity;
+  const staDists = STATIONS.map(s => haversine(epi[1], epi[0], s.lat, s.lon) / VP);
+  const sortedTimes = [...staDists].sort((a,b) => a - b);
+  if (sortedTimes.length >= 3) thirdDetectTime = sortedTimes[2];
+
+  stationDots.attr("fill", (d, i) => {
+    const dist = haversine(epi[1], epi[0], d.lat, d.lon);
+    const arrivalTime = dist / VP;
+    if (simTime >= arrivalTime) { detected++; return "#f59e0b"; }
+    return "#22c55e";
+  }).attr("r", (d, i) => {
+    const dist = haversine(epi[1], epi[0], d.lat, d.lon);
+    const arrivalTime = dist / VP;
+    if (simTime >= arrivalTime) return 6;
+    return 4;
+  });
+
+  stationsDetected = detected;
+  const warningTime = thirdDetectTime + PROCESSING_TIME;
+  warningIssued = simTime >= warningTime;
+
+  // Status bar
+  const statusBar = d3.select("#status-bar");
+  if (simTime === 0) {
+    statusBar.attr("class", "status-bar status-idle").text("Press Play to start the simulation");
+  } else if (!warningIssued && detected < WARNING_STATIONS_NEEDED) {
+    statusBar.attr("class", "status-bar status-detecting").text(`P-wave spreading... ${detected} station${detected !== 1 ? "s" : ""} detecting (need ${WARNING_STATIONS_NEEDED})`);
+  } else if (!warningIssued) {
+    statusBar.attr("class", "status-bar status-warning").text(`${detected} stations detecting — processing magnitude estimate...`);
+  } else {
+    statusBar.attr("class", "status-bar status-alert").text(`⚠ WARNING ISSUED at t=${warningTime.toFixed(1)}s — Alert broadcast to all phones & systems`);
+  }
+
+  // Warning flash
+  warningFlash.attr("opacity", warningIssued ? 1 : 0);
+
+  // City warning labels
+  cityWarningLabels.text(d => {
+    const dist = haversine(epi[1], epi[0], d.lat, d.lon);
+    const sArrival = dist / VS;
+    if (simTime <= 0) return "";
+    if (simTime >= sArrival) return "S-wave arrived";
+    const remaining = sArrival - simTime;
+    if (warningIssued) {
+      return `${remaining.toFixed(0)}s until S-wave`;
+    }
+    return `S-wave in ${remaining.toFixed(0)}s`;
+  }).attr("fill", d => {
+    const dist = haversine(epi[1], epi[0], d.lat, d.lon);
+    const sArrival = dist / VS;
+    if (simTime >= sArrival) return "#991b1b";
+    return "#ef4444";
+  });
+
+  // Timeline cursor
+  tlG.select(".tl-cursor").attr("x1", tlScale(simTime)).attr("x2", tlScale(simTime));
+}
+
+function tick(timestamp) {
+  if (!playing) { animFrame = null; return; }
+  if (lastFrameTime === null) lastFrameTime = timestamp;
+  const dt = (timestamp - lastFrameTime) / 1000 * speed;
+  lastFrameTime = timestamp;
+  simTime += dt;
+
+  // Stop at reasonable max
+  if (simTime > 150) { simTime = 150; playing = false; }
+
+  updateVis();
+  animFrame = requestAnimationFrame(tick);
+}
+
+function startPlaying() {
+  playing = true;
+  lastFrameTime = null;
+  d3.select("#btn-play").classed("active", true);
+  d3.select("#btn-pause").classed("active", false);
+  animFrame = requestAnimationFrame(tick);
+}
+
+function stopPlaying() {
+  playing = false;
+  d3.select("#btn-play").classed("active", false);
+  d3.select("#btn-pause").classed("active", true);
+  if (animFrame) { cancelAnimationFrame(animFrame); animFrame = null; }
+}
+
+// Controls
+d3.select("#btn-play").on("click", startPlaying);
+d3.select("#btn-pause").on("click", stopPlaying);
+d3.select("#btn-reset").on("click", () => { stopPlaying(); reset(); });
+d3.select("#sel-speed").on("change", function() { speed = +this.value; });
+d3.select("#sel-scenario").on("change", function() {
+  currentScenario = this.value;
+  stopPlaying();
+  reset();
+  const events = buildTimelineEvents(getScenario());
+  drawTimeline(events);
+  updateVis();
+});
+
+// Init: load TopoJSON, then start
+d3.json("../shared/japan.topojson").then(topoData => {
+  const japanFeatures = topojson.feature(topoData, topoData.objects.japan);
+  const japanMesh = topojson.mesh(topoData, topoData.objects.japan, (a, b) => a !== b);
+
+  // Draw prefecture fills
+  japanBaseGroup.selectAll("path.prefecture")
+    .data(japanFeatures.features)
+    .join("path")
+      .attr("class", "prefecture")
+      .attr("d", geoPath)
+      .attr("fill", "#f0f0f0")
+      .attr("stroke", "#ccc")
+      .attr("stroke-width", 0.5);
+
+  // Internal borders
+  japanBaseGroup.append("path")
+    .datum(japanMesh)
+    .attr("d", geoPath)
+    .attr("fill", "none")
+    .attr("stroke", "#ddd")
+    .attr("stroke-width", 0.5);
+
+  const initEvents = buildTimelineEvents(getScenario());
+  drawTimeline(initEvents);
+  updateVis();
+
+  // Auto-start after brief pause
+  setTimeout(startPlaying, 800);
+});
+</script>
+</body>
+</html>

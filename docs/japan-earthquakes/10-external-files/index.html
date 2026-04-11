@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>External CSV/JSON Files — Data Strategy Explainer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --article-width: 740px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem; --line-height: 1.6;
+  --text: #1a1a2e; --text-2: #4a4a6a;
+  --accent: #2563eb; --accent-light: #dbeafe;
+  --bg: #fafafa; --fig-bg: #ffffff; --border: #e2e2e8;
+}
+body { font-family: var(--body-font); font-size: var(--body-size); line-height: var(--line-height); color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased; }
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
+h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+p { margin: 0 0 1rem; }
+.figure { margin: 2rem 0; padding: 1.5rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; }
+.figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; }
+.insight { background: var(--accent-light); border-left: 3px solid var(--accent); padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 4px 4px 0; }
+svg text { font-family: var(--heading-font); }
+svg .axis text { font-size: 11px; fill: var(--text-2); }
+svg .axis line, svg .axis path { stroke: var(--border); }
+
+code, .code-block {
+  font-family: var(--mono-font);
+  font-size: 0.875rem;
+}
+code {
+  background: #f0f0f5;
+  padding: 0.15em 0.4em;
+  border-radius: 3px;
+}
+.code-block {
+  background: #1e1e2e;
+  color: #cdd6f4;
+  padding: 1.25rem 1.5rem;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 1rem 0 1.5rem;
+  line-height: 1.5;
+  white-space: pre;
+}
+.code-block .kw { color: #cba6f7; }
+.code-block .fn { color: #89b4fa; }
+.code-block .str { color: #a6e3a1; }
+.code-block .cmt { color: #6c7086; font-style: italic; }
+.code-block .op { color: #fab387; }
+
+.dir-tree {
+  font-family: var(--mono-font);
+  font-size: 0.875rem;
+  background: var(--fig-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1.25rem 1.5rem;
+  margin: 1rem 0 1.5rem;
+  line-height: 1.7;
+  color: var(--text-2);
+}
+.dir-tree .folder { color: var(--accent); font-weight: 600; }
+.dir-tree .file { color: var(--text); }
+.dir-tree .note { color: #888; font-style: italic; font-family: var(--body-font); font-size: 0.8rem; }
+
+.subtitle { font-family: var(--heading-font); font-size: 1.15rem; color: var(--text-2); margin-bottom: 2rem; font-weight: 400; }
+
+/* Loading spinner */
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 300px;
+  gap: 1rem;
+}
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-text {
+  font-family: var(--heading-font);
+  font-size: 0.9rem;
+  color: var(--text-2);
+}
+
+/* Error state */
+.error-box {
+  background: #fef2f2;
+  border: 1px solid #fca5a5;
+  border-left: 3px solid #ef4444;
+  border-radius: 0 4px 4px 0;
+  padding: 1rem 1.25rem;
+  margin: 0;
+}
+.error-box h3 {
+  color: #dc2626;
+  font-size: 1rem;
+  margin-bottom: 0.5rem;
+}
+.error-box p {
+  font-size: 0.95rem;
+  margin-bottom: 0.5rem;
+}
+.error-box p:last-child { margin-bottom: 0; }
+
+/* Fallback notice */
+.fallback-notice {
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-left: 3px solid #f59e0b;
+  border-radius: 0 4px 4px 0;
+  padding: 0.75rem 1rem;
+  margin-top: 0.75rem;
+  font-family: var(--heading-font);
+  font-size: 0.85rem;
+  color: #92400e;
+}
+
+.status-badge {
+  display: inline-block;
+  font-family: var(--heading-font);
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.2em 0.6em;
+  border-radius: 3px;
+  margin-left: 0.5rem;
+  vertical-align: middle;
+}
+.status-badge.loaded { background: #dcfce7; color: #166534; }
+.status-badge.fallback { background: #fef3c7; color: #92400e; }
+
+.tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: rgba(26,26,46,0.92);
+  color: #fff;
+  padding: 0.5rem 0.75rem;
+  border-radius: 4px;
+  font-family: var(--heading-font);
+  font-size: 0.8rem;
+  line-height: 1.4;
+  max-width: 240px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.compare-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--heading-font);
+  font-size: 0.9rem;
+  margin: 1rem 0 1.5rem;
+}
+.compare-table th, .compare-table td {
+  text-align: left;
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+.compare-table th {
+  background: #f5f5fa;
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--text-2);
+}
+.compare-table td:first-child { font-weight: 500; }
+</style>
+</head>
+<body>
+<div class="article">
+
+<h1>External CSV/JSON Files</h1>
+<p class="subtitle">Loading data from companion files — the most common pattern in D3 projects</p>
+
+<p>
+Every block and visualization you've seen so far has embedded its data directly in the HTML.
+That works for small datasets, but earthquake catalogs, census tables, and climate records
+can run to thousands of rows. At that point, you want the data in its own file.
+</p>
+
+<p>
+This page demonstrates the pattern by doing it live: the earthquake map below loads 200
+earthquakes from a JSON file sitting in a <code>data/</code> folder right next to this HTML.
+Watch the loading spinner appear while the file is being fetched.
+</p>
+
+<h2>The file organization convention</h2>
+
+<p>
+D3 projects almost universally follow this layout. The HTML and the data live side by side,
+with data in its own folder:
+</p>
+
+<div class="dir-tree">
+<span class="folder">my-project/</span><br>
+├── <span class="file">index.html</span> <span class="note">← your visualization</span><br>
+├── <span class="folder">data/</span><br>
+│   ├── <span class="file">earthquakes.json</span> <span class="note">← 200 quakes, 33 KB</span><br>
+│   └── <span class="file">stations.csv</span> <span class="note">← could add more files</span><br>
+└── <span class="file">style.css</span> <span class="note">← optional separate styles</span>
+</div>
+
+<p>
+This convention matters because the path you write in your code —
+<code>d3.json("data/earthquakes.json")</code> — is <em>relative</em> to the HTML file.
+If you move the HTML somewhere else without bringing the <code>data/</code> folder, the
+visualization breaks.
+</p>
+
+<h2>Loading the data</h2>
+
+<p>
+Here's the core pattern. D3 provides convenience functions that fetch a file and parse it
+in one step:
+</p>
+
+<div class="code-block"><span class="cmt">// Load JSON — returns a Promise</span>
+<span class="fn">d3.json</span>(<span class="str">"data/earthquakes.json"</span>)
+  .<span class="fn">then</span>(<span class="kw">data</span> <span class="op">=></span> {
+    <span class="cmt">// data is now a JavaScript array of objects</span>
+    console.<span class="fn">log</span>(<span class="str">`Loaded ${data.length} earthquakes`</span>);
+    <span class="fn">drawMap</span>(data);
+  })
+  .<span class="fn">catch</span>(<span class="kw">error</span> <span class="op">=></span> {
+    console.<span class="fn">error</span>(<span class="str">"Failed to load:"</span>, error);
+    <span class="fn">showError</span>(error);
+  });</div>
+
+<p>
+For CSV files the call is <code>d3.csv("data/earthquakes.csv")</code>. D3 parses each row into
+an object using the header row as keys. One important difference: CSV values are always strings,
+so you need to convert numbers yourself with a row accessor or <code>+d.mag</code> after loading.
+JSON preserves types — a number stays a number.
+</p>
+
+<h2>The map: 200 Japan earthquakes</h2>
+
+<p>
+This map loads its data from <code>data/earthquakes.json</code>. The loading state is real — your
+browser is making an HTTP request for that file right now. If you're viewing this locally
+by double-clicking the HTML file, the fetch may fail (more on that below).
+</p>
+
+<div class="figure" id="map-container">
+  <div class="loading-container" id="loading-state">
+    <div class="spinner"></div>
+    <div class="loading-text">Fetching data/earthquakes.json...</div>
+  </div>
+  <div id="error-state" style="display:none;"></div>
+  <div id="map-viz" style="display:none;"></div>
+  <div class="figure-caption" id="map-caption"></div>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+
+<h2>Loading states: never show a blank page</h2>
+
+<p>
+When data comes from an external file, there's always a moment — maybe 50 milliseconds, maybe
+2 seconds on a slow connection — where your page has no data. If you do nothing, the user sees
+a blank white rectangle and wonders if something broke.
+</p>
+
+<p>
+The fix is straightforward: show <em>something</em> while waiting. A spinner, a skeleton outline
+of the chart, or a simple "Loading..." message. The map above uses a spinner. Here's the
+pattern:
+</p>
+
+<div class="code-block"><span class="cmt">// 1. Show loading state (already visible in HTML)</span>
+
+<span class="cmt">// 2. Fetch the data</span>
+<span class="fn">d3.json</span>(<span class="str">"data/earthquakes.json"</span>)
+  .<span class="fn">then</span>(<span class="kw">data</span> <span class="op">=></span> {
+    <span class="cmt">// 3. Hide loading, show viz</span>
+    <span class="fn">hideLoading</span>();
+    <span class="fn">drawMap</span>(data);
+  })
+  .<span class="fn">catch</span>(<span class="kw">error</span> <span class="op">=></span> {
+    <span class="cmt">// 4. Hide loading, show error</span>
+    <span class="fn">hideLoading</span>();
+    <span class="fn">showError</span>(error);
+  });</div>
+
+<p>
+The loading state lives in the HTML from the start — no JavaScript needed to create it. The
+script just hides it when data arrives (or when it fails).
+</p>
+
+<h2>Error handling and CORS</h2>
+
+<p>
+External data loading can fail. The file might be missing, the path might be wrong, or your
+browser might block the request entirely. That last one — the CORS issue — trips up
+everyone learning D3.
+</p>
+
+<div class="insight">
+<strong>The local file problem.</strong> If you open an HTML file directly (the URL bar shows
+<code>file:///Users/you/project/index.html</code>), browsers block <code>fetch()</code> requests
+to other local files for security reasons. This is called the same-origin policy. Your
+visualization works fine on a web server but fails silently on your desktop.
+</div>
+
+<p>
+The fix: run a local web server. Python ships with one built in:
+</p>
+
+<div class="code-block"><span class="cmt"># In your project folder, run:</span>
+python -m http.server 8000
+
+<span class="cmt"># Then open: http://localhost:8000</span></div>
+
+<p>
+That one command solves the problem. On hosted platforms — GitHub Pages, Observable, any
+web server — CORS is not an issue because the files are served over HTTP already.
+</p>
+
+<p>
+This page handles the error gracefully: if the external file can't be loaded, it falls back
+to a small inline dataset and shows a notice. That way the reader still sees something useful
+instead of a broken page.
+</p>
+
+<h2>Advantages and disadvantages</h2>
+
+<table class="compare-table">
+<thead>
+<tr><th></th><th>Advantage</th><th>Disadvantage</th></tr>
+</thead>
+<tbody>
+<tr>
+<td>Separation</td>
+<td>Data and code stay independent — update one without touching the other</td>
+<td>Two things to keep in sync; broken paths break everything</td>
+</tr>
+<tr>
+<td>Size</td>
+<td>HTML stays small and readable; data can be megabytes</td>
+<td>Extra HTTP request adds latency</td>
+</tr>
+<tr>
+<td>Reusability</td>
+<td>Same data file can feed multiple visualizations</td>
+<td>Must bundle the data folder when sharing</td>
+</tr>
+<tr>
+<td>Development</td>
+<td>Easier to replace data (swap in a new CSV export)</td>
+<td>Needs a local server — can't just double-click the HTML</td>
+</tr>
+</tbody>
+</table>
+
+<h2>CSV vs JSON: which format?</h2>
+
+<p>
+Both work. The choice usually comes down to what your data source gives you and how you want
+to use it.
+</p>
+
+<table class="compare-table">
+<thead>
+<tr><th></th><th>CSV</th><th>JSON</th></tr>
+</thead>
+<tbody>
+<tr>
+<td>File size</td>
+<td>Smaller — no repeated keys, no brackets</td>
+<td>Larger — each object repeats every key name</td>
+</tr>
+<tr>
+<td>Types</td>
+<td>Everything is a string; you parse numbers yourself</td>
+<td>Numbers, booleans, nulls preserved as-is</td>
+</tr>
+<tr>
+<td>Structure</td>
+<td>Flat table only — rows and columns</td>
+<td>Can nest objects, arrays, hierarchies</td>
+</tr>
+<tr>
+<td>Editing</td>
+<td>Opens in Excel/Google Sheets</td>
+<td>Needs a text editor or code</td>
+</tr>
+<tr>
+<td>D3 loader</td>
+<td><code>d3.csv()</code> — auto-parses headers</td>
+<td><code>d3.json()</code> — ready to use</td>
+</tr>
+</tbody>
+</table>
+
+<p>
+For this earthquake dataset, JSON is the better choice. Magnitude, depth, and coordinates are
+numbers — in CSV they'd arrive as strings like <code>"4.7"</code> and you'd need to convert
+each one. In JSON, <code>4.7</code> is already a number.
+</p>
+
+<div class="insight">
+<strong>This page is demonstrating itself.</strong> The map above actually loads from
+<code>data/earthquakes.json</code>. View source if you want to see the loading, error handling,
+and fallback code working together. The data file is 33 KB — small enough to load instantly on
+most connections, but big enough that putting it inline would make this HTML unreadable.
+</div>
+
+<h2>When to use external files</h2>
+
+<p>
+Use external files when your dataset has more than ~30 rows or when the same data feeds
+multiple visualizations. Use inline data (the previous pattern) when the dataset is tiny, or
+when you need a single self-contained file with no dependencies.
+</p>
+
+<p>
+Most real D3 projects use external files. The USGS earthquake catalog, JMA station data,
+population tables — they all live in <code>data/</code> folders, loaded with
+<code>d3.csv()</code> or <code>d3.json()</code>, with a spinner keeping the user company while
+the bytes arrive.
+</p>
+
+</div>
+
+<script>
+// --- Fallback data: 12 notable Japan earthquakes ---
+const FALLBACK_DATA = [
+  {time:"2024-01-01T07:10:09Z",lat:37.5,lon:137.27,depth:10,mag:7.5,place:"Noto Peninsula"},
+  {time:"2022-03-16T14:36:32Z",lat:37.72,lon:141.63,depth:57,mag:7.3,place:"Fukushima coast"},
+  {time:"2021-02-13T14:07:49Z",lat:37.73,lon:141.75,depth:51,mag:7.1,place:"Off Fukushima"},
+  {time:"2019-06-18T13:22:20Z",lat:38.61,lon:139.48,depth:12,mag:6.4,place:"Yamagata"},
+  {time:"2018-09-05T18:07:59Z",lat:42.69,lon:141.93,depth:35,mag:6.6,place:"Hokkaido"},
+  {time:"2016-04-15T16:25:06Z",lat:32.79,lon:130.75,depth:10,mag:7.0,place:"Kumamoto"},
+  {time:"2015-05-30T11:23:02Z",lat:27.86,lon:140.68,depth:664,mag:7.8,place:"Ogasawara"},
+  {time:"2014-11-22T13:08:18Z",lat:36.69,lon:137.89,depth:5,mag:6.2,place:"Nagano"},
+  {time:"2013-10-25T17:10:16Z",lat:37.16,lon:144.66,depth:35,mag:7.1,place:"Off Fukushima"},
+  {time:"2011-03-11T05:46:24Z",lat:38.30,lon:142.37,depth:29,mag:9.1,place:"Tohoku"},
+  {time:"2008-06-13T23:43:45Z",lat:39.03,lon:140.88,depth:8,mag:6.9,place:"Iwate-Miyagi"},
+  {time:"2007-07-16T01:13:22Z",lat:37.56,lon:138.61,depth:12,mag:6.6,place:"Niigata-Chuetsu"}
+];
+
+// --- DOM refs ---
+const loadingEl = document.getElementById("loading-state");
+const errorEl   = document.getElementById("error-state");
+const vizEl     = document.getElementById("map-viz");
+const captionEl = document.getElementById("map-caption");
+const tooltip   = document.getElementById("tooltip");
+
+function hideLoading() {
+  loadingEl.style.display = "none";
+}
+
+function showError(err) {
+  const isFileProtocol = window.location.protocol === "file:";
+  errorEl.style.display = "block";
+  errorEl.innerHTML = `
+    <div class="error-box">
+      <h3>Could not load data/earthquakes.json</h3>
+      <p>${err.message || "Network error"}</p>
+      ${isFileProtocol ? `<p>You're viewing this as a local file. Browsers block fetch requests
+      from <code>file://</code> URLs. Run <code>python -m http.server</code> in this folder
+      and open <code>http://localhost:8000</code> instead.</p>` : ""}
+    </div>`;
+}
+
+function showFallbackNotice() {
+  const notice = document.createElement("div");
+  notice.className = "fallback-notice";
+  notice.textContent = "External file could not be loaded. Showing 12 built-in earthquakes as fallback.";
+  vizEl.parentNode.insertBefore(notice, captionEl);
+}
+
+// --- Map drawing ---
+function drawMap(data, isFallback) {
+  vizEl.style.display = "block";
+
+  const w = 700;
+  const h = 500;
+
+  const svg = d3.select("#map-viz")
+    .append("svg")
+    .attr("viewBox", `0 0 ${w} ${h}`)
+    .attr("width", "100%")
+    .style("display", "block");
+
+  const projection = d3.geoMercator()
+    .center([137, 37])
+    .scale(1200)
+    .translate([w / 2, h / 2]);
+
+  const geoPath = d3.geoPath().projection(projection);
+
+  const rScale = d3.scaleSqrt()
+    .domain([4.5, 9.5])
+    .range([2, isFallback ? 14 : 10]);
+
+  const colorScale = d3.scaleSequential(d3.interpolateYlOrRd)
+    .domain([0, 600]);
+
+  // Load TopoJSON for prefecture boundaries, then draw quakes on top
+  d3.json("../shared/japan.topojson").then(topoData => {
+    const prefectures = topojson.feature(topoData, topoData.objects.japan);
+    const borders = topojson.mesh(topoData, topoData.objects.japan, (a, b) => a !== b);
+
+    // Draw prefecture shapes
+    svg.append("g")
+      .selectAll("path")
+      .data(prefectures.features)
+      .join("path")
+      .attr("d", geoPath)
+      .attr("fill", "#f0f0f0")
+      .attr("stroke", "#ccc")
+      .attr("stroke-width", 0.5);
+
+    // Draw internal borders
+    svg.append("path")
+      .datum(borders)
+      .attr("d", geoPath)
+      .attr("fill", "none")
+      .attr("stroke", "#ddd")
+      .attr("stroke-width", 0.5);
+
+    // Sort: larger on bottom
+    data.sort((a, b) => b.mag - a.mag);
+
+    // Draw earthquakes
+    svg.selectAll("circle.quake")
+      .data(data)
+      .join("circle")
+      .attr("class", "quake")
+      .attr("cx", d => projection([d.lon, d.lat])[0])
+      .attr("cy", d => projection([d.lon, d.lat])[1])
+      .attr("r", d => rScale(d.mag))
+      .attr("fill", d => colorScale(d.depth))
+      .attr("fill-opacity", 0.7)
+      .attr("stroke", "#333")
+      .attr("stroke-width", 0.3)
+      .style("cursor", "pointer")
+      .on("mouseenter", function(event, d) {
+        d3.select(this).attr("stroke-width", 1.5).attr("fill-opacity", 1);
+        const date = d.time.slice(0, 10);
+        tooltip.innerHTML = `<strong>M${d.mag}</strong> — ${d.place}<br>${date}<br>Depth: ${d.depth} km`;
+        tooltip.style.opacity = 1;
+      })
+      .on("mousemove", function(event) {
+        tooltip.style.left = (event.pageX + 12) + "px";
+        tooltip.style.top = (event.pageY - 10) + "px";
+      })
+      .on("mouseleave", function() {
+        d3.select(this).attr("stroke-width", 0.3).attr("fill-opacity", 0.7);
+        tooltip.style.opacity = 0;
+      });
+
+    // Magnitude legend
+    const legendMags = [5.0, 6.0, 7.0];
+    const legendG = svg.append("g").attr("transform", `translate(${w - 110}, ${h - 100})`);
+
+    legendG.append("text").text("Magnitude").attr("font-size", 11).attr("font-weight", 600).attr("fill", "#4a4a6a");
+
+    legendMags.forEach((m, i) => {
+      const cy = 25 + i * 28;
+      legendG.append("circle")
+        .attr("cx", 10).attr("cy", cy)
+        .attr("r", rScale(m))
+        .attr("fill", "none").attr("stroke", "#666").attr("stroke-width", 0.8);
+      legendG.append("text")
+        .attr("x", 28).attr("y", cy + 4)
+        .text(`M${m.toFixed(1)}`)
+        .attr("font-size", 11).attr("fill", "#4a4a6a");
+    });
+
+    // Depth legend
+    const depthG = svg.append("g").attr("transform", `translate(60, ${h - 70})`);
+    depthG.append("text").text("Depth").attr("font-size", 11).attr("font-weight", 600).attr("fill", "#4a4a6a").attr("y", -8);
+
+    const depthW = 120;
+    const defs = svg.append("defs");
+    const grad = defs.append("linearGradient").attr("id", "depth-grad");
+    [0, 0.25, 0.5, 0.75, 1].forEach(t => {
+      grad.append("stop").attr("offset", `${t * 100}%`).attr("stop-color", colorScale(t * 600));
+    });
+    depthG.append("rect").attr("y", 2).attr("width", depthW).attr("height", 10).attr("rx", 2).attr("fill", "url(#depth-grad)");
+    depthG.append("text").attr("y", 26).text("0 km").attr("font-size", 10).attr("fill", "#4a4a6a");
+    depthG.append("text").attr("x", depthW).attr("y", 26).attr("text-anchor", "end").text("600 km").attr("font-size", 10).attr("fill", "#4a4a6a");
+  });
+
+  // Caption
+  const badge = isFallback
+    ? `<span class="status-badge fallback">Fallback data</span>`
+    : `<span class="status-badge loaded">Loaded from file</span>`;
+  captionEl.innerHTML = `${data.length} earthquakes (M4.5+) around Japan, colored by depth. ${badge}`;
+}
+
+// --- Load data with fallback ---
+d3.json("data/earthquakes.json")
+  .then(data => {
+    hideLoading();
+    drawMap(data, false);
+  })
+  .catch(err => {
+    hideLoading();
+    showError(err);
+    showFallbackNotice();
+    drawMap(FALLBACK_DATA, true);
+  });
+</script>
+</body>
+</html>

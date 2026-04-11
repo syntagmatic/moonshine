@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spatial Clustering — Brush-linked map + timeline</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --article-width: 740px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem;
+  --line-height: 1.6;
+  --text: #1a1a2e;
+  --text-2: #4a4a6a;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --bg: #fafafa;
+  --fig-bg: #ffffff;
+  --border: #e2e2e8;
+}
+body { font-family: var(--body-font); font-size: var(--body-size); line-height: var(--line-height); color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased; }
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
+h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+p { margin: 0 0 1rem; }
+.figure { margin: 2rem 0; padding: 1.5rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; position: relative; }
+.figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; }
+.insight { background: var(--accent-light); border-left: 3px solid var(--accent); padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 4px 4px 0; }
+svg text { font-family: var(--heading-font); }
+svg .axis text { font-size: 11px; fill: var(--text-2); }
+svg .axis line, svg .axis path { stroke: var(--border); }
+
+.subtitle { font-family: var(--heading-font); font-size: 1.1rem; color: var(--text-2); margin-bottom: 2rem; font-weight: 400; }
+.ghost { fill: #e0e0e0; opacity: 0.3; }
+.brush-map .selection { fill: var(--accent); fill-opacity: 0.08; stroke: var(--accent); stroke-width: 1.5; }
+.brush-timeline .selection { fill: var(--accent); fill-opacity: 0.12; stroke: var(--accent); stroke-width: 1.5; }
+.legend-label { font-size: 11px; fill: var(--text-2); }
+.status-bar { font-family: var(--heading-font); font-size: 0.8rem; color: var(--text-2); margin-top: 0.5rem; }
+.tooltip {
+  position: absolute; pointer-events: none;
+  background: rgba(26,26,46,0.92); color: #fff;
+  padding: 6px 10px; border-radius: 4px;
+  font-family: var(--heading-font); font-size: 0.78rem;
+  line-height: 1.4; max-width: 240px;
+  opacity: 0; transition: opacity 0.15s;
+}
+</style>
+</head>
+<body>
+<div class="article">
+
+<h1>Where the Earth Cracks Open</h1>
+<p class="subtitle">25 years of earthquakes around Japan, and what spatial clustering reveals about plate tectonics beneath your feet</p>
+
+<p>If you have lived in Japan for any length of time, you already know the feeling: a low rumble, the rattle of dishes, a few seconds of uncertainty while you decide whether to duck under the table or keep eating. Japan averages roughly 1,500 earthquakes of magnitude 4 or greater per year. But they do not happen everywhere equally. They <em>cluster</em>.</p>
+
+<p>Spatial clustering is exactly what it sounds like: events that bunch together in space rather than scattering randomly. When earthquakes cluster, they are telling you something about the geology below. In Japan's case, they trace the boundaries of four colliding tectonic plates.</p>
+
+<h2>The map and the timeline</h2>
+
+<p>Below is every M4.5+ earthquake recorded by the USGS in and around Japan from 2000 through 2025 -- about 16,800 events. Each dot is colored by depth: shallow quakes (near the surface) appear in warm reds and oranges; deep quakes (hundreds of kilometers down) appear in cool blues and purples.</p>
+
+<p>Two brushes let you explore the data from both directions:</p>
+<ul style="margin: 0 0 1rem 1.5rem;">
+  <li><strong>Drag on the timeline</strong> to select a time window. The map will show only quakes from that period.</li>
+  <li><strong>Drag on the map</strong> to select a geographic region. The timeline will highlight only quakes from that area.</li>
+</ul>
+<p>Click anywhere outside a brush to clear it.</p>
+
+<div class="figure">
+  <div id="viz"></div>
+  <div class="status-bar" id="status">Loading data...</div>
+  <div class="figure-caption">Data: USGS Earthquake Catalog, M4.5+, 2000 -- 2025. Depth color scale runs from 0 km (shallow, red) to 600+ km (deep, blue).</div>
+  <div class="tooltip" id="tooltip"></div>
+</div>
+
+<h2>What the clusters tell you</h2>
+
+<div class="insight">
+<strong>Try this:</strong> Brush the timeline to select just March 2011. You will see the Tohoku earthquake swarm -- thousands of dots packed into a tight band off the northeast coast. That band follows the Japan Trench, where the Pacific Plate dives beneath the Okhotsk Plate.
+</div>
+
+<p>Japan sits at the intersection of four tectonic plates: the Pacific Plate, the Philippine Sea Plate, the Eurasian Plate, and the Okhotsk (North American) Plate. Each boundary produces its own style of seismicity:</p>
+
+<p><strong>The Japan Trench</strong> (east of Honshu) -- the Pacific Plate subducts westward beneath the Okhotsk Plate. This is the source of most of Japan's largest earthquakes, including the M9.1 Tohoku event. The quakes here tend to be shallow to moderate depth and very frequent.</p>
+
+<p><strong>The Nankai Trough</strong> (south of Shikoku and Kii Peninsula) -- the Philippine Sea Plate subducts beneath the Eurasian Plate. Historically, this zone produces a great earthquake roughly every 100-150 years.</p>
+
+<p><strong>The Ryukyu Trench</strong> (Okinawa and the southwest islands) -- another part of the Philippine Sea Plate boundary, extending toward Taiwan. You can see a chain of dots stretching southwest.</p>
+
+<p><strong>Deep-focus clusters</strong> -- brush the map over the Sea of Japan side. Those deep-blue dots at 300-600 km depth? They trace the Wadati-Benioff zone: the subducted slab of the Pacific Plate, still generating earthquakes as it sinks into the mantle hundreds of kilometers below.</p>
+
+<div class="insight">
+<strong>Try this:</strong> Brush a rectangle over the deep-blue dots under central Honshu. Then look at the timeline. Deep quakes are relatively steady over time -- they don't cluster in bursts the way shallow aftershock sequences do. Different depth, different physics.
+</div>
+
+<h2>Why clustering matters</h2>
+
+<p>Random noise doesn't cluster. When earthquakes bunch together in space and time, they are revealing structure: a fault, a subduction interface, a volcanic arc. Spatial clustering is one of the first things seismologists look for when analyzing a catalog. It separates signal from noise and helps identify which faults are active, where stress is building, and which areas face the greatest hazard.</p>
+
+<p>The bidirectional brush you just used is a simple but powerful technique from exploratory data analysis. By linking two views of the same data -- geography and time -- you can notice patterns that neither view reveals alone. The 2011 Tohoku swarm is obvious in the timeline (a spike), but only the map shows you <em>where</em> those quakes concentrate. Conversely, the steady rhythm of deep-focus quakes is invisible on the map but clear in the timeline.</p>
+
+<p>Next time the ground shakes, you will know a little more about what's happening beneath you.</p>
+
+</div>
+
+<script>
+(async function() {
+
+  const width = 700;
+  const mapHeight = 500;
+  const timelineHeight = 140;
+  const margin = { top: 10, right: 20, bottom: 30, left: 50 };
+  const gap = 40;
+
+  const totalHeight = mapHeight + gap + timelineHeight;
+
+  const container = d3.select("#viz");
+  const svg = container.append("svg")
+    .attr("viewBox", `0 0 ${width} ${totalHeight}`)
+    .attr("width", "100%")
+    .style("display", "block");
+
+  // Load data
+  const raw = await d3.csv("data/earthquakes.csv", d => {
+    const lat = +d.latitude;
+    const lon = +d.longitude;
+    const depth = +d.depth;
+    const mag = +d.mag;
+    const time = new Date(d.time);
+    if (isNaN(lat) || isNaN(lon) || isNaN(depth) || isNaN(time)) return null;
+    return { lat, lon, depth, mag, time, place: d.place };
+  });
+
+  const data = raw.filter(d => d !== null);
+  d3.select("#status").text(`${data.length.toLocaleString()} earthquakes loaded.`);
+
+  // Projection centered on Japan
+  const projection = d3.geoMercator()
+    .center([137, 37])
+    .scale(1200)
+    .translate([width / 2, mapHeight / 2]);
+
+  // Project all points once
+  data.forEach(d => {
+    const [x, y] = projection([d.lon, d.lat]);
+    d.px = x;
+    d.py = y;
+  });
+
+  // Depth color scale: shallow=warm, deep=cool
+  const depthMax = 650;
+  const depthColor = d3.scaleSequential()
+    .domain([0, depthMax])
+    .interpolator(t => d3.interpolateRdYlBu(t));
+
+  // Time scale for timeline
+  const timeExtent = d3.extent(data, d => d.time);
+  const xTime = d3.scaleTime()
+    .domain(timeExtent)
+    .range([margin.left, width - margin.right]);
+
+  // Bin data by month for the timeline histogram
+  const timeBins = d3.bin()
+    .value(d => d.time)
+    .domain(timeExtent)
+    .thresholds(d3.timeMonths(...timeExtent));
+
+  const allBins = timeBins(data);
+
+  const yHist = d3.scaleLinear()
+    .domain([0, d3.max(allBins, b => b.length)])
+    .nice()
+    .range([mapHeight + gap + timelineHeight - margin.bottom, mapHeight + gap + 10]);
+
+  // --- JAPAN PREFECTURES ---
+  const topoData = await d3.json("../shared/japan.topojson");
+  const prefectures = topojson.feature(topoData, topoData.objects.japan);
+  const prefBorders = topojson.mesh(topoData, topoData.objects.japan, (a, b) => a !== b);
+  const geoPath = d3.geoPath(projection);
+
+  // --- MAP ---
+  const mapGroup = svg.append("g");
+
+  // Prefecture shapes (background)
+  mapGroup.append("g")
+    .selectAll("path")
+    .data(prefectures.features)
+    .join("path")
+      .attr("d", geoPath)
+      .attr("fill", "#f0f0f0")
+      .attr("stroke", "#ccc")
+      .attr("stroke-width", 0.5);
+
+  // Internal prefecture borders
+  mapGroup.append("path")
+    .datum(prefBorders)
+    .attr("d", geoPath)
+    .attr("fill", "none")
+    .attr("stroke", "#ddd")
+    .attr("stroke-width", 0.5);
+
+  // Draw earthquake dots on map (sorted so shallow on top)
+  const sorted = [...data].sort((a, b) => b.depth - a.depth);
+
+  const mapDots = mapGroup.append("g")
+    .selectAll("circle")
+    .data(sorted)
+    .join("circle")
+      .attr("cx", d => d.px)
+      .attr("cy", d => d.py)
+      .attr("r", d => Math.max(0.8, (d.mag - 4) * 0.9))
+      .attr("fill", d => depthColor(Math.min(d.depth, depthMax)))
+      .attr("opacity", 0.55)
+      .attr("stroke", "none");
+
+  // Map border
+  mapGroup.append("rect")
+    .attr("x", 0).attr("y", 0)
+    .attr("width", width).attr("height", mapHeight)
+    .attr("fill", "none").attr("stroke", "var(--border)").attr("stroke-width", 1);
+
+  // --- DEPTH LEGEND ---
+  const legendW = 14, legendH = 180;
+  const legendX = width - margin.right - legendW - 6;
+  const legendY = mapHeight / 2 - legendH / 2;
+
+  const defs = svg.append("defs");
+  const grad = defs.append("linearGradient")
+    .attr("id", "depth-grad")
+    .attr("x1", "0%").attr("y1", "0%")
+    .attr("x2", "0%").attr("y2", "100%");
+
+  const nStops = 10;
+  for (let i = 0; i <= nStops; i++) {
+    const t = i / nStops;
+    grad.append("stop")
+      .attr("offset", `${t * 100}%`)
+      .attr("stop-color", depthColor(t * depthMax));
+  }
+
+  const legend = svg.append("g").attr("transform", `translate(${legendX},${legendY})`);
+  legend.append("rect")
+    .attr("width", legendW).attr("height", legendH)
+    .attr("fill", "url(#depth-grad)").attr("stroke", "var(--border)").attr("stroke-width", 0.5)
+    .attr("rx", 2);
+
+  const legendScale = d3.scaleLinear().domain([0, depthMax]).range([0, legendH]);
+  const legendAxis = d3.axisRight(legendScale).ticks(5).tickFormat(d => `${d} km`).tickSize(3);
+
+  legend.append("g")
+    .attr("transform", `translate(${legendW}, 0)`)
+    .call(legendAxis)
+    .call(g => g.select(".domain").remove())
+    .call(g => g.selectAll("text").attr("class", "legend-label"));
+
+  legend.append("text")
+    .attr("x", legendW / 2).attr("y", -8)
+    .attr("text-anchor", "middle")
+    .attr("class", "legend-label")
+    .attr("font-weight", 600)
+    .text("Depth");
+
+  // --- TIMELINE ---
+  const tlGroup = svg.append("g");
+
+  // Bars
+  const bars = tlGroup.selectAll("rect.bar")
+    .data(allBins)
+    .join("rect")
+      .attr("class", "bar")
+      .attr("x", b => xTime(b.x0) + 0.5)
+      .attr("y", b => yHist(b.length))
+      .attr("width", b => Math.max(1, xTime(b.x1) - xTime(b.x0) - 1))
+      .attr("height", b => yHist(0) - yHist(b.length))
+      .attr("fill", "var(--accent)")
+      .attr("opacity", 0.5)
+      .attr("rx", 1);
+
+  // Axes
+  tlGroup.append("g")
+    .attr("class", "axis")
+    .attr("transform", `translate(0,${mapHeight + gap + timelineHeight - margin.bottom})`)
+    .call(d3.axisBottom(xTime).ticks(d3.timeYear.every(5)).tickSizeOuter(0));
+
+  tlGroup.append("g")
+    .attr("class", "axis")
+    .attr("transform", `translate(${margin.left},0)`)
+    .call(d3.axisLeft(yHist).ticks(4).tickSizeOuter(0));
+
+  // Labels
+  tlGroup.append("text")
+    .attr("x", (margin.left + width - margin.right) / 2)
+    .attr("y", mapHeight + gap + timelineHeight - 2)
+    .attr("text-anchor", "middle")
+    .attr("font-size", 12)
+    .attr("fill", "var(--text-2)")
+    .text("Year");
+
+  tlGroup.append("text")
+    .attr("transform", `translate(${14},${mapHeight + gap + timelineHeight / 2}) rotate(-90)`)
+    .attr("text-anchor", "middle")
+    .attr("font-size", 12)
+    .attr("fill", "var(--text-2)")
+    .text("Quakes / month");
+
+  // Timeline border
+  tlGroup.append("rect")
+    .attr("x", margin.left)
+    .attr("y", mapHeight + gap + 5)
+    .attr("width", width - margin.left - margin.right)
+    .attr("height", timelineHeight - margin.bottom - 5)
+    .attr("fill", "none").attr("stroke", "var(--border)").attr("stroke-width", 1);
+
+  // --- TOOLTIP ---
+  const tooltip = d3.select("#tooltip");
+
+  svg.on("mousemove", function(event) {
+    const [mx, my] = d3.pointer(event);
+    // Only on map area
+    if (my > mapHeight) { tooltip.style("opacity", 0); return; }
+    // Find nearest dot
+    let best = null, bestDist = 100;
+    for (const d of data) {
+      const dx = d.px - mx, dy = d.py - my;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < bestDist) { bestDist = dist; best = d; }
+    }
+    if (best && bestDist < 8) {
+      const figEl = container.node().closest(".figure");
+      const figRect = figEl.getBoundingClientRect();
+      const svgEl = svg.node();
+      const pt = svgEl.createSVGPoint();
+      pt.x = best.px; pt.y = best.py;
+      const screenPt = pt.matrixTransform(svgEl.getScreenCTM());
+      tooltip
+        .style("left", (screenPt.x - figRect.left + 12) + "px")
+        .style("top", (screenPt.y - figRect.top - 10) + "px")
+        .style("opacity", 1)
+        .html(`<strong>M${best.mag.toFixed(1)}</strong> at ${best.depth.toFixed(0)} km depth<br>
+               ${best.place || ''}<br>
+               ${best.time.toISOString().slice(0, 10)}`);
+    } else {
+      tooltip.style("opacity", 0);
+    }
+  });
+  svg.on("mouseleave", () => tooltip.style("opacity", 0));
+
+  // --- BRUSHES ---
+  let mapBrushSel = null;   // [[x0,y0],[x1,y1]] or null
+  let timeBrushSel = null;  // [t0, t1] or null
+
+  function updateVisuals() {
+    const hasMapBrush = mapBrushSel !== null;
+    const hasTimeBrush = timeBrushSel !== null;
+    const statusEl = d3.select("#status");
+
+    if (!hasMapBrush && !hasTimeBrush) {
+      // Show everything
+      mapDots
+        .attr("fill", d => depthColor(Math.min(d.depth, depthMax)))
+        .attr("opacity", 0.55);
+      bars.attr("fill", "var(--accent)").attr("opacity", 0.5);
+      statusEl.text(`${data.length.toLocaleString()} earthquakes shown.`);
+      return;
+    }
+
+    // Determine which dots are selected
+    let mapSelected, timelineSelected;
+
+    if (hasTimeBrush) {
+      const [t0, t1] = timeBrushSel;
+      mapDots.each(function(d) {
+        const sel = d.time >= t0 && d.time <= t1;
+        d3.select(this)
+          .attr("fill", sel ? depthColor(Math.min(d.depth, depthMax)) : "#e0e0e0")
+          .attr("opacity", sel ? 0.7 : 0.12);
+      });
+      const count = data.filter(d => d.time >= t0 && d.time <= t1).length;
+      statusEl.text(`${count.toLocaleString()} earthquakes in selected time window.`);
+    } else {
+      mapDots
+        .attr("fill", d => depthColor(Math.min(d.depth, depthMax)))
+        .attr("opacity", 0.55);
+    }
+
+    if (hasMapBrush) {
+      const [[x0, y0], [x1, y1]] = mapBrushSel;
+      // Filter data for timeline highlighting
+      const inBox = d => d.px >= x0 && d.px <= x1 && d.py >= y0 && d.py <= y1;
+
+      // Recolor map dots
+      if (!hasTimeBrush) {
+        mapDots.each(function(d) {
+          const sel = inBox(d);
+          d3.select(this)
+            .attr("fill", sel ? depthColor(Math.min(d.depth, depthMax)) : "#e0e0e0")
+            .attr("opacity", sel ? 0.7 : 0.12);
+        });
+      }
+
+      // Recompute timeline bins for selected region
+      const selectedData = data.filter(inBox);
+      const selectedBins = timeBins(selectedData);
+      const selectedMap = new Map(selectedBins.map(b => [+b.x0, b.length]));
+
+      bars.each(function(b) {
+        const selCount = selectedMap.get(+b.x0) || 0;
+        d3.select(this)
+          .attr("fill", selCount > 0 ? "var(--accent)" : "#d0d0d0")
+          .attr("opacity", selCount > 0 ? 0.7 : 0.2);
+      });
+
+      const count = selectedData.length;
+      statusEl.text(`${count.toLocaleString()} earthquakes in selected region.`);
+    } else {
+      bars.attr("fill", "var(--accent)").attr("opacity", 0.5);
+    }
+  }
+
+  // Map brush
+  const mapBrush = d3.brush()
+    .extent([[0, 0], [width, mapHeight]])
+    .on("start brush end", function(event) {
+      if (!event.selection) {
+        mapBrushSel = null;
+      } else {
+        mapBrushSel = event.selection;
+      }
+      updateVisuals();
+    });
+
+  svg.append("g")
+    .attr("class", "brush-map")
+    .call(mapBrush);
+
+  // Timeline brush
+  const tlBrush = d3.brushX()
+    .extent([[margin.left, mapHeight + gap + 5], [width - margin.right, mapHeight + gap + timelineHeight - margin.bottom]])
+    .on("start brush end", function(event) {
+      if (!event.selection) {
+        timeBrushSel = null;
+      } else {
+        timeBrushSel = event.selection.map(xTime.invert);
+      }
+      updateVisuals();
+    });
+
+  svg.append("g")
+    .attr("class", "brush-timeline")
+    .call(tlBrush);
+
+})();
+</script>
+</body>
+</html>

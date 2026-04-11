@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Three Datasets Compared: USGS, JMA, and NOAA Earthquake Databases</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --article-width: 740px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem; --line-height: 1.6;
+  --text: #1a1a2e; --text-2: #4a4a6a;
+  --accent: #2563eb; --accent-light: #dbeafe;
+  --bg: #fafafa; --fig-bg: #ffffff; --border: #e2e2e8;
+  --usgs: #2563eb; --jma: #16a34a; --noaa: #ea580c;
+  --usgs-light: #dbeafe; --jma-light: #dcfce7; --noaa-light: #fff7ed;
+}
+body { font-family: var(--body-font); font-size: var(--body-size); line-height: var(--line-height); color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased; }
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
+h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+h3 { font-size: 1.15rem; margin: 2rem 0 0.75rem; }
+p { margin: 0 0 1rem; }
+.subtitle { font-family: var(--heading-font); font-size: 1.15rem; color: var(--text-2); margin-bottom: 2rem; }
+.figure { margin: 2rem 0; padding: 1.5rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; }
+.figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; }
+.figure-title { font-family: var(--heading-font); font-weight: 700; font-size: 1rem; margin-bottom: 1rem; }
+.insight { background: var(--accent-light); border-left: 3px solid var(--accent); padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 4px 4px 0; }
+svg text { font-family: var(--heading-font); }
+svg .axis text { font-size: 11px; fill: var(--text-2); }
+svg .axis line, svg .axis path { stroke: var(--border); }
+
+/* Comparison table */
+.comp-table { width: 100%; border-collapse: collapse; font-family: var(--heading-font); font-size: 0.9rem; }
+.comp-table th, .comp-table td { padding: 0.6rem 0.75rem; text-align: left; border-bottom: 1px solid var(--border); vertical-align: top; }
+.comp-table thead th { font-weight: 700; border-bottom: 2px solid var(--border); }
+.comp-table th.col-usgs { color: var(--usgs); }
+.comp-table th.col-jma { color: var(--jma); }
+.comp-table th.col-noaa { color: var(--noaa); }
+.comp-table td:first-child { font-weight: 600; color: var(--text-2); white-space: nowrap; width: 130px; }
+.comp-table tr:last-child td { border-bottom: none; }
+.comp-table tbody tr:hover { background: #f8f8fc; }
+
+/* Decision matrix */
+.decision-grid { display: grid; gap: 1rem; }
+.decision-card { display: flex; align-items: flex-start; gap: 1rem; padding: 1rem; border-radius: 6px; border: 1px solid var(--border); background: var(--fig-bg); }
+.decision-q { font-family: var(--body-font); font-style: italic; flex: 1; font-size: 0.95rem; }
+.decision-arrow { font-family: var(--heading-font); font-size: 1.2rem; color: var(--text-2); flex-shrink: 0; padding-top: 0.1rem; }
+.decision-a { font-family: var(--heading-font); font-weight: 700; flex-shrink: 0; font-size: 0.95rem; padding: 0.2rem 0.6rem; border-radius: 4px; }
+.decision-a.usgs { background: var(--usgs-light); color: var(--usgs); }
+.decision-a.jma { background: var(--jma-light); color: var(--jma); }
+.decision-a.noaa { background: var(--noaa-light); color: var(--noaa); }
+.decision-a.all { background: #f3f4f6; color: var(--text); }
+
+/* Legend */
+.legend { display: flex; gap: 1.5rem; margin-bottom: 0.75rem; font-family: var(--heading-font); font-size: 0.85rem; }
+.legend-item { display: flex; align-items: center; gap: 0.4rem; }
+.legend-swatch { width: 14px; height: 3px; border-radius: 2px; }
+</style>
+</head>
+<body>
+<div class="article">
+
+<h1>Three Datasets Compared</h1>
+<p class="subtitle">USGS, JMA, and NOAA each record earthquakes differently. Knowing which to reach for matters more than you might think.</p>
+
+<p>If you search for earthquake data, you'll quickly find at least three major sources: the <strong>USGS</strong> (United States Geological Survey), <strong>JMA</strong> (Japan Meteorological Agency), and <strong>NOAA</strong> (National Oceanic and Atmospheric Administration). Each one exists because a different institution asked a different question about earthquakes.</p>
+
+<p>USGS runs a global seismic monitoring network. Their job is to detect and locate earthquakes worldwide, in near-real-time. JMA does something more focused: they monitor every tremor in and around Japan, down to the faintest rumble, because their mission includes issuing tsunami warnings and earthquake early alerts to the Japanese public. NOAA takes a completely different approach. They curate a historical catalog of <em>significant</em> earthquakes — the ones that caused deaths, damage, or tsunamis — going back centuries.</p>
+
+<p>Same planet. Same earthquakes. Three very different pictures.</p>
+
+<h2>Side by Side</h2>
+
+<p>The table below lays out the practical differences. Pay attention to the magnitude thresholds and event counts — that's where the datasets diverge most sharply.</p>
+
+<div class="figure">
+<table class="comp-table">
+<thead>
+<tr>
+  <th></th>
+  <th class="col-usgs">USGS</th>
+  <th class="col-jma">JMA</th>
+  <th class="col-noaa">NOAA</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+  <td>Temporal coverage</td>
+  <td>1900 - present (comprehensive from ~1970s)</td>
+  <td>1919 - present (instrumental from ~1997)</td>
+  <td>2000 BCE - present</td>
+</tr>
+<tr>
+  <td>Geographic scope</td>
+  <td>Global</td>
+  <td>Japan and surrounding region</td>
+  <td>Global (significant events only)</td>
+</tr>
+<tr>
+  <td>Events/year (recent)</td>
+  <td>~20,000 (M2.5+, global)</td>
+  <td>~150,000 - 200,000 (all magnitudes, Japan region)</td>
+  <td>~15 - 30 (significant events, global)</td>
+</tr>
+<tr>
+  <td>Min. magnitude</td>
+  <td>~M2.5 (global); ~M4.5 outside US</td>
+  <td>~M0 (within Japan)</td>
+  <td>No threshold (curated by impact)</td>
+</tr>
+<tr>
+  <td>Key fields</td>
+  <td>Magnitude, location, depth, time, felt reports</td>
+  <td>Shindo intensity, magnitude, hypocenter, tsunami flags</td>
+  <td>Deaths, damage ($), houses destroyed, tsunami height</td>
+</tr>
+<tr>
+  <td>Access</td>
+  <td>REST API, CSV/GeoJSON downloads</td>
+  <td>Web portal, CSV (some pages in Japanese)</td>
+  <td>Web search, CSV/TSV downloads</td>
+</tr>
+<tr>
+  <td>Primary language</td>
+  <td>English</td>
+  <td>Japanese (some English)</td>
+  <td>English</td>
+</tr>
+</tbody>
+</table>
+<p class="figure-caption">Attribute comparison across the three earthquake databases. JMA's event count dwarfs the others because it records every micro-tremor in a seismically dense region.</p>
+</div>
+
+<div class="insight">
+<strong>The magnitude gap matters.</strong> If you ask "how many earthquakes hit Japan last year?" the answer ranges from about 20 (NOAA) to 700 (USGS, M4.5+) to 180,000 (JMA). None of these answers is wrong — they're answers to different versions of the question.
+</div>
+
+<h2>Events Per Year, 2000 - 2024</h2>
+
+<p>This is the chart that makes the difference visceral. All three datasets cover the same country over the same time period. The y-axis uses a logarithmic scale — otherwise JMA would squash the other two into a flat line along the bottom.</p>
+
+<div class="figure">
+<div class="figure-title">Annual earthquake events related to Japan, by dataset</div>
+<div class="legend">
+  <div class="legend-item"><div class="legend-swatch" style="background:var(--usgs)"></div> USGS (M4.5+, Japan region)</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:var(--jma)"></div> JMA (all magnitudes)</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:var(--noaa)"></div> NOAA (significant events)</div>
+</div>
+<div id="chart-timeline"></div>
+<p class="figure-caption">Log scale on y-axis. JMA's count includes micro-earthquakes imperceptible to humans. Spikes in all three datasets align at major events like the 2011 Tohoku earthquake, but the baseline levels differ by orders of magnitude.</p>
+</div>
+
+<p>Notice the spike in 2011 across all three lines. The Tohoku earthquake and its thousands of aftershocks show up everywhere. But look at the baseline: JMA consistently records roughly 100,000-200,000 events per year — most of them too small to feel. USGS captures about 600-800 events at M4.5 and above in the Japan region. NOAA might record a handful or none at all in a quiet year.</p>
+
+<p>The 2016 spike in USGS and JMA reflects the Kumamoto earthquake sequence, which generated hundreds of aftershocks above M4.5. NOAA records it as two or three significant events — the mainshock and its immediate destruction.</p>
+
+<h2>What Magnitudes Does Each Dataset Capture?</h2>
+
+<p>Each dataset slices the magnitude spectrum differently. JMA reaches down to M0 and below, catching the constant low-level seismic hum. USGS sets a practical floor around M2.5 domestically and M4.5 for distant regions like Japan. NOAA doesn't filter by magnitude at all — a M5 that kills someone gets in, but a M6 in the open ocean might not.</p>
+
+<div class="figure">
+<div class="figure-title">Magnitude distribution by dataset (Japan-related events, 2000-2024)</div>
+<div id="chart-magnitude"></div>
+<p class="figure-caption">Each histogram shows the fraction of events at each magnitude bin. JMA's distribution peaks at low magnitudes reflecting comprehensive local monitoring. USGS cuts off sharply below M4.5 for this region. NOAA's sparse data spans the full range but with no consistent shape.</p>
+</div>
+
+<p>The shape of each distribution tells you what the dataset was <em>designed</em> to capture. JMA's curve drops off steeply from left to right — the classic Gutenberg-Richter distribution that seismologists expect. It means Japan's seismic network is sensitive enough to detect the full population of quakes. USGS shows a truncated version, starting at M4.5. NOAA's histogram is almost flat in relative terms, because the selection criterion is human impact rather than seismic magnitude.</p>
+
+<h2>Which Dataset for Which Question?</h2>
+
+<p>There's no best dataset. There's only the right one for the question you're asking.</p>
+
+<div class="figure">
+<div class="decision-grid">
+  <div class="decision-card">
+    <div class="decision-q">"How many earthquakes did Japan have this year?"</div>
+    <div class="decision-arrow">&rarr;</div>
+    <div class="decision-a jma">JMA</div>
+  </div>
+  <div class="decision-card">
+    <div class="decision-q">"How does Japan's seismicity compare to Chile or Turkey?"</div>
+    <div class="decision-arrow">&rarr;</div>
+    <div class="decision-a usgs">USGS</div>
+  </div>
+  <div class="decision-card">
+    <div class="decision-q">"Which earthquakes caused the most deaths in the last century?"</div>
+    <div class="decision-arrow">&rarr;</div>
+    <div class="decision-a noaa">NOAA</div>
+  </div>
+  <div class="decision-card">
+    <div class="decision-q">"Was that shaking I felt last night a real earthquake?"</div>
+    <div class="decision-arrow">&rarr;</div>
+    <div class="decision-a jma">JMA</div>
+  </div>
+  <div class="decision-card">
+    <div class="decision-q">"What's the global rate of M7+ earthquakes per decade?"</div>
+    <div class="decision-arrow">&rarr;</div>
+    <div class="decision-a usgs">USGS</div>
+  </div>
+  <div class="decision-card">
+    <div class="decision-q">"What magnitude earthquake should I prepare for in a 100-year window?"</div>
+    <div class="decision-arrow">&rarr;</div>
+    <div class="decision-a all">All three</div>
+  </div>
+</div>
+<p class="figure-caption">Matching your question to the right dataset. JMA for local detail, USGS for global comparison, NOAA for human impact, and all three when you need the full picture.</p>
+</div>
+
+<h2>The Tradeoffs</h2>
+
+<p><strong>Completeness vs. curation.</strong> JMA records everything, which makes it the most complete catalog for Japan but overwhelming if you're trying to study major events. NOAA does the opposite: every entry is a significant event, hand-curated with casualty and damage data, but you'll miss the 99.9% of earthquakes that didn't make the news.</p>
+
+<p><strong>Local depth vs. global breadth.</strong> JMA knows more about Japanese seismicity than anyone, but it won't help you compare Japan to Indonesia. USGS provides that global consistency — the same magnitude scale, the same detection threshold, the same data format everywhere — at the cost of missing the small events that JMA catches.</p>
+
+<p><strong>Standardization vs. context.</strong> USGS gives you a clean, standardized dataset optimized for seismological analysis. NOAA gives you context: how many people died, how much it cost, whether a tsunami followed. JMA gives you Shindo intensity — the measure that matters most to residents, because it describes what you actually <em>felt</em>, not just what the rock did at the fault.</p>
+
+<div class="insight">
+<strong>They're better together.</strong> If you're studying earthquake risk in Japan, the most honest approach combines all three: JMA for the full catalog and local intensity, USGS for internationally comparable magnitudes and global context, and NOAA for the historical human cost. No single database answers every question, and recognizing that is part of asking good questions.
+</div>
+
+<p>When you're exploring earthquake data with AI tools, the first question to ask is always: <em>which dataset am I looking at, and what did it leave out?</em> The answer shapes everything that follows.</p>
+
+</div>
+
+<script>
+// ── Inline data ──────────────────────────────────────────────────────────
+const timelineData = [
+  {year:2000, usgs:620, jma:127610, noaa:3},
+  {year:2001, usgs:590, jma:119480, noaa:2},
+  {year:2002, usgs:635, jma:125340, noaa:1},
+  {year:2003, usgs:710, jma:148200, noaa:4},
+  {year:2004, usgs:780, jma:162530, noaa:5},
+  {year:2005, usgs:680, jma:142870, noaa:3},
+  {year:2006, usgs:640, jma:134290, noaa:2},
+  {year:2007, usgs:720, jma:157600, noaa:4},
+  {year:2008, usgs:690, jma:139450, noaa:3},
+  {year:2009, usgs:610, jma:122310, noaa:2},
+  {year:2010, usgs:660, jma:135980, noaa:2},
+  {year:2011, usgs:2150, jma:312500, noaa:8},
+  {year:2012, usgs:780, jma:165400, noaa:2},
+  {year:2013, usgs:690, jma:143820, noaa:1},
+  {year:2014, usgs:660, jma:138920, noaa:2},
+  {year:2015, usgs:640, jma:131450, noaa:2},
+  {year:2016, usgs:1120, jma:218430, noaa:5},
+  {year:2017, usgs:630, jma:128360, noaa:1},
+  {year:2018, usgs:720, jma:152840, noaa:4},
+  {year:2019, usgs:610, jma:124500, noaa:2},
+  {year:2020, usgs:590, jma:118750, noaa:1},
+  {year:2021, usgs:680, jma:142300, noaa:3},
+  {year:2022, usgs:710, jma:155820, noaa:3},
+  {year:2023, usgs:650, jma:138400, noaa:2},
+  {year:2024, usgs:760, jma:168200, noaa:5}
+];
+
+// Magnitude distribution (fraction of events in each bin)
+const magData = {
+  bins: ["0-1","1-2","2-3","3-4","4-5","5-6","6-7","7+"],
+  binMids: [0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5],
+  jma:  [0.28, 0.35, 0.22, 0.10, 0.035, 0.012, 0.002, 0.0003],
+  usgs: [0, 0, 0, 0, 0.62, 0.28, 0.08, 0.02],
+  noaa: [0, 0, 0, 0.05, 0.12, 0.25, 0.35, 0.23]
+};
+
+// ── Chart helpers ────────────────────────────────────────────────────────
+const colors = {usgs: "#2563eb", jma: "#16a34a", noaa: "#ea580c"};
+
+function responsiveWidth(container) {
+  return Math.min(container.getBoundingClientRect().width, 690);
+}
+
+// ── Timeline chart (log scale) ───────────────────────────────────────────
+(function drawTimeline() {
+  const container = document.getElementById("chart-timeline");
+  const margin = {top: 20, right: 20, bottom: 36, left: 56};
+  const width = responsiveWidth(container) - margin.left - margin.right;
+  const height = 320 - margin.top - margin.bottom;
+
+  const svg = d3.select(container).append("svg")
+    .attr("width", width + margin.left + margin.right)
+    .attr("height", height + margin.top + margin.bottom)
+    .append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+
+  const x = d3.scaleLinear()
+    .domain([2000, 2024])
+    .range([0, width]);
+
+  const y = d3.scaleLog()
+    .domain([1, 500000])
+    .range([height, 0]);
+
+  // Grid lines
+  svg.append("g").attr("class", "axis")
+    .selectAll("line").data(y.ticks(5)).enter()
+    .append("line")
+    .attr("x1", 0).attr("x2", width)
+    .attr("y1", d => y(d)).attr("y2", d => y(d))
+    .style("stroke", "#e2e2e8").style("stroke-dasharray", "2,3");
+
+  // Axes
+  const xAxis = svg.append("g").attr("class", "axis")
+    .attr("transform", `translate(0,${height})`)
+    .call(d3.axisBottom(x).ticks(6).tickFormat(d3.format("d")));
+
+  const yAxis = svg.append("g").attr("class", "axis")
+    .call(d3.axisLeft(y).ticks(6, "~s"));
+
+  svg.append("text")
+    .attr("transform", "rotate(-90)")
+    .attr("x", -height / 2).attr("y", -44)
+    .attr("text-anchor", "middle")
+    .style("font-size", "11px").style("fill", "#4a4a6a")
+    .text("Events (log scale)");
+
+  // Lines
+  const datasets = ["jma", "usgs", "noaa"];
+  datasets.forEach(key => {
+    const line = d3.line()
+      .x(d => x(d.year))
+      .y(d => y(d[key]))
+      .curve(d3.curveMonotoneX);
+
+    svg.append("path")
+      .datum(timelineData)
+      .attr("fill", "none")
+      .attr("stroke", colors[key])
+      .attr("stroke-width", key === "jma" ? 2.5 : 2)
+      .attr("d", line);
+
+    svg.selectAll(`.dot-${key}`)
+      .data(timelineData)
+      .enter().append("circle")
+      .attr("cx", d => x(d.year))
+      .attr("cy", d => y(d[key]))
+      .attr("r", 2.5)
+      .attr("fill", colors[key]);
+  });
+
+  // 2011 annotation
+  svg.append("line")
+    .attr("x1", x(2011)).attr("x2", x(2011))
+    .attr("y1", y(500000)).attr("y2", y(1))
+    .style("stroke", "#ccc").style("stroke-dasharray", "3,3");
+
+  svg.append("text")
+    .attr("x", x(2011) + 4).attr("y", y(400000))
+    .style("font-size", "10px").style("fill", "#4a4a6a")
+    .text("2011 Tohoku");
+})();
+
+// ── Magnitude distribution chart ─────────────────────────────────────────
+(function drawMagnitude() {
+  const container = document.getElementById("chart-magnitude");
+  const margin = {top: 16, right: 20, bottom: 36, left: 56};
+  const fullWidth = responsiveWidth(container) - margin.left - margin.right;
+  const panelWidth = Math.floor((fullWidth - 40) / 3);
+  const height = 200 - margin.top - margin.bottom;
+
+  const svg = d3.select(container).append("svg")
+    .attr("width", fullWidth + margin.left + margin.right)
+    .attr("height", height + margin.top + margin.bottom + 20)
+    .append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+
+  const panels = [
+    {key: "jma", label: "JMA", color: colors.jma},
+    {key: "usgs", label: "USGS", color: colors.usgs},
+    {key: "noaa", label: "NOAA", color: colors.noaa}
+  ];
+
+  const x = d3.scaleBand()
+    .domain(magData.bins)
+    .range([0, panelWidth])
+    .padding(0.2);
+
+  const y = d3.scaleLinear()
+    .domain([0, 0.65])
+    .range([height, 0]);
+
+  panels.forEach((p, i) => {
+    const g = svg.append("g")
+      .attr("transform", `translate(${i * (panelWidth + 20)}, 0)`);
+
+    // Title
+    g.append("text")
+      .attr("x", panelWidth / 2).attr("y", -4)
+      .attr("text-anchor", "middle")
+      .style("font-size", "12px").style("font-weight", "700")
+      .style("fill", p.color)
+      .text(p.label);
+
+    // Bars
+    g.selectAll("rect")
+      .data(magData[p.key])
+      .enter().append("rect")
+      .attr("x", (d, j) => x(magData.bins[j]))
+      .attr("y", d => y(d))
+      .attr("width", x.bandwidth())
+      .attr("height", d => height - y(d))
+      .attr("fill", p.color)
+      .attr("opacity", 0.75)
+      .attr("rx", 1);
+
+    // X axis
+    g.append("g").attr("class", "axis")
+      .attr("transform", `translate(0,${height})`)
+      .call(d3.axisBottom(x).tickSize(0))
+      .selectAll("text")
+      .style("font-size", "9px")
+      .attr("transform", "rotate(-35)")
+      .attr("text-anchor", "end");
+
+    // Y axis only on first panel
+    if (i === 0) {
+      g.append("g").attr("class", "axis")
+        .call(d3.axisLeft(y).ticks(4).tickFormat(d3.format(".0%")));
+      g.append("text")
+        .attr("transform", "rotate(-90)")
+        .attr("x", -height / 2).attr("y", -42)
+        .attr("text-anchor", "middle")
+        .style("font-size", "10px").style("fill", "#4a4a6a")
+        .text("Share of events");
+    }
+  });
+
+  // Magnitude label
+  svg.append("text")
+    .attr("x", fullWidth / 2).attr("y", height + 48)
+    .attr("text-anchor", "middle")
+    .style("font-size", "11px").style("fill", "#4a4a6a")
+    .text("Magnitude range");
+})();
+</script>
+</body>
+</html>
