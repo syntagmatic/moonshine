@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Oncoprint — Bioinformatics Visualization</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --article-width: 740px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem;
+  --line-height: 1.6;
+  --text: #1a1a2e;
+  --text-2: #4a4a6a;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --bg: #fafafa;
+  --fig-bg: #ffffff;
+  --border: #e2e2e8;
+}
+
+body { font-family: var(--body-font); font-size: var(--body-size); line-height: var(--line-height); color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased; }
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
+h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+p { margin: 0 0 1rem; }
+a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+a:hover { color: #1d4ed8; }
+
+.header { padding: 4rem 0 2rem; border-bottom: 1px solid var(--border); margin-bottom: 2.5rem; }
+.header .back { font-family: var(--heading-font); font-size: 0.85rem; display: inline-block; margin-bottom: 1.5rem; }
+.header .subtitle { font-family: var(--heading-font); font-size: 1.15rem; color: var(--text-2); margin-bottom: 0; max-width: 580px; }
+
+.figure { margin: 2rem 0; padding: 1.5rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.figure-wide { margin-left: -2rem; margin-right: -2rem; }
+.figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; line-height: 1.4; }
+.figure-label { font-weight: 600; color: var(--text); }
+
+.insight { background: var(--accent-light); border-left: 3px solid var(--accent); padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 4px 4px 0; }
+.insight p { margin: 0; }
+
+.controls { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); }
+.controls label { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; }
+
+.btn { font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600; padding: 0.45rem 1.1rem; border-radius: 5px; border: 1px solid var(--border); background: var(--fig-bg); color: var(--text); cursor: pointer; transition: background 0.15s, border-color 0.15s; user-select: none; }
+.btn:hover { border-color: var(--accent); background: var(--accent-light); }
+.btn.active { border-color: var(--accent); background: var(--accent); color: white; }
+
+svg text { font-family: var(--heading-font); }
+svg .axis text { font-size: 11px; fill: var(--text-2); }
+svg .axis line, svg .axis path { stroke: var(--border); }
+
+.tip { position: fixed; pointer-events: none; background: var(--text); color: white; font-family: var(--heading-font); font-size: 0.75rem; padding: 0.3rem 0.55rem; border-radius: 4px; opacity: 0; transition: opacity 0.12s; z-index: 10; white-space: nowrap; }
+
+.legend-row { display: flex; align-items: center; gap: 1.25rem; flex-wrap: wrap; margin-bottom: 0.75rem; font-family: var(--heading-font); font-size: 0.8rem; color: var(--text-2); }
+.legend-item { display: flex; align-items: center; gap: 0.35rem; }
+.legend-swatch { width: 14px; height: 14px; border-radius: 2px; flex-shrink: 0; }
+
+.next-link { margin-top: 4rem; padding-top: 2rem; border-top: 1px solid var(--border); font-family: var(--heading-font); font-size: 0.95rem; }
+
+@media (max-width: 640px) { .figure-wide { margin-left: 0; margin-right: 0; } h1 { font-size: 1.75rem; } }
+</style>
+</head>
+<body>
+
+<div class="article">
+
+  <header class="header">
+    <a class="back" href="index.html">&larr; Bioinformatics Visualization</a>
+    <h1>Oncoprint</h1>
+    <p class="subtitle">How often is TP53 altered across patients, and what happens to its target CDKN1A when it is?</p>
+  </header>
+
+  <p>The visualizations we have seen so far — heatmaps, volcano plots, survival curves — each answer a question about a single layer of data. But cancer genomics produces many layers per patient: mutations, copy-number changes, fusions, expression. The <strong>oncoprint</strong>, pioneered by cBioPortal, compresses all of these into a single dense grid.</p>
+
+  <p>Columns are patients. Rows are genes. Each cell encodes whether that gene is altered in that patient and what kind of alteration was found. The result is a visual that immediately shows which genes are most frequently hit, which patients carry the heaviest mutational burden, and — most importantly — which pairs of genes tend to be altered in a mutually exclusive pattern, hinting that they act in the same pathway.</p>
+
+  <h2>The Grid</h2>
+
+  <p>Below is an oncoprint for 60 simulated cancer patients across eight genes involved in the p53 and growth-factor signaling pathways. Each thin column is a patient. The colored inner rectangles indicate alteration type: <span style="color:#3d9970; font-weight:600;">missense</span>, <span style="font-weight:600;">truncating</span>, <span style="color:#e74c3c; font-weight:600;">amplification</span>, <span style="color:#2980b9; font-weight:600;">deep deletion</span>, and <span style="color:#8e44ad; font-weight:600;">fusion</span>. A gray background means no alteration. Patients are sorted by TP53 status first, then by total alteration count.</p>
+
+  <div class="figure figure-wide" id="fig-oncoprint">
+    <div class="legend-row" id="legend"></div>
+    <div id="oncoprint-main"></div>
+    <p class="figure-caption"><span class="figure-label">Figure 1.</span> Basic oncoprint grid. Rows are genes, columns are patients (sorted by TP53 status). The bar on the right shows alteration frequency for each gene. Hover any cell for details.</p>
+  </div>
+
+  <div class="insight">
+    <p>TP53 is the most frequently mutated gene in human cancer — altered in roughly 40-50% of patients in many tumor types. It encodes the "guardian of the genome," a transcription factor that activates DNA repair, cell-cycle arrest (via CDKN1A/p21), and apoptosis.</p>
+  </div>
+
+  <h2>Mutual Exclusivity</h2>
+
+  <p>If two genes serve the same function in a pathway, mutating both is redundant — one hit is enough. This produces a <strong>mutual exclusivity</strong> pattern in the oncoprint: when one gene is altered, the other is usually wild-type.</p>
+
+  <p>The classic example is <strong>TP53</strong> and <strong>MDM2</strong>. MDM2 is the ubiquitin ligase that degrades p53 protein. Amplifying MDM2 destroys p53 function just as effectively as mutating TP53 directly. Patients rarely carry both alterations because a single hit is sufficient to disable the pathway.</p>
+
+  <div class="figure figure-wide" id="fig-exclusivity">
+    <div class="controls">
+      <span>Sort by gene:</span>
+      <div id="sort-buttons" style="display: flex; gap: 0.5rem; flex-wrap: wrap;"></div>
+    </div>
+    <div id="oncoprint-excl"></div>
+    <p class="figure-caption"><span class="figure-label">Figure 2.</span> Mutual exclusivity between TP53 and MDM2. Toggle sorting by different genes to reveal co-occurrence and exclusivity patterns. The highlighted rows show TP53 and MDM2 are rarely co-altered.</p>
+  </div>
+
+  <div class="insight">
+    <p>Mutual exclusivity is a strong signal for pathway membership. When two genes are mutually exclusive in an oncoprint, they likely participate in the same biological pathway — inactivating either one is sufficient to disrupt it. Co-occurrence, by contrast, suggests that both hits together are needed for a selective advantage.</p>
+  </div>
+
+  <h2>TP53 Status and CDKN1A Expression</h2>
+
+  <p>TP53 is a transcription factor. One of its most important targets is <strong>CDKN1A</strong>, which encodes the cell-cycle inhibitor p21. When TP53 is functional, it drives CDKN1A expression to halt the cell cycle. Mutations like R175H in the DNA-binding domain prevent TP53 from activating CDKN1A, so expression drops.</p>
+
+  <p>The linked view below places CDKN1A expression bars directly under each patient column of the oncoprint. The connection should be immediately visible: patients with TP53 alterations (left side) tend to have lower CDKN1A expression.</p>
+
+  <div class="figure figure-wide" id="fig-expression">
+    <div id="oncoprint-expr"></div>
+    <div id="expr-bars"></div>
+    <p class="figure-caption"><span class="figure-label">Figure 3.</span> Linked oncoprint and expression view. Top: TP53 and CDKN1A alteration status. Bottom: CDKN1A mRNA expression for each patient column, colored by TP53 mutation status (<span style="color:#e74c3c">mutant</span> vs. <span style="color:#999">wild-type</span>). The dashed lines show group means.</p>
+  </div>
+
+  <div class="insight">
+    <p>This is the functional consequence of TP53 loss: without a working p53 protein, CDKN1A is not transcribed, p21 is not made, and the cell-cycle checkpoint fails. The cell divides when it should not. This is why TP53 mutations are so dangerous — they uncouple DNA damage from the brake pedal.</p>
+  </div>
+
+  <h2>Reading Oncoprints</h2>
+
+  <p>A few principles for interpreting oncoprints in the wild:</p>
+
+  <p><strong>Column ordering matters.</strong> cBioPortal sorts columns to cluster alterations together, making patterns like mutual exclusivity visible. Different sort orders tell different stories.</p>
+
+  <p><strong>Alteration frequency is the first thing to check.</strong> The sidebar bars show what fraction of patients carry each gene alteration. Genes above ~15-20% are interesting; below that, the sample size is usually too small for pattern detection.</p>
+
+  <p><strong>Pair it with expression data.</strong> As we saw with TP53 and CDKN1A, the oncoprint tells you <em>what</em> is altered, but linking to expression tells you <em>what happens</em> as a result. The best analyses combine the two.</p>
+
+  <div class="next-link">
+    <a href="11-methylation.html">Next: Methylation &rarr;</a>
+  </div>
+
+</div>
+
+<div class="tip" id="tip"></div>
+
+<script>
+// ─── Seeded RNG ───
+function mulberry32(seed) {
+  return function() {
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+const rng = mulberry32(2048);
+function rnorm(mu, sig) {
+  const u1 = rng(), u2 = rng();
+  return mu + sig * Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+}
+
+// ─── Alteration types & colors ───
+const ALT_TYPES = {
+  missense:    { color: '#3d9970', label: 'Missense', height: 0.55 },
+  truncating:  { color: '#111111', label: 'Truncating', height: 0.55 },
+  amplification: { color: '#e74c3c', label: 'Amplification', height: 1.0 },
+  deletion:    { color: '#2980b9', label: 'Deep deletion', height: 1.0 },
+  fusion:      { color: '#8e44ad', label: 'Fusion', height: 0.55 }
+};
+
+const NO_ALT_COLOR = '#e8e8ee';
+const tip = d3.select('#tip');
+
+// ─── Gene definitions with alteration probabilities ───
+const GENES = [
+  { name: 'TP53',   pAlter: 0.48, weights: { missense: 0.55, truncating: 0.30, deletion: 0.10, amplification: 0.0, fusion: 0.05 } },
+  { name: 'CDKN1A', pAlter: 0.08, weights: { missense: 0.20, truncating: 0.10, deletion: 0.60, amplification: 0.0, fusion: 0.10 } },
+  { name: 'MDM2',   pAlter: 0.18, weights: { missense: 0.05, truncating: 0.0, deletion: 0.0, amplification: 0.90, fusion: 0.05 } },
+  { name: 'EGFR',   pAlter: 0.22, weights: { missense: 0.60, truncating: 0.05, deletion: 0.05, amplification: 0.25, fusion: 0.05 } },
+  { name: 'KRAS',   pAlter: 0.30, weights: { missense: 0.85, truncating: 0.0, deletion: 0.0, amplification: 0.10, fusion: 0.05 } },
+  { name: 'PTEN',   pAlter: 0.25, weights: { missense: 0.30, truncating: 0.35, deletion: 0.30, amplification: 0.0, fusion: 0.05 } },
+  { name: 'RB1',    pAlter: 0.15, weights: { missense: 0.15, truncating: 0.40, deletion: 0.40, amplification: 0.0, fusion: 0.05 } },
+  { name: 'PIK3CA', pAlter: 0.28, weights: { missense: 0.80, truncating: 0.05, deletion: 0.0, amplification: 0.10, fusion: 0.05 } }
+];
+
+const N_PATIENTS = 60;
+
+// ─── Generate patient data ───
+function pickAltType(weights) {
+  const r = rng();
+  let cum = 0;
+  for (const [type, w] of Object.entries(weights)) {
+    cum += w;
+    if (r < cum) return type;
+  }
+  return 'missense';
+}
+
+// Generate alterations with mutual exclusivity for TP53/MDM2
+const patients = d3.range(N_PATIENTS).map(i => {
+  const alts = {};
+  GENES.forEach(g => {
+    if (rng() < g.pAlter) {
+      alts[g.name] = pickAltType(g.weights);
+    }
+  });
+  // Enforce mutual exclusivity: TP53 and MDM2 rarely co-occur
+  if (alts['TP53'] && alts['MDM2'] && rng() < 0.88) {
+    // Remove one of them
+    if (rng() < 0.6) delete alts['MDM2'];
+    else delete alts['TP53'];
+  }
+  return { id: i, alts };
+});
+
+// Generate CDKN1A expression based on TP53 status
+patients.forEach(p => {
+  const tp53Mutant = !!p.alts['TP53'];
+  // TP53 mutant → lower CDKN1A expression
+  p.cdkn1aExpr = tp53Mutant
+    ? Math.max(0.1, rnorm(2.8, 1.2))
+    : Math.max(0.1, rnorm(6.5, 1.8));
+  p.tp53Mutant = tp53Mutant;
+});
+
+// ─── Sort patients: TP53-altered first, then by total alt count ───
+function sortPatients(data, primaryGene) {
+  return [...data].sort((a, b) => {
+    const aHas = a.alts[primaryGene] ? 1 : 0;
+    const bHas = b.alts[primaryGene] ? 1 : 0;
+    if (bHas !== aHas) return bHas - aHas;
+    const aCount = Object.keys(a.alts).length;
+    const bCount = Object.keys(b.alts).length;
+    return bCount - aCount;
+  });
+}
+
+// Compute alteration frequency per gene
+function altFreq(data) {
+  return GENES.map(g => ({
+    name: g.name,
+    freq: data.filter(p => p.alts[g.name]).length / data.length
+  }));
+}
+
+// ─── Legend ───
+(function() {
+  const legend = d3.select('#legend');
+  Object.entries(ALT_TYPES).forEach(([key, val]) => {
+    const item = legend.append('span').attr('class', 'legend-item');
+    item.append('span').attr('class', 'legend-swatch').style('background', val.color);
+    item.append('span').text(val.label);
+  });
+  const item = legend.append('span').attr('class', 'legend-item');
+  item.append('span').attr('class', 'legend-swatch').style('background', NO_ALT_COLOR);
+  item.append('span').text('No alteration');
+})();
+
+// ─── Figure 1: Basic Oncoprint ───
+(function() {
+  const sorted = sortPatients(patients, 'TP53');
+  const freqs = altFreq(sorted);
+
+  const margin = { top: 10, right: 90, bottom: 20, left: 70 };
+  const cellW = 9, cellH = 18, gap = 2;
+  const width = margin.left + N_PATIENTS * (cellW + gap) + margin.right;
+  const height = margin.top + GENES.length * (cellH + gap) + margin.bottom;
+
+  const svg = d3.select('#oncoprint-main').append('svg')
+    .attr('viewBox', `0 0 ${width} ${height}`)
+    .attr('width', '100%')
+    .style('display', 'block');
+
+  // Gene labels
+  GENES.forEach((g, gi) => {
+    svg.append('text')
+      .attr('x', margin.left - 8)
+      .attr('y', margin.top + gi * (cellH + gap) + cellH / 2)
+      .attr('text-anchor', 'end')
+      .attr('dominant-baseline', 'central')
+      .style('font-size', '11px')
+      .style('font-weight', '600')
+      .text(g.name);
+  });
+
+  // Grid cells
+  sorted.forEach((p, pi) => {
+    const x = margin.left + pi * (cellW + gap);
+    GENES.forEach((g, gi) => {
+      const y = margin.top + gi * (cellH + gap);
+      const alt = p.alts[g.name];
+
+      // Background
+      svg.append('rect')
+        .attr('x', x).attr('y', y)
+        .attr('width', cellW).attr('height', cellH)
+        .attr('fill', NO_ALT_COLOR)
+        .attr('rx', 1);
+
+      if (alt) {
+        const info = ALT_TYPES[alt];
+        const h = cellH * info.height;
+        const yOff = (cellH - h) / 2;
+        svg.append('rect')
+          .attr('x', x).attr('y', y + yOff)
+          .attr('width', cellW).attr('height', h)
+          .attr('fill', info.color)
+          .attr('rx', 1);
+      }
+
+      // Hover target
+      svg.append('rect')
+        .attr('x', x).attr('y', y)
+        .attr('width', cellW).attr('height', cellH)
+        .attr('fill', 'transparent')
+        .style('cursor', 'pointer')
+        .on('mouseenter', function(event) {
+          const label = alt ? `Patient ${p.id} — ${g.name}: ${ALT_TYPES[alt].label}` : `Patient ${p.id} — ${g.name}: No alteration`;
+          tip.html(label)
+            .style('left', (event.clientX + 12) + 'px')
+            .style('top', (event.clientY - 24) + 'px')
+            .style('opacity', 1);
+        })
+        .on('mousemove', function(event) {
+          tip.style('left', (event.clientX + 12) + 'px')
+            .style('top', (event.clientY - 24) + 'px');
+        })
+        .on('mouseleave', () => tip.style('opacity', 0));
+    });
+  });
+
+  // Frequency bars on the right
+  const barX = margin.left + N_PATIENTS * (cellW + gap) + 12;
+  const barMaxW = 55;
+  const barScale = d3.scaleLinear().domain([0, 1]).range([0, barMaxW]);
+
+  freqs.forEach((f, i) => {
+    const y = margin.top + i * (cellH + gap);
+    svg.append('rect')
+      .attr('x', barX).attr('y', y + 2)
+      .attr('width', barScale(f.freq)).attr('height', cellH - 4)
+      .attr('fill', '#aab')
+      .attr('rx', 2);
+    svg.append('text')
+      .attr('x', barX + barScale(f.freq) + 4)
+      .attr('y', y + cellH / 2)
+      .attr('dominant-baseline', 'central')
+      .style('font-size', '9px')
+      .style('fill', '#666')
+      .text(Math.round(f.freq * 100) + '%');
+  });
+})();
+
+// ─── Figure 2: Mutual Exclusivity ───
+(function() {
+  const margin = { top: 10, right: 20, bottom: 20, left: 70 };
+  const cellW = 9, cellH = 18, gap = 2;
+  const highlightGenes = ['TP53', 'MDM2'];
+  const width = margin.left + N_PATIENTS * (cellW + gap) + margin.right;
+  const height = margin.top + GENES.length * (cellH + gap) + margin.bottom;
+
+  const svg = d3.select('#oncoprint-excl').append('svg')
+    .attr('viewBox', `0 0 ${width} ${height}`)
+    .attr('width', '100%')
+    .style('display', 'block');
+
+  let currentSort = 'TP53';
+
+  function render(sortGene) {
+    svg.selectAll('*').remove();
+    const sorted = sortPatients(patients, sortGene);
+
+    // Highlight row backgrounds for TP53 and MDM2
+    GENES.forEach((g, gi) => {
+      if (highlightGenes.includes(g.name)) {
+        svg.append('rect')
+          .attr('x', margin.left - 4)
+          .attr('y', margin.top + gi * (cellH + gap) - 1)
+          .attr('width', N_PATIENTS * (cellW + gap) + 8)
+          .attr('height', cellH + 2)
+          .attr('fill', '#fff3cd')
+          .attr('rx', 3);
+      }
+    });
+
+    // Gene labels
+    GENES.forEach((g, gi) => {
+      svg.append('text')
+        .attr('x', margin.left - 8)
+        .attr('y', margin.top + gi * (cellH + gap) + cellH / 2)
+        .attr('text-anchor', 'end')
+        .attr('dominant-baseline', 'central')
+        .style('font-size', '11px')
+        .style('font-weight', highlightGenes.includes(g.name) ? '700' : '600')
+        .style('fill', highlightGenes.includes(g.name) ? '#b8860b' : 'var(--text)')
+        .text(g.name);
+    });
+
+    // Cells
+    sorted.forEach((p, pi) => {
+      const x = margin.left + pi * (cellW + gap);
+      GENES.forEach((g, gi) => {
+        const y = margin.top + gi * (cellH + gap);
+        const alt = p.alts[g.name];
+
+        svg.append('rect')
+          .attr('x', x).attr('y', y)
+          .attr('width', cellW).attr('height', cellH)
+          .attr('fill', NO_ALT_COLOR)
+          .attr('rx', 1);
+
+        if (alt) {
+          const info = ALT_TYPES[alt];
+          const h = cellH * info.height;
+          const yOff = (cellH - h) / 2;
+          svg.append('rect')
+            .attr('x', x).attr('y', y + yOff)
+            .attr('width', cellW).attr('height', h)
+            .attr('fill', info.color)
+            .attr('rx', 1);
+        }
+
+        svg.append('rect')
+          .attr('x', x).attr('y', y)
+          .attr('width', cellW).attr('height', cellH)
+          .attr('fill', 'transparent')
+          .style('cursor', 'pointer')
+          .on('mouseenter', function(event) {
+            const label = alt ? `Patient ${p.id} — ${g.name}: ${ALT_TYPES[alt].label}` : `Patient ${p.id} — ${g.name}: No alteration`;
+            tip.html(label)
+              .style('left', (event.clientX + 12) + 'px')
+              .style('top', (event.clientY - 24) + 'px')
+              .style('opacity', 1);
+          })
+          .on('mousemove', function(event) {
+            tip.style('left', (event.clientX + 12) + 'px')
+              .style('top', (event.clientY - 24) + 'px');
+          })
+          .on('mouseleave', () => tip.style('opacity', 0));
+      });
+    });
+
+    // Co-occurrence stats
+    const bothAltered = patients.filter(p => p.alts['TP53'] && p.alts['MDM2']).length;
+    const tp53Only = patients.filter(p => p.alts['TP53'] && !p.alts['MDM2']).length;
+    const mdm2Only = patients.filter(p => !p.alts['TP53'] && p.alts['MDM2']).length;
+    const neither = patients.filter(p => !p.alts['TP53'] && !p.alts['MDM2']).length;
+
+    const statsY = height - 4;
+    svg.append('text')
+      .attr('x', margin.left)
+      .attr('y', statsY)
+      .style('font-size', '9.5px')
+      .style('fill', '#666')
+      .text(`TP53 & MDM2 co-altered: ${bothAltered}  |  TP53 only: ${tp53Only}  |  MDM2 only: ${mdm2Only}  |  Neither: ${neither}`);
+  }
+
+  render(currentSort);
+
+  // Sort buttons
+  const btnContainer = d3.select('#sort-buttons');
+  GENES.forEach(g => {
+    btnContainer.append('button')
+      .attr('class', 'btn' + (g.name === currentSort ? ' active' : ''))
+      .text(g.name)
+      .on('click', function() {
+        currentSort = g.name;
+        btnContainer.selectAll('.btn').classed('active', false);
+        d3.select(this).classed('active', true);
+        render(currentSort);
+      });
+  });
+})();
+
+// ─── Figure 3: TP53 Status → CDKN1A Expression ───
+(function() {
+  const sorted = sortPatients(patients, 'TP53');
+  const cellW = 9, gap = 2;
+
+  // Top part: mini oncoprint for just TP53 and CDKN1A
+  const genes2 = GENES.filter(g => g.name === 'TP53' || g.name === 'CDKN1A');
+  const margin1 = { top: 10, right: 20, bottom: 4, left: 70 };
+  const cellH = 18;
+  const h1 = margin1.top + genes2.length * (cellH + gap) + margin1.bottom;
+  const width = margin1.left + N_PATIENTS * (cellW + gap) + margin1.right;
+
+  const svg1 = d3.select('#oncoprint-expr').append('svg')
+    .attr('viewBox', `0 0 ${width} ${h1}`)
+    .attr('width', '100%')
+    .style('display', 'block');
+
+  genes2.forEach((g, gi) => {
+    svg1.append('text')
+      .attr('x', margin1.left - 8)
+      .attr('y', margin1.top + gi * (cellH + gap) + cellH / 2)
+      .attr('text-anchor', 'end')
+      .attr('dominant-baseline', 'central')
+      .style('font-size', '11px')
+      .style('font-weight', '600')
+      .text(g.name);
+  });
+
+  // Divider line between TP53-mutant and wild-type
+  const nMutant = sorted.filter(p => p.tp53Mutant).length;
+
+  sorted.forEach((p, pi) => {
+    const x = margin1.left + pi * (cellW + gap);
+    genes2.forEach((g, gi) => {
+      const y = margin1.top + gi * (cellH + gap);
+      const alt = p.alts[g.name];
+
+      svg1.append('rect')
+        .attr('x', x).attr('y', y)
+        .attr('width', cellW).attr('height', cellH)
+        .attr('fill', NO_ALT_COLOR).attr('rx', 1);
+
+      if (alt) {
+        const info = ALT_TYPES[alt];
+        const h = cellH * info.height;
+        const yOff = (cellH - h) / 2;
+        svg1.append('rect')
+          .attr('x', x).attr('y', y + yOff)
+          .attr('width', cellW).attr('height', h)
+          .attr('fill', info.color).attr('rx', 1);
+      }
+    });
+  });
+
+  // Vertical divider
+  if (nMutant > 0 && nMutant < N_PATIENTS) {
+    const divX = margin1.left + nMutant * (cellW + gap) - gap / 2;
+    svg1.append('line')
+      .attr('x1', divX).attr('x2', divX)
+      .attr('y1', margin1.top - 2).attr('y2', h1)
+      .attr('stroke', '#999').attr('stroke-dasharray', '3,2').attr('stroke-width', 1);
+  }
+
+  // Bottom part: CDKN1A expression bars
+  const margin2 = { top: 4, right: 20, bottom: 30, left: 70 };
+  const barMaxH = 90;
+  const h2 = margin2.top + barMaxH + margin2.bottom;
+
+  const svg2 = d3.select('#expr-bars').append('svg')
+    .attr('viewBox', `0 0 ${width} ${h2}`)
+    .attr('width', '100%')
+    .style('display', 'block');
+
+  const exprMax = d3.max(sorted, d => d.cdkn1aExpr);
+  const yScale = d3.scaleLinear().domain([0, exprMax]).range([0, barMaxH]);
+
+  // Y-axis label
+  svg2.append('text')
+    .attr('x', margin2.left - 8)
+    .attr('y', margin2.top + barMaxH / 2)
+    .attr('text-anchor', 'end')
+    .attr('dominant-baseline', 'central')
+    .style('font-size', '10px')
+    .style('fill', '#666')
+    .text('CDKN1A');
+
+  svg2.append('text')
+    .attr('x', margin2.left - 8)
+    .attr('y', margin2.top + barMaxH / 2 + 13)
+    .attr('text-anchor', 'end')
+    .attr('dominant-baseline', 'central')
+    .style('font-size', '9px')
+    .style('fill', '#999')
+    .text('expression');
+
+  // Bars
+  sorted.forEach((p, pi) => {
+    const x = margin2.left + pi * (cellW + gap);
+    const barH = yScale(p.cdkn1aExpr);
+
+    svg2.append('rect')
+      .attr('x', x)
+      .attr('y', margin2.top + barMaxH - barH)
+      .attr('width', cellW)
+      .attr('height', barH)
+      .attr('fill', p.tp53Mutant ? '#e74c3c' : '#bbb')
+      .attr('rx', 1)
+      .on('mouseenter', function(event) {
+        tip.html(`Patient ${p.id} — CDKN1A: ${p.cdkn1aExpr.toFixed(1)} | TP53: ${p.tp53Mutant ? 'Mutant' : 'Wild-type'}`)
+          .style('left', (event.clientX + 12) + 'px')
+          .style('top', (event.clientY - 24) + 'px')
+          .style('opacity', 1);
+      })
+      .on('mousemove', function(event) {
+        tip.style('left', (event.clientX + 12) + 'px')
+          .style('top', (event.clientY - 24) + 'px');
+      })
+      .on('mouseleave', () => tip.style('opacity', 0));
+  });
+
+  // Vertical divider in expression plot too
+  if (nMutant > 0 && nMutant < N_PATIENTS) {
+    const divX = margin2.left + nMutant * (cellW + gap) - gap / 2;
+    svg2.append('line')
+      .attr('x1', divX).attr('x2', divX)
+      .attr('y1', margin2.top).attr('y2', margin2.top + barMaxH)
+      .attr('stroke', '#999').attr('stroke-dasharray', '3,2').attr('stroke-width', 1);
+  }
+
+  // Group means
+  const mutantMean = d3.mean(sorted.filter(p => p.tp53Mutant), d => d.cdkn1aExpr);
+  const wtMean = d3.mean(sorted.filter(p => !p.tp53Mutant), d => d.cdkn1aExpr);
+
+  // Mutant mean line
+  if (mutantMean !== undefined) {
+    const myMut = margin2.top + barMaxH - yScale(mutantMean);
+    const mutStart = margin2.left;
+    const mutEnd = margin2.left + nMutant * (cellW + gap) - gap;
+    svg2.append('line')
+      .attr('x1', mutStart).attr('x2', mutEnd)
+      .attr('y1', myMut).attr('y2', myMut)
+      .attr('stroke', '#e74c3c').attr('stroke-dasharray', '5,3').attr('stroke-width', 1.5);
+    svg2.append('text')
+      .attr('x', mutEnd + 3).attr('y', myMut)
+      .attr('dominant-baseline', 'central')
+      .style('font-size', '9px').style('fill', '#e74c3c').style('font-weight', '600')
+      .text('mean');
+  }
+
+  // Wild-type mean line
+  if (wtMean !== undefined) {
+    const myWt = margin2.top + barMaxH - yScale(wtMean);
+    const wtStart = margin2.left + nMutant * (cellW + gap);
+    const wtEnd = margin2.left + N_PATIENTS * (cellW + gap) - gap;
+    svg2.append('line')
+      .attr('x1', wtStart).attr('x2', wtEnd)
+      .attr('y1', myWt).attr('y2', myWt)
+      .attr('stroke', '#888').attr('stroke-dasharray', '5,3').attr('stroke-width', 1.5);
+    svg2.append('text')
+      .attr('x', wtEnd + 3).attr('y', myWt)
+      .attr('dominant-baseline', 'central')
+      .style('font-size', '9px').style('fill', '#888').style('font-weight', '600')
+      .text('mean');
+  }
+
+  // Labels under groups
+  const labelY = margin2.top + barMaxH + 16;
+  if (nMutant > 0) {
+    svg2.append('text')
+      .attr('x', margin2.left + (nMutant * (cellW + gap)) / 2)
+      .attr('y', labelY)
+      .attr('text-anchor', 'middle')
+      .style('font-size', '10px').style('fill', '#e74c3c').style('font-weight', '600')
+      .text('TP53 mutant');
+  }
+  if (nMutant < N_PATIENTS) {
+    svg2.append('text')
+      .attr('x', margin2.left + nMutant * (cellW + gap) + ((N_PATIENTS - nMutant) * (cellW + gap)) / 2)
+      .attr('y', labelY)
+      .attr('text-anchor', 'middle')
+      .style('font-size', '10px').style('fill', '#888').style('font-weight', '600')
+      .text('TP53 wild-type');
+  }
+})();
+</script>
+
+</body>
+</html>

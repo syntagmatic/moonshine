@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Forest Plot — Bioinformatics Visualization</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --article-width: 740px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem;
+  --line-height: 1.6;
+  --text: #1a1a2e;
+  --text-2: #4a4a6a;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --bg: #fafafa;
+  --fig-bg: #ffffff;
+  --border: #e2e2e8;
+}
+
+body { font-family: var(--body-font); font-size: var(--body-size); line-height: var(--line-height); color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased; }
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
+h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+p { margin: 0 0 1rem; }
+a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+a:hover { color: #1d4ed8; }
+
+.header { padding: 4rem 0 2rem; border-bottom: 1px solid var(--border); margin-bottom: 2.5rem; }
+.header .back { font-family: var(--heading-font); font-size: 0.85rem; display: inline-block; margin-bottom: 1.5rem; }
+.header .subtitle { font-family: var(--heading-font); font-size: 1.15rem; color: var(--text-2); margin-bottom: 0; max-width: 580px; }
+
+.figure { margin: 2rem 0; padding: 1.5rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.figure-wide { margin-left: -2rem; margin-right: -2rem; }
+.figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; line-height: 1.4; }
+.figure-label { font-weight: 600; color: var(--text); }
+
+.insight { background: var(--accent-light); border-left: 3px solid var(--accent); padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 4px 4px 0; }
+.insight p { margin: 0; }
+
+.controls { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); }
+.controls label { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; }
+
+.btn { font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600; padding: 0.45rem 1.1rem; border-radius: 5px; border: 1px solid var(--border); background: var(--fig-bg); color: var(--text); cursor: pointer; transition: background 0.15s, border-color 0.15s; user-select: none; }
+.btn:hover { border-color: var(--accent); background: var(--accent-light); }
+.btn.active { border-color: var(--accent); background: var(--accent); color: white; }
+
+svg text { font-family: var(--heading-font); }
+svg .axis text { font-size: 11px; fill: var(--text-2); }
+svg .axis line, svg .axis path { stroke: var(--border); }
+
+.tip { position: fixed; pointer-events: none; background: var(--text); color: white; font-family: var(--heading-font); font-size: 0.75rem; padding: 0.3rem 0.55rem; border-radius: 4px; opacity: 0; transition: opacity 0.12s; z-index: 10; white-space: nowrap; }
+
+.stats-row { font-family: var(--mono-font); font-size: 0.8rem; color: var(--text-2); margin-top: 0.5rem; }
+
+.next-link { margin-top: 4rem; padding-top: 2rem; border-top: 1px solid var(--border); font-family: var(--heading-font); font-size: 0.95rem; }
+
+@media (max-width: 640px) { .figure-wide { margin-left: 0; margin-right: 0; } h1 { font-size: 1.75rem; } }
+</style>
+</head>
+<body>
+
+<div class="article">
+
+  <header class="header">
+    <a class="back" href="index.html">&larr; Bioinformatics Visualization</a>
+    <h1>Forest Plot</h1>
+    <p class="subtitle">Is the TP53&rarr;CDKN1A link consistent across studies? A meta-analysis of expression changes when the guardian gene is broken.</p>
+  </header>
+
+  <p>We have seen in earlier explainers that TP53 mutations tend to reduce CDKN1A expression. But any single study can be misleading&mdash;small samples, tissue-specific biology, and technical variation all introduce noise. A <strong>meta-analysis</strong> pools results from multiple independent studies to ask: does the effect hold up?</p>
+
+  <p>The forest plot is the standard way to visualize meta-analytic results. Each row is a study. Each study reports an <em>effect size</em>&mdash;here, the log<sub>2</sub> fold change of CDKN1A expression in TP53-mutant versus wild-type patients&mdash;along with a confidence interval. A negative value means CDKN1A is reduced in the mutant group. A diamond at the bottom shows the pooled estimate from all studies combined.</p>
+
+  <h2>The meta-analysis</h2>
+
+  <div class="figure figure-wide" id="fig-forest">
+    <div id="forest-main"></div>
+    <div class="figure-caption"><span class="figure-label">Figure 1.</span> Forest plot of eight studies reporting CDKN1A log<sub>2</sub> fold change in TP53-mutant versus wild-type tumors. Squares are proportional to study weight (inverse variance). The dashed line marks the null (no effect). Hover any study for details.</div>
+  </div>
+
+  <div class="insight">
+    <p>Most studies show CDKN1A expression is reduced when TP53 is mutated, but the magnitude varies. The pooled diamond sits firmly in negative territory, confirming the overall direction of the effect.</p>
+  </div>
+
+  <h2>Sensitivity analysis</h2>
+
+  <p>How robust is the pooled estimate? In a <strong>leave-one-out</strong> sensitivity analysis, we remove each study in turn and recalculate. If removing one study changes the conclusion, it might be driving the result on its own. Click any study below to exclude it.</p>
+
+  <div class="figure figure-wide" id="fig-sensitivity">
+    <div class="controls" id="sensitivity-controls">
+      <span>Click a study to exclude it.</span>
+      <button class="btn" id="btn-reset">Reset all</button>
+    </div>
+    <div id="forest-sensitivity"></div>
+    <div class="stats-row" id="sensitivity-stats"></div>
+    <div class="figure-caption"><span class="figure-label">Figure 2.</span> Leave-one-out sensitivity analysis. Click any study row to toggle its inclusion. The pooled estimate and I&sup2; heterogeneity statistic update in real time. Excluding the outlier study changes I&sup2; substantially.</div>
+  </div>
+
+  <div class="insight">
+    <p>The I&sup2; statistic measures what fraction of the variation across studies is due to real heterogeneity rather than sampling error. Values above 50% suggest meaningful differences between studies. Watch how excluding certain studies shifts I&sup2;.</p>
+  </div>
+
+  <h2>Checking for publication bias</h2>
+
+  <p>Journals are more likely to publish studies with significant results. This creates <strong>publication bias</strong>: if small, non-significant studies go unpublished, the meta-analysis overestimates the true effect. The <strong>funnel plot</strong> is a diagnostic tool. It plots each study's effect size against its precision (inverse of the standard error). In an unbiased literature, the points should scatter symmetrically around the pooled estimate, forming an inverted funnel shape.</p>
+
+  <div class="figure figure-wide" id="fig-funnel">
+    <div id="funnel-plot"></div>
+    <div class="stats-row" id="funnel-stats"></div>
+    <div class="figure-caption"><span class="figure-label">Figure 3.</span> Funnel plot for detecting publication bias. X-axis is effect size; y-axis is standard error (inverted so that more precise studies sit at the top). The dashed line is the pooled estimate. Asymmetry suggests missing studies on one side.</div>
+  </div>
+
+  <p>Egger's regression test formalizes the visual check. It regresses the standardized effect (effect / SE) against precision (1 / SE). A significant intercept implies asymmetry. In well-powered collections of studies, a p-value below 0.10 is conventionally considered evidence of funnel asymmetry.</p>
+
+  <h2>Reading forest plots</h2>
+
+  <p><strong>The square size matters.</strong> Larger squares mean more precise studies (larger sample, tighter CI). They pull the pooled estimate toward them. Pay attention to which studies dominate.</p>
+
+  <p><strong>The diamond is the bottom line.</strong> If the diamond does not cross the null line, the pooled effect is statistically significant. Its width shows the confidence interval of the pooled estimate&mdash;narrower is more precise.</p>
+
+  <p><strong>Heterogeneity tells a story.</strong> High I&sup2; does not invalidate the analysis, but it means the true effect likely varies across settings. When you see high heterogeneity, the interesting question is <em>why</em>&mdash;is it tissue type, sample size, sequencing technology?</p>
+
+  <div class="next-link">
+    <a href="19-gene-portrait.html">Next: Gene Portrait &rarr;</a>
+  </div>
+
+</div>
+
+<div class="tip" id="tip"></div>
+
+<script>
+// ─── Seeded PRNG ───
+function mulberry32(a) {
+  return function() {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    var t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+const rand = mulberry32(20260411);
+function rnorm(mu, sigma) {
+  const u1 = rand(), u2 = rand();
+  return mu + sigma * Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+}
+
+const tip = d3.select('#tip');
+
+// ─── Study Data ───
+const studies = [
+  { name: 'TCGA Breast 2015',     n: 412, trueLFC: -1.1  },
+  { name: 'ICGC Liver 2018',      n: 187, trueLFC: -0.9  },
+  { name: 'TCGA Lung Adeno 2016', n: 305, trueLFC: -1.3  },
+  { name: 'TARGET AML 2017',      n: 89,  trueLFC: -0.4  },
+  { name: 'METABRIC 2019',        n: 520, trueLFC: -1.0  },
+  { name: 'PCAWG Pancreas 2020',  n: 63,  trueLFC: 0.2   },
+  { name: 'TCGA Ovarian 2014',    n: 274, trueLFC: -1.2  },
+  { name: 'Hartwig WGS 2021',     n: 341, trueLFC: -0.85 }
+];
+
+const data = studies.map(s => {
+  const se = 1.8 / Math.sqrt(s.n) + rand() * 0.08;
+  const lfc = rnorm(s.trueLFC, se * 0.6);
+  const ci_lo = lfc - 1.96 * se;
+  const ci_hi = lfc + 1.96 * se;
+  return { name: s.name, n: s.n, lfc, se, ci_lo, ci_hi };
+});
+
+// ─── Meta-analysis helpers ───
+function metaAnalysis(subset) {
+  const weights = subset.map(d => 1 / (d.se * d.se));
+  const totalW = d3.sum(weights);
+  const pooled = d3.sum(subset.map((d, i) => weights[i] * d.lfc)) / totalW;
+  const pooledSE = Math.sqrt(1 / totalW);
+
+  // Q statistic
+  const Q = d3.sum(subset.map((d, i) => weights[i] * Math.pow(d.lfc - pooled, 2)));
+  const df = subset.length - 1;
+  const I2 = df > 0 ? Math.max(0, (Q - df) / Q * 100) : 0;
+
+  return { pooled, pooledSE, ci_lo: pooled - 1.96 * pooledSE, ci_hi: pooled + 1.96 * pooledSE, I2, Q, df, weights, totalW };
+}
+
+function eggerTest(subset, meta) {
+  // Egger's regression: regress (lfc / se) on (1 / se)
+  const n = subset.length;
+  if (n < 3) return { intercept: NaN, pValue: NaN };
+  const xs = subset.map(d => 1 / d.se);
+  const ys = subset.map(d => d.lfc / d.se);
+  const xBar = d3.mean(xs);
+  const yBar = d3.mean(ys);
+  const ssxx = d3.sum(xs.map(x => (x - xBar) * (x - xBar)));
+  const ssxy = d3.sum(xs.map((x, i) => (x - xBar) * (ys[i] - yBar)));
+  const slope = ssxy / ssxx;
+  const intercept = yBar - slope * xBar;
+  const residuals = ys.map((y, i) => y - (intercept + slope * xs[i]));
+  const sse = d3.sum(residuals.map(r => r * r));
+  const mse = sse / (n - 2);
+  const seIntercept = Math.sqrt(mse * (1 / n + xBar * xBar / ssxx));
+  const tStat = intercept / seIntercept;
+  // Approximate two-tailed p from t distribution (df = n-2)
+  const df = n - 2;
+  const x = df / (df + tStat * tStat);
+  // Regularized incomplete beta approximation (simple)
+  const p = incompleteBeta(df / 2, 0.5, x);
+  return { intercept, pValue: p };
+}
+
+// Simple incomplete beta via continued fraction (good enough for small df)
+function incompleteBeta(a, b, x) {
+  if (x < 0 || x > 1) return NaN;
+  if (x === 0) return 0;
+  if (x === 1) return 1;
+  const lnBeta = lgamma(a) + lgamma(b) - lgamma(a + b);
+  const front = Math.exp(Math.log(x) * a + Math.log(1 - x) * b - lnBeta);
+  // Lentz's continued fraction
+  let f = 1, c = 1, d = 0;
+  for (let m = 0; m <= 200; m++) {
+    let numerator;
+    if (m === 0) {
+      numerator = 1;
+    } else {
+      const k = m;
+      const m2 = Math.floor((k + 1) / 2);
+      if (k % 2 === 1) {
+        numerator = -(a + m2 - 1 + m2) * (a + m2 - 1 + m2) / ((a + k - 1) * (a + k));
+        numerator = -((a + m2) * (a + b + m2 - 1) * x) / ((a + 2 * m2 - 1) * (a + 2 * m2));
+      } else {
+        numerator = (m2 * (b - m2) * x) / ((a + 2 * m2 - 1) * (a + 2 * m2));
+      }
+    }
+    d = 1 + numerator * d;
+    if (Math.abs(d) < 1e-30) d = 1e-30;
+    d = 1 / d;
+    c = 1 + numerator / c;
+    if (Math.abs(c) < 1e-30) c = 1e-30;
+    f *= d * c;
+    if (Math.abs(d * c - 1) < 1e-10) break;
+  }
+  return front * f / a;
+}
+
+function lgamma(x) {
+  // Lanczos approximation
+  const g = 7;
+  const c = [0.99999999999980993,676.5203681218851,-1259.1392167224028,
+    771.32342877765313,-176.61502916214059,12.507343278686905,
+    -0.13857109526572012,9.9843695780195716e-6,1.5056327351493116e-7];
+  if (x < 0.5) return Math.log(Math.PI / Math.sin(Math.PI * x)) - lgamma(1 - x);
+  x -= 1;
+  let a = c[0];
+  const t = x + g + 0.5;
+  for (let i = 1; i < g + 2; i++) a += c[i] / (x + i);
+  return 0.5 * Math.log(2 * Math.PI) + (x + 0.5) * Math.log(t) - t + Math.log(a);
+}
+
+// ─── Figure 1: Standard Forest Plot ───
+(function() {
+  const meta = metaAnalysis(data);
+  const margin = { top: 20, right: 30, bottom: 35, left: 200 };
+  const rowH = 32;
+  const pooledRowH = 40;
+  const width = 700;
+  const height = margin.top + data.length * rowH + 12 + pooledRowH + margin.bottom;
+
+  const allVals = data.flatMap(d => [d.ci_lo, d.ci_hi]).concat([meta.ci_lo, meta.ci_hi, 0]);
+  const xExtent = [d3.min(allVals) - 0.3, d3.max(allVals) + 0.3];
+
+  const x = d3.scaleLinear().domain(xExtent).range([margin.left, width - margin.right]);
+
+  const maxW = d3.max(meta.weights);
+
+  const svg = d3.select('#forest-main').append('svg')
+    .attr('viewBox', `0 0 ${width} ${height}`)
+    .attr('width', '100%')
+    .style('display', 'block');
+
+  // Column headers
+  svg.append('text').attr('x', margin.left - 10).attr('y', margin.top - 6)
+    .attr('text-anchor', 'end').style('font-size', '10px').style('font-weight', '700').style('fill', 'var(--text-2)').text('Study');
+  svg.append('text').attr('x', width - margin.right + 5).attr('y', margin.top - 6)
+    .attr('text-anchor', 'start').style('font-size', '10px').style('font-weight', '700').style('fill', 'var(--text-2)').text('Weight');
+
+  // Null line
+  svg.append('line')
+    .attr('x1', x(0)).attr('x2', x(0))
+    .attr('y1', margin.top).attr('y2', height - margin.bottom)
+    .attr('stroke', '#999').attr('stroke-dasharray', '4,3').attr('stroke-width', 1);
+
+  // Studies
+  data.forEach((d, i) => {
+    const cy = margin.top + i * rowH + rowH / 2;
+    const weight = meta.weights[i];
+    const sqSize = 4 + 10 * (weight / maxW);
+    const weightPct = (weight / meta.totalW * 100).toFixed(1);
+
+    // Label
+    svg.append('text')
+      .attr('x', margin.left - 10).attr('y', cy)
+      .attr('text-anchor', 'end').attr('dominant-baseline', 'central')
+      .style('font-size', '11px').style('fill', 'var(--text)')
+      .text(d.name);
+
+    // Weight
+    svg.append('text')
+      .attr('x', width - margin.right + 5).attr('y', cy)
+      .attr('text-anchor', 'start').attr('dominant-baseline', 'central')
+      .style('font-size', '10px').style('fill', 'var(--text-2)')
+      .text(weightPct + '%');
+
+    // CI line
+    svg.append('line')
+      .attr('x1', x(d.ci_lo)).attr('x2', x(d.ci_hi))
+      .attr('y1', cy).attr('y2', cy)
+      .attr('stroke', 'var(--accent)').attr('stroke-width', 1.5);
+
+    // Square
+    svg.append('rect')
+      .attr('x', x(d.lfc) - sqSize / 2).attr('y', cy - sqSize / 2)
+      .attr('width', sqSize).attr('height', sqSize)
+      .attr('fill', 'var(--accent)')
+      .style('cursor', 'pointer')
+      .on('mouseenter', function(event) {
+        tip.html(`${d.name} (n=${d.n}) — LFC: ${d.lfc.toFixed(2)} [${d.ci_lo.toFixed(2)}, ${d.ci_hi.toFixed(2)}]`)
+          .style('left', (event.clientX + 12) + 'px')
+          .style('top', (event.clientY - 24) + 'px')
+          .style('opacity', 1);
+      })
+      .on('mousemove', function(event) {
+        tip.style('left', (event.clientX + 12) + 'px').style('top', (event.clientY - 24) + 'px');
+      })
+      .on('mouseleave', () => tip.style('opacity', 0));
+  });
+
+  // Pooled diamond
+  const diamondY = margin.top + data.length * rowH + 12 + pooledRowH / 2;
+  const diamondHH = 8;
+  const pts = [
+    [x(meta.ci_lo), diamondY],
+    [x(meta.pooled), diamondY - diamondHH],
+    [x(meta.ci_hi), diamondY],
+    [x(meta.pooled), diamondY + diamondHH]
+  ];
+  svg.append('polygon')
+    .attr('points', pts.map(p => p.join(',')).join(' '))
+    .attr('fill', '#e74c3c');
+
+  svg.append('text')
+    .attr('x', margin.left - 10).attr('y', diamondY)
+    .attr('text-anchor', 'end').attr('dominant-baseline', 'central')
+    .style('font-size', '11px').style('font-weight', '700').style('fill', '#e74c3c')
+    .text('Pooled estimate');
+
+  // X axis
+  const xAxis = d3.axisBottom(x).ticks(8).tickSize(-height + margin.top + margin.bottom);
+  const axisG = svg.append('g').attr('class', 'axis').attr('transform', `translate(0,${height - margin.bottom})`).call(xAxis);
+  axisG.select('.domain').remove();
+  axisG.selectAll('.tick line').attr('stroke', '#eee').attr('stroke-dasharray', '2,2');
+
+  svg.append('text')
+    .attr('x', x(0)).attr('y', height - 4)
+    .attr('text-anchor', 'middle')
+    .style('font-size', '10px').style('fill', 'var(--text-2)')
+    .text('log\u2082 fold change (TP53-mutant vs wild-type)');
+})();
+
+// ─── Figure 2: Sensitivity Analysis ───
+(function() {
+  const margin = { top: 20, right: 30, bottom: 35, left: 200 };
+  const rowH = 32;
+  const pooledRowH = 40;
+  const width = 700;
+  const height = margin.top + data.length * rowH + 12 + pooledRowH + margin.bottom;
+
+  const container = d3.select('#forest-sensitivity');
+  const svg = container.append('svg')
+    .attr('viewBox', `0 0 ${width} ${height}`)
+    .attr('width', '100%')
+    .style('display', 'block');
+
+  const excluded = new Set();
+
+  function render() {
+    svg.selectAll('*').remove();
+
+    const active = data.filter((_, i) => !excluded.has(i));
+    if (active.length < 2) return;
+
+    const meta = metaAnalysis(active);
+    const allVals = data.flatMap(d => [d.ci_lo, d.ci_hi]).concat([meta.ci_lo, meta.ci_hi, 0]);
+    const xExtent = [d3.min(allVals) - 0.3, d3.max(allVals) + 0.3];
+    const x = d3.scaleLinear().domain(xExtent).range([margin.left, width - margin.right]);
+
+    const maxW = d3.max(meta.weights);
+
+    // Null line
+    svg.append('line')
+      .attr('x1', x(0)).attr('x2', x(0))
+      .attr('y1', margin.top).attr('y2', height - margin.bottom)
+      .attr('stroke', '#999').attr('stroke-dasharray', '4,3').attr('stroke-width', 1);
+
+    // Studies
+    let weightIdx = 0;
+    data.forEach((d, i) => {
+      const cy = margin.top + i * rowH + rowH / 2;
+      const isExcluded = excluded.has(i);
+
+      // Clickable background
+      svg.append('rect')
+        .attr('x', 0).attr('y', cy - rowH / 2)
+        .attr('width', width).attr('height', rowH)
+        .attr('fill', isExcluded ? '#fff0f0' : 'transparent')
+        .style('cursor', 'pointer')
+        .on('click', function() {
+          if (excluded.has(i)) excluded.delete(i);
+          else if (data.length - excluded.size > 2) excluded.add(i);
+          render();
+        });
+
+      // Label
+      svg.append('text')
+        .attr('x', margin.left - 10).attr('y', cy)
+        .attr('text-anchor', 'end').attr('dominant-baseline', 'central')
+        .style('font-size', '11px')
+        .style('fill', isExcluded ? '#ccc' : 'var(--text)')
+        .style('text-decoration', isExcluded ? 'line-through' : 'none')
+        .text(d.name);
+
+      if (!isExcluded) {
+        const weight = meta.weights[weightIdx];
+        const sqSize = 4 + 10 * (weight / maxW);
+        weightIdx++;
+
+        // CI line
+        svg.append('line')
+          .attr('x1', x(d.ci_lo)).attr('x2', x(d.ci_hi))
+          .attr('y1', cy).attr('y2', cy)
+          .attr('stroke', 'var(--accent)').attr('stroke-width', 1.5);
+
+        // Square
+        svg.append('rect')
+          .attr('x', x(d.lfc) - sqSize / 2).attr('y', cy - sqSize / 2)
+          .attr('width', sqSize).attr('height', sqSize)
+          .attr('fill', 'var(--accent)');
+      } else {
+        // Ghost CI
+        svg.append('line')
+          .attr('x1', x(d.ci_lo)).attr('x2', x(d.ci_hi))
+          .attr('y1', cy).attr('y2', cy)
+          .attr('stroke', '#ddd').attr('stroke-width', 1);
+        svg.append('circle')
+          .attr('cx', x(d.lfc)).attr('cy', cy).attr('r', 3)
+          .attr('fill', '#ddd');
+      }
+    });
+
+    // Pooled diamond
+    const diamondY = margin.top + data.length * rowH + 12 + pooledRowH / 2;
+    const diamondHH = 8;
+    const pts = [
+      [x(meta.ci_lo), diamondY],
+      [x(meta.pooled), diamondY - diamondHH],
+      [x(meta.ci_hi), diamondY],
+      [x(meta.pooled), diamondY + diamondHH]
+    ];
+    svg.append('polygon')
+      .attr('points', pts.map(p => p.join(',')).join(' '))
+      .attr('fill', '#e74c3c');
+
+    svg.append('text')
+      .attr('x', margin.left - 10).attr('y', diamondY)
+      .attr('text-anchor', 'end').attr('dominant-baseline', 'central')
+      .style('font-size', '11px').style('font-weight', '700').style('fill', '#e74c3c')
+      .text('Pooled estimate');
+
+    // X axis
+    const xAxis = d3.axisBottom(x).ticks(8).tickSize(-height + margin.top + margin.bottom);
+    const axisG = svg.append('g').attr('class', 'axis').attr('transform', `translate(0,${height - margin.bottom})`).call(xAxis);
+    axisG.select('.domain').remove();
+    axisG.selectAll('.tick line').attr('stroke', '#eee').attr('stroke-dasharray', '2,2');
+
+    svg.append('text')
+      .attr('x', x(0)).attr('y', height - 4)
+      .attr('text-anchor', 'middle')
+      .style('font-size', '10px').style('fill', 'var(--text-2)')
+      .text('log\u2082 fold change');
+
+    // Stats
+    d3.select('#sensitivity-stats').html(
+      `Pooled LFC: <strong>${meta.pooled.toFixed(3)}</strong> ` +
+      `[${meta.ci_lo.toFixed(3)}, ${meta.ci_hi.toFixed(3)}] &nbsp;|&nbsp; ` +
+      `I&sup2; = <strong>${meta.I2.toFixed(1)}%</strong> &nbsp;|&nbsp; ` +
+      `Studies included: <strong>${active.length}</strong> / ${data.length}`
+    );
+  }
+
+  render();
+
+  d3.select('#btn-reset').on('click', function() {
+    excluded.clear();
+    render();
+  });
+})();
+
+// ─── Figure 3: Funnel Plot ───
+(function() {
+  const meta = metaAnalysis(data);
+  const margin = { top: 20, right: 30, bottom: 45, left: 60 };
+  const width = 500;
+  const height = 350;
+
+  const svg = d3.select('#funnel-plot').append('svg')
+    .attr('viewBox', `0 0 ${width} ${height}`)
+    .attr('width', '100%')
+    .style('display', 'block');
+
+  const seMax = d3.max(data, d => d.se) * 1.2;
+  const lfcExtent = d3.extent(data, d => d.lfc);
+  const xPad = 0.8;
+
+  const x = d3.scaleLinear()
+    .domain([Math.min(lfcExtent[0], meta.pooled) - xPad, Math.max(lfcExtent[1], meta.pooled) + xPad])
+    .range([margin.left, width - margin.right]);
+
+  const y = d3.scaleLinear()
+    .domain([0, seMax])
+    .range([margin.top, height - margin.bottom]);
+
+  // Funnel shape (from pooled estimate)
+  const funnelPts = [
+    [x(meta.pooled), y(0)],
+    [x(meta.pooled - 1.96 * seMax), y(seMax)],
+    [x(meta.pooled + 1.96 * seMax), y(seMax)]
+  ];
+  svg.append('polygon')
+    .attr('points', funnelPts.map(p => p.join(',')).join(' '))
+    .attr('fill', '#f0f4ff').attr('stroke', 'none');
+
+  // Pooled estimate line
+  svg.append('line')
+    .attr('x1', x(meta.pooled)).attr('x2', x(meta.pooled))
+    .attr('y1', y(0)).attr('y2', y(seMax))
+    .attr('stroke', '#e74c3c').attr('stroke-dasharray', '5,3').attr('stroke-width', 1.5);
+
+  // Null line
+  svg.append('line')
+    .attr('x1', x(0)).attr('x2', x(0))
+    .attr('y1', y(0)).attr('y2', y(seMax))
+    .attr('stroke', '#bbb').attr('stroke-dasharray', '3,3').attr('stroke-width', 1);
+
+  // Points
+  data.forEach(d => {
+    svg.append('circle')
+      .attr('cx', x(d.lfc)).attr('cy', y(d.se))
+      .attr('r', 5)
+      .attr('fill', 'var(--accent)').attr('stroke', '#fff').attr('stroke-width', 1.5)
+      .style('cursor', 'pointer')
+      .on('mouseenter', function(event) {
+        tip.html(`${d.name} (n=${d.n}) — LFC: ${d.lfc.toFixed(2)}, SE: ${d.se.toFixed(3)}`)
+          .style('left', (event.clientX + 12) + 'px')
+          .style('top', (event.clientY - 24) + 'px')
+          .style('opacity', 1);
+      })
+      .on('mousemove', function(event) {
+        tip.style('left', (event.clientX + 12) + 'px').style('top', (event.clientY - 24) + 'px');
+      })
+      .on('mouseleave', () => tip.style('opacity', 0));
+  });
+
+  // Axes
+  const xAxis = d3.axisBottom(x).ticks(8);
+  svg.append('g').attr('class', 'axis').attr('transform', `translate(0,${height - margin.bottom})`).call(xAxis);
+
+  const yAxis = d3.axisLeft(y).ticks(5);
+  svg.append('g').attr('class', 'axis').attr('transform', `translate(${margin.left},0)`).call(yAxis);
+
+  // Axis labels
+  svg.append('text')
+    .attr('x', (margin.left + width - margin.right) / 2).attr('y', height - 6)
+    .attr('text-anchor', 'middle')
+    .style('font-size', '10px').style('fill', 'var(--text-2)')
+    .text('log\u2082 fold change');
+
+  svg.append('text')
+    .attr('transform', `rotate(-90)`)
+    .attr('x', -(margin.top + height - margin.bottom) / 2).attr('y', 16)
+    .attr('text-anchor', 'middle')
+    .style('font-size', '10px').style('fill', 'var(--text-2)')
+    .text('Standard error');
+
+  // Egger's test
+  const egger = eggerTest(data, meta);
+  const pFormatted = isNaN(egger.pValue) ? 'N/A' : egger.pValue < 0.001 ? '< 0.001' : egger.pValue.toFixed(3);
+  const asymmetric = !isNaN(egger.pValue) && egger.pValue < 0.10;
+  d3.select('#funnel-stats').html(
+    `Egger's test for funnel asymmetry: intercept = ${egger.intercept.toFixed(2)}, ` +
+    `p = <strong>${pFormatted}</strong>` +
+    (asymmetric ? ' &mdash; suggests possible publication bias' : ' &mdash; no strong evidence of asymmetry')
+  );
+})();
+</script>
+
+</body>
+</html>

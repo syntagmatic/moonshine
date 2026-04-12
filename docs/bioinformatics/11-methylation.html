@@ -1,0 +1,720 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DNA Methylation — Bioinformatics Visualization</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --article-width: 740px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem;
+  --line-height: 1.6;
+  --text: #1a1a2e;
+  --text-2: #4a4a6a;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --bg: #fafafa;
+  --fig-bg: #ffffff;
+  --border: #e2e2e8;
+}
+
+body { font-family: var(--body-font); font-size: var(--body-size); line-height: var(--line-height); color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased; }
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
+h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+p { margin: 0 0 1rem; }
+a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+a:hover { color: #1d4ed8; }
+
+.header { padding: 4rem 0 2rem; border-bottom: 1px solid var(--border); margin-bottom: 2.5rem; }
+.header .back { font-family: var(--heading-font); font-size: 0.85rem; display: inline-block; margin-bottom: 1.5rem; }
+.header .subtitle { font-family: var(--heading-font); font-size: 1.15rem; color: var(--text-2); margin-bottom: 0; max-width: 580px; }
+
+.figure { margin: 2rem 0; padding: 1.5rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.figure-wide { margin-left: -2rem; margin-right: -2rem; }
+.figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; line-height: 1.4; }
+.figure-label { font-weight: 600; color: var(--text); }
+
+.insight { background: var(--accent-light); border-left: 3px solid var(--accent); padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 4px 4px 0; }
+.insight p { margin: 0; }
+
+.controls { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); }
+.controls label { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; }
+
+svg text { font-family: var(--heading-font); }
+svg .axis text { font-size: 11px; fill: var(--text-2); }
+svg .axis line, svg .axis path { stroke: var(--border); }
+svg .grid line { stroke: var(--border); stroke-dasharray: 2,3; }
+svg .grid path { stroke: none; }
+
+.tip { position: fixed; pointer-events: none; background: var(--text); color: white; font-family: var(--heading-font); font-size: 0.75rem; padding: 0.3rem 0.55rem; border-radius: 4px; opacity: 0; transition: opacity 0.12s; z-index: 10; white-space: nowrap; }
+
+.legend { display: flex; gap: 1.25rem; font-family: var(--heading-font); font-size: 0.8rem; color: var(--text-2); margin-bottom: 0.5rem; }
+.legend-item { display: flex; align-items: center; gap: 0.35rem; }
+.legend-swatch { width: 12px; height: 12px; border-radius: 50%; }
+
+.gene-model rect { stroke: none; }
+.gene-model text { font-size: 10px; fill: var(--text-2); }
+
+.next-link { font-family: var(--heading-font); font-size: 0.95rem; margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid var(--border); }
+
+@media (max-width: 640px) { .figure-wide { margin-left: 0; margin-right: 0; } h1 { font-size: 1.75rem; } }
+</style>
+</head>
+<body>
+
+<div class="article">
+
+  <header class="header">
+    <a class="back" href="index.html">&larr; Bioinformatics Visualization</a>
+    <h1>DNA Methylation</h1>
+    <p class="subtitle">Is CDKN1A silenced by promoter methylation in TP53-mutant tumors? Visualizing CpG-level epigenetic marks to connect mutation with transcriptional silencing.</p>
+  </header>
+
+  <p>In the previous explainers we saw that TP53 directly activates <em>CDKN1A</em> (p21), a critical cell-cycle inhibitor. When TP53 is mutated, CDKN1A loses its transcriptional activator. But there is a second, more permanent way a cell can silence a gene: <strong>DNA methylation</strong>.</p>
+
+  <p>A methyl group added to the 5-carbon of cytosine in a CpG dinucleotide does not change the DNA sequence, but it changes what the cell can read. When CpG sites in a promoter are heavily methylated, transcription factors cannot bind, and the gene goes silent. This is an <strong>epigenetic</strong> mechanism &mdash; heritable across cell divisions, but reversible in principle.</p>
+
+  <p>The question here is whether TP53-mutant tumors show elevated methylation at the CDKN1A promoter, suggesting a two-hit silencing model: loss of activator <em>plus</em> epigenetic lockdown.</p>
+
+  <h2>CpG Methylation at the CDKN1A Promoter</h2>
+
+  <p>Illumina methylation arrays (450K, EPIC) measure the <strong>beta value</strong> at each CpG probe &mdash; the ratio of methylated signal to total signal, ranging from 0 (fully unmethylated) to 1 (fully methylated). Below, each circle is one CpG site in the CDKN1A promoter region, positioned along the genomic coordinate with the beta value on the y-axis.</p>
+
+  <div class="figure figure-wide" id="fig-lollipop">
+    <div class="legend">
+      <div class="legend-item"><div class="legend-swatch" style="background:#3498db"></div> TP53 Wildtype</div>
+      <div class="legend-item"><div class="legend-swatch" style="background:#e74c3c"></div> TP53 Mutant</div>
+    </div>
+    <div id="lollipop-chart"></div>
+    <p class="figure-caption"><span class="figure-label">Figure 1.</span> Mean beta values at 20 CpG sites spanning the CDKN1A promoter. CpGs near the transcription start site (TSS) show elevated methylation in TP53-mutant tumors relative to wildtype. The gene model below shows the TSS, first exon, and CpG island boundaries. Hover over any point for details.</p>
+  </div>
+
+  <div class="insight">
+    <p>The methylation difference is concentrated around the TSS &mdash; exactly where it would block transcription initiation. CpGs further upstream or into the gene body show similar levels in both groups, consistent with promoter-specific silencing rather than a chromosome-wide effect.</p>
+  </div>
+
+  <h2>Methylation Heatmap</h2>
+
+  <p>The lollipop plot shows group means, but tumors are not uniform. A heatmap lets us see individual samples. Each row is a tumor sample, each column a CpG site. Color encodes the beta value: blue for unmethylated, red for methylated. Samples are clustered by similarity, revealing whether TP53-mutant tumors form a coherent block of high methylation.</p>
+
+  <div class="figure figure-wide" id="fig-heatmap">
+    <div id="heatmap-chart"></div>
+    <p class="figure-caption"><span class="figure-label">Figure 2.</span> Methylation heatmap of 30 samples (15 TP53-WT, 15 TP53-mut) across 20 CpG sites. Hierarchical clustering groups samples with similar methylation profiles. The TP53-mutant samples cluster together, driven by elevated methylation at promoter-proximal CpGs. Hover for sample and CpG details.</p>
+  </div>
+
+  <p>The heatmap reveals heterogeneity within the TP53-mutant group: not every mutant tumor shows high methylation. Some mutant tumors remain unmethylated at CDKN1A, suggesting that methylation is one of several silencing mechanisms &mdash; not a universal consequence of TP53 loss.</p>
+
+  <h2>Beta Value Distribution</h2>
+
+  <p>To quantify the difference at the most differentially methylated CpG, we can look at the full distribution of beta values across all samples. Beta values are famously <strong>bimodal</strong>: in any given sample, a CpG tends to be either mostly unmethylated (beta near 0) or mostly methylated (beta near 1), with fewer intermediate values.</p>
+
+  <div class="figure figure-wide" id="fig-violin">
+    <div id="violin-chart"></div>
+    <p class="figure-caption"><span class="figure-label">Figure 3.</span> Distribution of beta values at the most differentially methylated CpG (cg07 near the TSS). Each dot is one sample. The violin shape shows the density estimate. TP53-wildtype samples cluster near 0 (unmethylated), while TP53-mutant samples are spread bimodally, with a subset reaching high methylation.</p>
+  </div>
+
+  <div class="insight">
+    <p>The bimodal pattern in TP53-mutant tumors is telling: some mutant tumors acquired methylation at this CpG and some did not. This suggests methylation is a stochastic event that is <em>selected for</em> in the absence of TP53 &mdash; a second hit that permanently locks down CDKN1A expression.</p>
+  </div>
+
+  <h2>Reading Methylation Plots</h2>
+
+  <p>Three practical points for interpreting methylation data:</p>
+
+  <p><strong>Beta vs. M-value.</strong> Beta values (0&ndash;1) are intuitive but statistically awkward near the boundaries. The M-value (log2 of beta / (1 &minus; beta)) has better statistical properties and is preferred for differential analysis, but beta is standard for visualization.</p>
+
+  <p><strong>Probe context matters.</strong> A CpG in a promoter CpG island has different implications than one in a gene body or intergenic region. Gene-body methylation is often <em>positively</em> correlated with expression &mdash; the opposite of the promoter effect.</p>
+
+  <p><strong>Confounders.</strong> Cell-type composition, batch effects, and tumor purity all affect measured methylation levels. A tumor sample is a mixture of tumor and normal cells, so observed beta values are a weighted average. Deconvolution methods attempt to correct for this.</p>
+
+  <p class="next-link"><a href="12-chip-seq.html">Next: ChIP-seq Peak Visualization &rarr;</a></p>
+
+</div>
+
+<div class="tip" id="tip"></div>
+
+<script>
+// ─── Seeded PRNG (mulberry32) ───
+function mulberry32(a) {
+  return function() {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    var t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+// ─── Data Generation ───
+;(function() {
+  const rng = mulberry32(42);
+
+  // Normal-ish via Box-Muller
+  function rnorm(mu, sigma) {
+    const u1 = rng(), u2 = rng();
+    return mu + sigma * Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+  }
+
+  // Clamp beta to [0.01, 0.99]
+  function clampBeta(v) { return Math.max(0.01, Math.min(0.99, v)); }
+
+  // 20 CpG sites along the CDKN1A promoter region
+  // Positions relative to TSS (at 0), spanning -1500 to +500
+  const cpgPositions = [
+    -1420, -1280, -1110, -950, -820, -680, -540, -430,
+    -320, -220, -150, -80, -30, 20, 80, 150,
+    250, 340, 420, 490
+  ];
+
+  const cpgNames = cpgPositions.map((_, i) => 'cg' + String(i + 1).padStart(2, '0'));
+
+  // TSS-proximal CpGs (indices 8-15, roughly -320 to +150) get differential methylation
+  const tssProximal = new Set([8, 9, 10, 11, 12, 13, 14, 15]);
+
+  const nWT = 15, nMut = 15;
+
+  // Generate per-CpG mean beta for WT and Mut
+  const cpgData = cpgPositions.map((pos, i) => {
+    const isProximal = tssProximal.has(i);
+    // WT: low methylation everywhere in promoter
+    const wtMean = isProximal ? 0.1 + rng() * 0.1 : 0.15 + rng() * 0.2;
+    // Mut: elevated at TSS-proximal, similar elsewhere
+    const mutMean = isProximal ? 0.55 + rng() * 0.25 : 0.15 + rng() * 0.2;
+    return { pos, name: cpgNames[i], index: i, isProximal, wtMean, mutMean };
+  });
+
+  // Generate sample-level data
+  const samples = [];
+  for (let s = 0; s < nWT + nMut; s++) {
+    const isMut = s >= nWT;
+    const label = isMut ? 'TP53-mut' : 'TP53-WT';
+    const sampleName = (isMut ? 'MUT' : 'WT') + String((s % nWT) + 1).padStart(2, '0');
+    const betas = cpgData.map(cpg => {
+      const mean = isMut ? cpg.mutMean : cpg.wtMean;
+      // For mutant TSS-proximal: some samples stay low (heterogeneity)
+      let val;
+      if (isMut && cpg.isProximal && rng() < 0.3) {
+        val = clampBeta(rnorm(0.15, 0.08)); // unmethylated even in mutant
+      } else {
+        val = clampBeta(rnorm(mean, 0.08));
+      }
+      return val;
+    });
+    samples.push({ name: sampleName, group: label, isMut, betas });
+  }
+
+  // Find most differentially methylated CpG
+  let maxDiff = 0, maxDiffIdx = 0;
+  cpgData.forEach((cpg, i) => {
+    const wtVals = samples.filter(s => !s.isMut).map(s => s.betas[i]);
+    const mutVals = samples.filter(s => s.isMut).map(s => s.betas[i]);
+    const diff = Math.abs(d3.mean(mutVals) - d3.mean(wtVals));
+    if (diff > maxDiff) { maxDiff = diff; maxDiffIdx = i; }
+  });
+
+  // Export to window for figures
+  window._methData = { cpgData, cpgPositions, cpgNames, samples, nWT, nMut, maxDiffIdx, tssProximal };
+})();
+
+// ─── Tooltip helper ───
+const tip = document.getElementById('tip');
+function showTip(evt, html) {
+  tip.innerHTML = html;
+  tip.style.opacity = 1;
+  tip.style.left = (evt.clientX + 12) + 'px';
+  tip.style.top = (evt.clientY - 28) + 'px';
+}
+function hideTip() { tip.style.opacity = 0; }
+
+// ═══════════════════════════════════════
+// Figure 1: Lollipop / CpG scatter
+// ═══════════════════════════════════════
+;(function() {
+  const { cpgData, cpgPositions, samples, nWT } = window._methData;
+
+  const W = 680, H = 380;
+  const margin = { top: 20, right: 30, bottom: 100, left: 55 };
+  const w = W - margin.left - margin.right;
+  const h = H - margin.top - margin.bottom;
+
+  const svg = d3.select('#lollipop-chart').append('svg')
+    .attr('viewBox', `0 0 ${W} ${H}`)
+    .attr('width', '100%');
+
+  const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+
+  const x = d3.scaleLinear()
+    .domain([d3.min(cpgPositions) - 50, d3.max(cpgPositions) + 50])
+    .range([0, w]);
+
+  const y = d3.scaleLinear().domain([0, 1]).range([h, 0]);
+
+  // Grid
+  g.append('g').attr('class', 'grid')
+    .call(d3.axisLeft(y).ticks(5).tickSize(-w).tickFormat(''));
+
+  // Axes
+  g.append('g').attr('class', 'axis').attr('transform', `translate(0,${h})`)
+    .call(d3.axisBottom(x).ticks(8).tickFormat(d => d > 0 ? '+' + d : d));
+
+  g.append('g').attr('class', 'axis').call(d3.axisLeft(y).ticks(5));
+
+  // Axis labels
+  g.append('text').attr('x', w / 2).attr('y', h + 38)
+    .attr('text-anchor', 'middle').attr('font-size', 12).attr('fill', '#4a4a6a')
+    .text('Position relative to TSS (bp)');
+
+  g.append('text').attr('transform', 'rotate(-90)').attr('x', -h / 2).attr('y', -42)
+    .attr('text-anchor', 'middle').attr('font-size', 12).attr('fill', '#4a4a6a')
+    .text('Beta value (methylation)');
+
+  // Compute group means
+  const wtSamples = samples.filter(s => !s.isMut);
+  const mutSamples = samples.filter(s => s.isMut);
+
+  const groups = [
+    { key: 'WT', color: '#3498db', samples: wtSamples },
+    { key: 'Mut', color: '#e74c3c', samples: mutSamples }
+  ];
+
+  const meanData = cpgData.map((cpg, i) => ({
+    ...cpg,
+    wtMeanActual: d3.mean(wtSamples.map(s => s.betas[i])),
+    mutMeanActual: d3.mean(mutSamples.map(s => s.betas[i])),
+    wtSE: d3.deviation(wtSamples.map(s => s.betas[i])) / Math.sqrt(wtSamples.length),
+    mutSE: d3.deviation(mutSamples.map(s => s.betas[i])) / Math.sqrt(mutSamples.length)
+  }));
+
+  // Lollipop stems
+  const offset = 3; // px offset for side-by-side
+  const seriesConfig = [
+    { key: 'wt', mean: 'wtMeanActual', se: 'wtSE', color: '#3498db', dx: -offset, label: 'TP53-WT' },
+    { key: 'mut', mean: 'mutMeanActual', se: 'mutSE', color: '#e74c3c', dx: offset, label: 'TP53-Mut' }
+  ];
+
+  seriesConfig.forEach(s => {
+    // Stems
+    g.selectAll(`.stem-${s.key}`).data(meanData).enter().append('line')
+      .attr('x1', d => x(d.pos) + s.dx).attr('x2', d => x(d.pos) + s.dx)
+      .attr('y1', y(0)).attr('y2', d => y(d[s.mean]))
+      .attr('stroke', s.color).attr('stroke-width', 1.5).attr('opacity', 0.5);
+
+    // Circles
+    g.selectAll(`.dot-${s.key}`).data(meanData).enter().append('circle')
+      .attr('cx', d => x(d.pos) + s.dx).attr('cy', d => y(d[s.mean]))
+      .attr('r', 5).attr('fill', s.color).attr('stroke', '#fff').attr('stroke-width', 1.2)
+      .style('cursor', 'pointer')
+      .on('mouseover', function(evt, d) {
+        d3.select(this).attr('r', 7);
+        showTip(evt, `<strong>${d.name}</strong> (${d.pos > 0 ? '+' : ''}${d.pos} bp)<br>${s.label}: β = ${d[s.mean].toFixed(3)} ± ${d[s.se].toFixed(3)}`);
+      })
+      .on('mousemove', function(evt) {
+        tip.style.left = (evt.clientX + 12) + 'px';
+        tip.style.top = (evt.clientY - 28) + 'px';
+      })
+      .on('mouseout', function() {
+        d3.select(this).attr('r', 5);
+        hideTip();
+      });
+  });
+
+  // ── Gene model below the plot ──
+  const gm = svg.append('g')
+    .attr('class', 'gene-model')
+    .attr('transform', `translate(${margin.left},${margin.top + h + 52})`);
+
+  // Intron line
+  gm.append('line')
+    .attr('x1', x(cpgPositions[0] - 30)).attr('x2', x(cpgPositions[cpgPositions.length - 1] + 30))
+    .attr('y1', 10).attr('y2', 10)
+    .attr('stroke', '#999').attr('stroke-width', 1.5);
+
+  // First exon
+  gm.append('rect')
+    .attr('x', x(-30)).attr('y', 2).attr('width', x(150) - x(-30)).attr('height', 16)
+    .attr('fill', '#6c5ce7').attr('rx', 2);
+
+  gm.append('text').attr('x', x(60)).attr('y', 14)
+    .attr('text-anchor', 'middle').attr('fill', 'white').attr('font-size', 9).attr('font-weight', 600)
+    .text('Exon 1');
+
+  // TSS arrow
+  gm.append('path')
+    .attr('d', `M${x(0)},0 L${x(0)},-6 L${x(0) + 8},-6`)
+    .attr('stroke', '#e74c3c').attr('stroke-width', 1.5).attr('fill', 'none')
+    .attr('marker-end', 'none');
+
+  gm.append('text').attr('x', x(0)).attr('y', -10)
+    .attr('text-anchor', 'middle').attr('fill', '#e74c3c').attr('font-size', 10).attr('font-weight', 600)
+    .text('TSS');
+
+  // CpG island shading
+  gm.append('rect')
+    .attr('x', x(-350)).attr('y', -2).attr('width', x(200) - x(-350)).attr('height', 24)
+    .attr('fill', '#2ecc71').attr('opacity', 0.15).attr('rx', 3);
+
+  gm.append('text').attr('x', x(-75)).attr('y', 34)
+    .attr('text-anchor', 'middle').attr('fill', '#2ecc71').attr('font-size', 9).attr('font-weight', 600)
+    .text('CpG Island');
+
+  // Direction arrow
+  gm.append('text').attr('x', x(490) + 10).attr('y', 14)
+    .attr('text-anchor', 'start').attr('fill', '#999').attr('font-size', 10)
+    .text('CDKN1A →');
+})();
+
+// ═══════════════════════════════════════
+// Figure 2: Methylation Heatmap
+// ═══════════════════════════════════════
+;(function() {
+  const { cpgData, cpgPositions, cpgNames, samples, maxDiffIdx } = window._methData;
+
+  // Simple agglomerative clustering (single-linkage for ordering)
+  function clusterOrder(matrix) {
+    const n = matrix.length;
+    if (n <= 1) return [0];
+
+    // Distance matrix (Euclidean)
+    const dist = [];
+    for (let i = 0; i < n; i++) {
+      dist[i] = [];
+      for (let j = 0; j < n; j++) {
+        let d = 0;
+        for (let k = 0; k < matrix[i].length; k++) {
+          d += (matrix[i][k] - matrix[j][k]) ** 2;
+        }
+        dist[i][j] = Math.sqrt(d);
+      }
+    }
+
+    // Greedy nearest-neighbor chain for ordering
+    const visited = new Set();
+    const order = [];
+    let current = 0;
+    for (let step = 0; step < n; step++) {
+      order.push(current);
+      visited.add(current);
+      let nearest = -1, nearDist = Infinity;
+      for (let j = 0; j < n; j++) {
+        if (!visited.has(j) && dist[current][j] < nearDist) {
+          nearDist = dist[current][j];
+          nearest = j;
+        }
+      }
+      current = nearest;
+    }
+    return order;
+  }
+
+  // Build dendrogram merge structure (simplified for display)
+  function buildDendrogram(matrix, order) {
+    // Return simple binary tree from ordering
+    const n = order.length;
+    if (n <= 1) return { leaves: order, height: 0 };
+
+    // Pairwise distances in order
+    const nodes = order.map(i => ({ leaves: [i], height: 0, idx: i }));
+    const merges = [];
+
+    while (nodes.length > 1) {
+      let minD = Infinity, mi = 0, mj = 1;
+      for (let i = 0; i < nodes.length - 1; i++) {
+        // Average linkage between adjacent nodes
+        let d = 0, cnt = 0;
+        for (const li of nodes[i].leaves) {
+          for (const lj of nodes[i + 1].leaves) {
+            let s = 0;
+            for (let k = 0; k < matrix[li].length; k++) s += (matrix[li][k] - matrix[lj][k]) ** 2;
+            d += Math.sqrt(s);
+            cnt++;
+          }
+        }
+        d /= cnt;
+        if (d < minD) { minD = d; mi = i; mj = i + 1; }
+      }
+      const merged = {
+        left: nodes[mi], right: nodes[mj],
+        leaves: [...nodes[mi].leaves, ...nodes[mj].leaves],
+        height: minD
+      };
+      nodes.splice(mi, 2, merged);
+      merges.push(merged);
+    }
+    return nodes[0];
+  }
+
+  const matrix = samples.map(s => s.betas);
+  const sampleOrder = clusterOrder(matrix);
+  const dendro = buildDendrogram(matrix, sampleOrder);
+
+  const nSamples = samples.length;
+  const nCpG = cpgNames.length;
+
+  const W = 680, dendroW = 60;
+  const labelW = 58;
+  const cellW = Math.floor((W - dendroW - labelW - 80) / nCpG);
+  const cellH = 14;
+  const heatW = cellW * nCpG;
+  const heatH = cellH * nSamples;
+  const margin = { top: 50, right: 20, bottom: 30, left: dendroW + labelW + 10 };
+  const totalH = margin.top + heatH + margin.bottom;
+
+  const svg = d3.select('#heatmap-chart').append('svg')
+    .attr('viewBox', `0 0 ${W} ${totalH}`)
+    .attr('width', '100%');
+
+  const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+
+  // Color scale: blue (0) -> white (0.5) -> red (1)
+  const colorScale = d3.scaleLinear()
+    .domain([0, 0.5, 1])
+    .range(['#2563eb', '#f5f5f5', '#dc2626'])
+    .clamp(true);
+
+  // Draw cells
+  sampleOrder.forEach((si, row) => {
+    const sample = samples[si];
+    sample.betas.forEach((beta, col) => {
+      g.append('rect')
+        .attr('x', col * cellW).attr('y', row * cellH)
+        .attr('width', cellW - 1).attr('height', cellH - 1)
+        .attr('fill', colorScale(beta))
+        .attr('rx', 1)
+        .style('cursor', 'pointer')
+        .on('mouseover', function(evt) {
+          d3.select(this).attr('stroke', '#333').attr('stroke-width', 1.5);
+          showTip(evt, `<strong>${sample.name}</strong> (${sample.group})<br>${cpgNames[col]}: β = ${beta.toFixed(3)}`);
+        })
+        .on('mousemove', function(evt) {
+          tip.style.left = (evt.clientX + 12) + 'px';
+          tip.style.top = (evt.clientY - 28) + 'px';
+        })
+        .on('mouseout', function() {
+          d3.select(this).attr('stroke', 'none');
+          hideTip();
+        });
+    });
+  });
+
+  // Sample labels
+  sampleOrder.forEach((si, row) => {
+    const sample = samples[si];
+    g.append('text')
+      .attr('x', -6).attr('y', row * cellH + cellH / 2 + 3.5)
+      .attr('text-anchor', 'end').attr('font-size', 9)
+      .attr('fill', sample.isMut ? '#e74c3c' : '#3498db')
+      .text(sample.name);
+  });
+
+  // CpG labels (top, rotated)
+  cpgNames.forEach((name, col) => {
+    g.append('text')
+      .attr('transform', `translate(${col * cellW + cellW / 2},-6) rotate(-45)`)
+      .attr('text-anchor', 'start').attr('font-size', 8).attr('fill', '#4a4a6a')
+      .text(name);
+  });
+
+  // ── Dendrogram ──
+  const dendroG = svg.append('g').attr('transform', `translate(${10},${margin.top})`);
+  const maxH = dendro.height || 1;
+  const dendroXScale = d3.scaleLinear().domain([0, maxH]).range([dendroW - 5, 0]);
+
+  function drawDendro(node, yLookup) {
+    if (!node.left) {
+      // Leaf
+      return yLookup[node.leaves[0]];
+    }
+    const yL = drawDendro(node.left, yLookup);
+    const yR = drawDendro(node.right, yLookup);
+    const xPos = dendroXScale(node.height);
+    const xL = node.left.height ? dendroXScale(node.left.height) : dendroW - 5;
+    const xR = node.right.height ? dendroXScale(node.right.height) : dendroW - 5;
+
+    // Horizontal lines to children
+    dendroG.append('line').attr('x1', xPos).attr('x2', xL).attr('y1', yL).attr('y2', yL)
+      .attr('stroke', '#bbb').attr('stroke-width', 1);
+    dendroG.append('line').attr('x1', xPos).attr('x2', xR).attr('y1', yR).attr('y2', yR)
+      .attr('stroke', '#bbb').attr('stroke-width', 1);
+    // Vertical connector
+    dendroG.append('line').attr('x1', xPos).attr('x2', xPos).attr('y1', yL).attr('y2', yR)
+      .attr('stroke', '#bbb').attr('stroke-width', 1);
+
+    return (yL + yR) / 2;
+  }
+
+  const yLookup = {};
+  sampleOrder.forEach((si, row) => { yLookup[si] = row * cellH + cellH / 2; });
+  drawDendro(dendro, yLookup);
+
+  // Color legend
+  const legendG = svg.append('g').attr('transform', `translate(${margin.left},${margin.top + heatH + 12})`);
+  const legendW = 120;
+  const defs = svg.append('defs');
+  const grad = defs.append('linearGradient').attr('id', 'meth-grad');
+  grad.append('stop').attr('offset', '0%').attr('stop-color', '#2563eb');
+  grad.append('stop').attr('offset', '50%').attr('stop-color', '#f5f5f5');
+  grad.append('stop').attr('offset', '100%').attr('stop-color', '#dc2626');
+
+  legendG.append('rect').attr('x', 0).attr('y', 0).attr('width', legendW).attr('height', 10)
+    .attr('fill', 'url(#meth-grad)').attr('rx', 2);
+  legendG.append('text').attr('x', 0).attr('y', -3).attr('font-size', 9).attr('fill', '#4a4a6a').text('0');
+  legendG.append('text').attr('x', legendW / 2).attr('y', -3).attr('text-anchor', 'middle').attr('font-size', 9).attr('fill', '#4a4a6a').text('0.5');
+  legendG.append('text').attr('x', legendW).attr('y', -3).attr('text-anchor', 'end').attr('font-size', 9).attr('fill', '#4a4a6a').text('1.0');
+  legendG.append('text').attr('x', legendW + 8).attr('y', 9).attr('font-size', 9).attr('fill', '#4a4a6a').text('β value');
+
+  // Group annotation bar
+  const annoG = g.append('g').attr('transform', `translate(${heatW + 4},0)`);
+  sampleOrder.forEach((si, row) => {
+    annoG.append('rect')
+      .attr('x', 0).attr('y', row * cellH)
+      .attr('width', 8).attr('height', cellH - 1)
+      .attr('fill', samples[si].isMut ? '#e74c3c' : '#3498db')
+      .attr('rx', 1);
+  });
+  annoG.append('text').attr('x', 4).attr('y', -6).attr('text-anchor', 'middle')
+    .attr('font-size', 8).attr('fill', '#4a4a6a').text('TP53');
+})();
+
+// ═══════════════════════════════════════
+// Figure 3: Beta Distribution Violin
+// ═══════════════════════════════════════
+;(function() {
+  const { cpgNames, samples, maxDiffIdx } = window._methData;
+
+  const cpgName = cpgNames[maxDiffIdx];
+  const wtVals = samples.filter(s => !s.isMut).map(s => s.betas[maxDiffIdx]);
+  const mutVals = samples.filter(s => s.isMut).map(s => s.betas[maxDiffIdx]);
+
+  const W = 460, H = 360;
+  const margin = { top: 30, right: 40, bottom: 50, left: 55 };
+  const w = W - margin.left - margin.right;
+  const h = H - margin.top - margin.bottom;
+
+  const svg = d3.select('#violin-chart').append('svg')
+    .attr('viewBox', `0 0 ${W} ${H}`)
+    .attr('width', '100%')
+    .style('max-width', '460px');
+
+  const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+
+  const groups = [
+    { key: 'TP53-WT', color: '#3498db', vals: wtVals, x: w * 0.28 },
+    { key: 'TP53-Mut', color: '#e74c3c', vals: mutVals, x: w * 0.72 }
+  ];
+
+  const y = d3.scaleLinear().domain([0, 1]).range([h, 0]);
+
+  // Grid
+  g.append('g').attr('class', 'grid')
+    .call(d3.axisLeft(y).ticks(5).tickSize(-w).tickFormat(''));
+
+  g.append('g').attr('class', 'axis').call(d3.axisLeft(y).ticks(5));
+
+  g.append('text').attr('transform', 'rotate(-90)').attr('x', -h / 2).attr('y', -42)
+    .attr('text-anchor', 'middle').attr('font-size', 12).attr('fill', '#4a4a6a')
+    .text('Beta value');
+
+  // KDE
+  function kde(values, bandwidth) {
+    const nBins = 60;
+    const step = 1 / nBins;
+    const density = [];
+    for (let t = 0; t <= 1; t += step) {
+      let sum = 0;
+      values.forEach(v => {
+        const u = (t - v) / bandwidth;
+        sum += Math.exp(-0.5 * u * u) / (bandwidth * Math.sqrt(2 * Math.PI));
+      });
+      density.push({ x: t, y: sum / values.length });
+    }
+    return density;
+  }
+
+  const maxViolinW = 60;
+
+  groups.forEach(grp => {
+    const density = kde(grp.vals, 0.06);
+    const maxD = d3.max(density, d => d.y);
+    const violinW = d3.scaleLinear().domain([0, maxD]).range([0, maxViolinW]);
+
+    // Violin area
+    const area = d3.area()
+      .x0(d => grp.x - violinW(d.y))
+      .x1(d => grp.x + violinW(d.y))
+      .y(d => y(d.x))
+      .curve(d3.curveBasis);
+
+    g.append('path').datum(density)
+      .attr('d', area)
+      .attr('fill', grp.color).attr('opacity', 0.2)
+      .attr('stroke', grp.color).attr('stroke-width', 1.5);
+
+    // Jitter dots
+    const rng = mulberry32(grp.key === 'TP53-WT' ? 100 : 200);
+    grp.vals.forEach((v, i) => {
+      const jitter = (rng() - 0.5) * 20;
+      g.append('circle')
+        .attr('cx', grp.x + jitter).attr('cy', y(v))
+        .attr('r', 3.5).attr('fill', grp.color).attr('opacity', 0.7)
+        .attr('stroke', '#fff').attr('stroke-width', 0.8)
+        .style('cursor', 'pointer')
+        .on('mouseover', function(evt) {
+          d3.select(this).attr('r', 5.5).attr('opacity', 1);
+          const sampleIdx = grp.key === 'TP53-WT' ? i : i + 15;
+          showTip(evt, `<strong>${samples[sampleIdx].name}</strong><br>β = ${v.toFixed(3)}`);
+        })
+        .on('mousemove', function(evt) {
+          tip.style.left = (evt.clientX + 12) + 'px';
+          tip.style.top = (evt.clientY - 28) + 'px';
+        })
+        .on('mouseout', function() {
+          d3.select(this).attr('r', 3.5).attr('opacity', 0.7);
+          hideTip();
+        });
+    });
+
+    // Median line
+    const med = d3.median(grp.vals);
+    g.append('line')
+      .attr('x1', grp.x - 18).attr('x2', grp.x + 18)
+      .attr('y1', y(med)).attr('y2', y(med))
+      .attr('stroke', grp.color).attr('stroke-width', 2.5);
+
+    // Group label
+    g.append('text').attr('x', grp.x).attr('y', h + 20)
+      .attr('text-anchor', 'middle').attr('font-size', 12).attr('fill', grp.color).attr('font-weight', 600)
+      .text(grp.key);
+  });
+
+  // CpG label
+  g.append('text').attr('x', w / 2).attr('y', h + 40)
+    .attr('text-anchor', 'middle').attr('font-size', 11).attr('fill', '#4a4a6a')
+    .text(`Site: ${cpgName} (pos. ${window._methData.cpgPositions[maxDiffIdx] > 0 ? '+' : ''}${window._methData.cpgPositions[maxDiffIdx]} bp from TSS)`);
+
+  // Wilcoxon-like p-value annotation (simulated)
+  const bracket_y = y(1.0) - 5;
+  g.append('line').attr('x1', groups[0].x).attr('x2', groups[1].x)
+    .attr('y1', bracket_y).attr('y2', bracket_y)
+    .attr('stroke', '#999').attr('stroke-width', 1);
+  g.append('line').attr('x1', groups[0].x).attr('x2', groups[0].x)
+    .attr('y1', bracket_y).attr('y2', bracket_y + 5)
+    .attr('stroke', '#999').attr('stroke-width', 1);
+  g.append('line').attr('x1', groups[1].x).attr('x2', groups[1].x)
+    .attr('y1', bracket_y).attr('y2', bracket_y + 5)
+    .attr('stroke', '#999').attr('stroke-width', 1);
+  g.append('text').attr('x', (groups[0].x + groups[1].x) / 2).attr('y', bracket_y - 5)
+    .attr('text-anchor', 'middle').attr('font-size', 10).attr('fill', '#999')
+    .text('p < 0.001');
+})();
+</script>
+</body>
+</html>

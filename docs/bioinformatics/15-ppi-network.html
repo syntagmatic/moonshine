@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Protein-Protein Interaction Networks — Bioinformatics Visualization</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --article-width: 740px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem;
+  --line-height: 1.6;
+  --text: #1a1a2e;
+  --text-2: #4a4a6a;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --bg: #fafafa;
+  --fig-bg: #ffffff;
+  --border: #e2e2e8;
+}
+
+body { font-family: var(--body-font); font-size: var(--body-size); line-height: var(--line-height); color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased; }
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
+h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+p { margin: 0 0 1rem; }
+a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+a:hover { color: #1d4ed8; }
+
+.header { padding: 4rem 0 2rem; border-bottom: 1px solid var(--border); margin-bottom: 2.5rem; }
+.header .back { font-family: var(--heading-font); font-size: 0.85rem; display: inline-block; margin-bottom: 1.5rem; }
+.header .subtitle { font-family: var(--heading-font); font-size: 1.15rem; color: var(--text-2); margin-bottom: 0; max-width: 580px; }
+
+.figure { margin: 2rem 0; padding: 1.5rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.figure-wide { margin-left: -2rem; margin-right: -2rem; }
+.figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; line-height: 1.4; }
+.figure-label { font-weight: 600; color: var(--text); }
+
+.insight { background: var(--accent-light); border-left: 3px solid var(--accent); padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 4px 4px 0; }
+.insight p { margin: 0; }
+
+.controls { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); }
+.controls label { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; }
+
+.btn { font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600; padding: 0.45rem 1.1rem; border-radius: 5px; border: 1px solid var(--border); background: var(--fig-bg); color: var(--text); cursor: pointer; transition: background 0.15s, border-color 0.15s; user-select: none; }
+.btn:hover { border-color: var(--accent); background: var(--accent-light); }
+.btn.active { border-color: var(--accent); background: var(--accent); color: white; }
+
+svg text { font-family: var(--heading-font); }
+svg .axis text { font-size: 11px; fill: var(--text-2); }
+svg .axis line, svg .axis path { stroke: var(--border); }
+svg .grid line { stroke: var(--border); stroke-dasharray: 2,3; }
+svg .grid path { stroke: none; }
+
+.tip { position: fixed; pointer-events: none; background: var(--text); color: white; font-family: var(--heading-font); font-size: 0.75rem; padding: 0.3rem 0.55rem; border-radius: 4px; opacity: 0; transition: opacity 0.12s; z-index: 10; white-space: nowrap; }
+
+.legend { font-family: var(--heading-font); font-size: 0.8rem; display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 0.75rem; }
+.legend-item { display: flex; align-items: center; gap: 0.35rem; }
+.legend-swatch { width: 12px; height: 12px; border-radius: 50%; }
+
+.path-info { font-family: var(--heading-font); font-size: 0.9rem; padding: 0.75rem 1rem; background: #f8f8fc; border-radius: 4px; margin-top: 0.75rem; min-height: 2.5rem; }
+
+.sidebar-chart { display: flex; gap: 1.5rem; align-items: flex-start; }
+.sidebar-chart .graph-area { flex: 1; min-width: 0; }
+.sidebar-chart .bar-area { width: 200px; flex-shrink: 0; }
+
+@media (max-width: 640px) {
+  .figure-wide { margin-left: 0; margin-right: 0; }
+  h1 { font-size: 1.75rem; }
+  .sidebar-chart { flex-direction: column; }
+  .sidebar-chart .bar-area { width: 100%; }
+}
+</style>
+</head>
+<body>
+
+<div class="article">
+
+  <header class="header">
+    <a class="back" href="index.html">&larr; Bioinformatics Visualization</a>
+    <h1>Protein-Protein Interaction Networks</h1>
+    <p class="subtitle">What other proteins connect TP53 and CDKN1A? PPI networks reveal the interaction landscape around genes of interest, exposing functional modules and hub proteins that mediate cellular signaling.</p>
+  </header>
+
+  <p>Previous explainers in this series identified <strong>TP53</strong> as a key gene and <strong>CDKN1A</strong> (p21) as one of its transcriptional targets. But genes don't act alone. Their protein products physically bind other proteins, forming intricate networks that coordinate cell behavior.</p>
+
+  <p>A <strong>protein-protein interaction (PPI) network</strong> maps these interactions. Nodes are proteins; edges represent physical or functional interactions validated by experiment, predicted computationally, or curated from databases like <a href="https://string-db.org/" target="_blank">STRING</a>. By exploring the neighborhood around TP53 and CDKN1A, we can see which proteins mediate DNA damage response, cell-cycle arrest, and apoptosis.</p>
+
+  <h2>The TP53 Neighborhood</h2>
+
+  <p>The network below places TP53 and CDKN1A at the center of their interaction neighborhood. Each node is a protein, colored by functional category. Drag any node to rearrange the layout. Hover for protein details.</p>
+
+  <div class="legend" id="legend1"></div>
+
+  <div class="figure figure-wide" id="fig-network">
+    <div id="network1"></div>
+    <p class="figure-caption"><span class="figure-label">Figure 1.</span> Force-directed PPI network centered on TP53 and CDKN1A. Node color encodes functional category: <span style="color:#3b82f6">cell cycle</span>, <span style="color:#ef4444">apoptosis</span>, <span style="color:#22c55e">DNA repair</span>, <span style="color:#f59e0b">ubiquitin/regulation</span>. TP53 and CDKN1A are shown as larger nodes. Edges reflect curated interaction data.</p>
+  </div>
+
+  <div class="insight">
+    <p>TP53 sits at the crossroads of multiple functional modules. It directly activates CDKN1A (causing cell-cycle arrest), interacts with MDM2 (which targets it for degradation), and connects to both the DNA-repair and apoptosis machineries. This centrality explains why TP53 mutations have such broad consequences in cancer.</p>
+  </div>
+
+  <h2>Degree and Hubness</h2>
+
+  <p>Not all proteins are equally connected. In biological networks, a few <strong>hub</strong> proteins have many partners while most have few — a property called <em>scale-free</em> topology. Toggle between uniform and degree-scaled node sizes to see which proteins are the biggest hubs.</p>
+
+  <div class="figure figure-wide" id="fig-degree">
+    <div class="controls">
+      <button class="btn active" id="btn-degree">Degree-scaled</button>
+      <button class="btn" id="btn-uniform">Uniform size</button>
+    </div>
+    <div class="sidebar-chart">
+      <div class="graph-area" id="network2"></div>
+      <div class="bar-area" id="degree-bars"></div>
+    </div>
+    <p class="figure-caption"><span class="figure-label">Figure 2.</span> Node size scaled by degree (number of connections). TP53 is the dominant hub. The bar chart ranks all proteins by degree. Toggle to uniform size to see the network without the degree encoding.</p>
+  </div>
+
+  <div class="insight">
+    <p>Hub proteins like TP53 are disproportionately important. Removing a hub disrupts many pathways at once, which is why TP53 loss-of-function is the most common mutation in human cancers. Scale-free networks are robust to random failures but fragile to targeted attacks on hubs.</p>
+  </div>
+
+  <h2>Shortest Path Explorer</h2>
+
+  <p>Click any two proteins to find the <strong>shortest path</strong> between them. The path edges highlight in bold, and the distance is displayed below. Try TP53 and CDKN1A (direct neighbors, distance 1), then CDK4 and BAX (routed through TP53).</p>
+
+  <div class="figure figure-wide" id="fig-path">
+    <div class="controls">
+      <span id="path-instructions">Click two nodes to find the shortest path between them.</span>
+      <button class="btn" id="btn-clear-path">Clear</button>
+    </div>
+    <div id="network3"></div>
+    <div class="path-info" id="path-result"></div>
+    <p class="figure-caption"><span class="figure-label">Figure 3.</span> Click any two proteins to highlight the shortest path. Path length (number of edges) reveals how closely connected two proteins are in the network. Most protein pairs in this neighborhood are within 2-3 steps of each other, reflecting the small-world property of biological networks.</p>
+  </div>
+
+  <div class="insight">
+    <p>Short path lengths matter biologically. If two proteins are separated by only one or two intermediaries, a signal (or a mutation's effect) can propagate between them quickly. The "small world" property of PPI networks means that perturbations in one module can rapidly affect distant cellular functions.</p>
+  </div>
+
+  <h2>From Networks to Systems</h2>
+
+  <p>PPI networks are a foundation of <strong>systems biology</strong>. They connect the molecular details we've explored in earlier explainers — differential expression, genomic location, survival outcomes — into a unified picture of how proteins collaborate. The next step is integrating multiple data types simultaneously.</p>
+
+  <p style="margin-top: 2rem; font-family: var(--heading-font); font-size: 0.95rem;">
+    Next: <a href="16-multi-omics-heatmap.html">Multi-Omics Heatmap</a> &rarr;
+  </p>
+
+</div>
+
+<div class="tip" id="tip"></div>
+
+<script>
+// ─── PPI Data ───
+const categories = {
+  'Cell Cycle': '#3b82f6',
+  'Apoptosis': '#ef4444',
+  'DNA Repair': '#22c55e',
+  'Ubiquitin/Regulation': '#f59e0b'
+};
+
+const proteins = [
+  { id: 'TP53', category: 'Apoptosis', description: 'Tumor suppressor, "guardian of the genome." Transcription factor activated by DNA damage.' },
+  { id: 'CDKN1A', category: 'Cell Cycle', description: 'p21. CDK inhibitor induced by TP53. Halts cell cycle at G1/S checkpoint.' },
+  { id: 'MDM2', category: 'Ubiquitin/Regulation', description: 'E3 ubiquitin ligase. Primary negative regulator of TP53 — targets it for proteasomal degradation.' },
+  { id: 'MDM4', category: 'Ubiquitin/Regulation', description: 'MDMX. Inhibits TP53 transcriptional activity and stabilizes MDM2.' },
+  { id: 'ATM', category: 'DNA Repair', description: 'Kinase activated by double-strand breaks. Phosphorylates TP53 and CHEK2.' },
+  { id: 'ATR', category: 'DNA Repair', description: 'Kinase activated by replication stress. Phosphorylates CHEK1.' },
+  { id: 'CHEK1', category: 'DNA Repair', description: 'Checkpoint kinase 1. Downstream of ATR, enforces S and G2/M checkpoints.' },
+  { id: 'CHEK2', category: 'DNA Repair', description: 'Checkpoint kinase 2. Downstream of ATM, phosphorylates TP53 and BRCA1.' },
+  { id: 'BAX', category: 'Apoptosis', description: 'Pro-apoptotic BCL-2 family member. Transcriptional target of TP53, permeabilizes mitochondria.' },
+  { id: 'BCL2', category: 'Apoptosis', description: 'Anti-apoptotic. Binds and inhibits BAX, preventing cytochrome c release.' },
+  { id: 'GADD45A', category: 'DNA Repair', description: 'Growth arrest and DNA damage-inducible. Induced by TP53, involved in DNA repair and G2/M arrest.' },
+  { id: 'BRCA1', category: 'DNA Repair', description: 'Tumor suppressor involved in homologous recombination repair. Interacts with TP53 and CHEK2.' },
+  { id: 'EP300', category: 'Ubiquitin/Regulation', description: 'Histone acetyltransferase. Acetylates TP53 to enhance its DNA-binding and stability.' },
+  { id: 'CREBBP', category: 'Ubiquitin/Regulation', description: 'CBP. Transcriptional coactivator, acetylates TP53 similarly to EP300.' },
+  { id: 'CDK2', category: 'Cell Cycle', description: 'Cyclin-dependent kinase 2. Drives S-phase entry. Inhibited by CDKN1A (p21).' },
+  { id: 'CDK4', category: 'Cell Cycle', description: 'Cyclin-dependent kinase 4. Drives G1 progression. Inhibited by p21 and p16.' },
+  { id: 'CDK6', category: 'Cell Cycle', description: 'Cyclin-dependent kinase 6. Functionally similar to CDK4 in G1 progression.' },
+  { id: 'RB1', category: 'Cell Cycle', description: 'Retinoblastoma protein. Phosphorylated by CDK4/6, releases E2F1 to allow S-phase genes.' },
+  { id: 'E2F1', category: 'Cell Cycle', description: 'Transcription factor controlling S-phase gene expression. Sequestered by hypophosphorylated RB1.' },
+  { id: 'CCND1', category: 'Cell Cycle', description: 'Cyclin D1. Activating partner of CDK4 and CDK6 in G1 phase.' },
+  { id: 'CCNE1', category: 'Cell Cycle', description: 'Cyclin E1. Activating partner of CDK2 at the G1/S transition.' },
+  { id: 'SIRT1', category: 'Ubiquitin/Regulation', description: 'NAD-dependent deacetylase. Deacetylates TP53, reducing its pro-apoptotic activity.' },
+  { id: 'USP7', category: 'Ubiquitin/Regulation', description: 'HAUSP. Deubiquitinase that stabilizes both MDM2 and TP53.' },
+  { id: 'PTEN', category: 'Apoptosis', description: 'Tumor suppressor phosphatase. Stabilizes TP53 by inhibiting MDM2 nuclear import.' },
+  { id: 'PCNA', category: 'DNA Repair', description: 'Sliding clamp for DNA polymerase. Binds CDKN1A, linking cell cycle to DNA repair.' }
+];
+
+const edges = [
+  // TP53 interactions
+  { source: 'TP53', target: 'CDKN1A' },
+  { source: 'TP53', target: 'MDM2' },
+  { source: 'TP53', target: 'MDM4' },
+  { source: 'TP53', target: 'ATM' },
+  { source: 'TP53', target: 'ATR' },
+  { source: 'TP53', target: 'CHEK2' },
+  { source: 'TP53', target: 'BAX' },
+  { source: 'TP53', target: 'GADD45A' },
+  { source: 'TP53', target: 'BRCA1' },
+  { source: 'TP53', target: 'EP300' },
+  { source: 'TP53', target: 'CREBBP' },
+  { source: 'TP53', target: 'SIRT1' },
+  { source: 'TP53', target: 'USP7' },
+  { source: 'TP53', target: 'PTEN' },
+  { source: 'TP53', target: 'BCL2' },
+  // CDKN1A interactions
+  { source: 'CDKN1A', target: 'CDK2' },
+  { source: 'CDKN1A', target: 'CDK4' },
+  { source: 'CDKN1A', target: 'CDK6' },
+  { source: 'CDKN1A', target: 'CCND1' },
+  { source: 'CDKN1A', target: 'CCNE1' },
+  { source: 'CDKN1A', target: 'PCNA' },
+  { source: 'CDKN1A', target: 'GADD45A' },
+  // DNA repair module
+  { source: 'ATM', target: 'CHEK2' },
+  { source: 'ATM', target: 'BRCA1' },
+  { source: 'ATR', target: 'CHEK1' },
+  { source: 'CHEK1', target: 'CHEK2' },
+  { source: 'BRCA1', target: 'CHEK2' },
+  { source: 'BRCA1', target: 'GADD45A' },
+  { source: 'GADD45A', target: 'PCNA' },
+  // Ubiquitin/regulation module
+  { source: 'MDM2', target: 'MDM4' },
+  { source: 'MDM2', target: 'USP7' },
+  { source: 'MDM2', target: 'PTEN' },
+  { source: 'EP300', target: 'CREBBP' },
+  { source: 'SIRT1', target: 'EP300' },
+  // Cell cycle module
+  { source: 'CDK4', target: 'CCND1' },
+  { source: 'CDK6', target: 'CCND1' },
+  { source: 'CDK2', target: 'CCNE1' },
+  { source: 'CDK4', target: 'RB1' },
+  { source: 'CDK6', target: 'RB1' },
+  { source: 'RB1', target: 'E2F1' },
+  { source: 'E2F1', target: 'CCNE1' },
+  // Apoptosis cross-links
+  { source: 'BAX', target: 'BCL2' },
+  { source: 'PTEN', target: 'BCL2' },
+  // Additional cross-module
+  { source: 'CHEK1', target: 'CDK2' },
+  { source: 'EP300', target: 'RB1' }
+];
+
+// Compute degrees
+const degreeMap = {};
+proteins.forEach(p => degreeMap[p.id] = 0);
+edges.forEach(e => {
+  degreeMap[e.source] = (degreeMap[e.source] || 0) + 1;
+  degreeMap[e.target] = (degreeMap[e.target] || 0) + 1;
+});
+
+const tip = document.getElementById('tip');
+
+function showTip(evt, html) {
+  tip.innerHTML = html;
+  tip.style.opacity = 1;
+  tip.style.left = (evt.clientX + 12) + 'px';
+  tip.style.top = (evt.clientY - 10) + 'px';
+}
+function hideTip() { tip.style.opacity = 0; }
+
+// Build legend
+(function() {
+  const legend = document.getElementById('legend1');
+  Object.entries(categories).forEach(([name, color]) => {
+    const item = document.createElement('span');
+    item.className = 'legend-item';
+    item.innerHTML = `<span class="legend-swatch" style="background:${color}"></span>${name}`;
+    legend.appendChild(item);
+  });
+})();
+
+// ─── BFS shortest path ───
+function bfs(adjList, startId, endId) {
+  if (startId === endId) return [startId];
+  const visited = new Set([startId]);
+  const queue = [[startId]];
+  while (queue.length) {
+    const path = queue.shift();
+    const node = path[path.length - 1];
+    for (const neighbor of (adjList[node] || [])) {
+      if (visited.has(neighbor)) continue;
+      const newPath = [...path, neighbor];
+      if (neighbor === endId) return newPath;
+      visited.add(neighbor);
+      queue.push(newPath);
+    }
+  }
+  return null;
+}
+
+// Build adjacency list
+const adjList = {};
+proteins.forEach(p => adjList[p.id] = []);
+edges.forEach(e => {
+  const s = typeof e.source === 'object' ? e.source.id : e.source;
+  const t = typeof e.target === 'object' ? e.target.id : e.target;
+  adjList[s].push(t);
+  adjList[t].push(s);
+});
+
+// ─── Shared force graph builder ───
+function buildForceGraph(containerId, opts = {}) {
+  const { W = 660, H = 460, sizeByDegree = false, onNodeClick = null } = opts;
+
+  const container = d3.select('#' + containerId);
+  container.selectAll('svg').remove();
+
+  const svg = container.append('svg')
+    .attr('width', W).attr('height', H)
+    .attr('viewBox', `0 0 ${W} ${H}`)
+    .style('max-width', '100%').style('height', 'auto');
+
+  const g = svg.append('g');
+
+  // Deep-copy nodes and edges for each simulation instance
+  const nodes = proteins.map(p => ({ ...p }));
+  const links = edges.map(e => ({
+    source: typeof e.source === 'object' ? e.source.id : e.source,
+    target: typeof e.target === 'object' ? e.target.id : e.target
+  }));
+
+  const nodeById = {};
+  nodes.forEach(n => nodeById[n.id] = n);
+
+  function nodeRadius(d) {
+    if (sizeByDegree) {
+      const deg = degreeMap[d.id] || 1;
+      if (d.id === 'TP53' || d.id === 'CDKN1A') return Math.sqrt(deg) * 4.5;
+      return Math.sqrt(deg) * 3.5;
+    }
+    return (d.id === 'TP53' || d.id === 'CDKN1A') ? 12 : 7;
+  }
+
+  const simulation = d3.forceSimulation(nodes)
+    .force('link', d3.forceLink(links).id(d => d.id).distance(65))
+    .force('charge', d3.forceManyBody().strength(-200))
+    .force('center', d3.forceCenter(W / 2, H / 2))
+    .force('collision', d3.forceCollide().radius(d => nodeRadius(d) + 4))
+    .force('x', d3.forceX(W / 2).strength(0.05))
+    .force('y', d3.forceY(H / 2).strength(0.05));
+
+  const linkG = g.append('g');
+  const linkEls = linkG.selectAll('line')
+    .data(links).join('line')
+    .attr('stroke', '#c8c8d4').attr('stroke-width', 1.5).attr('stroke-opacity', 0.6);
+
+  const nodeG = g.append('g');
+  const nodeEls = nodeG.selectAll('g')
+    .data(nodes).join('g')
+    .style('cursor', onNodeClick ? 'pointer' : 'grab');
+
+  nodeEls.append('circle')
+    .attr('r', d => nodeRadius(d))
+    .attr('fill', d => categories[d.category])
+    .attr('stroke', d => (d.id === 'TP53' || d.id === 'CDKN1A') ? '#1a1a2e' : '#fff')
+    .attr('stroke-width', d => (d.id === 'TP53' || d.id === 'CDKN1A') ? 2.5 : 1.5);
+
+  nodeEls.append('text')
+    .text(d => d.id)
+    .attr('dy', d => -nodeRadius(d) - 4)
+    .attr('text-anchor', 'middle')
+    .style('font-size', d => (d.id === 'TP53' || d.id === 'CDKN1A') ? '11px' : '9px')
+    .style('font-weight', d => (d.id === 'TP53' || d.id === 'CDKN1A') ? '700' : '600')
+    .style('fill', 'var(--text)')
+    .style('pointer-events', 'none');
+
+  nodeEls.on('mouseover', function(evt, d) {
+    showTip(evt, `<strong>${d.id}</strong> (${d.category})<br>${d.description}<br>Degree: ${degreeMap[d.id]}`);
+  }).on('mousemove', function(evt) {
+    tip.style.left = (evt.clientX + 12) + 'px';
+    tip.style.top = (evt.clientY - 10) + 'px';
+  }).on('mouseout', hideTip);
+
+  if (onNodeClick) {
+    nodeEls.on('click', function(evt, d) { onNodeClick(d, evt); });
+  }
+
+  // Drag
+  const drag = d3.drag()
+    .on('start', (evt, d) => {
+      if (!evt.active) simulation.alphaTarget(0.3).restart();
+      d.fx = d.x; d.fy = d.y;
+    })
+    .on('drag', (evt, d) => { d.fx = evt.x; d.fy = evt.y; })
+    .on('end', (evt, d) => {
+      if (!evt.active) simulation.alphaTarget(0);
+      d.fx = null; d.fy = null;
+    });
+  nodeEls.call(drag);
+
+  simulation.on('tick', () => {
+    // Keep nodes in bounds
+    nodes.forEach(d => {
+      const r = nodeRadius(d);
+      d.x = Math.max(r + 20, Math.min(W - r - 20, d.x));
+      d.y = Math.max(r + 20, Math.min(H - r - 20, d.y));
+    });
+    linkEls
+      .attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+      .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+    nodeEls.attr('transform', d => `translate(${d.x},${d.y})`);
+  });
+
+  return { svg, g, simulation, nodes, links, linkEls, nodeEls, nodeById, nodeRadius };
+}
+
+// ─── Figure 1: Basic Network ───
+(function() {
+  buildForceGraph('network1');
+})();
+
+// ─── Figure 2: Degree & Hubness ───
+(function() {
+  let sizeByDegree = true;
+
+  function render() {
+    const graph = buildForceGraph('network2', { W: 440, H: 460, sizeByDegree });
+
+    // Draw bar chart
+    const barDiv = d3.select('#degree-bars');
+    barDiv.selectAll('svg').remove();
+
+    const sorted = proteins.slice().sort((a, b) => degreeMap[b.id] - degreeMap[a.id]);
+    const barW = 200, barH = 460;
+    const barMargin = { top: 8, right: 10, bottom: 8, left: 52 };
+    const bw = barW - barMargin.left - barMargin.right;
+    const bh = barH - barMargin.top - barMargin.bottom;
+
+    const barSvg = barDiv.append('svg').attr('width', barW).attr('height', barH)
+      .attr('viewBox', `0 0 ${barW} ${barH}`).style('max-width', '100%').style('height', 'auto');
+    const bg = barSvg.append('g').attr('transform', `translate(${barMargin.left},${barMargin.top})`);
+
+    const y = d3.scaleBand().domain(sorted.map(d => d.id)).range([0, bh]).padding(0.15);
+    const x = d3.scaleLinear().domain([0, d3.max(Object.values(degreeMap))]).range([0, bw]);
+
+    bg.selectAll('rect').data(sorted).join('rect')
+      .attr('x', 0).attr('y', d => y(d.id))
+      .attr('width', d => x(degreeMap[d.id]))
+      .attr('height', y.bandwidth())
+      .attr('fill', d => categories[d.category])
+      .attr('rx', 2);
+
+    bg.selectAll('.bar-label').data(sorted).join('text')
+      .attr('class', 'bar-label')
+      .attr('x', -4).attr('y', d => y(d.id) + y.bandwidth() / 2)
+      .attr('dy', '0.35em').attr('text-anchor', 'end')
+      .style('font-size', '8.5px').style('fill', 'var(--text)')
+      .style('font-weight', d => (d.id === 'TP53' || d.id === 'CDKN1A') ? '700' : '400')
+      .text(d => d.id);
+
+    bg.selectAll('.bar-count').data(sorted).join('text')
+      .attr('class', 'bar-count')
+      .attr('x', d => x(degreeMap[d.id]) + 3)
+      .attr('y', d => y(d.id) + y.bandwidth() / 2)
+      .attr('dy', '0.35em')
+      .style('font-size', '8px').style('fill', 'var(--text-2)')
+      .text(d => degreeMap[d.id]);
+  }
+
+  render();
+
+  d3.select('#btn-degree').on('click', function() {
+    sizeByDegree = true;
+    d3.select('#btn-degree').classed('active', true);
+    d3.select('#btn-uniform').classed('active', false);
+    render();
+  });
+
+  d3.select('#btn-uniform').on('click', function() {
+    sizeByDegree = false;
+    d3.select('#btn-uniform').classed('active', true);
+    d3.select('#btn-degree').classed('active', false);
+    render();
+  });
+})();
+
+// ─── Figure 3: Shortest Path ───
+(function() {
+  const graph = buildForceGraph('network3', {
+    W: 660, H: 460,
+    onNodeClick: handleClick
+  });
+
+  let selected = [];
+
+  function handleClick(d) {
+    selected.push(d.id);
+    if (selected.length === 1) {
+      d3.select('#path-instructions').text(`Selected: ${d.id}. Click another protein.`);
+      highlightSelected();
+    }
+    if (selected.length === 2) {
+      showPath();
+    }
+  }
+
+  function highlightSelected() {
+    graph.nodeEls.select('circle')
+      .attr('stroke', d => {
+        if (selected.includes(d.id)) return '#f59e0b';
+        return (d.id === 'TP53' || d.id === 'CDKN1A') ? '#1a1a2e' : '#fff';
+      })
+      .attr('stroke-width', d => selected.includes(d.id) ? 3.5 : ((d.id === 'TP53' || d.id === 'CDKN1A') ? 2.5 : 1.5));
+  }
+
+  function showPath() {
+    const [a, b] = selected;
+    const path = bfs(adjList, a, b);
+
+    if (!path) {
+      d3.select('#path-result').html(`<strong>No path</strong> found between ${a} and ${b}.`);
+    } else {
+      const dist = path.length - 1;
+      const pathStr = path.join(' → ');
+      d3.select('#path-result').html(
+        `<strong>Shortest path:</strong> ${pathStr}<br>` +
+        `<strong>Distance:</strong> ${dist} edge${dist !== 1 ? 's' : ''}`
+      );
+
+      // Highlight path edges
+      const pathEdges = new Set();
+      for (let i = 0; i < path.length - 1; i++) {
+        pathEdges.add(path[i] + '|' + path[i + 1]);
+        pathEdges.add(path[i + 1] + '|' + path[i]);
+      }
+      const pathNodes = new Set(path);
+
+      graph.linkEls
+        .attr('stroke', d => {
+          const key = (typeof d.source === 'object' ? d.source.id : d.source) + '|' + (typeof d.target === 'object' ? d.target.id : d.target);
+          return pathEdges.has(key) ? '#f59e0b' : '#c8c8d4';
+        })
+        .attr('stroke-width', d => {
+          const key = (typeof d.source === 'object' ? d.source.id : d.source) + '|' + (typeof d.target === 'object' ? d.target.id : d.target);
+          return pathEdges.has(key) ? 4 : 1.5;
+        })
+        .attr('stroke-opacity', d => {
+          const key = (typeof d.source === 'object' ? d.source.id : d.source) + '|' + (typeof d.target === 'object' ? d.target.id : d.target);
+          return pathEdges.has(key) ? 1 : 0.25;
+        });
+
+      graph.nodeEls.select('circle')
+        .attr('opacity', d => pathNodes.has(d.id) ? 1 : 0.3);
+      graph.nodeEls.select('text')
+        .attr('opacity', d => pathNodes.has(d.id) ? 1 : 0.3);
+
+      // Highlight selected endpoints
+      graph.nodeEls.select('circle')
+        .attr('stroke', d => {
+          if (d.id === a || d.id === b) return '#f59e0b';
+          if (pathNodes.has(d.id)) return (d.id === 'TP53' || d.id === 'CDKN1A') ? '#1a1a2e' : '#fff';
+          return (d.id === 'TP53' || d.id === 'CDKN1A') ? '#1a1a2e' : '#fff';
+        })
+        .attr('stroke-width', d => (d.id === a || d.id === b) ? 3.5 : ((d.id === 'TP53' || d.id === 'CDKN1A') ? 2.5 : 1.5));
+    }
+
+    d3.select('#path-instructions').text(`Path: ${a} → ${b}. Click Clear to try another.`);
+  }
+
+  function clearPath() {
+    selected = [];
+    d3.select('#path-instructions').text('Click two nodes to find the shortest path between them.');
+    d3.select('#path-result').html('');
+    graph.linkEls.attr('stroke', '#c8c8d4').attr('stroke-width', 1.5).attr('stroke-opacity', 0.6);
+    graph.nodeEls.select('circle')
+      .attr('opacity', 1)
+      .attr('stroke', d => (d.id === 'TP53' || d.id === 'CDKN1A') ? '#1a1a2e' : '#fff')
+      .attr('stroke-width', d => (d.id === 'TP53' || d.id === 'CDKN1A') ? 2.5 : 1.5);
+    graph.nodeEls.select('text').attr('opacity', 1);
+  }
+
+  d3.select('#btn-clear-path').on('click', clearPath);
+})();
+</script>
+</body>
+</html>

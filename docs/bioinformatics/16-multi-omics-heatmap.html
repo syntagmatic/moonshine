@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Multi-Omics Heatmap — Bioinformatics Visualization</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --article-width: 740px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem;
+  --line-height: 1.6;
+  --text: #1a1a2e;
+  --text-2: #4a4a6a;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --bg: #fafafa;
+  --fig-bg: #ffffff;
+  --border: #e2e2e8;
+}
+
+body { font-family: var(--body-font); font-size: var(--body-size); line-height: var(--line-height); color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased; }
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
+h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+h3 { font-size: 1.15rem; margin: 2rem 0 0.75rem; }
+p { margin: 0 0 1rem; }
+a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+a:hover { color: #1d4ed8; }
+
+code { font-family: var(--mono-font); font-size: 0.9em; background: #f1f1f5; padding: 0.15em 0.4em; border-radius: 3px; }
+
+.header { padding: 4rem 0 2rem; border-bottom: 1px solid var(--border); margin-bottom: 2.5rem; }
+.header .back { font-family: var(--heading-font); font-size: 0.85rem; display: inline-block; margin-bottom: 1.5rem; }
+.header .subtitle { font-family: var(--heading-font); font-size: 1.15rem; color: var(--text-2); margin-bottom: 0; max-width: 580px; }
+
+.figure { margin: 2rem 0; padding: 1.5rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.figure-wide { margin-left: -2rem; margin-right: -2rem; }
+.figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; line-height: 1.4; }
+.figure-label { font-weight: 600; color: var(--text); }
+
+.insight { background: var(--accent-light); border-left: 3px solid var(--accent); padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 4px 4px 0; }
+.insight p { margin: 0; }
+
+.controls { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); }
+.controls label { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; }
+.controls input[type="checkbox"] { accent-color: var(--accent); }
+
+.btn { font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600; padding: 0.45rem 1.1rem; border-radius: 5px; border: 1px solid var(--border); background: var(--fig-bg); color: var(--text); cursor: pointer; transition: background 0.15s, border-color 0.15s; user-select: none; }
+.btn:hover { border-color: var(--accent); background: var(--accent-light); }
+.btn.active { border-color: var(--accent); background: var(--accent); color: white; }
+
+svg text { font-family: var(--heading-font); }
+svg .axis text { font-size: 11px; fill: var(--text-2); }
+svg .axis line, svg .axis path { stroke: var(--border); }
+
+.tip { position: fixed; pointer-events: none; background: var(--text); color: white; font-family: var(--heading-font); font-size: 0.75rem; padding: 0.3rem 0.55rem; border-radius: 4px; opacity: 0; transition: opacity 0.12s; z-index: 10; white-space: nowrap; }
+
+.nav-footer { margin-top: 4rem; padding-top: 2rem; border-top: 1px solid var(--border); display: flex; justify-content: space-between; font-family: var(--heading-font); font-size: 0.9rem; }
+
+.scatter-prompt { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); padding: 2rem; text-align: center; }
+
+.row-selectable { cursor: pointer; }
+.row-selectable:hover { opacity: 0.8; }
+.row-selected rect.row-bg { fill: var(--accent-light); opacity: 0.3; }
+
+@media (max-width: 640px) { .figure-wide { margin-left: 0; margin-right: 0; } h1 { font-size: 1.75rem; } }
+</style>
+</head>
+<body>
+
+<div class="article">
+
+  <header class="header">
+    <a class="back" href="index.html">&larr; Bioinformatics Visualization</a>
+    <h1>Multi-Omics Heatmap</h1>
+    <p class="subtitle">Do all the layers of evidence agree? Stacking expression, methylation, mutation, and copy number data on a shared patient axis to see whether different data types converge on the same biological story.</p>
+  </header>
+
+  <p>Every earlier explainer in this series examines one kind of molecular data at a time: gene expression in the heatmap, mutations in the volcano plot, survival outcomes in the Kaplan-Meier curve. But real biology is layered. A gene can be silenced by a mutation, by methylation of its promoter, or by deletion of its chromosomal region. A multi-omics heatmap stacks these layers vertically and asks a simple question: <em>do they tell the same story?</em></p>
+
+  <p>The columns are patients. The rows, grouped into panels, are different measurements. When you sort the columns by one variable — here, TP53 mutation status — the patterns that emerge across panels reveal whether expression, methylation, and copy number agree or disagree about which patients are disrupted.</p>
+
+  <h2>The Stacked View</h2>
+
+  <p>The full stack has four panels sharing a patient axis. A clinical annotation bar at the top marks TP53 status. Below that, expression, methylation, mutation, and copy number panels each add a different line of evidence. Hover on any patient column to see it highlighted across all panels simultaneously.</p>
+
+  <div class="figure figure-wide" id="fig-stack">
+    <div id="omics-stack"></div>
+    <p class="figure-caption"><span class="figure-label">Figure 1.</span> Forty patients sorted by TP53 mutation status. The annotation bar at top marks mutant (red) and wild-type (blue) patients. Four panels below show expression, methylation, mutation, and copy number. Hover a column to highlight that patient across all layers.</p>
+  </div>
+
+  <div class="insight">
+    <p>Notice how TP53-mutant patients (left side) tend to show higher CDKN1A expression, lower promoter methylation, and more copy number alterations. This convergence across independent data types is what makes multi-omics integration powerful: each layer alone is noisy, but together the signal reinforces.</p>
+  </div>
+
+  <h2>Panel Toggle</h2>
+
+  <p>Each panel tells a partial story. Remove one and the picture becomes ambiguous; add it back and the pattern snaps into focus. Use the checkboxes below to show or hide panels and watch the remaining ones expand to fill the space.</p>
+
+  <div class="figure figure-wide" id="fig-toggle">
+    <div class="controls" id="toggle-controls"></div>
+    <div id="omics-toggle"></div>
+    <p class="figure-caption"><span class="figure-label">Figure 2.</span> Toggle panels to see how each layer contributes. With all four visible, the convergent pattern is clear. With only one, you see noise and uncertainty.</p>
+  </div>
+
+  <h2>Cross-Omics Correlation</h2>
+
+  <p>The heatmap shows patterns visually, but to quantify relationships between layers you need a scatter plot. Click any row label in the heatmap below to select it. Once you have selected two rows from different panels, a scatter plot appears showing those two variables across all patients, colored by TP53 status.</p>
+
+  <p>Try clicking <strong>CDKN1A</strong> in the expression panel and then <strong>CDKN1A_CpG1</strong> in the methylation panel. Expression and promoter methylation should be anti-correlated: when the promoter is methylated, the gene is silenced.</p>
+
+  <div class="figure figure-wide" id="fig-scatter">
+    <div id="omics-selectable"></div>
+    <div id="scatter-plot">
+      <p class="scatter-prompt">Click two row labels from different panels above to see their cross-omics scatter plot.</p>
+    </div>
+    <p class="figure-caption"><span class="figure-label">Figure 3.</span> Click two rows from different panels to generate a scatter plot. Points are colored by TP53 status (red = mutant, blue = wild-type). Anti-correlated variables (e.g., expression vs methylation) appear as a downward trend.</p>
+  </div>
+
+  <div class="insight">
+    <p>Cross-omics correlations are the analytical backbone of integrative genomics. A gene whose expression anti-correlates with its promoter methylation is likely epigenetically regulated. A gene whose expression tracks with copy number is likely dosage-sensitive. These relationships survive across independent measurement platforms, making them far more trustworthy than single-omics signals.</p>
+  </div>
+
+  <h2>Reading the Layers</h2>
+
+  <p>Multi-omics heatmaps are standard in cancer genomics papers — TCGA publications routinely show stacks of five or more panels for hundreds of patients. The key to reading them is the shared column axis: your eye moves vertically through the panels for a single patient, checking whether the signals align. When they do, you have convergent evidence. When they don't, you have a biological puzzle worth investigating.</p>
+
+  <p>In the synthetic data above, we built the correlations in: TP53-mutant samples have higher CDKN1A expression (the p21 pathway activates), lower promoter methylation (the promoter opens up), and copy number alterations in the TP53 region. Real data is noisier, but the logic is the same. Integration is about asking the data to vote, and trusting the consensus.</p>
+
+  <nav class="nav-footer">
+    <span></span>
+    <a href="17-waterfall-plot.html">Waterfall Plot &rarr;</a>
+  </nav>
+
+</div>
+
+<div class="tip" id="tip"></div>
+
+<script>
+// ─── Seeded PRNG ───
+function mulberry32(seed) {
+  return function() {
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = t + Math.imul(t ^ (t >>> 7), 61 | t) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// ─── Data Generation ───
+(function() {
+  const rng = mulberry32(42);
+  const N = 40;
+
+  // Patient IDs and TP53 status (first 18 are mutant, rest WT)
+  const patients = d3.range(N).map(i => ({
+    id: 'P' + String(i + 1).padStart(2, '0'),
+    tp53_mutant: i < 18
+  }));
+
+  // Shuffle then sort by TP53 status
+  // (Generate data first, then sort)
+
+  const exprGenes = ['TP53', 'CDKN1A', 'MDM2', 'BAX'];
+  const methSites = ['CDKN1A_CpG1', 'CDKN1A_CpG2', 'CDKN1A_CpG3', 'CDKN1A_CpG4'];
+  const mutGenes = ['TP53', 'CDKN1A', 'MDM2'];
+  const cnGenes = ['TP53_region'];
+
+  function rnorm(mean, sd) {
+    const u = rng(), v = rng();
+    return mean + sd * Math.sqrt(-2 * Math.log(u || 1e-10)) * Math.cos(2 * Math.PI * v);
+  }
+
+  function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+  // Generate data for each patient
+  patients.forEach(p => {
+    const m = p.tp53_mutant;
+
+    // Expression: z-scores, mutant patients have shifted expression
+    p.expr = {};
+    p.expr['TP53'] = clamp(rnorm(m ? -0.8 : 0.5, 0.6), -3, 3);
+    p.expr['CDKN1A'] = clamp(rnorm(m ? 1.2 : -0.3, 0.7), -3, 3);
+    p.expr['MDM2'] = clamp(rnorm(m ? 0.8 : -0.1, 0.8), -3, 3);
+    p.expr['BAX'] = clamp(rnorm(m ? 0.6 : -0.2, 0.7), -3, 3);
+
+    // Methylation: beta values 0-1, anti-correlated with expression for CDKN1A
+    p.meth = {};
+    p.meth['CDKN1A_CpG1'] = clamp(rnorm(m ? 0.2 : 0.7, 0.15), 0, 1);
+    p.meth['CDKN1A_CpG2'] = clamp(rnorm(m ? 0.25 : 0.65, 0.15), 0, 1);
+    p.meth['CDKN1A_CpG3'] = clamp(rnorm(m ? 0.3 : 0.6, 0.18), 0, 1);
+    p.meth['CDKN1A_CpG4'] = clamp(rnorm(m ? 0.22 : 0.68, 0.14), 0, 1);
+
+    // Mutation: binary
+    p.mut = {};
+    p.mut['TP53'] = m ? 1 : (rng() < 0.02 ? 1 : 0);
+    p.mut['CDKN1A'] = rng() < (m ? 0.15 : 0.05) ? 1 : 0;
+    p.mut['MDM2'] = rng() < (m ? 0.1 : 0.03) ? 1 : 0;
+
+    // Copy number: -2 to 2
+    p.cn = {};
+    p.cn['TP53_region'] = m ? (rng() < 0.6 ? -1 : (rng() < 0.3 ? -2 : 0)) : (rng() < 0.1 ? -1 : 0);
+  });
+
+  // Sort: mutant first
+  patients.sort((a, b) => b.tp53_mutant - a.tp53_mutant || a.id.localeCompare(b.id));
+
+  // Expose data globally
+  window._omicsData = { patients, exprGenes, methSites, mutGenes, cnGenes };
+})();
+
+
+// ─── Tooltip ───
+const tip = d3.select('#tip');
+function showTip(evt, html) {
+  tip.html(html).style('left', (evt.clientX + 12) + 'px').style('top', (evt.clientY - 10) + 'px').style('opacity', 1);
+}
+function hideTip() { tip.style('opacity', 0); }
+
+
+// ─── Figure 1: Full Multi-Omics Stack ───
+(function() {
+  const { patients, exprGenes, methSites, mutGenes, cnGenes } = window._omicsData;
+  const container = d3.select('#omics-stack');
+
+  const W = 680, labelW = 110, cellW = (W - labelW) / patients.length;
+  const annoH = 14, panelGap = 6, rowH = 16;
+
+  const panels = [
+    { key: 'expr', label: 'Expression', genes: exprGenes, rows: exprGenes.length },
+    { key: 'meth', label: 'Methylation', genes: methSites, rows: methSites.length },
+    { key: 'mut', label: 'Mutation', genes: mutGenes, rows: mutGenes.length },
+    { key: 'cn', label: 'Copy Number', genes: cnGenes, rows: cnGenes.length }
+  ];
+
+  const totalH = annoH + panelGap + panels.reduce((s, p) => s + p.rows * rowH + panelGap, 0) + 20;
+
+  const svg = container.append('svg').attr('width', W).attr('height', totalH);
+
+  // Color scales
+  const exprColor = d3.scaleSequential(d3.interpolateRdBu).domain([3, -3]);
+  const methColor = d3.scaleSequential(d3.interpolateGnBu).domain([0, 1]);
+  const cnColor = d3.scaleSequential(d3.interpolateRdBu).domain([2, -2]);
+
+  let highlightCol = -1;
+
+  function draw() {
+    svg.selectAll('*').remove();
+
+    let y = 0;
+
+    // Panel label offset
+    const dataX = labelW;
+
+    // Annotation bar: TP53 status
+    const anno = svg.append('g').attr('transform', `translate(0, ${y})`);
+    anno.append('text').attr('x', labelW - 8).attr('y', annoH - 2).attr('text-anchor', 'end').attr('font-size', 10).attr('fill', '#4a4a6a').text('TP53 status');
+    patients.forEach((p, i) => {
+      anno.append('rect')
+        .attr('x', dataX + i * cellW).attr('y', 0)
+        .attr('width', cellW - 0.5).attr('height', annoH)
+        .attr('fill', p.tp53_mutant ? '#e74c3c' : '#3498db')
+        .attr('opacity', highlightCol >= 0 && highlightCol !== i ? 0.2 : 1)
+        .on('mouseover', function(evt) {
+          highlightCol = i; draw();
+          showTip(evt, `<strong>${p.id}</strong> — ${p.tp53_mutant ? 'Mutant' : 'Wild-type'}`);
+        })
+        .on('mouseout', function() { highlightCol = -1; draw(); hideTip(); });
+    });
+    y += annoH + panelGap;
+
+    // Draw each panel
+    panels.forEach(panel => {
+      const g = svg.append('g').attr('transform', `translate(0, ${y})`);
+
+      // Panel title
+      g.append('text').attr('x', 0).attr('y', -1).attr('font-size', 10).attr('font-weight', 600).attr('fill', '#1a1a2e').text(panel.label);
+
+      panel.genes.forEach((gene, ri) => {
+        // Row label
+        g.append('text').attr('x', labelW - 8).attr('y', ri * rowH + rowH - 3)
+          .attr('text-anchor', 'end').attr('font-size', 10).attr('fill', '#4a4a6a').text(gene);
+
+        patients.forEach((p, ci) => {
+          let fill, tipText;
+          if (panel.key === 'expr') {
+            const v = p.expr[gene];
+            fill = exprColor(v);
+            tipText = `${gene}: ${v.toFixed(2)} (z-score)`;
+          } else if (panel.key === 'meth') {
+            const v = p.meth[gene];
+            fill = methColor(v);
+            tipText = `${gene}: ${(v * 100).toFixed(1)}% methylated`;
+          } else if (panel.key === 'mut') {
+            const v = p.mut[gene];
+            fill = v ? '#1a1a2e' : '#d0d0d8';
+            tipText = `${gene}: ${v ? 'Mutated' : 'Wild-type'}`;
+          } else {
+            const v = p.cn[gene];
+            fill = v === 0 ? '#e8e8e8' : cnColor(v);
+            tipText = `${gene}: ${v > 0 ? 'Amp +' + v : v < 0 ? 'Del ' + v : 'Neutral'}`;
+          }
+
+          g.append('rect')
+            .attr('x', dataX + ci * cellW).attr('y', ri * rowH)
+            .attr('width', cellW - 0.5).attr('height', rowH - 1)
+            .attr('fill', fill)
+            .attr('opacity', highlightCol >= 0 && highlightCol !== ci ? 0.2 : 1)
+            .on('mouseover', function(evt) {
+              highlightCol = ci; draw();
+              showTip(evt, `<strong>${p.id}</strong> (${p.tp53_mutant ? 'Mut' : 'WT'})<br>${tipText}`);
+            })
+            .on('mouseout', function() { highlightCol = -1; draw(); hideTip(); });
+        });
+      });
+
+      y += panel.rows * rowH + panelGap;
+    });
+
+    // Column highlight line
+    if (highlightCol >= 0) {
+      svg.append('rect')
+        .attr('x', dataX + highlightCol * cellW - 0.5)
+        .attr('y', 0).attr('width', cellW + 0.5).attr('height', totalH)
+        .attr('fill', 'none').attr('stroke', '#f59e0b').attr('stroke-width', 1.5)
+        .attr('pointer-events', 'none');
+    }
+  }
+
+  draw();
+})();
+
+
+// ─── Figure 2: Toggle Panels ───
+(function() {
+  const { patients, exprGenes, methSites, mutGenes, cnGenes } = window._omicsData;
+  const container = d3.select('#omics-toggle');
+  const controlsDiv = d3.select('#toggle-controls');
+
+  const W = 680, labelW = 110, cellW = (W - labelW) / patients.length;
+  const annoH = 14, panelGap = 6;
+
+  const allPanels = [
+    { key: 'expr', label: 'Expression', genes: exprGenes },
+    { key: 'meth', label: 'Methylation', genes: methSites },
+    { key: 'mut', label: 'Mutation', genes: mutGenes },
+    { key: 'cn', label: 'Copy Number', genes: cnGenes }
+  ];
+
+  const visible = { expr: true, meth: true, mut: true, cn: true };
+
+  // Checkboxes
+  allPanels.forEach(panel => {
+    const lbl = controlsDiv.append('label');
+    lbl.append('input').attr('type', 'checkbox').property('checked', true)
+      .on('change', function() { visible[panel.key] = this.checked; draw(); });
+    lbl.append('span').text(panel.label);
+  });
+
+  const exprColor = d3.scaleSequential(d3.interpolateRdBu).domain([3, -3]);
+  const methColor = d3.scaleSequential(d3.interpolateGnBu).domain([0, 1]);
+  const cnColor = d3.scaleSequential(d3.interpolateRdBu).domain([2, -2]);
+
+  function draw() {
+    container.selectAll('svg').remove();
+
+    const activePanels = allPanels.filter(p => visible[p.key]);
+    const visibleCount = activePanels.length;
+    if (visibleCount === 0) {
+      container.append('svg').attr('width', W).attr('height', 60)
+        .append('text').attr('x', W / 2).attr('y', 30).attr('text-anchor', 'middle')
+        .attr('font-size', 12).attr('fill', '#4a4a6a').text('Enable at least one panel.');
+      return;
+    }
+
+    // Expand row height when fewer panels visible
+    const baseRowH = 16;
+    const rowH = visibleCount <= 2 ? 24 : baseRowH;
+
+    const totalH = annoH + panelGap + activePanels.reduce((s, p) => s + p.genes.length * rowH + panelGap, 0) + 10;
+    const svg = container.append('svg').attr('width', W).attr('height', totalH);
+    const dataX = labelW;
+
+    let y = 0;
+
+    // Annotation bar
+    const anno = svg.append('g');
+    anno.append('text').attr('x', labelW - 8).attr('y', annoH - 2).attr('text-anchor', 'end').attr('font-size', 10).attr('fill', '#4a4a6a').text('TP53 status');
+    patients.forEach((p, i) => {
+      anno.append('rect').attr('x', dataX + i * cellW).attr('y', 0)
+        .attr('width', cellW - 0.5).attr('height', annoH)
+        .attr('fill', p.tp53_mutant ? '#e74c3c' : '#3498db');
+    });
+    y += annoH + panelGap;
+
+    activePanels.forEach(panel => {
+      const g = svg.append('g').attr('transform', `translate(0, ${y})`);
+      g.append('text').attr('x', 0).attr('y', -1).attr('font-size', 10).attr('font-weight', 600).attr('fill', '#1a1a2e').text(panel.label);
+
+      panel.genes.forEach((gene, ri) => {
+        g.append('text').attr('x', labelW - 8).attr('y', ri * rowH + rowH - 3)
+          .attr('text-anchor', 'end').attr('font-size', 10).attr('fill', '#4a4a6a').text(gene);
+
+        patients.forEach((p, ci) => {
+          let fill;
+          if (panel.key === 'expr') fill = exprColor(p.expr[gene]);
+          else if (panel.key === 'meth') fill = methColor(p.meth[gene]);
+          else if (panel.key === 'mut') fill = p.mut[gene] ? '#1a1a2e' : '#d0d0d8';
+          else fill = p.cn[gene] === 0 ? '#e8e8e8' : cnColor(p.cn[gene]);
+
+          g.append('rect').attr('x', dataX + ci * cellW).attr('y', ri * rowH)
+            .attr('width', cellW - 0.5).attr('height', rowH - 1).attr('fill', fill);
+        });
+      });
+
+      y += panel.genes.length * rowH + panelGap;
+    });
+  }
+
+  draw();
+})();
+
+
+// ─── Figure 3: Selectable Heatmap + Correlation Scatter ───
+(function() {
+  const { patients, exprGenes, methSites, mutGenes, cnGenes } = window._omicsData;
+  const heatContainer = d3.select('#omics-selectable');
+  const scatterContainer = d3.select('#scatter-plot');
+
+  const W = 680, labelW = 110, cellW = (W - labelW) / patients.length;
+  const annoH = 14, panelGap = 6, rowH = 16;
+
+  const panels = [
+    { key: 'expr', label: 'Expression', genes: exprGenes },
+    { key: 'meth', label: 'Methylation', genes: methSites },
+    { key: 'mut', label: 'Mutation', genes: mutGenes },
+    { key: 'cn', label: 'Copy Number', genes: cnGenes }
+  ];
+
+  const exprColor = d3.scaleSequential(d3.interpolateRdBu).domain([3, -3]);
+  const methColor = d3.scaleSequential(d3.interpolateGnBu).domain([0, 1]);
+  const cnColor = d3.scaleSequential(d3.interpolateRdBu).domain([2, -2]);
+
+  // Selection state: up to 2 rows from different panels
+  let selections = []; // [{panel, gene}, ...]
+
+  function getValue(p, panelKey, gene) {
+    if (panelKey === 'expr') return p.expr[gene];
+    if (panelKey === 'meth') return p.meth[gene];
+    if (panelKey === 'mut') return p.mut[gene];
+    if (panelKey === 'cn') return p.cn[gene];
+    return 0;
+  }
+
+  function panelLabel(key) {
+    return panels.find(p => p.key === key).label;
+  }
+
+  function drawHeatmap() {
+    heatContainer.selectAll('svg').remove();
+
+    const totalH = annoH + panelGap + panels.reduce((s, p) => s + p.genes.length * rowH + panelGap, 0) + 10;
+    const svg = heatContainer.append('svg').attr('width', W).attr('height', totalH);
+    const dataX = labelW;
+
+    let y = 0;
+
+    // Annotation
+    const anno = svg.append('g');
+    anno.append('text').attr('x', labelW - 8).attr('y', annoH - 2).attr('text-anchor', 'end').attr('font-size', 10).attr('fill', '#4a4a6a').text('TP53 status');
+    patients.forEach((p, i) => {
+      anno.append('rect').attr('x', dataX + i * cellW).attr('y', 0)
+        .attr('width', cellW - 0.5).attr('height', annoH)
+        .attr('fill', p.tp53_mutant ? '#e74c3c' : '#3498db');
+    });
+    y += annoH + panelGap;
+
+    panels.forEach(panel => {
+      const g = svg.append('g').attr('transform', `translate(0, ${y})`);
+      g.append('text').attr('x', 0).attr('y', -1).attr('font-size', 10).attr('font-weight', 600).attr('fill', '#1a1a2e').text(panel.label);
+
+      panel.genes.forEach((gene, ri) => {
+        const isSelected = selections.some(s => s.panel === panel.key && s.gene === gene);
+        const rowG = g.append('g').attr('class', 'row-selectable');
+
+        // Clickable background for label area
+        rowG.append('rect')
+          .attr('x', 0).attr('y', ri * rowH)
+          .attr('width', labelW - 4).attr('height', rowH - 1)
+          .attr('fill', isSelected ? '#dbeafe' : 'transparent')
+          .attr('rx', 2);
+
+        rowG.append('text').attr('x', labelW - 8).attr('y', ri * rowH + rowH - 3)
+          .attr('text-anchor', 'end').attr('font-size', 10)
+          .attr('fill', isSelected ? '#2563eb' : '#4a4a6a')
+          .attr('font-weight', isSelected ? 600 : 400)
+          .text(gene);
+
+        // Click handler on row label area
+        rowG.on('click', function() {
+          const idx = selections.findIndex(s => s.panel === panel.key && s.gene === gene);
+          if (idx >= 0) {
+            // Deselect
+            selections.splice(idx, 1);
+          } else {
+            // If already have 2 selections, or same panel, manage accordingly
+            if (selections.length >= 2) {
+              selections = [selections[1]]; // keep most recent
+            }
+            // Don't allow two from same panel
+            if (selections.length === 1 && selections[0].panel === panel.key) {
+              selections = [];
+            }
+            selections.push({ panel: panel.key, gene: gene });
+          }
+          drawHeatmap();
+          drawScatter();
+        });
+
+        // Heatmap cells
+        patients.forEach((p, ci) => {
+          let fill;
+          if (panel.key === 'expr') fill = exprColor(p.expr[gene]);
+          else if (panel.key === 'meth') fill = methColor(p.meth[gene]);
+          else if (panel.key === 'mut') fill = p.mut[gene] ? '#1a1a2e' : '#d0d0d8';
+          else fill = p.cn[gene] === 0 ? '#e8e8e8' : cnColor(p.cn[gene]);
+
+          g.append('rect').attr('x', dataX + ci * cellW).attr('y', ri * rowH)
+            .attr('width', cellW - 0.5).attr('height', rowH - 1).attr('fill', fill);
+        });
+      });
+
+      y += panel.genes.length * rowH + panelGap;
+    });
+  }
+
+  function drawScatter() {
+    scatterContainer.selectAll('*').remove();
+
+    if (selections.length < 2 || selections[0].panel === selections[1].panel) {
+      scatterContainer.append('p').attr('class', 'scatter-prompt')
+        .html(selections.length === 0
+          ? 'Click two row labels from different panels above to see their cross-omics scatter plot.'
+          : selections.length === 1
+            ? `Selected <strong>${selections[0].gene}</strong> (${panelLabel(selections[0].panel)}). Now click a row from a different panel.`
+            : 'Select rows from <em>different</em> panels.');
+      return;
+    }
+
+    const s0 = selections[0], s1 = selections[1];
+    const xVals = patients.map(p => getValue(p, s0.panel, s0.gene));
+    const yVals = patients.map(p => getValue(p, s1.panel, s1.gene));
+
+    const margin = { top: 30, right: 30, bottom: 50, left: 60 };
+    const sw = 400, sh = 320;
+    const innerW = sw - margin.left - margin.right;
+    const innerH = sh - margin.top - margin.bottom;
+
+    const svg = scatterContainer.append('svg').attr('width', sw).attr('height', sh);
+    const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+
+    const xExt = d3.extent(xVals), yExt = d3.extent(yVals);
+    const xPad = (xExt[1] - xExt[0]) * 0.1 || 0.5;
+    const yPad = (yExt[1] - yExt[0]) * 0.1 || 0.5;
+
+    const xScale = d3.scaleLinear().domain([xExt[0] - xPad, xExt[1] + xPad]).range([0, innerW]);
+    const yScale = d3.scaleLinear().domain([yExt[0] - yPad, yExt[1] + yPad]).range([innerH, 0]);
+
+    // Axes
+    g.append('g').attr('class', 'axis').attr('transform', `translate(0,${innerH})`).call(d3.axisBottom(xScale).ticks(6));
+    g.append('g').attr('class', 'axis').call(d3.axisLeft(yScale).ticks(6));
+
+    // Axis labels
+    svg.append('text').attr('x', margin.left + innerW / 2).attr('y', sh - 8)
+      .attr('text-anchor', 'middle').attr('font-size', 12).attr('fill', '#4a4a6a')
+      .text(`${s0.gene} (${panelLabel(s0.panel)})`);
+    svg.append('text').attr('transform', `translate(14, ${margin.top + innerH / 2}) rotate(-90)`)
+      .attr('text-anchor', 'middle').attr('font-size', 12).attr('fill', '#4a4a6a')
+      .text(`${s1.gene} (${panelLabel(s1.panel)})`);
+
+    // Points
+    patients.forEach((p, i) => {
+      g.append('circle')
+        .attr('cx', xScale(xVals[i])).attr('cy', yScale(yVals[i]))
+        .attr('r', 4.5)
+        .attr('fill', p.tp53_mutant ? '#e74c3c' : '#3498db')
+        .attr('opacity', 0.75)
+        .attr('stroke', '#fff').attr('stroke-width', 0.5)
+        .on('mouseover', function(evt) {
+          d3.select(this).attr('r', 7).attr('opacity', 1);
+          showTip(evt, `<strong>${p.id}</strong> (${p.tp53_mutant ? 'Mut' : 'WT'})<br>${s0.gene}: ${xVals[i].toFixed(2)}<br>${s1.gene}: ${yVals[i].toFixed(2)}`);
+        })
+        .on('mouseout', function() {
+          d3.select(this).attr('r', 4.5).attr('opacity', 0.75);
+          hideTip();
+        });
+    });
+
+    // Correlation coefficient
+    const n = xVals.length;
+    const xMean = d3.mean(xVals), yMean = d3.mean(yVals);
+    let num = 0, denX = 0, denY = 0;
+    for (let i = 0; i < n; i++) {
+      const dx = xVals[i] - xMean, dy = yVals[i] - yMean;
+      num += dx * dy; denX += dx * dx; denY += dy * dy;
+    }
+    const r = denX && denY ? num / Math.sqrt(denX * denY) : 0;
+
+    // Legend
+    const legend = svg.append('g').attr('transform', `translate(${margin.left + innerW - 100}, ${margin.top + 4})`);
+    legend.append('circle').attr('cx', 0).attr('cy', 0).attr('r', 4).attr('fill', '#e74c3c');
+    legend.append('text').attr('x', 8).attr('y', 4).attr('font-size', 10).attr('fill', '#4a4a6a').text('TP53 Mutant');
+    legend.append('circle').attr('cx', 0).attr('cy', 16).attr('r', 4).attr('fill', '#3498db');
+    legend.append('text').attr('x', 8).attr('y', 20).attr('font-size', 10).attr('fill', '#4a4a6a').text('TP53 WT');
+
+    // r value
+    svg.append('text').attr('x', margin.left + 6).attr('y', margin.top + 14)
+      .attr('font-size', 12).attr('font-weight', 600).attr('fill', '#1a1a2e')
+      .text(`r = ${r.toFixed(3)}`);
+
+    // Trend line
+    const slope = denX ? num / denX : 0;
+    const intercept = yMean - slope * xMean;
+    const x0 = xExt[0] - xPad, x1 = xExt[1] + xPad;
+    g.append('line')
+      .attr('x1', xScale(x0)).attr('y1', yScale(slope * x0 + intercept))
+      .attr('x2', xScale(x1)).attr('y2', yScale(slope * x1 + intercept))
+      .attr('stroke', '#1a1a2e').attr('stroke-width', 1).attr('stroke-dasharray', '4,3')
+      .attr('opacity', 0.5);
+  }
+
+  drawHeatmap();
+  drawScatter();
+})();
+</script>
+</body>
+</html>

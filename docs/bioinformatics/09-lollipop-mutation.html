@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lollipop Mutation Plot — Bioinformatics Visualization</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --article-width: 740px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem;
+  --line-height: 1.6;
+  --text: #1a1a2e;
+  --text-2: #4a4a6a;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --bg: #fafafa;
+  --fig-bg: #ffffff;
+  --border: #e2e2e8;
+}
+
+body { font-family: var(--body-font); font-size: var(--body-size); line-height: var(--line-height); color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased; }
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
+h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+p { margin: 0 0 1rem; }
+a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+a:hover { color: #1d4ed8; }
+
+.header { padding: 4rem 0 2rem; border-bottom: 1px solid var(--border); margin-bottom: 2.5rem; }
+.header .back { font-family: var(--heading-font); font-size: 0.85rem; display: inline-block; margin-bottom: 1.5rem; }
+.header .subtitle { font-family: var(--heading-font); font-size: 1.15rem; color: var(--text-2); margin-bottom: 0; max-width: 580px; }
+
+.figure { margin: 2rem 0; padding: 1.5rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.figure-wide { margin-left: -2rem; margin-right: -2rem; }
+.figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; line-height: 1.4; }
+.figure-label { font-weight: 600; color: var(--text); }
+
+.insight { background: var(--accent-light); border-left: 3px solid var(--accent); padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 4px 4px 0; }
+.insight p { margin: 0; }
+
+.controls { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); }
+.controls label { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; }
+
+.btn { font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600; padding: 0.45rem 1.1rem; border-radius: 5px; border: 1px solid var(--border); background: var(--fig-bg); color: var(--text); cursor: pointer; transition: background 0.15s, border-color 0.15s; user-select: none; }
+.btn:hover { border-color: var(--accent); background: var(--accent-light); }
+.btn.active { border-color: var(--accent); background: var(--accent); color: white; }
+
+svg text { font-family: var(--heading-font); }
+svg .axis text { font-size: 11px; fill: var(--text-2); }
+svg .axis line, svg .axis path { stroke: var(--border); }
+svg .grid line { stroke: var(--border); stroke-dasharray: 2,3; }
+svg .grid path { stroke: none; }
+
+.tip { position: fixed; pointer-events: none; background: var(--text); color: white; font-family: var(--heading-font); font-size: 0.75rem; padding: 0.3rem 0.55rem; border-radius: 4px; opacity: 0; transition: opacity 0.12s; z-index: 10; white-space: nowrap; }
+
+.domain-legend { display: flex; gap: 1rem; flex-wrap: wrap; font-family: var(--heading-font); font-size: 0.8rem; margin-top: 0.5rem; }
+.domain-legend-item { display: flex; align-items: center; gap: 0.35rem; cursor: pointer; }
+.domain-legend-item .swatch { width: 14px; height: 10px; border-radius: 2px; }
+
+@media (max-width: 640px) { .figure-wide { margin-left: 0; margin-right: 0; } h1 { font-size: 1.75rem; } }
+</style>
+</head>
+<body>
+
+<div class="article">
+
+  <header class="header">
+    <a class="back" href="index.html">&larr; Bioinformatics Visualization</a>
+    <h1>Lollipop Mutation Plot</h1>
+    <p class="subtitle">Mapping mutations onto a protein's linear sequence to see where damage clusters and why certain positions matter more than others.</p>
+  </header>
+
+  <p>A protein is a long chain of amino acids, folded into a three-dimensional shape. But when we want to ask <em>where</em> a mutation falls, we often unfold the protein back into a line. The <strong>lollipop mutation plot</strong> does exactly this: the x-axis is amino acid position, colored blocks along the bottom mark functional domains, and vertical stems topped with circles show where mutations occur and how frequently.</p>
+
+  <p>TP53 is the most frequently mutated gene in human cancer. Its protein product, p53, is 393 amino acids long and acts as a transcription factor that activates genes like CDKN1A in response to DNA damage. When p53 carries the R175H mutation in its DNA-binding domain, it loses the ability to bind DNA and activate its targets. But where exactly does R175H sit, and why is it so consequential?</p>
+
+  <h2>TP53 Hotspot Mutations</h2>
+
+  <p>The plot below shows the full TP53 protein. Notice how the tallest lollipops cluster in the DNA-binding domain (blue) rather than being spread evenly. This is not random: the DNA-binding domain is the business end of p53, and mutations there directly disable its tumor-suppressing function. R175H, highlighted in red, is the single most common TP53 mutation across all human cancers.</p>
+
+  <div class="figure figure-wide" id="fig-tp53">
+    <div id="lollipop-tp53"></div>
+    <div class="domain-legend" id="tp53-legend"></div>
+    <p class="figure-caption"><span class="figure-label">Figure 1.</span> TP53 lollipop mutation plot. Lollipop height encodes mutation frequency across patients. The R175H hotspot is highlighted in red. Hover any lollipop for details. Click a domain block to zoom in (Figure 2).</p>
+  </div>
+
+  <div class="insight">
+    <p>Six residues — R175, G245, R248, R249, R273, R282 — account for roughly 30% of all TP53 missense mutations. Five of the six directly contact DNA or stabilize the structure that contacts DNA. Evolution has optimized this protein so tightly that even a single amino acid change at a critical position is enough to abolish function.</p>
+  </div>
+
+  <h2>Domain Zoom</h2>
+
+  <p>Click any domain in the plot above to zoom into it below. The DNA-binding domain (residues 102-292) is where the action is: you'll see that the hotspots cluster at positions known to make direct contact with DNA. A secondary structure track shows alpha helices and beta sheets to give a sense of the protein's architecture in this region.</p>
+
+  <div class="figure figure-wide" id="fig-zoom">
+    <div class="controls">
+      <span id="zoom-label" style="font-weight: 600;">Select a domain above, or:</span>
+      <button class="btn" id="zoom-dbd-btn">Zoom to DNA-binding domain</button>
+      <button class="btn" id="zoom-reset-btn">Show full protein</button>
+    </div>
+    <div id="lollipop-zoom"></div>
+    <p class="figure-caption"><span class="figure-label">Figure 2.</span> Zoomed view of the selected domain. The secondary structure annotation track shows helices (coils) and sheets (arrows). In the DNA-binding domain, hotspot mutations cluster at DNA-contact residues.</p>
+  </div>
+
+  <h2>CDKN1A: The Target That Doesn't Need Mutating</h2>
+
+  <p>If TP53 is the general, CDKN1A is the soldier it sends to halt the cell cycle. CDKN1A encodes p21, a 198 amino acid protein with two functional domains: a CDK-binding domain that blocks cell division and a PCNA-binding domain that stalls DNA replication. You might expect cancer to mutate p21 just as aggressively as p53. It doesn't.</p>
+
+  <div class="figure figure-wide" id="fig-cdkn1a">
+    <div id="lollipop-cdkn1a"></div>
+    <div class="domain-legend" id="cdkn1a-legend"></div>
+    <p class="figure-caption"><span class="figure-label">Figure 3.</span> CDKN1A lollipop plot at the same frequency scale as Figure 1. The protein is shorter, simpler, and far less mutated. Cancer silences p21 by breaking TP53 upstream rather than mutating CDKN1A directly.</p>
+  </div>
+
+  <div class="insight">
+    <p>This is the key lesson of the TP53-CDKN1A axis: cancer follows the path of least resistance. Why mutate CDKN1A when you can knock out TP53 and silence CDKN1A along with dozens of other tumor-suppressing targets at the same time? One mutation, many consequences. The lollipop plots make this asymmetry visible at a glance.</p>
+  </div>
+
+  <h2>Mutation Type Coloring</h2>
+
+  <p>Not all mutations are created equal. A <strong>missense</strong> mutation swaps one amino acid for another — the protein is made but may be broken. A <strong>nonsense</strong> mutation introduces a premature stop codon, truncating the protein. A <strong>frameshift</strong> shifts the reading frame, scrambling everything downstream. Toggle between coloring schemes below to see that the TP53 hotspots are overwhelmingly missense: the protein is still produced, but it folds wrong or can't bind DNA.</p>
+
+  <div class="figure figure-wide" id="fig-type">
+    <div class="controls">
+      <span style="font-weight: 600;">Color by:</span>
+      <button class="btn active" id="btn-type">Mutation type</button>
+      <button class="btn" id="btn-domain">Domain location</button>
+    </div>
+    <div id="lollipop-type"></div>
+    <div id="type-legend" class="domain-legend"></div>
+    <p class="figure-caption"><span class="figure-label">Figure 4.</span> TP53 mutations colored by type (missense, nonsense, frameshift) or by domain location. The hotspot positions are almost entirely missense — the protein is made, but it's broken. Nonsense and frameshift mutations are scattered more evenly.</p>
+  </div>
+
+  <div class="insight">
+    <p>Missense-dominant hotspots are a hallmark of oncogenic "gain of function." The R175H mutant p53 doesn't just lose its tumor-suppressing ability — it actively promotes cancer by binding and disabling other proteins. This is why missense mutations at these positions are selected for in tumors: a truncated protein would be less harmful than a corrupted one.</p>
+  </div>
+
+  <h2>Proteins as One-Dimensional Maps</h2>
+
+  <p>The lollipop plot's power lies in its simplicity. By unfolding a three-dimensional protein into a line, it makes mutation patterns legible at a glance. The clustering of hotspots in the DNA-binding domain, the asymmetry between TP53 and CDKN1A, the dominance of missense mutations at key residues — each of these observations maps directly onto a biological mechanism.</p>
+
+  <p>Next, we move from single proteins to entire patient cohorts. The <a href="10-oncoprint.html">oncoprint</a> arranges many genes across many patients into a single compact grid, revealing which combinations of mutations tend to travel together and which are mutually exclusive.</p>
+
+</div>
+
+<div class="tip" id="tip"></div>
+
+<script>
+// ─── Seeded RNG ───
+function mulberry32(seed) {
+  return function() {
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+const rng = mulberry32(175); // seed nods to R175H
+function rnorm(mu, sig) { const u1 = rng(), u2 = rng(); return mu + sig * Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2); }
+
+// ─── Tooltip helper ───
+const tip = d3.select('#tip');
+function showTip(evt, html) {
+  tip.html(html).style('left', (evt.clientX + 12) + 'px').style('top', (evt.clientY - 28) + 'px').style('opacity', 1);
+}
+function hideTip() { tip.style('opacity', 0); }
+
+// ─── TP53 protein data ───
+const tp53Length = 393;
+const tp53Domains = [
+  { name: 'Transactivation 1', abbr: 'TAD1', start: 1, end: 40, color: '#e74c3c' },
+  { name: 'Transactivation 2', abbr: 'TAD2', start: 41, end: 61, color: '#e67e22' },
+  { name: 'Proline-rich', abbr: 'PRR', start: 64, end: 92, color: '#f1c40f' },
+  { name: 'DNA-binding', abbr: 'DBD', start: 102, end: 292, color: '#3498db' },
+  { name: 'Tetramerization', abbr: 'TET', start: 323, end: 356, color: '#2ecc71' },
+  { name: 'Regulatory', abbr: 'REG', start: 364, end: 393, color: '#9b59b6' }
+];
+
+// Real TP53 hotspot positions with approximate frequencies
+const tp53Hotspots = [
+  { pos: 175, aa: 'R', mut: 'H', label: 'R175H', freq: 42, type: 'missense', contact: true },
+  { pos: 245, aa: 'G', mut: 'S', label: 'G245S', freq: 26, type: 'missense', contact: false },
+  { pos: 248, aa: 'R', mut: 'W', label: 'R248W', freq: 38, type: 'missense', contact: true },
+  { pos: 249, aa: 'R', mut: 'S', label: 'R249S', freq: 18, type: 'missense', contact: true },
+  { pos: 273, aa: 'R', mut: 'H', label: 'R273H', freq: 34, type: 'missense', contact: true },
+  { pos: 282, aa: 'R', mut: 'W', label: 'R282W', freq: 16, type: 'missense', contact: false }
+];
+
+// Generate additional mutations across the protein
+const tp53Mutations = [...tp53Hotspots];
+const mutTypes = ['missense', 'missense', 'missense', 'missense', 'nonsense', 'frameshift'];
+for (let i = 0; i < 65; i++) {
+  const pos = Math.floor(rng() * tp53Length) + 1;
+  if (tp53Mutations.some(m => Math.abs(m.pos - pos) < 3)) continue;
+  const inDBD = pos >= 102 && pos <= 292;
+  // Bias frequency toward DBD
+  const baseFreq = inDBD ? 2 + Math.floor(rng() * 10) : 1 + Math.floor(rng() * 5);
+  const type = mutTypes[Math.floor(rng() * mutTypes.length)];
+  const aa = 'ACDEFGHIKLMNPQRSTVWY'[Math.floor(rng() * 20)];
+  const mutAa = type === 'missense' ? 'ACDEFGHIKLMNPQRSTVWY'[Math.floor(rng() * 20)] : (type === 'nonsense' ? '*' : 'fs');
+  tp53Mutations.push({
+    pos, aa, mut: mutAa, label: `${aa}${pos}${mutAa}`, freq: baseFreq, type,
+    contact: inDBD && rng() < 0.3
+  });
+}
+tp53Mutations.sort((a, b) => a.pos - b.pos);
+
+// Secondary structure for DBD (simplified)
+const dbdSecondary = [
+  { type: 'sheet', start: 110, end: 118 },
+  { type: 'sheet', start: 124, end: 135 },
+  { type: 'helix', start: 139, end: 146 },
+  { type: 'sheet', start: 150, end: 157 },
+  { type: 'sheet', start: 163, end: 170 },
+  { type: 'helix', start: 177, end: 192 },
+  { type: 'sheet', start: 198, end: 205 },
+  { type: 'sheet', start: 211, end: 220 },
+  { type: 'helix', start: 226, end: 236 },
+  { type: 'sheet', start: 241, end: 248 },
+  { type: 'helix', start: 253, end: 258 },
+  { type: 'sheet', start: 265, end: 274 },
+  { type: 'helix', start: 278, end: 289 }
+];
+
+// ─── CDKN1A protein data ───
+const cdkn1aLength = 198;
+const cdkn1aDomains = [
+  { name: 'CDK-binding', abbr: 'CDK', start: 12, end: 71, color: '#e74c3c' },
+  { name: 'PCNA-binding', abbr: 'PCNA', start: 143, end: 164, color: '#3498db' }
+];
+
+// CDKN1A has far fewer mutations
+const cdkn1aMutations = [];
+for (let i = 0; i < 12; i++) {
+  const pos = Math.floor(rng() * cdkn1aLength) + 1;
+  if (cdkn1aMutations.some(m => Math.abs(m.pos - pos) < 4)) continue;
+  const type = rng() < 0.6 ? 'missense' : (rng() < 0.5 ? 'nonsense' : 'frameshift');
+  const aa = 'ACDEFGHIKLMNPQRSTVWY'[Math.floor(rng() * 20)];
+  const mutAa = type === 'missense' ? 'ACDEFGHIKLMNPQRSTVWY'[Math.floor(rng() * 20)] : (type === 'nonsense' ? '*' : 'fs');
+  cdkn1aMutations.push({
+    pos, aa, mut: mutAa, label: `${aa}${pos}${mutAa}`, freq: 1 + Math.floor(rng() * 3), type,
+    contact: false
+  });
+}
+cdkn1aMutations.sort((a, b) => a.pos - b.pos);
+
+// ─── Domain color lookup ───
+function domainAt(pos, domains) {
+  for (const d of domains) { if (pos >= d.start && pos <= d.end) return d; }
+  return null;
+}
+
+// ═══════════════════════════════════════════════
+// Figure 1: TP53 Full Lollipop Plot
+// ═══════════════════════════════════════════════
+;(function() {
+  const container = d3.select('#lollipop-tp53');
+  const W = 700, H = 260;
+  const margin = { top: 40, right: 20, bottom: 50, left: 40 };
+  const w = W - margin.left - margin.right, h = H - margin.top - margin.bottom;
+
+  const svg = container.append('svg')
+    .attr('viewBox', `0 0 ${W} ${H}`)
+    .attr('width', '100%');
+  const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+
+  const x = d3.scaleLinear().domain([1, tp53Length]).range([0, w]);
+  const maxFreq = d3.max(tp53Mutations, d => d.freq);
+  const y = d3.scaleLinear().domain([0, maxFreq * 1.1]).range([h - 30, 0]);
+  const r = d3.scaleSqrt().domain([1, maxFreq]).range([3, 10]);
+
+  // X axis
+  g.append('g').attr('class', 'axis')
+    .attr('transform', `translate(0,${h})`)
+    .call(d3.axisBottom(x).ticks(10).tickFormat(d => d))
+    .append('text').attr('x', w / 2).attr('y', 36).attr('fill', 'var(--text-2)')
+    .attr('text-anchor', 'middle').attr('font-size', '11px').text('Amino acid position');
+
+  // Y axis
+  g.append('g').attr('class', 'axis')
+    .call(d3.axisLeft(y).ticks(5))
+    .append('text').attr('x', -6).attr('y', -10).attr('fill', 'var(--text-2)')
+    .attr('text-anchor', 'start').attr('font-size', '11px').text('Frequency');
+
+  // Domain track
+  const domainY = h - 22;
+  const domainH = 16;
+  g.selectAll('.domain-block')
+    .data(tp53Domains).enter().append('rect')
+    .attr('class', 'domain-block')
+    .attr('x', d => x(d.start)).attr('y', domainY)
+    .attr('width', d => x(d.end) - x(d.start)).attr('height', domainH)
+    .attr('fill', d => d.color).attr('opacity', 0.7).attr('rx', 2)
+    .style('cursor', 'pointer')
+    .on('mouseenter', function(evt, d) { d3.select(this).attr('opacity', 1); showTip(evt, `${d.name} (${d.start}-${d.end})`); })
+    .on('mouseleave', function(evt, d) { d3.select(this).attr('opacity', 0.7); hideTip(); })
+    .on('click', (evt, d) => zoomToDomain(d));
+
+  // Domain labels
+  g.selectAll('.domain-label')
+    .data(tp53Domains.filter(d => (d.end - d.start) > 25)).enter().append('text')
+    .attr('x', d => x((d.start + d.end) / 2)).attr('y', domainY + domainH / 2 + 1)
+    .attr('text-anchor', 'middle').attr('dominant-baseline', 'middle')
+    .attr('font-size', '9px').attr('fill', '#fff').attr('font-weight', 600)
+    .attr('pointer-events', 'none').text(d => d.abbr);
+
+  // Backbone line
+  g.append('line')
+    .attr('x1', x(1)).attr('x2', x(tp53Length))
+    .attr('y1', domainY + domainH / 2).attr('y2', domainY + domainH / 2)
+    .attr('stroke', '#ccc').attr('stroke-width', 1.5);
+
+  // Lollipop stems
+  g.selectAll('.stem')
+    .data(tp53Mutations).enter().append('line')
+    .attr('class', 'stem')
+    .attr('x1', d => x(d.pos)).attr('x2', d => x(d.pos))
+    .attr('y1', domainY).attr('y2', d => y(d.freq))
+    .attr('stroke', d => d.label === 'R175H' ? '#e74c3c' : '#888')
+    .attr('stroke-width', d => d.label === 'R175H' ? 2 : 1)
+    .attr('opacity', 0.6);
+
+  // Lollipop heads
+  g.selectAll('.head')
+    .data(tp53Mutations).enter().append('circle')
+    .attr('class', 'head')
+    .attr('cx', d => x(d.pos)).attr('cy', d => y(d.freq))
+    .attr('r', d => r(d.freq))
+    .attr('fill', d => {
+      if (d.label === 'R175H') return '#e74c3c';
+      const dom = domainAt(d.pos, tp53Domains);
+      return dom ? dom.color : '#999';
+    })
+    .attr('stroke', d => d.label === 'R175H' ? '#b71c1c' : '#fff')
+    .attr('stroke-width', d => d.label === 'R175H' ? 2 : 1)
+    .attr('opacity', 0.85)
+    .style('cursor', 'pointer')
+    .on('mouseenter', function(evt, d) {
+      d3.select(this).attr('opacity', 1).attr('stroke-width', 2);
+      const dom = domainAt(d.pos, tp53Domains);
+      showTip(evt, `<strong>${d.label}</strong> | ${d.type} | freq: ${d.freq}${dom ? ' | ' + dom.name : ''}`);
+    })
+    .on('mouseleave', function(evt, d) {
+      d3.select(this).attr('opacity', 0.85).attr('stroke-width', d.label === 'R175H' ? 2 : 1);
+      hideTip();
+    });
+
+  // R175H annotation
+  const r175 = tp53Mutations.find(m => m.label === 'R175H');
+  if (r175) {
+    g.append('text')
+      .attr('x', x(r175.pos)).attr('y', y(r175.freq) - r(r175.freq) - 6)
+      .attr('text-anchor', 'middle').attr('font-size', '11px')
+      .attr('font-weight', 700).attr('fill', '#e74c3c').text('R175H');
+  }
+
+  // Legend
+  const legend = d3.select('#tp53-legend');
+  tp53Domains.forEach(d => {
+    const item = legend.append('div').attr('class', 'domain-legend-item')
+      .style('cursor', 'pointer')
+      .on('click', () => zoomToDomain(d));
+    item.append('div').attr('class', 'swatch').style('background', d.color);
+    item.append('span').text(`${d.name} (${d.start}-${d.end})`);
+  });
+})();
+
+// ═══════════════════════════════════════════════
+// Figure 2: Domain Zoom
+// ═══════════════════════════════════════════════
+let currentZoom = null;
+const zoomContainer = d3.select('#lollipop-zoom');
+const zoomW = 700, zoomH = 280;
+const zm = { top: 40, right: 20, bottom: 60, left: 40 };
+
+function drawZoom(startPos, endPos, domainLabel) {
+  zoomContainer.selectAll('*').remove();
+  currentZoom = { start: startPos, end: endPos };
+
+  const w = zoomW - zm.left - zm.right, h = zoomH - zm.top - zm.bottom;
+  const svg = zoomContainer.append('svg')
+    .attr('viewBox', `0 0 ${zoomW} ${zoomH}`)
+    .attr('width', '100%');
+  const g = svg.append('g').attr('transform', `translate(${zm.left},${zm.top})`);
+
+  const muts = tp53Mutations.filter(m => m.pos >= startPos && m.pos <= endPos);
+  const x = d3.scaleLinear().domain([startPos, endPos]).range([0, w]);
+  const maxFreq = d3.max(muts, d => d.freq) || 10;
+  const y = d3.scaleLinear().domain([0, maxFreq * 1.15]).range([h - 50, 0]);
+  const r = d3.scaleSqrt().domain([1, d3.max(tp53Mutations, d => d.freq)]).range([3.5, 12]);
+
+  // X axis
+  const tickCount = (endPos - startPos) < 100 ? 20 : 10;
+  g.append('g').attr('class', 'axis')
+    .attr('transform', `translate(0,${h})`)
+    .call(d3.axisBottom(x).ticks(tickCount).tickFormat(d3.format('d')))
+    .append('text').attr('x', w / 2).attr('y', 36).attr('fill', 'var(--text-2)')
+    .attr('text-anchor', 'middle').attr('font-size', '11px').text('Amino acid position');
+
+  // Y axis
+  g.append('g').attr('class', 'axis')
+    .call(d3.axisLeft(y).ticks(5))
+    .append('text').attr('x', -6).attr('y', -10).attr('fill', 'var(--text-2)')
+    .attr('text-anchor', 'start').attr('font-size', '11px').text('Frequency');
+
+  // Domain blocks in zoom
+  const domainY = h - 22;
+  const domainH = 16;
+  const domsInRange = tp53Domains.filter(d => d.end >= startPos && d.start <= endPos);
+  g.selectAll('.zdomain').data(domsInRange).enter().append('rect')
+    .attr('x', d => x(Math.max(d.start, startPos)))
+    .attr('y', domainY)
+    .attr('width', d => x(Math.min(d.end, endPos)) - x(Math.max(d.start, startPos)))
+    .attr('height', domainH)
+    .attr('fill', d => d.color).attr('opacity', 0.7).attr('rx', 2);
+
+  // Domain labels in zoom
+  g.selectAll('.zdlabel').data(domsInRange).enter().append('text')
+    .attr('x', d => x((Math.max(d.start, startPos) + Math.min(d.end, endPos)) / 2))
+    .attr('y', domainY + domainH / 2 + 1)
+    .attr('text-anchor', 'middle').attr('dominant-baseline', 'middle')
+    .attr('font-size', '9px').attr('fill', '#fff').attr('font-weight', 600)
+    .attr('pointer-events', 'none').text(d => d.name);
+
+  // Backbone
+  g.append('line')
+    .attr('x1', x(startPos)).attr('x2', x(endPos))
+    .attr('y1', domainY + domainH / 2).attr('y2', domainY + domainH / 2)
+    .attr('stroke', '#ccc').attr('stroke-width', 1.5);
+
+  // Secondary structure track (below domain blocks)
+  const ssY = h - 2;
+  const ssH = 8;
+  const ssInRange = dbdSecondary.filter(s => s.end >= startPos && s.start <= endPos);
+  ssInRange.forEach(s => {
+    const sx1 = x(Math.max(s.start, startPos));
+    const sx2 = x(Math.min(s.end, endPos));
+    if (s.type === 'helix') {
+      // Wavy line for helix
+      const points = [];
+      const n = Math.ceil((sx2 - sx1) / 3);
+      for (let i = 0; i <= n; i++) {
+        const px = sx1 + (sx2 - sx1) * i / n;
+        const py = ssY + ssH / 2 + Math.sin(i * Math.PI) * ssH * 0.35;
+        points.push([px, py]);
+      }
+      g.append('path')
+        .attr('d', d3.line()(points))
+        .attr('fill', 'none').attr('stroke', '#e74c3c').attr('stroke-width', 2.5)
+        .attr('opacity', 0.7);
+      g.append('text')
+        .attr('x', (sx1 + sx2) / 2).attr('y', ssY + ssH + 10)
+        .attr('text-anchor', 'middle').attr('font-size', '8px').attr('fill', '#e74c3c')
+        .text('\u03B1');
+    } else {
+      // Arrow for sheet
+      g.append('rect')
+        .attr('x', sx1).attr('y', ssY + 1)
+        .attr('width', sx2 - sx1).attr('height', ssH - 2)
+        .attr('fill', '#3498db').attr('opacity', 0.5).attr('rx', 1);
+      g.append('text')
+        .attr('x', (sx1 + sx2) / 2).attr('y', ssY + ssH + 10)
+        .attr('text-anchor', 'middle').attr('font-size', '8px').attr('fill', '#3498db')
+        .text('\u03B2');
+    }
+  });
+
+  // Stems
+  g.selectAll('.zstem').data(muts).enter().append('line')
+    .attr('x1', d => x(d.pos)).attr('x2', d => x(d.pos))
+    .attr('y1', domainY).attr('y2', d => y(d.freq))
+    .attr('stroke', d => d.label === 'R175H' ? '#e74c3c' : '#888')
+    .attr('stroke-width', d => d.label === 'R175H' ? 2 : 1)
+    .attr('opacity', 0.6);
+
+  // Heads
+  g.selectAll('.zhead').data(muts).enter().append('circle')
+    .attr('cx', d => x(d.pos)).attr('cy', d => y(d.freq))
+    .attr('r', d => r(d.freq))
+    .attr('fill', d => {
+      if (d.label === 'R175H') return '#e74c3c';
+      const dom = domainAt(d.pos, tp53Domains);
+      return dom ? dom.color : '#999';
+    })
+    .attr('stroke', d => d.label === 'R175H' ? '#b71c1c' : '#fff')
+    .attr('stroke-width', d => d.label === 'R175H' ? 2 : 1)
+    .attr('opacity', 0.85)
+    .style('cursor', 'pointer')
+    .on('mouseenter', function(evt, d) {
+      d3.select(this).attr('opacity', 1).attr('stroke-width', 2);
+      const dom = domainAt(d.pos, tp53Domains);
+      showTip(evt, `<strong>${d.label}</strong> | ${d.type} | freq: ${d.freq}${d.contact ? ' | DNA-contact' : ''}${dom ? ' | ' + dom.name : ''}`);
+    })
+    .on('mouseleave', function(evt, d) {
+      d3.select(this).attr('opacity', 0.85).attr('stroke-width', d.label === 'R175H' ? 2 : 1);
+      hideTip();
+    });
+
+  // Labels for hotspots
+  const hotspotsInRange = muts.filter(m => tp53Hotspots.some(h => h.label === m.label));
+  g.selectAll('.zlabel').data(hotspotsInRange).enter().append('text')
+    .attr('x', d => x(d.pos)).attr('y', d => y(d.freq) - r(d.freq) - 5)
+    .attr('text-anchor', 'middle').attr('font-size', '10px')
+    .attr('font-weight', 700).attr('fill', d => d.label === 'R175H' ? '#e74c3c' : 'var(--text)')
+    .text(d => d.label);
+
+  // DNA-contact markers
+  const contacts = muts.filter(m => m.contact);
+  if (contacts.length > 0) {
+    g.selectAll('.contact-mark').data(contacts).enter().append('text')
+      .attr('x', d => x(d.pos)).attr('y', domainY - 4)
+      .attr('text-anchor', 'middle').attr('font-size', '8px').attr('fill', '#e74c3c')
+      .text('\u25BC');
+  }
+
+  // Title
+  svg.append('text')
+    .attr('x', zm.left).attr('y', 18)
+    .attr('font-size', '12px').attr('font-weight', 600).attr('fill', 'var(--text)')
+    .text(domainLabel || `Residues ${startPos}\u2013${endPos}`);
+}
+
+function zoomToDomain(domain) {
+  const pad = Math.max(5, Math.floor((domain.end - domain.start) * 0.08));
+  drawZoom(Math.max(1, domain.start - pad), Math.min(tp53Length, domain.end + pad), domain.name + ' domain');
+  document.getElementById('fig-zoom').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+// Initial: show DNA-binding domain
+drawZoom(95, 300, 'DNA-binding domain');
+
+d3.select('#zoom-dbd-btn').on('click', () => {
+  const dbd = tp53Domains.find(d => d.abbr === 'DBD');
+  zoomToDomain(dbd);
+});
+d3.select('#zoom-reset-btn').on('click', () => {
+  drawZoom(1, tp53Length, 'Full TP53 protein');
+});
+
+// ═══════════════════════════════════════════════
+// Figure 3: CDKN1A Lollipop
+// ═══════════════════════════════════════════════
+;(function() {
+  const container = d3.select('#lollipop-cdkn1a');
+  const W = 700, H = 220;
+  const margin = { top: 30, right: 20, bottom: 50, left: 40 };
+  const w = W - margin.left - margin.right, h = H - margin.top - margin.bottom;
+
+  const svg = container.append('svg')
+    .attr('viewBox', `0 0 ${W} ${H}`)
+    .attr('width', '100%');
+  const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+
+  const x = d3.scaleLinear().domain([1, cdkn1aLength]).range([0, w]);
+  // Use the same y-scale max as TP53 figure to show the contrast
+  const tp53MaxFreq = d3.max(tp53Mutations, d => d.freq);
+  const y = d3.scaleLinear().domain([0, tp53MaxFreq * 1.1]).range([h - 30, 0]);
+  const r = d3.scaleSqrt().domain([1, tp53MaxFreq]).range([3, 10]);
+
+  // X axis
+  g.append('g').attr('class', 'axis')
+    .attr('transform', `translate(0,${h})`)
+    .call(d3.axisBottom(x).ticks(8).tickFormat(d3.format('d')))
+    .append('text').attr('x', w / 2).attr('y', 36).attr('fill', 'var(--text-2)')
+    .attr('text-anchor', 'middle').attr('font-size', '11px').text('Amino acid position');
+
+  // Y axis
+  g.append('g').attr('class', 'axis')
+    .call(d3.axisLeft(y).ticks(5))
+    .append('text').attr('x', -6).attr('y', -10).attr('fill', 'var(--text-2)')
+    .attr('text-anchor', 'start').attr('font-size', '11px').text('Frequency');
+
+  // Domain track
+  const domainY = h - 22;
+  const domainH = 16;
+  g.selectAll('.domain-block').data(cdkn1aDomains).enter().append('rect')
+    .attr('x', d => x(d.start)).attr('y', domainY)
+    .attr('width', d => x(d.end) - x(d.start)).attr('height', domainH)
+    .attr('fill', d => d.color).attr('opacity', 0.7).attr('rx', 2)
+    .on('mouseenter', function(evt, d) { d3.select(this).attr('opacity', 1); showTip(evt, `${d.name} (${d.start}-${d.end})`); })
+    .on('mouseleave', function(evt, d) { d3.select(this).attr('opacity', 0.7); hideTip(); });
+
+  // Domain labels
+  g.selectAll('.domain-label').data(cdkn1aDomains).enter().append('text')
+    .attr('x', d => x((d.start + d.end) / 2)).attr('y', domainY + domainH / 2 + 1)
+    .attr('text-anchor', 'middle').attr('dominant-baseline', 'middle')
+    .attr('font-size', '9px').attr('fill', '#fff').attr('font-weight', 600)
+    .attr('pointer-events', 'none').text(d => d.abbr);
+
+  // Backbone
+  g.append('line')
+    .attr('x1', x(1)).attr('x2', x(cdkn1aLength))
+    .attr('y1', domainY + domainH / 2).attr('y2', domainY + domainH / 2)
+    .attr('stroke', '#ccc').attr('stroke-width', 1.5);
+
+  // Stems
+  g.selectAll('.stem').data(cdkn1aMutations).enter().append('line')
+    .attr('x1', d => x(d.pos)).attr('x2', d => x(d.pos))
+    .attr('y1', domainY).attr('y2', d => y(d.freq))
+    .attr('stroke', '#888').attr('stroke-width', 1).attr('opacity', 0.6);
+
+  // Heads
+  g.selectAll('.head').data(cdkn1aMutations).enter().append('circle')
+    .attr('cx', d => x(d.pos)).attr('cy', d => y(d.freq))
+    .attr('r', d => r(d.freq))
+    .attr('fill', d => { const dom = domainAt(d.pos, cdkn1aDomains); return dom ? dom.color : '#999'; })
+    .attr('stroke', '#fff').attr('stroke-width', 1).attr('opacity', 0.85)
+    .style('cursor', 'pointer')
+    .on('mouseenter', function(evt, d) {
+      d3.select(this).attr('opacity', 1).attr('stroke-width', 2);
+      showTip(evt, `<strong>${d.label}</strong> | ${d.type} | freq: ${d.freq}`);
+    })
+    .on('mouseleave', function() {
+      d3.select(this).attr('opacity', 0.85).attr('stroke-width', 1);
+      hideTip();
+    });
+
+  // Title
+  svg.append('text')
+    .attr('x', margin.left).attr('y', 16)
+    .attr('font-size', '12px').attr('font-weight', 600).attr('fill', 'var(--text)')
+    .text('CDKN1A (p21) \u2014 198 amino acids');
+
+  // Legend
+  const legend = d3.select('#cdkn1a-legend');
+  cdkn1aDomains.forEach(d => {
+    const item = legend.append('div').attr('class', 'domain-legend-item');
+    item.append('div').attr('class', 'swatch').style('background', d.color);
+    item.append('span').text(`${d.name} (${d.start}-${d.end})`);
+  });
+})();
+
+// ═══════════════════════════════════════════════
+// Figure 4: Mutation Type Coloring
+// ═══════════════════════════════════════════════
+;(function() {
+  const container = d3.select('#lollipop-type');
+  const W = 700, H = 260;
+  const margin = { top: 40, right: 20, bottom: 50, left: 40 };
+  const w = W - margin.left - margin.right, h = H - margin.top - margin.bottom;
+
+  const typeColors = { missense: '#2563eb', nonsense: '#e74c3c', frameshift: '#f59e0b' };
+  let colorMode = 'type'; // or 'domain'
+
+  function draw() {
+    container.selectAll('*').remove();
+    d3.select('#type-legend').selectAll('*').remove();
+
+    const svg = container.append('svg')
+      .attr('viewBox', `0 0 ${W} ${H}`)
+      .attr('width', '100%');
+    const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+
+    const x = d3.scaleLinear().domain([1, tp53Length]).range([0, w]);
+    const maxFreq = d3.max(tp53Mutations, d => d.freq);
+    const y = d3.scaleLinear().domain([0, maxFreq * 1.1]).range([h - 30, 0]);
+    const r = d3.scaleSqrt().domain([1, maxFreq]).range([3, 10]);
+
+    // X axis
+    g.append('g').attr('class', 'axis')
+      .attr('transform', `translate(0,${h})`)
+      .call(d3.axisBottom(x).ticks(10).tickFormat(d3.format('d')))
+      .append('text').attr('x', w / 2).attr('y', 36).attr('fill', 'var(--text-2)')
+      .attr('text-anchor', 'middle').attr('font-size', '11px').text('Amino acid position');
+
+    // Y axis
+    g.append('g').attr('class', 'axis')
+      .call(d3.axisLeft(y).ticks(5))
+      .append('text').attr('x', -6).attr('y', -10).attr('fill', 'var(--text-2)')
+      .attr('text-anchor', 'start').attr('font-size', '11px').text('Frequency');
+
+    // Domain track
+    const domainY = h - 22;
+    const domainH = 16;
+    g.selectAll('.domain-block').data(tp53Domains).enter().append('rect')
+      .attr('x', d => x(d.start)).attr('y', domainY)
+      .attr('width', d => x(d.end) - x(d.start)).attr('height', domainH)
+      .attr('fill', d => d.color).attr('opacity', 0.5).attr('rx', 2);
+
+    // Backbone
+    g.append('line')
+      .attr('x1', x(1)).attr('x2', x(tp53Length))
+      .attr('y1', domainY + domainH / 2).attr('y2', domainY + domainH / 2)
+      .attr('stroke', '#ccc').attr('stroke-width', 1.5);
+
+    function fillColor(d) {
+      if (colorMode === 'type') return typeColors[d.type] || '#999';
+      const dom = domainAt(d.pos, tp53Domains);
+      return dom ? dom.color : '#999';
+    }
+
+    // Stems
+    g.selectAll('.stem').data(tp53Mutations).enter().append('line')
+      .attr('x1', d => x(d.pos)).attr('x2', d => x(d.pos))
+      .attr('y1', domainY).attr('y2', d => y(d.freq))
+      .attr('stroke', d => fillColor(d)).attr('stroke-width', 1).attr('opacity', 0.5);
+
+    // Heads
+    g.selectAll('.head').data(tp53Mutations).enter().append('circle')
+      .attr('cx', d => x(d.pos)).attr('cy', d => y(d.freq))
+      .attr('r', d => r(d.freq))
+      .attr('fill', d => fillColor(d))
+      .attr('stroke', '#fff').attr('stroke-width', 1).attr('opacity', 0.85)
+      .style('cursor', 'pointer')
+      .on('mouseenter', function(evt, d) {
+        d3.select(this).attr('opacity', 1).attr('stroke-width', 2);
+        const dom = domainAt(d.pos, tp53Domains);
+        showTip(evt, `<strong>${d.label}</strong> | ${d.type} | freq: ${d.freq}${dom ? ' | ' + dom.name : ''}`);
+      })
+      .on('mouseleave', function() {
+        d3.select(this).attr('opacity', 0.85).attr('stroke-width', 1);
+        hideTip();
+      });
+
+    // Hotspot labels
+    const hsData = tp53Mutations.filter(m => tp53Hotspots.some(h => h.label === m.label));
+    g.selectAll('.hlabel').data(hsData).enter().append('text')
+      .attr('x', d => x(d.pos)).attr('y', d => y(d.freq) - r(d.freq) - 5)
+      .attr('text-anchor', 'middle').attr('font-size', '9px')
+      .attr('font-weight', 600).attr('fill', d => fillColor(d))
+      .text(d => d.label);
+
+    // Legend
+    const legend = d3.select('#type-legend');
+    if (colorMode === 'type') {
+      Object.entries(typeColors).forEach(([t, c]) => {
+        const count = tp53Mutations.filter(m => m.type === t).length;
+        const item = legend.append('div').attr('class', 'domain-legend-item');
+        item.append('div').attr('class', 'swatch').style('background', c);
+        item.append('span').text(`${t} (${count})`);
+      });
+    } else {
+      tp53Domains.forEach(d => {
+        const count = tp53Mutations.filter(m => m.pos >= d.start && m.pos <= d.end).length;
+        const item = legend.append('div').attr('class', 'domain-legend-item');
+        item.append('div').attr('class', 'swatch').style('background', d.color);
+        item.append('span').text(`${d.name} (${count})`);
+      });
+    }
+  }
+
+  draw();
+
+  d3.select('#btn-type').on('click', function() {
+    colorMode = 'type';
+    d3.select('#btn-type').classed('active', true);
+    d3.select('#btn-domain').classed('active', false);
+    draw();
+  });
+  d3.select('#btn-domain').on('click', function() {
+    colorMode = 'domain';
+    d3.select('#btn-domain').classed('active', true);
+    d3.select('#btn-type').classed('active', false);
+    draw();
+  });
+})();
+</script>
+
+</body>
+</html>

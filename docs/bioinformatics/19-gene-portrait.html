@@ -1,0 +1,931 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gene Portrait Dashboard — Bioinformatics Visualization</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --article-width: 740px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem;
+  --line-height: 1.6;
+  --text: #1a1a2e;
+  --text-2: #4a4a6a;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --bg: #fafafa;
+  --fig-bg: #ffffff;
+  --border: #e2e2e8;
+}
+
+body { font-family: var(--body-font); font-size: var(--body-size); line-height: var(--line-height); color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased; }
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
+h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+h3 { font-size: 1.15rem; margin: 2rem 0 0.75rem; }
+p { margin: 0 0 1rem; }
+a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+a:hover { color: #1d4ed8; }
+
+.header { padding: 4rem 0 2rem; border-bottom: 1px solid var(--border); margin-bottom: 2.5rem; }
+.header .back { font-family: var(--heading-font); font-size: 0.85rem; display: inline-block; margin-bottom: 1.5rem; }
+.header .subtitle { font-family: var(--heading-font); font-size: 1.15rem; color: var(--text-2); margin-bottom: 0; max-width: 580px; }
+
+.figure { margin: 2rem 0; padding: 1.5rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.figure-wide { margin-left: -2rem; margin-right: -2rem; }
+.figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; line-height: 1.4; }
+.figure-label { font-weight: 600; color: var(--text); }
+
+.insight { background: var(--accent-light); border-left: 3px solid var(--accent); padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 4px 4px 0; }
+.insight p { margin: 0; }
+
+.controls { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); }
+.controls label { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; }
+
+.btn { font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600; padding: 0.45rem 1.1rem; border-radius: 5px; border: 1px solid var(--border); background: var(--fig-bg); color: var(--text); cursor: pointer; transition: background 0.15s, border-color 0.15s; user-select: none; }
+.btn:hover { border-color: var(--accent); background: var(--accent-light); }
+.btn.active { border-color: var(--accent); background: var(--accent); color: white; }
+
+svg text { font-family: var(--heading-font); }
+svg .axis text { font-size: 11px; fill: var(--text-2); }
+svg .axis line, svg .axis path { stroke: var(--border); }
+
+.tip { position: fixed; pointer-events: none; background: var(--text); color: white; font-family: var(--heading-font); font-size: 0.75rem; padding: 0.3rem 0.55rem; border-radius: 4px; opacity: 0; transition: opacity 0.12s; z-index: 10; white-space: nowrap; }
+
+.legend-row { display: flex; align-items: center; gap: 1.25rem; flex-wrap: wrap; margin-bottom: 0.75rem; font-family: var(--heading-font); font-size: 0.8rem; color: var(--text-2); }
+.legend-item { display: flex; align-items: center; gap: 0.35rem; }
+.legend-swatch { width: 14px; height: 14px; border-radius: 2px; flex-shrink: 0; }
+
+.next-link { margin-top: 4rem; padding-top: 2rem; border-top: 1px solid var(--border); font-family: var(--heading-font); font-size: 0.95rem; }
+
+/* Dashboard-specific styles */
+.master-toggle { display: flex; align-items: center; justify-content: center; gap: 0.75rem; padding: 0.75rem 1rem; background: #f0f4ff; border-radius: 8px; margin-bottom: 1rem; font-family: var(--heading-font); font-size: 0.9rem; }
+.master-toggle .toggle-label { font-weight: 600; color: var(--text); }
+.master-toggle .toggle-track { position: relative; width: 48px; height: 26px; background: #94a3b8; border-radius: 13px; cursor: pointer; transition: background 0.3s; flex-shrink: 0; }
+.master-toggle .toggle-track.mutant { background: #dc2626; }
+.master-toggle .toggle-thumb { position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; background: white; border-radius: 50%; transition: transform 0.3s; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+.master-toggle .toggle-track.mutant .toggle-thumb { transform: translateX(22px); }
+.master-toggle .status-wt { color: #16a34a; font-weight: 600; }
+.master-toggle .status-mut { color: #dc2626; font-weight: 600; }
+
+.panel-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; transition: all 0.4s ease; }
+.panel { background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px; cursor: pointer; transition: all 0.4s ease; position: relative; overflow: hidden; }
+.panel:hover { border-color: var(--accent); box-shadow: 0 2px 8px rgba(37,99,235,0.12); }
+.panel-title { font-family: var(--heading-font); font-size: 0.75rem; font-weight: 700; color: var(--text); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.03em; }
+.panel.expanded { grid-column: 1 / -1; grid-row: 1 / -1; z-index: 2; padding: 16px; }
+.panel.collapsed { opacity: 0.3; pointer-events: none; transform: scale(0.95); }
+.panel-back { display: none; font-family: var(--heading-font); font-size: 0.75rem; color: var(--accent); cursor: pointer; margin-bottom: 8px; border: none; background: none; padding: 0; }
+.panel-back:hover { text-decoration: underline; }
+.panel.expanded .panel-back { display: inline-block; }
+
+.summary-table { width: 100%; border-collapse: collapse; font-family: var(--heading-font); font-size: 0.8rem; }
+.summary-table th { background: #f8fafc; padding: 0.5rem 0.6rem; text-align: left; font-weight: 700; border-bottom: 2px solid var(--border); color: var(--text); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em; }
+.summary-table td { padding: 0.45rem 0.6rem; border-bottom: 1px solid var(--border); color: var(--text-2); }
+.summary-table tr:last-child td { border-bottom: none; }
+.dir-up { color: #dc2626; font-weight: 600; }
+.dir-down { color: #2563eb; font-weight: 600; }
+.dir-same { color: #6b7280; }
+
+@media (max-width: 640px) {
+  .figure-wide { margin-left: 0; margin-right: 0; }
+  h1 { font-size: 1.75rem; }
+  .panel-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<div class="article">
+
+  <header class="header">
+    <a class="back" href="index.html">&larr; Bioinformatics Visualization</a>
+    <h1>Gene Portrait</h1>
+    <p class="subtitle">Everything at once — what does the complete multi-dimensional portrait of TP53/CDKN1A look like?</p>
+  </header>
+
+  <p>
+    Every previous explainer in this series examined one dimension of the TP53/CDKN1A axis: expression changes, mutation landscapes, pathway wiring, epigenetic marks, survival outcomes. Each answered a narrow question. But a gene is not a single measurement. It is a composite of all these dimensions, viewed together.
+  </p>
+  <p>
+    This final explainer assembles six key views into a single integrated dashboard. A master toggle switches between TP53-wildtype and TP53-R175H mutant states, and every panel updates simultaneously. The result is a <em>gene portrait</em> — a compact visual summary of how one mutation reshapes an entire biological system.
+  </p>
+
+  <h2>The Dashboard</h2>
+
+  <p>
+    Six panels. One toggle. Click any panel to expand it for detail, or toggle TP53 status to watch all dimensions shift in concert. This is the overview+detail pattern: start with the gestalt, drill into the specifics.
+  </p>
+
+  <div class="figure figure-wide" id="fig-dashboard">
+    <div class="master-toggle">
+      <span class="toggle-label">TP53 Status:</span>
+      <span class="status-wt" id="label-wt">Wildtype</span>
+      <div class="toggle-track" id="master-toggle-track">
+        <div class="toggle-thumb"></div>
+      </div>
+      <span class="status-mut" id="label-mut" style="opacity:0.4">R175H Mutant</span>
+    </div>
+    <div class="panel-grid" id="panel-grid">
+      <div class="panel" data-panel="expression">
+        <button class="panel-back">&larr; Back to overview</button>
+        <div class="panel-title">Expression</div>
+        <div class="panel-svg"></div>
+      </div>
+      <div class="panel" data-panel="mutations">
+        <button class="panel-back">&larr; Back to overview</button>
+        <div class="panel-title">Mutations</div>
+        <div class="panel-svg"></div>
+      </div>
+      <div class="panel" data-panel="pathway">
+        <button class="panel-back">&larr; Back to overview</button>
+        <div class="panel-title">Pathway</div>
+        <div class="panel-svg"></div>
+      </div>
+      <div class="panel" data-panel="methylation">
+        <button class="panel-back">&larr; Back to overview</button>
+        <div class="panel-title">Methylation</div>
+        <div class="panel-svg"></div>
+      </div>
+      <div class="panel" data-panel="survival">
+        <button class="panel-back">&larr; Back to overview</button>
+        <div class="panel-title">Survival</div>
+        <div class="panel-svg"></div>
+      </div>
+      <div class="panel" data-panel="waterfall">
+        <button class="panel-back">&larr; Back to overview</button>
+        <div class="panel-title">Waterfall</div>
+        <div class="panel-svg"></div>
+      </div>
+    </div>
+    <div class="figure-caption"><span class="figure-label">Figure 1.</span> The gene portrait dashboard. Six dimensions of the TP53/CDKN1A axis rendered as compact panels. Toggle TP53 status to see all panels animate simultaneously. Click any panel to expand it.</div>
+  </div>
+
+  <div class="insight">
+    <p><strong>Reading the portrait.</strong> In wildtype, the system is coherent: TP53 activates CDKN1A, the promoter is unmethylated, expression is high, and patients survive longer. Toggle to R175H mutant and watch the cascade: CDKN1A expression drops, methylation rises, the pathway goes dark, and the survival curves separate.</p>
+  </div>
+
+  <h2>Expanded Panel View</h2>
+
+  <p>
+    The dashboard above supports an overview+detail interaction. Click any panel and it smoothly expands to fill the full figure width while the others fade and shrink. This is a common pattern in analytical dashboards: maintain spatial context while giving one view room to breathe. The expanded view below shows the same mechanism — click any panel, then use the "Back to overview" button to return to the grid.
+  </p>
+
+  <p>
+    Each expanded view reveals details that the miniature hides: axis labels, individual data points, gene names. The transition preserves the user's mental model of where each dimension lives in the grid.
+  </p>
+
+  <h2>Evidence Summary</h2>
+
+  <p>
+    The table below distills the portrait into numbers. Each row is one dimension, comparing the TP53-wildtype and R175H-mutant states. The "Direction" column encodes whether the mutant value is higher or lower, and the p-value indicates statistical confidence from the synthetic cohort.
+  </p>
+
+  <div class="figure figure-wide" id="fig-table">
+    <div id="summary-table-container"></div>
+    <div class="figure-caption"><span class="figure-label">Figure 3.</span> Evidence summary across all dimensions. Each row compares a measurement between TP53-wildtype and TP53-R175H mutant states. Color coding: <span style="color:#dc2626;font-weight:600">red</span> indicates an increase in the mutant, <span style="color:#2563eb;font-weight:600">blue</span> a decrease.</div>
+  </div>
+
+  <div class="insight">
+    <p><strong>Convergent evidence.</strong> No single measurement is definitive. But when expression, methylation, mutation, pathway activity, and survival all point the same direction, the biological story becomes compelling. This is the power of the multi-dimensional portrait.</p>
+  </div>
+
+  <h2>From Heatmaps to Portraits</h2>
+
+  <p>
+    This series began with a heatmap and dendrogram (<a href="01-heatmap-dendrogram.html">explainer 01</a>), the simplest way to see structure in gene expression. Each subsequent explainer added a dimension: MA plots for fold changes, volcano plots for significance, dimensionality reduction for sample relationships, genome browsers for genomic context, circos plots for structural variants, survival curves for clinical outcomes, dot plots for cell-type specificity, lollipop plots for mutation positions, oncoprints for alteration landscapes, methylation for epigenetics, ChIP-seq for binding, Manhattan plots for association, pathway diagrams for biological wiring, PPI networks for protein interactions, multi-omics heatmaps for integration, waterfall plots for patient ranking, and forest plots for effect estimation.
+  </p>
+  <p>
+    Each visualization answered a different question about the same biological system. Together, from heatmaps (01) through this dashboard (19), they form the visual vocabulary of modern bioinformatics — the grammar by which we read genomes, understand disease, and communicate biological discovery.
+  </p>
+
+  <div class="next-link">
+    <a href="index.html">&larr; Back to index</a>
+  </div>
+
+</div>
+
+<div class="tip" id="tip"></div>
+
+<script>
+(function() {
+  "use strict";
+
+  // --- PRNG: mulberry32 ---
+  function mulberry32(seed) {
+    return function() {
+      seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+      var t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+  var rng = mulberry32(20260411);
+  function rnorm(mu, sd) {
+    var u1 = rng(), u2 = rng();
+    return mu + sd * Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+  }
+
+  // --- State ---
+  var isMutant = false;
+  var expandedPanel = null;
+  var panels = {};
+  var tip = d3.select("#tip");
+
+  function showTip(ev, html) {
+    tip.html(html).style("opacity", 1)
+      .style("left", (ev.clientX + 12) + "px")
+      .style("top", (ev.clientY - 28) + "px");
+  }
+  function hideTip() { tip.style("opacity", 0); }
+
+  // --- Master Toggle ---
+  var toggleTrack = document.getElementById("master-toggle-track");
+  var labelWt = document.getElementById("label-wt");
+  var labelMut = document.getElementById("label-mut");
+
+  toggleTrack.addEventListener("click", function() {
+    isMutant = !isMutant;
+    toggleTrack.classList.toggle("mutant", isMutant);
+    labelWt.style.opacity = isMutant ? 0.4 : 1;
+    labelMut.style.opacity = isMutant ? 1 : 0.4;
+    updateAll();
+  });
+
+  // --- Panel expand/collapse ---
+  document.querySelectorAll(".panel").forEach(function(el) {
+    el.addEventListener("click", function(ev) {
+      if (ev.target.closest(".panel-back")) return;
+      if (expandedPanel) return;
+      expandPanel(el.dataset.panel);
+    });
+    el.querySelector(".panel-back").addEventListener("click", function(ev) {
+      ev.stopPropagation();
+      collapseAll();
+    });
+  });
+
+  function expandPanel(name) {
+    expandedPanel = name;
+    document.querySelectorAll(".panel").forEach(function(el) {
+      if (el.dataset.panel === name) {
+        el.classList.add("expanded");
+        el.classList.remove("collapsed");
+      } else {
+        el.classList.add("collapsed");
+        el.classList.remove("expanded");
+      }
+    });
+    // Redraw expanded panel at larger size
+    setTimeout(function() { drawPanel(name); }, 50);
+  }
+
+  function collapseAll() {
+    expandedPanel = null;
+    document.querySelectorAll(".panel").forEach(function(el) {
+      el.classList.remove("expanded", "collapsed");
+    });
+    setTimeout(function() { drawAll(); }, 50);
+  }
+
+  function getPanelSize(name) {
+    var container = document.querySelector('[data-panel="' + name + '"] .panel-svg');
+    var w = container.clientWidth || 200;
+    var isExp = expandedPanel === name;
+    var h = isExp ? 280 : 140;
+    return { w: w, h: h, expanded: isExp };
+  }
+
+  // ============================================================
+  // PANEL 1: Expression (mini volcano)
+  // ============================================================
+  function drawExpression() {
+    var name = "expression";
+    var dim = getPanelSize(name);
+    var container = d3.select('[data-panel="' + name + '"] .panel-svg');
+    container.selectAll("*").remove();
+
+    var m = dim.expanded ? {t:20, r:20, b:30, l:35} : {t:10, r:10, b:20, l:25};
+    var w = dim.w - m.l - m.r, h = dim.h - m.t - m.b;
+
+    var svg = container.append("svg").attr("width", dim.w).attr("height", dim.h);
+    var g = svg.append("g").attr("transform", "translate(" + m.l + "," + m.t + ")");
+
+    // Generate genes
+    var rng2 = mulberry32(100);
+    var genes = [];
+    for (var i = 0; i < 200; i++) {
+      var lfc = (rng2() - 0.5) * 6;
+      var pval = Math.pow(10, -rng2() * 8);
+      genes.push({ lfc: lfc, pval: pval, neg_log_p: -Math.log10(pval), name: "gene" + i });
+    }
+    // Add TP53 and CDKN1A
+    var cdkn1a_lfc = isMutant ? -2.1 : 1.8;
+    genes.push({ lfc: 0.3, pval: 0.6, neg_log_p: 0.22, name: "TP53", highlight: true, color: "#dc2626" });
+    genes.push({ lfc: cdkn1a_lfc, pval: 1e-6, neg_log_p: 6, name: "CDKN1A", highlight: true, color: "#2563eb" });
+
+    var x = d3.scaleLinear().domain([-4, 4]).range([0, w]);
+    var y = d3.scaleLinear().domain([0, 8]).range([h, 0]);
+
+    // Axes
+    if (dim.expanded) {
+      g.append("g").attr("class", "axis").attr("transform", "translate(0," + h + ")")
+        .call(d3.axisBottom(x).ticks(5).tickSize(-h)).selectAll(".tick line").attr("stroke-opacity", 0.1);
+      g.append("g").attr("class", "axis")
+        .call(d3.axisLeft(y).ticks(4).tickSize(-w)).selectAll(".tick line").attr("stroke-opacity", 0.1);
+      g.append("text").attr("x", w/2).attr("y", h + 26).attr("text-anchor", "middle").attr("font-size", 10).attr("fill", "#4a4a6a").text("log₂ fold change");
+      g.append("text").attr("transform", "rotate(-90)").attr("x", -h/2).attr("y", -28).attr("text-anchor", "middle").attr("font-size", 10).attr("fill", "#4a4a6a").text("-log₁₀(p)");
+    } else {
+      g.append("g").attr("class", "axis").attr("transform", "translate(0," + h + ")")
+        .call(d3.axisBottom(x).ticks(3).tickSize(0)).select(".domain").remove();
+      g.append("g").attr("class", "axis")
+        .call(d3.axisLeft(y).ticks(3).tickSize(0)).select(".domain").remove();
+    }
+
+    // Significance threshold
+    g.append("line").attr("x1", 0).attr("x2", w)
+      .attr("y1", y(-Math.log10(0.05))).attr("y2", y(-Math.log10(0.05)))
+      .attr("stroke", "#e2e2e8").attr("stroke-dasharray", "3,3");
+
+    // Background genes
+    g.selectAll(".bg-dot").data(genes.filter(function(d) { return !d.highlight; }))
+      .join("circle").attr("class", "bg-dot")
+      .attr("cx", function(d) { return x(Math.max(-4, Math.min(4, d.lfc))); })
+      .attr("cy", function(d) { return y(Math.min(8, d.neg_log_p)); })
+      .attr("r", dim.expanded ? 3 : 2)
+      .attr("fill", function(d) { return d.neg_log_p > 1.3 ? (d.lfc > 0 ? "#fca5a5" : "#93c5fd") : "#d1d5db"; })
+      .attr("opacity", 0.5);
+
+    // Highlighted genes
+    var hl = g.selectAll(".hl-dot").data(genes.filter(function(d) { return d.highlight; }))
+      .join("g").attr("class", "hl-dot");
+
+    hl.append("circle")
+      .attr("cx", function(d) { return x(Math.max(-4, Math.min(4, d.lfc))); })
+      .attr("cy", function(d) { return y(Math.min(8, d.neg_log_p)); })
+      .attr("r", dim.expanded ? 6 : 4)
+      .attr("fill", function(d) { return d.color; })
+      .attr("stroke", "white").attr("stroke-width", 1.5)
+      .on("mouseover", function(ev, d) { showTip(ev, d.name + ": LFC=" + d.lfc.toFixed(1)); })
+      .on("mouseout", hideTip);
+
+    hl.append("text")
+      .attr("x", function(d) { return x(Math.max(-4, Math.min(4, d.lfc))) + (dim.expanded ? 9 : 6); })
+      .attr("y", function(d) { return y(Math.min(8, d.neg_log_p)) + 3; })
+      .text(function(d) { return d.name; })
+      .attr("font-size", dim.expanded ? 11 : 8).attr("font-weight", 600)
+      .attr("fill", function(d) { return d.color; });
+
+    // Animate CDKN1A transition
+    hl.selectAll("circle").filter(function(d) { return d.name === "CDKN1A"; })
+      .transition().duration(600)
+      .attr("cx", function(d) { return x(Math.max(-4, Math.min(4, d.lfc))); });
+    hl.selectAll("text").filter(function(d) { return d.name === "CDKN1A"; })
+      .transition().duration(600)
+      .attr("x", function(d) { return x(Math.max(-4, Math.min(4, d.lfc))) + (dim.expanded ? 9 : 6); });
+  }
+
+  // ============================================================
+  // PANEL 2: Mutations (mini lollipop)
+  // ============================================================
+  function drawMutations() {
+    var name = "mutations";
+    var dim = getPanelSize(name);
+    var container = d3.select('[data-panel="' + name + '"] .panel-svg');
+    container.selectAll("*").remove();
+
+    var m = dim.expanded ? {t:20, r:20, b:30, l:35} : {t:10, r:10, b:16, l:10};
+    var w = dim.w - m.l - m.r, h = dim.h - m.t - m.b;
+
+    var svg = container.append("svg").attr("width", dim.w).attr("height", dim.h);
+    var g = svg.append("g").attr("transform", "translate(" + m.l + "," + m.t + ")");
+
+    var proteinLen = 393;
+    var x = d3.scaleLinear().domain([0, proteinLen]).range([0, w]);
+    var barH = dim.expanded ? 18 : 10;
+    var barY = h - barH;
+
+    // Protein bar
+    g.append("rect").attr("x", 0).attr("y", barY).attr("width", w).attr("height", barH)
+      .attr("fill", "#e2e8f0").attr("rx", 3);
+
+    // Domains
+    var domains = [
+      { name: "TAD", start: 1, end: 61, color: "#93c5fd" },
+      { name: "DBD", start: 102, end: 292, color: "#86efac" },
+      { name: "TET", start: 323, end: 356, color: "#fca5a5" }
+    ];
+    domains.forEach(function(d) {
+      g.append("rect").attr("x", x(d.start)).attr("y", barY).attr("width", x(d.end) - x(d.start))
+        .attr("height", barH).attr("fill", d.color).attr("rx", 2);
+      if (dim.expanded) {
+        g.append("text").attr("x", x((d.start + d.end) / 2)).attr("y", barY + barH / 2 + 4)
+          .attr("text-anchor", "middle").attr("font-size", 9).attr("fill", "#1a1a2e").text(d.name);
+      }
+    });
+
+    // Mutations
+    var muts = [
+      { pos: 175, label: "R175H", count: 8, hotspot: true },
+      { pos: 248, label: "R248W", count: 6, hotspot: true },
+      { pos: 273, label: "R273H", count: 5, hotspot: true },
+      { pos: 245, label: "G245S", count: 3, hotspot: false },
+      { pos: 249, label: "R249S", count: 3, hotspot: false },
+      { pos: 220, label: "Y220C", count: 2, hotspot: false },
+      { pos: 176, label: "C176F", count: 1, hotspot: false },
+      { pos: 158, label: "R158L", count: 2, hotspot: false }
+    ];
+
+    var yScale = d3.scaleLinear().domain([0, 10]).range([barY, dim.expanded ? 10 : 5]);
+
+    // Lollipop sticks
+    g.selectAll(".lol-stick").data(muts).join("line").attr("class", "lol-stick")
+      .attr("x1", function(d) { return x(d.pos); })
+      .attr("x2", function(d) { return x(d.pos); })
+      .attr("y1", barY)
+      .attr("y2", function(d) { return yScale(d.count); })
+      .attr("stroke", "#94a3b8").attr("stroke-width", 1);
+
+    // Lollipop heads
+    var headR = dim.expanded ? 5 : 3;
+    g.selectAll(".lol-head").data(muts).join("circle").attr("class", "lol-head")
+      .attr("cx", function(d) { return x(d.pos); })
+      .attr("cy", function(d) { return yScale(d.count); })
+      .attr("r", function(d) { return d.hotspot ? headR + 1.5 : headR; })
+      .attr("fill", function(d) {
+        if (d.label === "R175H") return isMutant ? "#dc2626" : "#f87171";
+        return d.hotspot ? "#f97316" : "#94a3b8";
+      })
+      .attr("stroke", "white").attr("stroke-width", 1)
+      .on("mouseover", function(ev, d) { showTip(ev, d.label + " (n=" + d.count + ")"); })
+      .on("mouseout", hideTip);
+
+    // R175H label
+    var r175 = muts[0];
+    g.append("text").attr("x", x(r175.pos)).attr("y", yScale(r175.count) - (dim.expanded ? 10 : 6))
+      .attr("text-anchor", "middle").attr("font-size", dim.expanded ? 11 : 7).attr("font-weight", 700)
+      .attr("fill", isMutant ? "#dc2626" : "#f87171").text("R175H");
+
+    if (dim.expanded) {
+      g.append("g").attr("class", "axis").attr("transform", "translate(0," + (barY + barH + 2) + ")")
+        .call(d3.axisBottom(x).ticks(5).tickSize(0).tickFormat(function(d) { return d; }))
+        .select(".domain").remove();
+      g.append("text").attr("x", w/2).attr("y", h + 16).attr("text-anchor", "middle")
+        .attr("font-size", 10).attr("fill", "#4a4a6a").text("Amino acid position");
+    }
+
+    // Highlight ring on R175H in mutant mode
+    if (isMutant) {
+      g.append("circle").attr("cx", x(175)).attr("cy", yScale(8))
+        .attr("r", headR + 5).attr("fill", "none")
+        .attr("stroke", "#dc2626").attr("stroke-width", 2).attr("stroke-dasharray", "3,2")
+        .attr("opacity", 0).transition().duration(400).attr("opacity", 0.7);
+    }
+  }
+
+  // ============================================================
+  // PANEL 3: Pathway (mini network)
+  // ============================================================
+  function drawPathway() {
+    var name = "pathway";
+    var dim = getPanelSize(name);
+    var container = d3.select('[data-panel="' + name + '"] .panel-svg');
+    container.selectAll("*").remove();
+
+    var svg = container.append("svg").attr("width", dim.w).attr("height", dim.h);
+    var g = svg.append("g");
+
+    var cx = dim.w / 2, cy = dim.h / 2;
+    var spread = dim.expanded ? 1.3 : 0.85;
+
+    var nodes = [
+      { id: "TP53", x: cx, y: cy - 35 * spread, active_wt: true, active_mut: false },
+      { id: "CDKN1A", x: cx + 60 * spread, y: cy + 15 * spread, active_wt: true, active_mut: false },
+      { id: "BAX", x: cx + 40 * spread, y: cy + 50 * spread, active_wt: true, active_mut: false },
+      { id: "MDM2", x: cx - 60 * spread, y: cy - 10 * spread, active_wt: true, active_mut: true },
+      { id: "BCL2", x: cx - 40 * spread, y: cy + 50 * spread, active_wt: false, active_mut: true },
+      { id: "GADD45", x: cx - 10 * spread, y: cy + 40 * spread, active_wt: true, active_mut: false }
+    ];
+
+    var edges = [
+      { source: "TP53", target: "CDKN1A", type: "activate" },
+      { source: "TP53", target: "BAX", type: "activate" },
+      { source: "TP53", target: "GADD45", type: "activate" },
+      { source: "MDM2", target: "TP53", type: "inhibit" },
+      { source: "BCL2", target: "BAX", type: "inhibit" }
+    ];
+
+    var nodeMap = {};
+    nodes.forEach(function(n) { nodeMap[n.id] = n; });
+
+    // Draw edges
+    edges.forEach(function(e) {
+      var s = nodeMap[e.source], t = nodeMap[e.target];
+      var edgeActive = isMutant ? s.active_mut : s.active_wt;
+      g.append("line")
+        .attr("x1", s.x).attr("y1", s.y).attr("x2", t.x).attr("y2", t.y)
+        .attr("stroke", edgeActive ? (e.type === "inhibit" ? "#dc2626" : "#16a34a") : "#d1d5db")
+        .attr("stroke-width", edgeActive ? 2 : 1)
+        .attr("stroke-opacity", edgeActive ? 0.8 : 0.3)
+        .attr("marker-end", "none");
+
+      // Arrow / inhibitor
+      var dx = t.x - s.x, dy = t.y - s.y;
+      var len = Math.sqrt(dx * dx + dy * dy);
+      var nx = dx / len, ny = dy / len;
+      var nodeR = dim.expanded ? 22 : 15;
+      var endX = t.x - nx * nodeR, endY = t.y - ny * nodeR;
+
+      if (e.type === "inhibit") {
+        // Flat bar for inhibition
+        g.append("line")
+          .attr("x1", endX - ny * 5).attr("y1", endY + nx * 5)
+          .attr("x2", endX + ny * 5).attr("y2", endY - nx * 5)
+          .attr("stroke", edgeActive ? "#dc2626" : "#d1d5db")
+          .attr("stroke-width", 2);
+      } else {
+        // Arrow
+        var ax = endX - nx * 6 - ny * 4, ay = endY - ny * 6 + nx * 4;
+        var bx = endX - nx * 6 + ny * 4, by = endY - ny * 6 - nx * 4;
+        g.append("polygon")
+          .attr("points", endX + "," + endY + " " + ax + "," + ay + " " + bx + "," + by)
+          .attr("fill", edgeActive ? "#16a34a" : "#d1d5db")
+          .attr("opacity", edgeActive ? 0.8 : 0.3);
+      }
+    });
+
+    // Draw nodes
+    var nodeR = dim.expanded ? 22 : 15;
+    var ng = g.selectAll(".node-g").data(nodes).join("g").attr("class", "node-g")
+      .attr("transform", function(d) { return "translate(" + d.x + "," + d.y + ")"; });
+
+    ng.append("circle").attr("r", nodeR)
+      .attr("fill", function(d) {
+        var active = isMutant ? d.active_mut : d.active_wt;
+        if (d.id === "TP53") return isMutant ? "#fca5a5" : "#86efac";
+        return active ? "#bbf7d0" : "#f1f5f9";
+      })
+      .attr("stroke", function(d) {
+        var active = isMutant ? d.active_mut : d.active_wt;
+        if (d.id === "TP53") return isMutant ? "#dc2626" : "#16a34a";
+        return active ? "#16a34a" : "#cbd5e1";
+      })
+      .attr("stroke-width", function(d) { return d.id === "TP53" ? 2.5 : 1.5; })
+      .on("mouseover", function(ev, d) {
+        var active = isMutant ? d.active_mut : d.active_wt;
+        showTip(ev, d.id + ": " + (active ? "Active" : "Inactive"));
+      })
+      .on("mouseout", hideTip);
+
+    ng.append("text").attr("text-anchor", "middle").attr("dy", "0.35em")
+      .attr("font-size", dim.expanded ? 10 : 7).attr("font-weight", 700)
+      .attr("fill", function(d) {
+        var active = isMutant ? d.active_mut : d.active_wt;
+        return active ? "#1a1a2e" : "#94a3b8";
+      })
+      .text(function(d) { return d.id; });
+
+    // Mutant X on TP53
+    if (isMutant) {
+      var tp53 = nodeMap["TP53"];
+      var xSize = dim.expanded ? 8 : 5;
+      g.append("line").attr("x1", tp53.x - xSize).attr("y1", tp53.y - xSize)
+        .attr("x2", tp53.x + xSize).attr("y2", tp53.y + xSize)
+        .attr("stroke", "#dc2626").attr("stroke-width", 3);
+      g.append("line").attr("x1", tp53.x + xSize).attr("y1", tp53.y - xSize)
+        .attr("x2", tp53.x - xSize).attr("y2", tp53.y + xSize)
+        .attr("stroke", "#dc2626").attr("stroke-width", 3);
+    }
+  }
+
+  // ============================================================
+  // PANEL 4: Methylation (mini CpG plot)
+  // ============================================================
+  function drawMethylation() {
+    var name = "methylation";
+    var dim = getPanelSize(name);
+    var container = d3.select('[data-panel="' + name + '"] .panel-svg');
+    container.selectAll("*").remove();
+
+    var m = dim.expanded ? {t:20, r:20, b:30, l:35} : {t:10, r:10, b:16, l:22};
+    var w = dim.w - m.l - m.r, h = dim.h - m.t - m.b;
+
+    var svg = container.append("svg").attr("width", dim.w).attr("height", dim.h);
+    var g = svg.append("g").attr("transform", "translate(" + m.l + "," + m.t + ")");
+
+    // CpG sites along CDKN1A promoter
+    var rng3 = mulberry32(333);
+    var cpgs = [];
+    for (var i = 0; i < 12; i++) {
+      var pos = -800 + i * 120 + Math.round((rng3() - 0.5) * 40);
+      var beta_wt = 0.1 + rng3() * 0.15;
+      var beta_mut = 0.4 + rng3() * 0.35;
+      cpgs.push({ pos: pos, beta_wt: beta_wt, beta_mut: beta_mut });
+    }
+
+    var x = d3.scaleLinear().domain([-850, 650]).range([0, w]);
+    var y = d3.scaleLinear().domain([0, 1]).range([h, 0]);
+
+    // TSS marker
+    g.append("line").attr("x1", x(0)).attr("x2", x(0)).attr("y1", 0).attr("y2", h)
+      .attr("stroke", "#e2e2e8").attr("stroke-dasharray", "3,3");
+    g.append("text").attr("x", x(0)).attr("y", dim.expanded ? -6 : -2)
+      .attr("text-anchor", "middle").attr("font-size", dim.expanded ? 9 : 6)
+      .attr("fill", "#94a3b8").text("TSS");
+
+    if (dim.expanded) {
+      g.append("g").attr("class", "axis").attr("transform", "translate(0," + h + ")")
+        .call(d3.axisBottom(x).ticks(5).tickSize(0).tickFormat(function(d) { return d > 0 ? "+" + d : d; }))
+        .select(".domain").remove();
+      g.append("g").attr("class", "axis")
+        .call(d3.axisLeft(y).ticks(4).tickSize(-w)).selectAll(".tick line").attr("stroke-opacity", 0.1);
+      g.append("text").attr("x", w/2).attr("y", h + 26).attr("text-anchor", "middle").attr("font-size", 10).attr("fill", "#4a4a6a").text("Position relative to TSS (bp)");
+      g.append("text").attr("transform", "rotate(-90)").attr("x", -h/2).attr("y", -28).attr("text-anchor", "middle").attr("font-size", 10).attr("fill", "#4a4a6a").text("Beta value");
+    } else {
+      g.append("g").attr("class", "axis").attr("transform", "translate(0," + h + ")")
+        .call(d3.axisBottom(x).ticks(3).tickSize(0)).select(".domain").remove();
+      g.append("g").attr("class", "axis")
+        .call(d3.axisLeft(y).ticks(3).tickSize(0)).select(".domain").remove();
+    }
+
+    var dotR = dim.expanded ? 5 : 3.5;
+
+    g.selectAll(".cpg-dot").data(cpgs).join("circle").attr("class", "cpg-dot")
+      .attr("cx", function(d) { return x(d.pos); })
+      .attr("r", dotR)
+      .attr("stroke", "white").attr("stroke-width", 1)
+      .on("mouseover", function(ev, d) {
+        var beta = isMutant ? d.beta_mut : d.beta_wt;
+        showTip(ev, "CpG " + d.pos + "bp: β=" + beta.toFixed(2));
+      })
+      .on("mouseout", hideTip)
+      .transition().duration(600)
+      .attr("cy", function(d) { return y(isMutant ? d.beta_mut : d.beta_wt); })
+      .attr("fill", function(d) {
+        var beta = isMutant ? d.beta_mut : d.beta_wt;
+        return d3.interpolateRgb("#2563eb", "#dc2626")(beta);
+      });
+  }
+
+  // ============================================================
+  // PANEL 5: Survival (mini KM curves)
+  // ============================================================
+  function drawSurvival() {
+    var name = "survival";
+    var dim = getPanelSize(name);
+    var container = d3.select('[data-panel="' + name + '"] .panel-svg');
+    container.selectAll("*").remove();
+
+    var m = dim.expanded ? {t:20, r:20, b:30, l:40} : {t:10, r:10, b:16, l:25};
+    var w = dim.w - m.l - m.r, h = dim.h - m.t - m.b;
+
+    var svg = container.append("svg").attr("width", dim.w).attr("height", dim.h);
+    var g = svg.append("g").attr("transform", "translate(" + m.l + "," + m.t + ")");
+
+    // Generate KM data
+    function generateKM(seed, medianSurvival) {
+      var r = mulberry32(seed);
+      var n = 50, alive = n;
+      var steps = [{t: 0, s: 1.0}];
+      for (var t = 1; t <= 60; t++) {
+        var hazard = 0.5 / medianSurvival;
+        var deaths = 0;
+        for (var j = 0; j < alive; j++) {
+          if (r() < hazard) deaths++;
+        }
+        alive -= deaths;
+        if (alive < 0) alive = 0;
+        steps.push({t: t, s: alive / n});
+        if (alive === 0) break;
+      }
+      return steps;
+    }
+
+    var wtCurve = generateKM(501, 40);
+    var mutCurve = generateKM(502, 20);
+
+    var x = d3.scaleLinear().domain([0, 60]).range([0, w]);
+    var y = d3.scaleLinear().domain([0, 1]).range([h, 0]);
+
+    if (dim.expanded) {
+      g.append("g").attr("class", "axis").attr("transform", "translate(0," + h + ")")
+        .call(d3.axisBottom(x).ticks(5).tickSize(-h)).selectAll(".tick line").attr("stroke-opacity", 0.1);
+      g.append("g").attr("class", "axis")
+        .call(d3.axisLeft(y).ticks(4).tickSize(-w).tickFormat(d3.format(".0%"))).selectAll(".tick line").attr("stroke-opacity", 0.1);
+      g.append("text").attr("x", w/2).attr("y", h + 26).attr("text-anchor", "middle").attr("font-size", 10).attr("fill", "#4a4a6a").text("Months");
+      g.append("text").attr("transform", "rotate(-90)").attr("x", -h/2).attr("y", -32).attr("text-anchor", "middle").attr("font-size", 10).attr("fill", "#4a4a6a").text("Survival");
+    } else {
+      g.append("g").attr("class", "axis").attr("transform", "translate(0," + h + ")")
+        .call(d3.axisBottom(x).ticks(3).tickSize(0)).select(".domain").remove();
+      g.append("g").attr("class", "axis")
+        .call(d3.axisLeft(y).ticks(3).tickSize(0).tickFormat(d3.format(".0%"))).select(".domain").remove();
+    }
+
+    // Step line generator
+    var lineGen = d3.line()
+      .x(function(d) { return x(d.t); })
+      .y(function(d) { return y(d.s); })
+      .curve(d3.curveStepAfter);
+
+    // WT curve
+    var wtOpacity = isMutant ? 0.6 : 1;
+    g.append("path").datum(wtCurve)
+      .attr("d", lineGen)
+      .attr("fill", "none").attr("stroke", "#16a34a").attr("stroke-width", dim.expanded ? 2.5 : 1.5)
+      .attr("opacity", wtOpacity);
+
+    // Mutant curve
+    var mutOpacity = isMutant ? 1 : 0.6;
+    g.append("path").datum(mutCurve)
+      .attr("d", lineGen)
+      .attr("fill", "none").attr("stroke", "#dc2626").attr("stroke-width", dim.expanded ? 2.5 : 1.5)
+      .attr("opacity", mutOpacity);
+
+    // Highlight active curve
+    if (isMutant) {
+      g.append("path").datum(mutCurve).attr("d", lineGen)
+        .attr("fill", "none").attr("stroke", "#dc2626").attr("stroke-width", dim.expanded ? 5 : 3)
+        .attr("opacity", 0.15);
+    } else {
+      g.append("path").datum(wtCurve).attr("d", lineGen)
+        .attr("fill", "none").attr("stroke", "#16a34a").attr("stroke-width", dim.expanded ? 5 : 3)
+        .attr("opacity", 0.15);
+    }
+
+    // Legend
+    var legY = dim.expanded ? 10 : 4;
+    var legX = dim.expanded ? w - 80 : w - 55;
+    var legSize = dim.expanded ? 9 : 7;
+    [{ label: "WT", color: "#16a34a" }, { label: "Mutant", color: "#dc2626" }].forEach(function(d, i) {
+      g.append("line").attr("x1", legX).attr("x2", legX + 12).attr("y1", legY + i * 14).attr("y2", legY + i * 14)
+        .attr("stroke", d.color).attr("stroke-width", 2);
+      g.append("text").attr("x", legX + 16).attr("y", legY + i * 14 + 3)
+        .attr("font-size", legSize).attr("fill", "#4a4a6a").text(d.label);
+    });
+  }
+
+  // ============================================================
+  // PANEL 6: Waterfall (mini waterfall)
+  // ============================================================
+  function drawWaterfall() {
+    var name = "waterfall";
+    var dim = getPanelSize(name);
+    var container = d3.select('[data-panel="' + name + '"] .panel-svg');
+    container.selectAll("*").remove();
+
+    var m = dim.expanded ? {t:20, r:20, b:30, l:35} : {t:10, r:10, b:16, l:22};
+    var w = dim.w - m.l - m.r, h = dim.h - m.t - m.b;
+
+    var svg = container.append("svg").attr("width", dim.w).attr("height", dim.h);
+    var g = svg.append("g").attr("transform", "translate(" + m.l + "," + m.t + ")");
+
+    // Generate patient CDKN1A expression
+    var rng4 = mulberry32(444);
+    var patients = [];
+    for (var i = 0; i < 60; i++) {
+      var tp53mut = rng4() < 0.4;
+      var expr;
+      if (tp53mut) {
+        expr = rnorm(-1.2, 1.0);
+      } else {
+        expr = rnorm(0.8, 0.8);
+      }
+      patients.push({ id: i, expr: expr, tp53_mut: tp53mut });
+    }
+    patients.sort(function(a, b) { return b.expr - a.expr; });
+
+    var x = d3.scaleBand().domain(patients.map(function(d, i) { return i; })).range([0, w]).padding(0.1);
+    var y = d3.scaleLinear().domain([-4, 4]).range([h, 0]);
+
+    // Zero line
+    g.append("line").attr("x1", 0).attr("x2", w).attr("y1", y(0)).attr("y2", y(0))
+      .attr("stroke", "#94a3b8").attr("stroke-width", 0.5);
+
+    // Bars
+    g.selectAll(".wf-bar").data(patients).join("rect").attr("class", "wf-bar")
+      .attr("x", function(d, i) { return x(i); })
+      .attr("width", x.bandwidth())
+      .attr("y", function(d) { return d.expr >= 0 ? y(d.expr) : y(0); })
+      .attr("height", function(d) { return Math.abs(y(0) - y(d.expr)); })
+      .attr("fill", function(d) {
+        if (isMutant) {
+          return d.tp53_mut ? "#dc2626" : "#94a3b8";
+        }
+        return d.tp53_mut ? "#fca5a5" : "#2563eb";
+      })
+      .attr("opacity", function(d) {
+        if (isMutant) return d.tp53_mut ? 1 : 0.4;
+        return d.tp53_mut ? 0.6 : 1;
+      })
+      .on("mouseover", function(ev, d) {
+        showTip(ev, "CDKN1A: " + d.expr.toFixed(2) + " | TP53: " + (d.tp53_mut ? "Mut" : "WT"));
+      })
+      .on("mouseout", hideTip);
+
+    if (dim.expanded) {
+      g.append("g").attr("class", "axis")
+        .call(d3.axisLeft(y).ticks(4).tickSize(-w)).selectAll(".tick line").attr("stroke-opacity", 0.1);
+      g.append("text").attr("transform", "rotate(-90)").attr("x", -h/2).attr("y", -28)
+        .attr("text-anchor", "middle").attr("font-size", 10).attr("fill", "#4a4a6a").text("CDKN1A expression (z-score)");
+      g.append("text").attr("x", w/2).attr("y", h + 24).attr("text-anchor", "middle")
+        .attr("font-size", 10).attr("fill", "#4a4a6a").text("Patients (ranked)");
+
+      // Legend
+      var lx = w - 90, ly = 6;
+      [{ label: "TP53-WT", color: "#2563eb" }, { label: "TP53-Mut", color: "#dc2626" }].forEach(function(d, i) {
+        g.append("rect").attr("x", lx).attr("y", ly + i * 16).attr("width", 10).attr("height", 10)
+          .attr("fill", d.color).attr("rx", 1);
+        g.append("text").attr("x", lx + 14).attr("y", ly + i * 16 + 9)
+          .attr("font-size", 9).attr("fill", "#4a4a6a").text(d.label);
+      });
+    } else {
+      g.append("g").attr("class", "axis")
+        .call(d3.axisLeft(y).ticks(3).tickSize(0)).select(".domain").remove();
+    }
+  }
+
+  // ============================================================
+  // Summary Table
+  // ============================================================
+  function drawSummaryTable() {
+    var container = document.getElementById("summary-table-container");
+    var rows = [
+      { dim: "Expression", metric: "CDKN1A log₂FC", wt: "+1.8", mut: "-2.1", dir: "down", p: "1.2e-06" },
+      { dim: "Methylation", metric: "Promoter mean β", wt: "0.14", mut: "0.62", dir: "up", p: "3.4e-05" },
+      { dim: "Mutation", metric: "TP53 R175H freq", wt: "0%", mut: "100%", dir: "up", p: "—" },
+      { dim: "Pathway", metric: "Active targets", wt: "4/5", mut: "1/5", dir: "down", p: "4.7e-04" },
+      { dim: "Survival", metric: "Median OS (mo)", wt: "42", mut: "21", dir: "down", p: "8.1e-03" },
+      { dim: "Waterfall", metric: "CDKN1A z-score", wt: "+0.8", mut: "-1.2", dir: "down", p: "2.9e-05" }
+    ];
+
+    var html = '<table class="summary-table">';
+    html += '<thead><tr><th>Dimension</th><th>Metric</th><th>TP53-WT</th><th>TP53-Mut</th><th>Direction</th><th>p-value</th></tr></thead>';
+    html += '<tbody>';
+    rows.forEach(function(r) {
+      var dirClass = r.dir === "up" ? "dir-up" : r.dir === "down" ? "dir-down" : "dir-same";
+      var arrow = r.dir === "up" ? "&#9650;" : r.dir === "down" ? "&#9660;" : "—";
+      html += '<tr>';
+      html += '<td style="font-weight:600;color:#1a1a2e">' + r.dim + '</td>';
+      html += '<td>' + r.metric + '</td>';
+      html += '<td>' + r.wt + '</td>';
+      html += '<td>' + r.mut + '</td>';
+      html += '<td class="' + dirClass + '">' + arrow + ' ' + r.dir.charAt(0).toUpperCase() + r.dir.slice(1) + '</td>';
+      html += '<td style="font-family:\'Source Code Pro\',monospace;font-size:0.75rem">' + r.p + '</td>';
+      html += '</tr>';
+    });
+    html += '</tbody></table>';
+    container.innerHTML = html;
+  }
+
+  // ============================================================
+  // Draw / Update
+  // ============================================================
+  var drawFns = {
+    expression: drawExpression,
+    mutations: drawMutations,
+    pathway: drawPathway,
+    methylation: drawMethylation,
+    survival: drawSurvival,
+    waterfall: drawWaterfall
+  };
+
+  function drawPanel(name) {
+    if (drawFns[name]) drawFns[name]();
+  }
+
+  function drawAll() {
+    Object.keys(drawFns).forEach(function(name) { drawFns[name](); });
+  }
+
+  function updateAll() {
+    if (expandedPanel) {
+      drawPanel(expandedPanel);
+    } else {
+      drawAll();
+    }
+  }
+
+  // Initial draw
+  drawAll();
+  drawSummaryTable();
+
+  // Redraw on resize
+  var resizeTimer;
+  window.addEventListener("resize", function() {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(function() { updateAll(); }, 150);
+  });
+
+})();
+</script>
+
+</body>
+</html>

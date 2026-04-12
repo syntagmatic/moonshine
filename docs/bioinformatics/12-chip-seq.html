@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ChIP-seq Peak Visualization — Bioinformatics Visualization</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --article-width: 740px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem;
+  --line-height: 1.6;
+  --text: #1a1a2e;
+  --text-2: #4a4a6a;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --bg: #fafafa;
+  --fig-bg: #ffffff;
+  --border: #e2e2e8;
+}
+
+body { font-family: var(--body-font); font-size: var(--body-size); line-height: var(--line-height); color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased; }
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
+h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+p { margin: 0 0 1rem; }
+a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+a:hover { color: #1d4ed8; }
+
+.header { padding: 4rem 0 2rem; border-bottom: 1px solid var(--border); margin-bottom: 2.5rem; }
+.header .back { font-family: var(--heading-font); font-size: 0.85rem; display: inline-block; margin-bottom: 1.5rem; }
+.header .subtitle { font-family: var(--heading-font); font-size: 1.15rem; color: var(--text-2); margin-bottom: 0; max-width: 580px; }
+
+.figure { margin: 2rem 0; padding: 1.5rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.figure-wide { margin-left: -2rem; margin-right: -2rem; }
+.figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; line-height: 1.4; }
+.figure-label { font-weight: 600; color: var(--text); }
+
+.insight { background: var(--accent-light); border-left: 3px solid var(--accent); padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 4px 4px 0; }
+.insight p { margin: 0; }
+
+.controls { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); }
+.controls label { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; }
+.controls input[type="range"] { width: 140px; accent-color: var(--accent); }
+
+.btn { font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600; padding: 0.45rem 1.1rem; border-radius: 5px; border: 1px solid var(--border); background: var(--fig-bg); color: var(--text); cursor: pointer; transition: background 0.15s, border-color 0.15s; user-select: none; }
+.btn:hover { border-color: var(--accent); background: var(--accent-light); }
+.btn.active { border-color: var(--accent); background: var(--accent); color: white; }
+
+.track-toggle { display: flex; align-items: center; gap: 0.4rem; font-family: var(--heading-font); font-size: 0.8rem; cursor: pointer; }
+.track-toggle input { accent-color: var(--accent); }
+
+svg text { font-family: var(--heading-font); }
+svg .axis text { font-size: 11px; fill: var(--text-2); }
+svg .axis line, svg .axis path { stroke: var(--border); }
+svg .grid line { stroke: var(--border); stroke-dasharray: 2,3; }
+svg .grid path { stroke: none; }
+
+.tip { position: fixed; pointer-events: none; background: var(--text); color: white; font-family: var(--heading-font); font-size: 0.75rem; padding: 0.3rem 0.55rem; border-radius: 4px; opacity: 0; transition: opacity 0.12s; z-index: 10; white-space: nowrap; }
+
+.stat-box { font-family: var(--heading-font); font-size: 0.85rem; padding: 0.75rem 1rem; background: #f8f8fc; border-radius: 4px; margin-top: 0.75rem; }
+.stat-row { display: flex; justify-content: space-between; padding: 0.15rem 0; }
+.stat-label { color: var(--text-2); }
+.stat-val { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+.legend-row { display: flex; align-items: center; gap: 0.5rem; font-family: var(--heading-font); font-size: 0.8rem; margin-bottom: 0.25rem; }
+.legend-swatch { width: 14px; height: 14px; border-radius: 2px; flex-shrink: 0; }
+
+@media (max-width: 640px) { .figure-wide { margin-left: 0; margin-right: 0; } h1 { font-size: 1.75rem; } }
+</style>
+</head>
+<body>
+
+<div class="article">
+
+  <header class="header">
+    <a class="back" href="index.html">&larr; Bioinformatics Visualization</a>
+    <h1>ChIP-seq Peak Visualization</h1>
+    <p class="subtitle">Chromatin immunoprecipitation followed by sequencing: measuring where a protein binds the genome, and what happens when it can't.</p>
+  </header>
+
+  <p>The previous explainers asked which genes change expression, where they sit in the genome, and whether those changes predict survival. But gene expression is an <em>effect</em>. ChIP-seq asks about the <em>cause</em>: which transcription factors are physically bound to a gene's regulatory region, and are they still bound when mutated?</p>
+
+  <p>The technique works by crosslinking proteins to DNA, shearing the DNA into fragments, pulling down the protein of interest with an antibody, and sequencing the attached fragments. The result is a <strong>signal track</strong>: at each genomic position, a number reflecting how enriched that position is for the protein. Tall peaks mean strong binding.</p>
+
+  <p>Our question: <strong>TP53 is a transcription factor that binds the promoter of CDKN1A to activate it. The R175H mutation is the most common TP53 mutation in cancer. Can mutant TP53 still bind?</strong></p>
+
+  <h2>The Binding Evidence</h2>
+
+  <p>Below is a simulated ~10 kb window around the CDKN1A transcription start site. The blue track shows wildtype TP53 ChIP-seq signal; the red track shows the R175H mutant. In the wildtype, a sharp peak rises directly over the promoter, exactly where TP53 is expected to bind. In the mutant, the signal is flat noise.</p>
+
+  <div class="figure figure-wide" id="fig-overlay">
+    <div class="controls">
+      <label><input type="checkbox" id="show-wt" checked> <span style="color:#3b82f6; font-weight:600;">TP53-WT</span></label>
+      <label><input type="checkbox" id="show-mut" checked> <span style="color:#ef4444; font-weight:600;">TP53-R175H</span></label>
+    </div>
+    <div id="chip-overlay"></div>
+    <p class="figure-caption"><span class="figure-label">Figure 1.</span> ChIP-seq signal at the CDKN1A locus. <span style="color:#3b82f6">Blue</span>: wildtype TP53 shows a strong binding peak at the promoter. <span style="color:#ef4444">Red</span>: the R175H mutant shows no enrichment. Hover for position and signal value. The gene model below shows the exon/intron structure of CDKN1A.</p>
+  </div>
+
+  <div class="insight">
+    <p>This is the direct molecular evidence that R175H disrupts DNA binding. The mutation sits in TP53's DNA-binding domain and destabilizes its zinc-coordination structure. Without binding, TP53 cannot activate CDKN1A, and the cell loses a critical brake on proliferation.</p>
+  </div>
+
+  <h2>The Epigenetic Cascade</h2>
+
+  <p>Loss of TP53 binding doesn't just remove one signal. It triggers a cascade of chromatin changes. Activating histone marks disappear, and repressive marks accumulate. Below, four tracks are shown at the same locus. Toggle each track to see how the epigenetic landscape shifts from active to repressed.</p>
+
+  <div class="figure figure-wide" id="fig-histone">
+    <div class="controls" id="histone-controls"></div>
+    <div id="histone-tracks"></div>
+    <p class="figure-caption"><span class="figure-label">Figure 2.</span> Multiple ChIP-seq tracks at CDKN1A. <span style="color:#3b82f6">TP53 binding</span> is lost in the mutant. <span style="color:#22c55e">H3K4me3</span> (active promoter) is reduced. <span style="color:#f59e0b">H3K27ac</span> (active enhancer) disappears. <span style="color:#a855f7">H3K27me3</span> (repressive mark) accumulates. Toggle tracks on and off.</p>
+  </div>
+
+  <div class="insight">
+    <p>The epigenetic cascade explains why a single mutation has such outsized effects. Losing TP53 binding doesn't merely fail to activate CDKN1A; it allows repressive chromatin to spread across the locus, silencing the gene entirely and potentially affecting neighboring genes as well.</p>
+  </div>
+
+  <h2>Peak Calling</h2>
+
+  <p>Raw ChIP-seq signal is noisy. <strong>Peak calling</strong> is the computational step that distinguishes real binding events from background noise. A peak caller scans the signal, fits a statistical model, and assigns each candidate peak a significance score. Only peaks that exceed a threshold are called as real binding events.</p>
+
+  <p>Drag the threshold slider below. As you raise it, weaker peaks disappear. The TP53-WT peak at the CDKN1A promoter is strong and survives even stringent thresholds. The mutant's noise peaks vanish quickly. This illustrates why peak calling is essential: without it, you'd mistake noise for binding.</p>
+
+  <div class="figure figure-wide" id="fig-threshold">
+    <div class="controls">
+      <label>Significance threshold (-log<sub>10</sub> p): <input type="range" id="threshold-slider" min="0" max="10" value="2" step="0.1"> <span id="threshold-val" style="min-width: 4em; font-variant-numeric: tabular-nums;">2.0</span></label>
+    </div>
+    <div id="peak-calling"></div>
+    <div class="stat-box" id="peak-stats"></div>
+    <p class="figure-caption"><span class="figure-label">Figure 3.</span> Peak calling at varying thresholds. <span style="color:#3b82f6">Blue markers</span>: WT peaks. <span style="color:#ef4444">Red markers</span>: mutant peaks. Raise the threshold to see weak/spurious peaks disappear. The CDKN1A promoter peak in WT (marked with an arrow) survives even the highest threshold. The mutant never shows a significant peak there.</p>
+  </div>
+
+  <div class="insight">
+    <p>In practice, peak callers like MACS2 use a local background model and a Poisson test. The threshold is usually set at a false discovery rate (FDR) of 0.01 or 0.05. The result is a list of genomic coordinates where the protein binds, which can be intersected with gene annotations to find direct targets.</p>
+  </div>
+
+  <h2>From Peaks to Biology</h2>
+
+  <p>The three figures above tell a complete story. Figure 1 shows that mutant TP53 cannot bind the CDKN1A promoter. Figure 2 shows that this binding loss triggers an epigenetic cascade from activation to repression. Figure 3 shows that peak calling distinguishes real binding from noise with statistical rigor.</p>
+
+  <p>ChIP-seq is one of the workhorses of functional genomics. Combined with the other visualizations in this series, it connects the dots from sequence (genome browser) to regulation (ChIP-seq) to expression (heatmaps, volcano plots) to clinical outcome (survival curves).</p>
+
+  <p style="margin-top: 3rem; font-family: var(--heading-font); font-size: 0.95rem;">
+    Next: <a href="13-manhattan-plot.html">Manhattan Plot &rarr;</a>
+  </p>
+
+</div>
+
+<div class="tip" id="tip"></div>
+
+<script>
+// ─── Seeded RNG ───
+function mulberry32(seed) {
+  return function() {
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+const rng = mulberry32(1201);
+function rnorm(mu, sig) {
+  const u1 = rng(), u2 = rng();
+  return mu + sig * Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+}
+
+const tip = document.getElementById('tip');
+
+// ─── Genomic Locus Setup ───
+// CDKN1A locus: ~10 kb around the TSS at chr6:36,652,000
+const locusStart = 36647000;
+const locusEnd   = 36657000;
+const locusLen   = locusEnd - locusStart;
+const tss        = 36652000; // transcription start site
+
+// Gene model for CDKN1A (simplified)
+const geneModel = {
+  name: 'CDKN1A',
+  strand: '+',
+  txStart: 36651800,
+  txEnd: 36656500,
+  cdsStart: 36652200,
+  cdsEnd: 36655800,
+  exons: [
+    [36651800, 36652400],
+    [36653200, 36653600],
+    [36654800, 36655200],
+    [36655600, 36656500]
+  ]
+};
+
+// ─── Generate ChIP-seq Signal ───
+const nBins = 500;
+const binSize = locusLen / nBins;
+
+function generateSignal(seed, peakPositions, noiseLevel) {
+  const r = mulberry32(seed);
+  function rn(mu, sig) {
+    const u1 = r(), u2 = r();
+    return mu + sig * Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+  }
+  const signal = [];
+  for (let i = 0; i < nBins; i++) {
+    const pos = locusStart + (i + 0.5) * binSize;
+    let val = Math.max(0, rn(noiseLevel, noiseLevel * 0.4));
+    peakPositions.forEach(pk => {
+      const dist = (pos - pk.center) / pk.width;
+      val += pk.height * Math.exp(-0.5 * dist * dist);
+    });
+    // Add a little local correlation (smooth noise)
+    signal.push({ pos, val: Math.max(0, val) });
+  }
+  // Smooth pass
+  for (let pass = 0; pass < 2; pass++) {
+    for (let i = 1; i < signal.length - 1; i++) {
+      signal[i].val = signal[i].val * 0.5 + (signal[i - 1].val + signal[i + 1].val) * 0.25;
+    }
+  }
+  return signal;
+}
+
+// WT: strong peak at TSS, minor peaks at enhancer regions
+const wtSignal = generateSignal(4001, [
+  { center: tss, height: 35, width: 300 },
+  { center: tss - 200, height: 20, width: 200 },
+  { center: 36649000, height: 5, width: 400 },
+  { center: 36655000, height: 3, width: 300 }
+], 1.5);
+
+// Mutant: flat noise, no real peaks
+const mutSignal = generateSignal(4002, [
+  { center: 36649500, height: 2.5, width: 500 },
+  { center: 36654000, height: 2, width: 400 }
+], 1.5);
+
+// ─── Figure 1: ChIP-seq Signal Overlay ───
+(function() {
+  const W = 680, H = 380;
+  const margin = { top: 20, right: 25, bottom: 80, left: 55 };
+  const w = W - margin.left - margin.right;
+  const h = H - margin.top - margin.bottom;
+  const geneH = 40;
+  const trackH = h - geneH - 15;
+
+  const svg = d3.select('#chip-overlay').append('svg')
+    .attr('width', W).attr('height', H)
+    .attr('viewBox', `0 0 ${W} ${H}`)
+    .style('max-width', '100%').style('height', 'auto');
+  const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+
+  const x = d3.scaleLinear().domain([locusStart, locusEnd]).range([0, w]);
+  const yMax = d3.max(wtSignal, d => d.val) * 1.1;
+  const y = d3.scaleLinear().domain([0, yMax]).range([trackH, 0]);
+
+  // Grid
+  g.append('g').attr('class', 'grid').attr('transform', `translate(0,${trackH})`)
+    .call(d3.axisBottom(x).ticks(5).tickSize(-trackH).tickFormat(''));
+  g.append('g').attr('class', 'grid')
+    .call(d3.axisLeft(y).ticks(5).tickSize(-w).tickFormat(''));
+
+  // Area generators
+  const area = d3.area()
+    .x(d => x(d.pos))
+    .y0(trackH)
+    .y1(d => y(d.val))
+    .curve(d3.curveBasis);
+
+  const line = d3.line()
+    .x(d => x(d.pos))
+    .y(d => y(d.val))
+    .curve(d3.curveBasis);
+
+  // WT track
+  const wtArea = g.append('path').datum(wtSignal)
+    .attr('d', area)
+    .attr('fill', '#3b82f6').attr('fill-opacity', 0.2);
+  const wtLine = g.append('path').datum(wtSignal)
+    .attr('d', line)
+    .attr('fill', 'none').attr('stroke', '#3b82f6').attr('stroke-width', 2);
+
+  // Mutant track
+  const mutArea = g.append('path').datum(mutSignal)
+    .attr('d', area)
+    .attr('fill', '#ef4444').attr('fill-opacity', 0.15);
+  const mutLine = g.append('path').datum(mutSignal)
+    .attr('d', line)
+    .attr('fill', 'none').attr('stroke', '#ef4444').attr('stroke-width', 2);
+
+  // Axes
+  g.append('g').attr('class', 'axis').attr('transform', `translate(0,${trackH})`)
+    .call(d3.axisBottom(x).ticks(5).tickFormat(d => {
+      const kb = (d - locusStart) / 1000;
+      return kb.toFixed(0) + ' kb';
+    }));
+  g.append('g').attr('class', 'axis')
+    .call(d3.axisLeft(y).ticks(5));
+
+  // Axis labels
+  g.append('text').attr('x', w / 2).attr('y', trackH + 35)
+    .attr('text-anchor', 'middle').style('font-size', '11px').style('fill', 'var(--text-2)')
+    .text('Position relative to CDKN1A locus');
+  g.append('text').attr('transform', 'rotate(-90)').attr('x', -trackH / 2).attr('y', -42)
+    .attr('text-anchor', 'middle').style('font-size', '11px').style('fill', 'var(--text-2)')
+    .text('ChIP-seq signal');
+
+  // TSS marker
+  g.append('line')
+    .attr('x1', x(tss)).attr('x2', x(tss))
+    .attr('y1', 0).attr('y2', trackH)
+    .attr('stroke', '#888').attr('stroke-width', 1).attr('stroke-dasharray', '4,3');
+  g.append('text').attr('x', x(tss)).attr('y', -5)
+    .attr('text-anchor', 'middle').style('font-size', '10px').style('fill', '#888')
+    .text('TSS');
+
+  // Gene model
+  const geneG = g.append('g').attr('transform', `translate(0,${trackH + 50})`);
+  const geneY = geneH / 2;
+
+  // Intron line
+  geneG.append('line')
+    .attr('x1', x(geneModel.txStart)).attr('x2', x(geneModel.txEnd))
+    .attr('y1', geneY).attr('y2', geneY)
+    .attr('stroke', '#555').attr('stroke-width', 1.5);
+
+  // Exons
+  geneModel.exons.forEach(([s, e]) => {
+    const inCds = s >= geneModel.cdsStart && e <= geneModel.cdsEnd;
+    const exH = inCds ? 14 : 8;
+    geneG.append('rect')
+      .attr('x', x(s)).attr('y', geneY - exH / 2)
+      .attr('width', x(e) - x(s)).attr('height', exH)
+      .attr('fill', '#555').attr('rx', 1);
+  });
+
+  // Direction arrow
+  const arrowX = x(geneModel.txEnd) + 5;
+  geneG.append('path')
+    .attr('d', `M${arrowX},${geneY - 4} L${arrowX + 8},${geneY} L${arrowX},${geneY + 4}`)
+    .attr('fill', '#555');
+
+  // Gene label
+  geneG.append('text')
+    .attr('x', x((geneModel.txStart + geneModel.txEnd) / 2))
+    .attr('y', geneY + 22)
+    .attr('text-anchor', 'middle')
+    .style('font-size', '11px').style('fill', '#555').style('font-style', 'italic')
+    .text('CDKN1A');
+
+  // Hover line + tooltip
+  const hoverLine = g.append('line')
+    .attr('y1', 0).attr('y2', trackH)
+    .attr('stroke', '#999').attr('stroke-width', 1)
+    .style('opacity', 0);
+
+  const hoverRect = g.append('rect')
+    .attr('width', w).attr('height', trackH)
+    .attr('fill', 'transparent').style('cursor', 'crosshair');
+
+  hoverRect.on('mousemove', function(event) {
+    const [mx] = d3.pointer(event, this);
+    const pos = x.invert(mx);
+    const idx = Math.min(nBins - 1, Math.max(0, Math.round((pos - locusStart) / binSize - 0.5)));
+    const wtVal = wtSignal[idx].val;
+    const mutVal = mutSignal[idx].val;
+    const relPos = ((pos - locusStart) / 1000).toFixed(2);
+
+    hoverLine.attr('x1', mx).attr('x2', mx).style('opacity', 1);
+
+    tip.style.opacity = 1;
+    tip.style.left = (event.clientX + 12) + 'px';
+    tip.style.top = (event.clientY - 10) + 'px';
+    tip.innerHTML = `${relPos} kb<br>WT: ${wtVal.toFixed(1)} | Mut: ${mutVal.toFixed(1)}`;
+  }).on('mouseleave', function() {
+    hoverLine.style('opacity', 0);
+    tip.style.opacity = 0;
+  });
+
+  // Toggle visibility
+  d3.select('#show-wt').on('change', function() {
+    const vis = this.checked;
+    wtArea.style('display', vis ? null : 'none');
+    wtLine.style('display', vis ? null : 'none');
+  });
+  d3.select('#show-mut').on('change', function() {
+    const vis = this.checked;
+    mutArea.style('display', vis ? null : 'none');
+    mutLine.style('display', vis ? null : 'none');
+  });
+})();
+
+// ─── Figure 2: Multiple Histone Marks ───
+(function() {
+  const tracks = [
+    { id: 'tp53',    label: 'TP53 binding', color: '#3b82f6', wtPeaks: [{ center: tss, height: 30, width: 300 }, { center: tss - 200, height: 18, width: 200 }], mutPeaks: [], noise: 1.2 },
+    { id: 'h3k4me3', label: 'H3K4me3 (active promoter)', color: '#22c55e',
+      wtPeaks: [{ center: tss + 100, height: 25, width: 500 }],
+      mutPeaks: [{ center: tss + 100, height: 10, width: 500 }], noise: 1.5 },
+    { id: 'h3k27ac', label: 'H3K27ac (active enhancer)', color: '#f59e0b',
+      wtPeaks: [{ center: tss - 500, height: 20, width: 600 }, { center: tss + 300, height: 15, width: 400 }],
+      mutPeaks: [{ center: tss - 500, height: 3, width: 600 }], noise: 1.3 },
+    { id: 'h3k27me3', label: 'H3K27me3 (repressive)', color: '#a855f7',
+      wtPeaks: [],
+      mutPeaks: [{ center: tss, height: 18, width: 1200 }, { center: tss + 1500, height: 12, width: 800 }], noise: 1.0 }
+  ];
+
+  const trackVisible = {};
+  tracks.forEach(t => { trackVisible[t.id] = true; });
+
+  // Generate signals for each track
+  const trackSignals = {};
+  let seedBase = 5000;
+  tracks.forEach(t => {
+    trackSignals[t.id] = {
+      wt: generateSignal(seedBase++, t.wtPeaks, t.noise),
+      mut: generateSignal(seedBase++, t.mutPeaks, t.noise)
+    };
+  });
+
+  // Controls
+  const ctrlDiv = d3.select('#histone-controls');
+  tracks.forEach(t => {
+    const lbl = ctrlDiv.append('label').attr('class', 'track-toggle');
+    lbl.append('input').attr('type', 'checkbox').attr('checked', true)
+      .attr('data-track', t.id);
+    lbl.append('span').style('color', t.color).style('font-weight', '600').text(t.label);
+  });
+
+  const W = 680, trackH = 70, gap = 4;
+  const margin = { top: 10, right: 25, bottom: 55, left: 55 };
+  const w = W - margin.left - margin.right;
+
+  function render() {
+    const visibleTracks = tracks.filter(t => trackVisible[t.id]);
+    const totalH = margin.top + visibleTracks.length * (trackH * 2 + gap) + 50 + margin.bottom;
+
+    d3.select('#histone-tracks').selectAll('svg').remove();
+    const svg = d3.select('#histone-tracks').append('svg')
+      .attr('width', W).attr('height', totalH)
+      .attr('viewBox', `0 0 ${W} ${totalH}`)
+      .style('max-width', '100%').style('height', 'auto');
+    const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+
+    const x = d3.scaleLinear().domain([locusStart, locusEnd]).range([0, w]);
+
+    let yOff = 0;
+    visibleTracks.forEach(t => {
+      const sig = trackSignals[t.id];
+      const maxVal = Math.max(
+        d3.max(sig.wt, d => d.val),
+        d3.max(sig.mut, d => d.val)
+      ) * 1.1;
+      const yScale = d3.scaleLinear().domain([0, maxVal]).range([trackH, 0]);
+
+      const area = d3.area()
+        .x(d => x(d.pos))
+        .y0(trackH)
+        .y1(d => yScale(d.val))
+        .curve(d3.curveBasis);
+
+      // WT sub-track
+      const wtG = g.append('g').attr('transform', `translate(0,${yOff})`);
+      wtG.append('rect').attr('width', w).attr('height', trackH)
+        .attr('fill', '#fafafa').attr('stroke', 'var(--border)').attr('stroke-width', 0.5);
+      wtG.append('path').datum(sig.wt).attr('d', area)
+        .attr('fill', t.color).attr('fill-opacity', 0.3);
+      wtG.append('text').attr('x', -5).attr('y', trackH / 2)
+        .attr('text-anchor', 'end').attr('dominant-baseline', 'middle')
+        .style('font-size', '9px').style('fill', 'var(--text-2)').text('WT');
+
+      yOff += trackH + gap;
+
+      // Mut sub-track
+      const mutG = g.append('g').attr('transform', `translate(0,${yOff})`);
+      mutG.append('rect').attr('width', w).attr('height', trackH)
+        .attr('fill', '#fafafa').attr('stroke', 'var(--border)').attr('stroke-width', 0.5);
+      mutG.append('path').datum(sig.mut).attr('d', area)
+        .attr('fill', t.color).attr('fill-opacity', 0.3);
+      mutG.append('text').attr('x', -5).attr('y', trackH / 2)
+        .attr('text-anchor', 'end').attr('dominant-baseline', 'middle')
+        .style('font-size', '9px').style('fill', 'var(--text-2)').text('Mut');
+
+      // Track label on right
+      const labelY = yOff - gap / 2 - trackH / 2;
+      g.append('text').attr('x', w + 5).attr('y', labelY + trackH / 2)
+        .attr('dominant-baseline', 'middle')
+        .style('font-size', '9px').style('fill', t.color).style('font-weight', '600')
+        .text(t.label);
+
+      yOff += trackH + gap + 8;
+    });
+
+    // TSS line
+    g.append('line')
+      .attr('x1', x(tss)).attr('x2', x(tss))
+      .attr('y1', 0).attr('y2', yOff - gap - 8)
+      .attr('stroke', '#aaa').attr('stroke-width', 1).attr('stroke-dasharray', '4,3');
+
+    // Axis
+    g.append('g').attr('class', 'axis').attr('transform', `translate(0,${yOff})`)
+      .call(d3.axisBottom(x).ticks(5).tickFormat(d => ((d - locusStart) / 1000).toFixed(0) + ' kb'));
+
+    g.append('text').attr('x', w / 2).attr('y', yOff + 35)
+      .attr('text-anchor', 'middle').style('font-size', '11px').style('fill', 'var(--text-2)')
+      .text('Position relative to CDKN1A locus');
+
+    // Hover
+    const hoverLine = g.append('line')
+      .attr('y1', 0).attr('y2', yOff)
+      .attr('stroke', '#999').attr('stroke-width', 1).style('opacity', 0);
+
+    g.append('rect')
+      .attr('width', w).attr('height', yOff)
+      .attr('fill', 'transparent').style('cursor', 'crosshair')
+      .on('mousemove', function(event) {
+        const [mx] = d3.pointer(event, this);
+        const pos = x.invert(mx);
+        const relPos = ((pos - locusStart) / 1000).toFixed(2);
+        hoverLine.attr('x1', mx).attr('x2', mx).style('opacity', 1);
+        tip.style.opacity = 1;
+        tip.style.left = (event.clientX + 12) + 'px';
+        tip.style.top = (event.clientY - 10) + 'px';
+        tip.textContent = relPos + ' kb from locus start';
+      })
+      .on('mouseleave', function() {
+        hoverLine.style('opacity', 0);
+        tip.style.opacity = 0;
+      });
+  }
+
+  render();
+
+  ctrlDiv.selectAll('input').on('change', function() {
+    trackVisible[this.dataset.track] = this.checked;
+    render();
+  });
+})();
+
+// ─── Figure 3: Peak Calling Threshold ───
+(function() {
+  // Generate genome-wide peaks for WT and mutant
+  const rngPk = mulberry32(7777);
+  function rn(mu, sig) {
+    const u1 = rngPk(), u2 = rngPk();
+    return mu + sig * Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+  }
+
+  const genomeLen = 50000; // cartoon genome in arbitrary units
+  const nPeaksWT = 45;
+  const nPeaksMut = 40;
+
+  function makePeaks(n, seed, hasPromoterPeak) {
+    const r = mulberry32(seed);
+    const peaks = [];
+    for (let i = 0; i < n; i++) {
+      const pos = r() * genomeLen;
+      const strength = Math.max(0.5, rn(4, 2.5));
+      peaks.push({ pos, strength, significance: Math.max(0.1, strength + rn(0, 1.5)) });
+    }
+    if (hasPromoterPeak) {
+      // Strong promoter peak at a canonical position (~60% along)
+      peaks.push({ pos: genomeLen * 0.6, strength: 12, significance: 12, isPromoter: true });
+    }
+    return peaks;
+  }
+
+  const wtPeaks = makePeaks(nPeaksWT, 8001, true);
+  const mutPeaks = makePeaks(nPeaksMut, 8002, false);
+  // Add a weak noise peak near the promoter position in mutant
+  mutPeaks.push({ pos: genomeLen * 0.6 + 200, strength: 1.5, significance: 1.2, isPromoter: true });
+
+  const W = 680, H = 340;
+  const margin = { top: 20, right: 25, bottom: 50, left: 55 };
+  const w = W - margin.left - margin.right;
+  const h = H - margin.top - margin.bottom;
+  const halfH = (h - 30) / 2;
+
+  const container = d3.select('#peak-calling');
+
+  function render(threshold) {
+    container.selectAll('svg').remove();
+
+    const svg = container.append('svg')
+      .attr('width', W).attr('height', H)
+      .attr('viewBox', `0 0 ${W} ${H}`)
+      .style('max-width', '100%').style('height', 'auto');
+    const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+
+    const x = d3.scaleLinear().domain([0, genomeLen]).range([0, w]);
+    const yWT = d3.scaleLinear().domain([0, 14]).range([halfH, 0]);
+    const yMut = d3.scaleLinear().domain([0, 14]).range([halfH, 0]);
+
+    // WT panel
+    const wtG = g.append('g');
+    wtG.append('rect').attr('width', w).attr('height', halfH)
+      .attr('fill', '#f8faff').attr('stroke', 'var(--border)').attr('stroke-width', 0.5);
+    wtG.append('text').attr('x', -5).attr('y', halfH / 2)
+      .attr('text-anchor', 'end').attr('dominant-baseline', 'middle')
+      .style('font-size', '11px').style('fill', '#3b82f6').style('font-weight', '600')
+      .text('WT');
+
+    // Threshold line WT
+    if (threshold > 0) {
+      wtG.append('line')
+        .attr('x1', 0).attr('x2', w)
+        .attr('y1', yWT(threshold)).attr('y2', yWT(threshold))
+        .attr('stroke', '#ccc').attr('stroke-width', 1).attr('stroke-dasharray', '4,3');
+    }
+
+    // WT peaks
+    wtPeaks.forEach(pk => {
+      const survives = pk.significance >= threshold;
+      const barH = yWT(0) - yWT(Math.min(pk.strength, 14));
+      wtG.append('rect')
+        .attr('x', x(pk.pos) - 3)
+        .attr('y', yWT(Math.min(pk.strength, 14)))
+        .attr('width', 6).attr('height', barH)
+        .attr('fill', survives ? '#3b82f6' : '#d1d5db')
+        .attr('rx', 1)
+        .attr('opacity', survives ? 0.9 : 0.35);
+
+      if (pk.isPromoter) {
+        // Arrow marking CDKN1A promoter
+        const arrowY = yWT(Math.min(pk.strength, 14)) - 12;
+        wtG.append('text')
+          .attr('x', x(pk.pos)).attr('y', arrowY)
+          .attr('text-anchor', 'middle')
+          .style('font-size', '9px').style('fill', survives ? '#3b82f6' : '#999')
+          .text('CDKN1A');
+        wtG.append('line')
+          .attr('x1', x(pk.pos)).attr('x2', x(pk.pos))
+          .attr('y1', arrowY + 3).attr('y2', yWT(Math.min(pk.strength, 14)) - 1)
+          .attr('stroke', survives ? '#3b82f6' : '#999').attr('stroke-width', 1);
+      }
+    });
+
+    // Mut panel
+    const mutG = g.append('g').attr('transform', `translate(0,${halfH + 30})`);
+    mutG.append('rect').attr('width', w).attr('height', halfH)
+      .attr('fill', '#fff5f5').attr('stroke', 'var(--border)').attr('stroke-width', 0.5);
+    mutG.append('text').attr('x', -5).attr('y', halfH / 2)
+      .attr('text-anchor', 'end').attr('dominant-baseline', 'middle')
+      .style('font-size', '11px').style('fill', '#ef4444').style('font-weight', '600')
+      .text('Mut');
+
+    // Threshold line Mut
+    if (threshold > 0) {
+      mutG.append('line')
+        .attr('x1', 0).attr('x2', w)
+        .attr('y1', yMut(threshold)).attr('y2', yMut(threshold))
+        .attr('stroke', '#ccc').attr('stroke-width', 1).attr('stroke-dasharray', '4,3');
+    }
+
+    // Mut peaks
+    mutPeaks.forEach(pk => {
+      const survives = pk.significance >= threshold;
+      const barH = yMut(0) - yMut(Math.min(pk.strength, 14));
+      mutG.append('rect')
+        .attr('x', x(pk.pos) - 3)
+        .attr('y', yMut(Math.min(pk.strength, 14)))
+        .attr('width', 6).attr('height', barH)
+        .attr('fill', survives ? '#ef4444' : '#d1d5db')
+        .attr('rx', 1)
+        .attr('opacity', survives ? 0.9 : 0.35);
+
+      if (pk.isPromoter) {
+        const arrowY = yMut(Math.min(pk.strength, 14)) - 12;
+        mutG.append('text')
+          .attr('x', x(pk.pos)).attr('y', arrowY)
+          .attr('text-anchor', 'middle')
+          .style('font-size', '9px').style('fill', survives ? '#ef4444' : '#999')
+          .text('CDKN1A');
+        mutG.append('line')
+          .attr('x1', x(pk.pos)).attr('x2', x(pk.pos))
+          .attr('y1', arrowY + 3).attr('y2', yMut(Math.min(pk.strength, 14)) - 1)
+          .attr('stroke', survives ? '#ef4444' : '#999').attr('stroke-width', 1);
+      }
+    });
+
+    // X axis
+    g.append('g').attr('class', 'axis').attr('transform', `translate(0,${h})`)
+      .call(d3.axisBottom(x).ticks(6).tickFormat(d => (d / 1000).toFixed(0) + ' kb'));
+    g.append('text').attr('x', w / 2).attr('y', h + 35)
+      .attr('text-anchor', 'middle').style('font-size', '11px').style('fill', 'var(--text-2)')
+      .text('Genome position (cartoon)');
+
+    // Label between panels
+    g.append('text').attr('x', w / 2).attr('y', halfH + 18)
+      .attr('text-anchor', 'middle').style('font-size', '10px').style('fill', 'var(--text-2)')
+      .text('Dashed line = significance threshold');
+
+    // Stats
+    const wtSurviving = wtPeaks.filter(pk => pk.significance >= threshold).length;
+    const mutSurviving = mutPeaks.filter(pk => pk.significance >= threshold).length;
+    const wtPromoter = wtPeaks.find(pk => pk.isPromoter);
+    const mutPromoter = mutPeaks.find(pk => pk.isPromoter);
+
+    d3.select('#peak-stats').html(`
+      <div class="stat-row"><span class="stat-label">Threshold</span><span class="stat-val">-log₁₀(p) = ${threshold.toFixed(1)}</span></div>
+      <div class="stat-row"><span class="stat-label">WT peaks called</span><span class="stat-val" style="color:#3b82f6">${wtSurviving} / ${wtPeaks.length}</span></div>
+      <div class="stat-row"><span class="stat-label">Mutant peaks called</span><span class="stat-val" style="color:#ef4444">${mutSurviving} / ${mutPeaks.length}</span></div>
+      <div class="stat-row"><span class="stat-label">WT CDKN1A promoter peak</span><span class="stat-val" style="color:#3b82f6">${wtPromoter && wtPromoter.significance >= threshold ? 'Called (sig = ' + wtPromoter.significance.toFixed(1) + ')' : 'Below threshold'}</span></div>
+      <div class="stat-row"><span class="stat-label">Mut CDKN1A promoter peak</span><span class="stat-val" style="color:#ef4444">${mutPromoter && mutPromoter.significance >= threshold ? 'Called (sig = ' + mutPromoter.significance.toFixed(1) + ')' : 'Below threshold'}</span></div>
+    `);
+  }
+
+  render(2.0);
+
+  d3.select('#threshold-slider').on('input', function() {
+    const val = +this.value;
+    d3.select('#threshold-val').text(val.toFixed(1));
+    render(val);
+  });
+})();
+</script>
+</body>
+</html>

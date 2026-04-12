@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Waterfall Plot — Bioinformatics Visualization</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --article-width: 740px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem;
+  --line-height: 1.6;
+  --text: #1a1a2e;
+  --text-2: #4a4a6a;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --bg: #fafafa;
+  --fig-bg: #ffffff;
+  --border: #e2e2e8;
+}
+
+body { font-family: var(--body-font); font-size: var(--body-size); line-height: var(--line-height); color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased; }
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
+h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+p { margin: 0 0 1rem; }
+a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+a:hover { color: #1d4ed8; }
+
+.header { padding: 4rem 0 2rem; border-bottom: 1px solid var(--border); margin-bottom: 2.5rem; }
+.header .back { font-family: var(--heading-font); font-size: 0.85rem; display: inline-block; margin-bottom: 1.5rem; }
+.header .subtitle { font-family: var(--heading-font); font-size: 1.15rem; color: var(--text-2); margin-bottom: 0; max-width: 580px; }
+
+.figure { margin: 2rem 0; padding: 1.5rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.figure-wide { margin-left: -2rem; margin-right: -2rem; }
+.figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; line-height: 1.4; }
+.figure-label { font-weight: 600; color: var(--text); }
+
+.insight { background: var(--accent-light); border-left: 3px solid var(--accent); padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 4px 4px 0; }
+.insight p { margin: 0; }
+
+.controls { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); }
+
+.btn { font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600; padding: 0.45rem 1.1rem; border-radius: 5px; border: 1px solid var(--border); background: var(--fig-bg); color: var(--text); cursor: pointer; transition: background 0.15s, border-color 0.15s; user-select: none; }
+.btn:hover { border-color: var(--accent); background: var(--accent-light); }
+.btn.active { border-color: var(--accent); background: var(--accent); color: white; }
+
+svg text { font-family: var(--heading-font); }
+svg .axis text { font-size: 11px; fill: var(--text-2); }
+svg .axis line, svg .axis path { stroke: var(--border); }
+svg .grid line { stroke: var(--border); stroke-dasharray: 2,3; }
+svg .grid path { stroke: none; }
+
+.tip { position: fixed; pointer-events: none; background: var(--text); color: white; font-family: var(--heading-font); font-size: 0.75rem; padding: 0.3rem 0.55rem; border-radius: 4px; opacity: 0; transition: opacity 0.12s; z-index: 10; white-space: nowrap; }
+
+.stat-box { font-family: var(--heading-font); font-size: 0.85rem; padding: 0.75rem 1rem; background: #f8f8fc; border-radius: 4px; margin-top: 0.75rem; }
+.stat-row { display: flex; justify-content: space-between; padding: 0.15rem 0; }
+.stat-label { color: var(--text-2); }
+.stat-val { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+.legend { display: flex; gap: 1.25rem; font-family: var(--heading-font); font-size: 0.8rem; margin-bottom: 0.5rem; }
+.legend-item { display: flex; align-items: center; gap: 0.35rem; }
+.legend-swatch { width: 12px; height: 12px; border-radius: 2px; }
+
+.threshold-line { cursor: ns-resize; }
+
+@media (max-width: 640px) { .figure-wide { margin-left: 0; margin-right: 0; } h1 { font-size: 1.75rem; } }
+</style>
+</head>
+<body>
+
+<div class="article">
+
+  <header class="header">
+    <a class="back" href="index.html">&larr; Bioinformatics Visualization</a>
+    <h1>Waterfall Plot</h1>
+    <p class="subtitle">Which patients show the biggest CDKN1A drop when TP53 is mutated? Sort everyone by a value and let the pattern cascade.</p>
+  </header>
+
+  <p>Previous explainers in this series looked at <strong>TP53</strong> as a gene with widespread effects and <strong>CDKN1A</strong> as one of its downstream targets. But how do individual patients line up? The <strong>waterfall plot</strong> answers this by ranking every sample in a cohort along the x-axis, creating a cascading bar chart that sorts from highest to lowest.</p>
+
+  <p>The waterfall's power is simplicity: sort by one measure, color by another, and the eye instantly catches whether those two variables are linked. If TP53-mutant samples cluster at one end of the CDKN1A expression waterfall, the relationship is visible without a single statistical test.</p>
+
+  <h2>The Cascade</h2>
+
+  <p>Below, 60 patients are sorted by their CDKN1A expression level (log<sub>2</sub> scale). Each bar is one patient. Red bars are TP53-mutant; blue bars are TP53-wildtype. A horizontal dashed line marks the cohort median. Notice where the red bars concentrate.</p>
+
+  <div class="figure figure-wide" id="fig-expression">
+    <div class="legend">
+      <div class="legend-item"><div class="legend-swatch" style="background:#e74c3c;"></div> TP53-mutant</div>
+      <div class="legend-item"><div class="legend-swatch" style="background:#3498db;"></div> TP53-wildtype</div>
+    </div>
+    <div id="waterfall-expression"></div>
+    <p class="figure-caption"><span class="figure-label">Figure 1.</span> CDKN1A expression waterfall for 60 patients, sorted descending. The dashed line marks the cohort median. TP53-mutant samples (red) cluster toward the low-expression end, consistent with TP53's role as a transcriptional activator of CDKN1A. Hover over any bar for patient details.</p>
+  </div>
+
+  <div class="insight">
+    <p>CDKN1A (also called p21) is a cell cycle inhibitor directly activated by TP53. When TP53 is mutated, it loses its ability to turn on CDKN1A transcription, so mutant tumors tend to have lower CDKN1A expression. The waterfall makes this population-level trend visible at the individual patient level.</p>
+  </div>
+
+  <h2>A Different Dimension: Tumor Mutation Burden</h2>
+
+  <p>The same 60 patients can be reordered by a completely different measure: <strong>tumor mutation burden</strong> (TMB), the total number of somatic mutations in each sample. TP53-mutant tumors often have higher TMB because loss of TP53 impairs DNA repair and genomic stability. Toggle between the two measures to see how the same patients reshuffle.</p>
+
+  <div class="figure figure-wide" id="fig-toggle">
+    <div class="controls">
+      <button class="btn active" id="btn-cdkn1a">CDKN1A expression</button>
+      <button class="btn" id="btn-tmb">Tumor mutation burden</button>
+    </div>
+    <div class="legend">
+      <div class="legend-item"><div class="legend-swatch" style="background:#e74c3c;"></div> TP53-mutant</div>
+      <div class="legend-item"><div class="legend-swatch" style="background:#3498db;"></div> TP53-wildtype</div>
+    </div>
+    <div id="waterfall-toggle"></div>
+    <p class="figure-caption"><span class="figure-label">Figure 2.</span> Toggle between CDKN1A expression (sorted descending) and TMB (sorted descending). TP53-mutant samples cluster at the low end of CDKN1A but at the <em>high</em> end of TMB. The same patients, two stories.</p>
+  </div>
+
+  <div class="insight">
+    <p>This is a common pattern in cancer genomics: a single driver mutation correlates with multiple downstream phenotypes. TP53 loss both reduces CDKN1A expression (a transcriptional effect) and increases mutation burden (a genomic stability effect). Waterfall plots help you see each dimension one at a time.</p>
+  </div>
+
+  <h2>Threshold Explorer</h2>
+
+  <p>Now for the analytical payoff. Drag the horizontal threshold line below. Patients whose CDKN1A expression falls below the line are flagged as <strong>CDKN1A-low</strong>. The stat panel shows what fraction of those CDKN1A-low patients carry a TP53 mutation. This is the logic behind <strong>enrichment analysis</strong>: if a molecular subgroup is disproportionately represented below a threshold, the two features are associated.</p>
+
+  <div class="figure figure-wide" id="fig-threshold">
+    <div class="legend">
+      <div class="legend-item"><div class="legend-swatch" style="background:#e74c3c;"></div> TP53-mutant</div>
+      <div class="legend-item"><div class="legend-swatch" style="background:#3498db;"></div> TP53-wildtype</div>
+    </div>
+    <div id="waterfall-threshold"></div>
+    <div class="stat-box" id="threshold-stats">
+      <div class="stat-row"><span class="stat-label">Threshold (log2)</span><span class="stat-val" id="stat-thresh">—</span></div>
+      <div class="stat-row"><span class="stat-label">CDKN1A-low patients</span><span class="stat-val" id="stat-low">—</span></div>
+      <div class="stat-row"><span class="stat-label">TP53-mutant among low</span><span class="stat-val" id="stat-mut">—</span></div>
+      <div class="stat-row"><span class="stat-label">TP53-mutant among high</span><span class="stat-val" id="stat-mut-high">—</span></div>
+      <div class="stat-row"><span class="stat-label">Enrichment (odds ratio)</span><span class="stat-val" id="stat-or">—</span></div>
+      <div class="stat-row"><span class="stat-label">Fisher's exact p-value</span><span class="stat-val" id="stat-p">—</span></div>
+    </div>
+    <p class="figure-caption"><span class="figure-label">Figure 3.</span> Drag the dashed threshold line up or down. Patients below the line are classified as CDKN1A-low. The stat panel updates with enrichment statistics, including a Fisher's exact test p-value computed from the 2&times;2 contingency table of TP53 status &times; CDKN1A-low status.</p>
+  </div>
+
+  <div class="insight">
+    <p>The Fisher's exact test evaluates whether the proportion of TP53-mutant patients is significantly different above versus below the threshold. When the threshold sits near the median, the enrichment is strongest because you capture the clearest separation between the two groups. As you drag the line toward extremes, the group sizes become unbalanced and statistical power drops.</p>
+  </div>
+
+  <h2>Reading a Waterfall</h2>
+
+  <p>A few principles for interpreting waterfall plots in practice:</p>
+
+  <p><strong>Sort order is the story.</strong> The x-axis has no inherent meaning; it's just rank. What you sort by defines the question you're asking. The same cohort can produce many different waterfalls.</p>
+
+  <p><strong>Color reveals association.</strong> If the colored bars cluster at one end of the waterfall, the categorical variable (here, TP53 status) is associated with the quantitative variable (CDKN1A expression). Random mixing means no association.</p>
+
+  <p><strong>Outliers stand out.</strong> A few wildtype patients with very low CDKN1A might have other mutations affecting the same pathway. The waterfall makes these cases easy to spot for follow-up investigation.</p>
+
+  <p><strong>Thresholds are choices.</strong> Where you draw the line between "high" and "low" affects your conclusions. The threshold explorer above demonstrates that enrichment depends on the cutoff. Report your threshold and justify it.</p>
+
+  <p style="margin-top: 3rem; font-family: var(--heading-font); font-size: 0.95rem;">Next: <a href="18-forest-plot.html">Forest Plot &rarr;</a></p>
+
+</div>
+
+<div class="tip" id="tip"></div>
+
+<script>
+// --- seeded PRNG: mulberry32 ---
+(function () {
+  function mulberry32(a) {
+    return function () {
+      a |= 0; a = a + 0x6D2B79F5 | 0;
+      var t = Math.imul(a ^ a >>> 15, 1 | a);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+
+  const rand = mulberry32(20260411);
+
+  function randNorm(mu, sigma) {
+    let u, v;
+    do { u = rand(); } while (u === 0);
+    v = rand();
+    return mu + sigma * Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+  }
+
+  // --- Generate 60 patients ---
+  const N = 60;
+  const patients = [];
+  for (let i = 0; i < N; i++) {
+    const tp53Mutant = rand() < 0.35;
+    // CDKN1A: mutants have lower expression
+    const cdkn1a = tp53Mutant
+      ? randNorm(4.5, 1.8)
+      : randNorm(7.5, 2.0);
+    // TMB: mutants tend higher
+    const tmb = tp53Mutant
+      ? Math.max(5, Math.round(randNorm(180, 70)))
+      : Math.max(5, Math.round(randNorm(80, 50)));
+    patients.push({
+      id: 'P' + String(i + 1).padStart(3, '0'),
+      tp53: tp53Mutant,
+      cdkn1a: +cdkn1a.toFixed(2),
+      tmb: tmb
+    });
+  }
+
+  const tip = d3.select('#tip');
+  const mutColor = '#e74c3c';
+  const wtColor = '#3498db';
+
+  function patientColor(d) { return d.tp53 ? mutColor : wtColor; }
+
+  // =================================================================
+  // Figure 1: CDKN1A expression waterfall (static)
+  // =================================================================
+  (function () {
+    const W = 680, H = 340;
+    const margin = { top: 20, right: 20, bottom: 40, left: 55 };
+    const iw = W - margin.left - margin.right;
+    const ih = H - margin.top - margin.bottom;
+
+    const sorted = patients.slice().sort((a, b) => b.cdkn1a - a.cdkn1a);
+    const median = d3.median(sorted, d => d.cdkn1a);
+
+    const x = d3.scaleBand().domain(d3.range(N)).range([0, iw]).padding(0.15);
+    const yExtent = d3.extent(sorted, d => d.cdkn1a);
+    const y = d3.scaleLinear().domain([Math.min(yExtent[0], 0) - 0.5, yExtent[1] + 0.5]).range([ih, 0]);
+
+    const svg = d3.select('#waterfall-expression').append('svg')
+      .attr('viewBox', `0 0 ${W} ${H}`)
+      .attr('width', '100%');
+
+    const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+
+    // grid
+    g.append('g').attr('class', 'grid')
+      .call(d3.axisLeft(y).ticks(6).tickSize(-iw).tickFormat(''));
+
+    // bars
+    g.selectAll('.bar').data(sorted).join('rect')
+      .attr('class', 'bar')
+      .attr('x', (d, i) => x(i))
+      .attr('width', x.bandwidth())
+      .attr('y', d => d.cdkn1a >= 0 ? y(d.cdkn1a) : y(0))
+      .attr('height', d => Math.abs(y(0) - y(d.cdkn1a)))
+      .attr('fill', patientColor)
+      .attr('rx', 1)
+      .style('cursor', 'pointer')
+      .on('mouseenter', function (event, d) {
+        d3.select(this).attr('opacity', 0.75);
+        tip.style('opacity', 1)
+          .html(`${d.id} &middot; ${d.tp53 ? 'TP53-mut' : 'TP53-wt'} &middot; CDKN1A: ${d.cdkn1a.toFixed(2)}`);
+      })
+      .on('mousemove', function (event) {
+        tip.style('left', (event.clientX + 12) + 'px').style('top', (event.clientY - 28) + 'px');
+      })
+      .on('mouseleave', function () {
+        d3.select(this).attr('opacity', 1);
+        tip.style('opacity', 0);
+      });
+
+    // median line
+    g.append('line')
+      .attr('x1', 0).attr('x2', iw)
+      .attr('y1', y(median)).attr('y2', y(median))
+      .attr('stroke', '#1a1a2e').attr('stroke-width', 1.5)
+      .attr('stroke-dasharray', '6,4')
+      .attr('opacity', 0.6);
+
+    g.append('text')
+      .attr('x', iw - 4).attr('y', y(median) - 6)
+      .attr('text-anchor', 'end').attr('font-size', 10).attr('fill', '#4a4a6a')
+      .text(`median: ${median.toFixed(2)}`);
+
+    // axes
+    g.append('g').attr('class', 'axis').attr('transform', `translate(0,${ih})`)
+      .call(d3.axisBottom(x).tickValues([]));
+
+    g.append('g').attr('class', 'axis')
+      .call(d3.axisLeft(y).ticks(6));
+
+    // labels
+    svg.append('text')
+      .attr('x', margin.left + iw / 2).attr('y', H - 4)
+      .attr('text-anchor', 'middle').attr('font-size', 11).attr('fill', '#4a4a6a')
+      .text('Patients (ranked by CDKN1A expression)');
+
+    svg.append('text')
+      .attr('transform', `translate(14,${margin.top + ih / 2}) rotate(-90)`)
+      .attr('text-anchor', 'middle').attr('font-size', 11).attr('fill', '#4a4a6a')
+      .text('CDKN1A expression (log2)');
+  })();
+
+  // =================================================================
+  // Figure 2: Toggle between CDKN1A and TMB
+  // =================================================================
+  (function () {
+    const W = 680, H = 340;
+    const margin = { top: 20, right: 20, bottom: 40, left: 55 };
+    const iw = W - margin.left - margin.right;
+    const ih = H - margin.top - margin.bottom;
+
+    const svg = d3.select('#waterfall-toggle').append('svg')
+      .attr('viewBox', `0 0 ${W} ${H}`)
+      .attr('width', '100%');
+
+    const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+    const gridG = g.append('g').attr('class', 'grid');
+    const barsG = g.append('g');
+    const medG = g.append('g');
+    const xAxisG = g.append('g').attr('class', 'axis').attr('transform', `translate(0,${ih})`);
+    const yAxisG = g.append('g').attr('class', 'axis');
+
+    const xLabel = svg.append('text')
+      .attr('x', margin.left + iw / 2).attr('y', H - 4)
+      .attr('text-anchor', 'middle').attr('font-size', 11).attr('fill', '#4a4a6a');
+
+    const yLabel = svg.append('text')
+      .attr('transform', `translate(14,${margin.top + ih / 2}) rotate(-90)`)
+      .attr('text-anchor', 'middle').attr('font-size', 11).attr('fill', '#4a4a6a');
+
+    const x = d3.scaleBand().domain(d3.range(N)).range([0, iw]).padding(0.15);
+
+    let currentMode = 'cdkn1a';
+
+    function draw(mode, animate) {
+      currentMode = mode;
+      const accessor = mode === 'cdkn1a' ? d => d.cdkn1a : d => d.tmb;
+      const sorted = patients.slice().sort((a, b) => b[mode] - a[mode]);
+      const median = d3.median(sorted, accessor);
+      const vals = sorted.map(accessor);
+      const yMin = Math.min(0, d3.min(vals)) - (mode === 'cdkn1a' ? 0.5 : 5);
+      const yMax = d3.max(vals) + (mode === 'cdkn1a' ? 0.5 : 10);
+      const y = d3.scaleLinear().domain([yMin, yMax]).range([ih, 0]);
+
+      gridG.call(d3.axisLeft(y).ticks(6).tickSize(-iw).tickFormat(''));
+      gridG.selectAll('.domain').remove();
+
+      const bars = barsG.selectAll('rect').data(sorted, d => d.id);
+
+      const enter = bars.enter().append('rect')
+        .attr('rx', 1)
+        .style('cursor', 'pointer')
+        .on('mouseenter', function (event, d) {
+          d3.select(this).attr('opacity', 0.75);
+          const val = mode === 'cdkn1a' ? `CDKN1A: ${d.cdkn1a.toFixed(2)}` : `TMB: ${d.tmb}`;
+          tip.style('opacity', 1)
+            .html(`${d.id} &middot; ${d.tp53 ? 'TP53-mut' : 'TP53-wt'} &middot; ${val}`);
+        })
+        .on('mousemove', function (event) {
+          tip.style('left', (event.clientX + 12) + 'px').style('top', (event.clientY - 28) + 'px');
+        })
+        .on('mouseleave', function () {
+          d3.select(this).attr('opacity', 1);
+          tip.style('opacity', 0);
+        });
+
+      const t = animate ? d3.transition().duration(600) : d3.transition().duration(0);
+
+      enter.merge(bars).transition(t)
+        .attr('x', (d, i) => x(i))
+        .attr('width', x.bandwidth())
+        .attr('y', d => accessor(d) >= 0 ? y(accessor(d)) : y(0))
+        .attr('height', d => Math.abs(y(0) - y(accessor(d))))
+        .attr('fill', patientColor);
+
+      // median
+      medG.selectAll('*').remove();
+      medG.append('line')
+        .attr('x1', 0).attr('x2', iw)
+        .attr('y1', y(median)).attr('y2', y(median))
+        .attr('stroke', '#1a1a2e').attr('stroke-width', 1.5)
+        .attr('stroke-dasharray', '6,4').attr('opacity', 0.6);
+      medG.append('text')
+        .attr('x', iw - 4).attr('y', y(median) - 6)
+        .attr('text-anchor', 'end').attr('font-size', 10).attr('fill', '#4a4a6a')
+        .text(`median: ${mode === 'cdkn1a' ? median.toFixed(2) : Math.round(median)}`);
+
+      xAxisG.call(d3.axisBottom(x).tickValues([]));
+      yAxisG.transition(t).call(d3.axisLeft(y).ticks(6));
+
+      xLabel.text(mode === 'cdkn1a'
+        ? 'Patients (ranked by CDKN1A expression)'
+        : 'Patients (ranked by TMB)');
+      yLabel.text(mode === 'cdkn1a'
+        ? 'CDKN1A expression (log2)'
+        : 'Tumor mutation burden');
+    }
+
+    draw('cdkn1a', false);
+
+    const btnC = d3.select('#btn-cdkn1a');
+    const btnT = d3.select('#btn-tmb');
+
+    btnC.on('click', () => {
+      btnC.classed('active', true); btnT.classed('active', false);
+      draw('cdkn1a', true);
+    });
+    btnT.on('click', () => {
+      btnT.classed('active', true); btnC.classed('active', false);
+      draw('tmb', true);
+    });
+  })();
+
+  // =================================================================
+  // Figure 3: Threshold explorer with Fisher's exact test
+  // =================================================================
+  (function () {
+    const W = 680, H = 370;
+    const margin = { top: 20, right: 20, bottom: 40, left: 55 };
+    const iw = W - margin.left - margin.right;
+    const ih = H - margin.top - margin.bottom;
+
+    const sorted = patients.slice().sort((a, b) => b.cdkn1a - a.cdkn1a);
+    const yExtent = d3.extent(sorted, d => d.cdkn1a);
+    const yMin = Math.min(yExtent[0], 0) - 0.5;
+    const yMax = yExtent[1] + 0.5;
+
+    const x = d3.scaleBand().domain(d3.range(N)).range([0, iw]).padding(0.15);
+    const y = d3.scaleLinear().domain([yMin, yMax]).range([ih, 0]);
+
+    const svg = d3.select('#waterfall-threshold').append('svg')
+      .attr('viewBox', `0 0 ${W} ${H}`)
+      .attr('width', '100%');
+
+    const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+
+    // grid
+    g.append('g').attr('class', 'grid')
+      .call(d3.axisLeft(y).ticks(6).tickSize(-iw).tickFormat(''));
+
+    // bars
+    const bars = g.selectAll('.bar').data(sorted).join('rect')
+      .attr('class', 'bar')
+      .attr('x', (d, i) => x(i))
+      .attr('width', x.bandwidth())
+      .attr('y', d => d.cdkn1a >= 0 ? y(d.cdkn1a) : y(0))
+      .attr('height', d => Math.abs(y(0) - y(d.cdkn1a)))
+      .attr('fill', patientColor)
+      .attr('rx', 1)
+      .style('cursor', 'pointer')
+      .on('mouseenter', function (event, d) {
+        d3.select(this).attr('opacity', 0.75);
+        tip.style('opacity', 1)
+          .html(`${d.id} &middot; ${d.tp53 ? 'TP53-mut' : 'TP53-wt'} &middot; CDKN1A: ${d.cdkn1a.toFixed(2)}`);
+      })
+      .on('mousemove', function (event) {
+        tip.style('left', (event.clientX + 12) + 'px').style('top', (event.clientY - 28) + 'px');
+      })
+      .on('mouseleave', function () {
+        d3.select(this).attr('opacity', 1);
+        tip.style('opacity', 0);
+      });
+
+    // axes
+    g.append('g').attr('class', 'axis').attr('transform', `translate(0,${ih})`)
+      .call(d3.axisBottom(x).tickValues([]));
+    g.append('g').attr('class', 'axis')
+      .call(d3.axisLeft(y).ticks(6));
+
+    svg.append('text')
+      .attr('x', margin.left + iw / 2).attr('y', H - 4)
+      .attr('text-anchor', 'middle').attr('font-size', 11).attr('fill', '#4a4a6a')
+      .text('Patients (ranked by CDKN1A expression)');
+    svg.append('text')
+      .attr('transform', `translate(14,${margin.top + ih / 2}) rotate(-90)`)
+      .attr('text-anchor', 'middle').attr('font-size', 11).attr('fill', '#4a4a6a')
+      .text('CDKN1A expression (log2)');
+
+    // Threshold line (draggable)
+    const median = d3.median(sorted, d => d.cdkn1a);
+    let threshold = median;
+
+    const threshLine = g.append('line')
+      .attr('class', 'threshold-line')
+      .attr('x1', -10).attr('x2', iw + 10)
+      .attr('y1', y(threshold)).attr('y2', y(threshold))
+      .attr('stroke', '#e74c3c').attr('stroke-width', 2)
+      .attr('stroke-dasharray', '8,4');
+
+    const threshLabel = g.append('text')
+      .attr('x', iw + 8).attr('text-anchor', 'end')
+      .attr('font-size', 10).attr('fill', '#e74c3c').attr('font-weight', 600);
+
+    // Shading below threshold
+    const belowRect = g.insert('rect', ':first-child')
+      .attr('x', 0).attr('width', iw)
+      .attr('fill', '#e74c3c').attr('opacity', 0.04);
+
+    // Fisher's exact test (log version for numerical stability)
+    function logFactorial(n) {
+      let s = 0;
+      for (let i = 2; i <= n; i++) s += Math.log(i);
+      return s;
+    }
+
+    function fisherExact(a, b, c, d) {
+      // one-sided: P(observing >= a mutants in the low group)
+      // We sum hypergeometric probabilities for tables at least as extreme
+      const n = a + b + c + d;
+      const r1 = a + b; // row 1 total (low group)
+      const c1 = a + c; // col 1 total (mutant)
+      const r2 = c + d;
+      const c2 = b + d;
+
+      // log of hypergeometric pmf
+      function logHyper(aa) {
+        const bb = r1 - aa;
+        const cc = c1 - aa;
+        const dd = r2 - cc;
+        if (bb < 0 || cc < 0 || dd < 0) return -Infinity;
+        return logFactorial(r1) + logFactorial(r2) + logFactorial(c1) + logFactorial(c2)
+          - logFactorial(n) - logFactorial(aa) - logFactorial(bb) - logFactorial(cc) - logFactorial(dd);
+      }
+
+      // two-sided: sum probabilities of tables as extreme or more
+      const pObs = logHyper(a);
+      let pVal = 0;
+      const maxA = Math.min(r1, c1);
+      const minA = Math.max(0, c1 - r2);
+      for (let aa = minA; aa <= maxA; aa++) {
+        const lp = logHyper(aa);
+        if (lp <= pObs + 1e-10) {
+          pVal += Math.exp(lp);
+        }
+      }
+      return Math.min(1, pVal);
+    }
+
+    function updateStats() {
+      // Count 2x2 table: TP53 status x above/below threshold
+      let a = 0, b = 0, c = 0, d = 0;
+      sorted.forEach(p => {
+        const low = p.cdkn1a < threshold;
+        if (low && p.tp53) a++;
+        if (low && !p.tp53) b++;
+        if (!low && p.tp53) c++;
+        if (!low && !p.tp53) d++;
+      });
+
+      const nLow = a + b;
+      const nHigh = c + d;
+      const fracLow = nLow > 0 ? a / nLow : 0;
+      const fracHigh = nHigh > 0 ? c / nHigh : 0;
+
+      // Odds ratio
+      const or_ = (a * d) / (b * c || 1);
+
+      const pVal = (nLow === 0 || nHigh === 0) ? 1 : fisherExact(a, b, c, d);
+
+      d3.select('#stat-thresh').text(threshold.toFixed(2));
+      d3.select('#stat-low').text(`${nLow} of ${N}`);
+      d3.select('#stat-mut').text(nLow > 0 ? `${a}/${nLow} (${(fracLow * 100).toFixed(0)}%)` : '—');
+      d3.select('#stat-mut-high').text(nHigh > 0 ? `${c}/${nHigh} (${(fracHigh * 100).toFixed(0)}%)` : '—');
+      d3.select('#stat-or').text(isFinite(or_) ? or_.toFixed(2) : '—');
+      d3.select('#stat-p').text(pVal < 0.001 ? pVal.toExponential(2) : pVal.toFixed(4));
+
+      // update bar dimming
+      bars.attr('opacity', p => p.cdkn1a < threshold ? 1 : 0.4);
+
+      // update threshold line position
+      threshLine.attr('y1', y(threshold)).attr('y2', y(threshold));
+      threshLabel.attr('y', y(threshold) - 6).text(`threshold: ${threshold.toFixed(2)}`);
+
+      // below rect
+      belowRect.attr('y', y(threshold)).attr('height', ih - y(threshold));
+    }
+
+    // Drag behavior
+    const drag = d3.drag()
+      .on('drag', function (event) {
+        const svgEl = svg.node();
+        const pt = svgEl.createSVGPoint();
+        pt.x = event.sourceEvent.clientX;
+        pt.y = event.sourceEvent.clientY;
+        const svgP = pt.matrixTransform(svgEl.getScreenCTM().inverse());
+        const newY = svgP.y - margin.top;
+        threshold = y.invert(Math.max(0, Math.min(ih, newY)));
+        updateStats();
+      });
+
+    threshLine.call(drag);
+
+    // Also allow clicking on the chart to move threshold
+    g.append('rect')
+      .attr('width', iw).attr('height', ih)
+      .attr('fill', 'transparent')
+      .style('cursor', 'ns-resize')
+      .on('click', function (event) {
+        const [, my] = d3.pointer(event);
+        threshold = y.invert(my);
+        updateStats();
+      });
+
+    updateStats();
+  })();
+})();
+</script>
+</body>
+</html>

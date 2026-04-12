@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Genome Browser — Bioinformatics Visualization</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --article-width: 740px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem;
+  --line-height: 1.6;
+  --text: #1a1a2e;
+  --text-2: #4a4a6a;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --bg: #fafafa;
+  --fig-bg: #ffffff;
+  --border: #e2e2e8;
+}
+
+body { font-family: var(--body-font); font-size: var(--body-size); line-height: var(--line-height); color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased; }
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
+h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+p { margin: 0 0 1rem; }
+a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+a:hover { color: #1d4ed8; }
+
+.header { padding: 4rem 0 2rem; border-bottom: 1px solid var(--border); margin-bottom: 2.5rem; }
+.header .back { font-family: var(--heading-font); font-size: 0.85rem; display: inline-block; margin-bottom: 1.5rem; }
+.header .subtitle { font-family: var(--heading-font); font-size: 1.15rem; color: var(--text-2); margin-bottom: 0; max-width: 580px; }
+
+.figure { margin: 2rem 0; padding: 1.5rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.figure-wide { margin-left: -2rem; margin-right: -2rem; }
+.figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; line-height: 1.4; }
+.figure-label { font-weight: 600; color: var(--text); }
+
+.insight { background: var(--accent-light); border-left: 3px solid var(--accent); padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 4px 4px 0; }
+.insight p { margin: 0; }
+
+.controls { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); }
+
+.btn { font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600; padding: 0.45rem 1.1rem; border-radius: 5px; border: 1px solid var(--border); background: var(--fig-bg); color: var(--text); cursor: pointer; transition: background 0.15s, border-color 0.15s; user-select: none; }
+.btn:hover { border-color: var(--accent); background: var(--accent-light); }
+.btn.active { border-color: var(--accent); background: var(--accent); color: white; }
+
+.track-toggle { display: flex; align-items: center; gap: 0.4rem; font-family: var(--heading-font); font-size: 0.8rem; cursor: pointer; }
+.track-toggle input { accent-color: var(--accent); }
+
+svg text { font-family: var(--heading-font); }
+
+.tip { position: fixed; pointer-events: none; background: var(--text); color: white; font-family: var(--heading-font); font-size: 0.75rem; padding: 0.3rem 0.55rem; border-radius: 4px; opacity: 0; transition: opacity 0.12s; z-index: 10; max-width: 280px; white-space: normal; }
+
+@media (max-width: 640px) { .figure-wide { margin-left: 0; margin-right: 0; } h1 { font-size: 1.75rem; } }
+</style>
+</head>
+<body>
+
+<div class="article">
+
+  <header class="header">
+    <a class="back" href="index.html">&larr; Bioinformatics Visualization</a>
+    <h1>Genome Browser</h1>
+    <p class="subtitle">Where genes live on a chromosome: stacked tracks layer annotations, expression, and conservation along a linear coordinate axis.</p>
+  </header>
+
+  <p>A genome browser is the Google Maps of genetics. Instead of streets and buildings, it shows a stretch of DNA. Instead of a single layer, it stacks multiple <strong>tracks</strong> of information at the same coordinates: gene models, regulatory regions, expression levels, conservation scores, and more.</p>
+
+  <p>The horizontal axis is always genomic position (measured in base pairs). Each track adds a different layer of biological annotation. The power comes from alignment: when a peak in expression lines up with a gene, a conserved region, and an open chromatin signal, the evidence converges.</p>
+
+  <h2>A Simulated Locus</h2>
+
+  <p>Below is a fictional 500-kilobase region of chromosome 7. Drag to pan, scroll to zoom. Toggle tracks on and off to see how different layers interact.</p>
+
+  <div class="figure figure-wide" id="fig-browser">
+    <div class="controls">
+      <button class="btn" id="btn-zoom-in">Zoom in</button>
+      <button class="btn" id="btn-zoom-out">Zoom out</button>
+      <button class="btn" id="btn-reset">Reset</button>
+      <span id="coord-label" style="margin-left: auto; font-family: var(--mono-font); font-size: 0.8rem;"></span>
+    </div>
+    <div class="controls" id="track-toggles"></div>
+    <div id="browser-main"></div>
+    <p class="figure-caption"><span class="figure-label">Figure 1.</span> Interactive genome browser. Drag to pan, scroll to zoom. Click any gene or feature for details. Toggle tracks to reduce visual clutter.</p>
+  </div>
+
+  <div class="insight">
+    <p>The genome browser's key insight is that biology is fundamentally about position. Genes, regulatory elements, variants, and epigenetic marks all exist at specific coordinates. Aligning them on a common axis reveals relationships that no single dataset can show alone.</p>
+  </div>
+
+  <h2>Reading the Tracks</h2>
+
+  <p>Each track type serves a different purpose:</p>
+
+  <ul style="margin: 0 0 1rem 1.5rem;">
+    <li><strong>Gene models</strong> (blue arrows): The location and structure of genes. Thick blocks are exons (protein-coding), thin lines are introns. Arrows show transcription direction.</li>
+    <li><strong>Expression</strong> (area chart): How much RNA is produced at each position. Peaks over genes mean the gene is active.</li>
+    <li><strong>CpG islands</strong> (green): Clusters of CG dinucleotides, often near gene promoters. Methylation of CpG islands silences genes.</li>
+    <li><strong>Conservation</strong> (purple): How similar this DNA is across species. High conservation means the sequence is functionally important and hasn't changed much over millions of years.</li>
+  </ul>
+
+  <div class="figure" id="fig-anatomy">
+    <div id="anatomy-diagram"></div>
+    <p class="figure-caption"><span class="figure-label">Figure 2.</span> Anatomy of a gene model. Exons (thick) are the parts that become protein. Introns (thin lines) are spliced out. The arrow indicates transcription direction. UTRs (medium) are transcribed but not translated.</p>
+  </div>
+
+  <h2>Why Stacked Tracks?</h2>
+
+  <p>Each track alone tells a partial story. Together, they answer questions no single layer can:</p>
+
+  <div class="figure" id="fig-convergence">
+    <div id="convergence-browser"></div>
+    <p class="figure-caption"><span class="figure-label">Figure 3.</span> A zoomed-in region where multiple signals converge. The expression peak aligns with a gene, a CpG island sits at the promoter, and conservation is high across the gene body. This convergence of evidence is what makes a gene candidate compelling.</p>
+  </div>
+
+  <p>The genome browser shows features along a single chromosome. But some of the most important events in biology involve interactions <em>between</em> chromosomes — translocations, fusions, and long-range regulatory contacts. For that, we need the <a href="06-circos-plot.html">circos plot</a>.</p>
+
+</div>
+
+<div class="tip" id="tip"></div>
+
+<script>
+// ─── Seeded RNG ───
+function mulberry32(seed) {
+  return function() {
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+const rng = mulberry32(456);
+function rnorm(mu, sig) {
+  const u1 = rng(), u2 = rng();
+  return mu + sig * Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+}
+
+// ─── Generate Genomic Features ───
+const regionStart = 55_000_000;
+const regionEnd = 55_500_000;
+const regionLen = regionEnd - regionStart;
+
+const genes = [
+  { name: 'EGFR', start: 55_086_000, end: 55_275_000, strand: '+', exons: [[55_086_000,55_091_000],[55_140_000,55_145_000],[55_170_000,55_177_000],[55_210_000,55_218_000],[55_260_000,55_275_000]], desc: 'Epidermal growth factor receptor. Frequently mutated in cancers.' },
+  { name: 'VOPP1', start: 55_300_000, end: 55_340_000, strand: '-', exons: [[55_300_000,55_308_000],[55_320_000,55_328_000],[55_335_000,55_340_000]], desc: 'Vesicular, overexpressed in cancer, prosurvival protein 1.' },
+  { name: 'SEC61G', start: 55_050_000, end: 55_075_000, strand: '+', exons: [[55_050_000,55_054_000],[55_062_000,55_067_000],[55_072_000,55_075_000]], desc: 'Protein translocation channel. Co-amplified with EGFR in glioblastoma.' },
+  { name: 'LANCL2', start: 55_370_000, end: 55_430_000, strand: '+', exons: [[55_370_000,55_376_000],[55_395_000,55_402_000],[55_420_000,55_430_000]], desc: 'LanC-like glutathione S-transferase. Role in immune regulation.' },
+  { name: 'CCT6A', start: 55_440_000, end: 55_480_000, strand: '-', exons: [[55_440_000,55_447_000],[55_460_000,55_468_000],[55_475_000,55_480_000]], desc: 'Chaperonin containing TCP1 subunit. Protein folding.' }
+];
+
+// CpG islands near promoters
+const cpgIslands = [
+  { start: 55_082_000, end: 55_089_000 },
+  { start: 55_047_000, end: 55_053_000 },
+  { start: 55_337_000, end: 55_343_000 },
+  { start: 55_366_000, end: 55_374_000 },
+  { start: 55_477_000, end: 55_484_000 },
+  { start: 55_200_000, end: 55_205_000 }
+];
+
+// Generate expression signal
+const exprBins = 500;
+const exprData = d3.range(exprBins).map(i => {
+  const pos = regionStart + (i / exprBins) * regionLen;
+  let val = Math.max(0, rnorm(0.5, 0.3));
+  genes.forEach(gene => {
+    gene.exons.forEach(([s, e]) => {
+      if (pos >= s - 5000 && pos <= e + 5000) {
+        const dist = Math.max(0, 1 - Math.min(Math.abs(pos - s), Math.abs(pos - e)) / 10000);
+        val += rnorm(3, 0.8) * dist;
+      }
+    });
+  });
+  return { pos, val: Math.max(0, val) };
+});
+
+// Conservation score
+const consData = d3.range(exprBins).map(i => {
+  const pos = regionStart + (i / exprBins) * regionLen;
+  let val = Math.max(0, Math.min(1, rnorm(0.3, 0.15)));
+  genes.forEach(gene => {
+    gene.exons.forEach(([s, e]) => {
+      if (pos >= s && pos <= e) val = Math.max(0, Math.min(1, rnorm(0.85, 0.1)));
+    });
+  });
+  return { pos, val };
+});
+
+const tip = document.getElementById('tip');
+
+// ─── Figure 1: Full Browser ───
+(function() {
+  const container = d3.select('#browser-main');
+  const W = 700;
+  const trackH = { coord: 20, genes: 80, expr: 70, cpg: 25, cons: 50 };
+  const gap = 8;
+  const margin = { top: 5, right: 15, bottom: 5, left: 65 };
+  const w = W - margin.left - margin.right;
+
+  const tracks = {
+    genes: { label: 'Genes', visible: true, h: trackH.genes },
+    expr: { label: 'Expression', visible: true, h: trackH.expr },
+    cpg: { label: 'CpG Islands', visible: true, h: trackH.cpg },
+    cons: { label: 'Conservation', visible: true, h: trackH.cons }
+  };
+
+  // Track toggles
+  const toggleDiv = d3.select('#track-toggles');
+  Object.entries(tracks).forEach(([key, t]) => {
+    const label = toggleDiv.append('label').attr('class', 'track-toggle');
+    label.append('input').attr('type', 'checkbox').attr('checked', true)
+      .on('change', function() { tracks[key].visible = this.checked; render(); });
+    label.append('span').text(t.label);
+  });
+
+  let viewStart = regionStart, viewEnd = regionEnd;
+
+  function totalH() {
+    let h = margin.top + trackH.coord + gap;
+    Object.values(tracks).forEach(t => { if (t.visible) h += t.h + gap; });
+    return h + margin.bottom;
+  }
+
+  function render() {
+    container.selectAll('svg').remove();
+    const H = totalH();
+    const svg = container.append('svg').attr('width', W).attr('height', H)
+      .attr('viewBox', `0 0 ${W} ${H}`).style('max-width', '100%').style('height', 'auto')
+      .style('cursor', 'grab');
+
+    const x = d3.scaleLinear().domain([viewStart, viewEnd]).range([margin.left, margin.left + w]);
+
+    // Coordinate axis
+    let yOff = margin.top;
+    const coordG = svg.append('g').attr('transform', `translate(0,${yOff})`);
+    const coordAxis = d3.axisBottom(x).ticks(8).tickFormat(d => {
+      if (d >= 1e6) return (d / 1e6).toFixed(2) + ' Mb';
+      if (d >= 1e3) return (d / 1e3).toFixed(0) + ' kb';
+      return d;
+    });
+    coordG.append('g').attr('transform', `translate(0,${trackH.coord})`).call(coordAxis)
+      .selectAll('text').style('font-size', '9px').style('fill', 'var(--text-2)');
+    coordG.selectAll('.domain, line').attr('stroke', 'var(--border)');
+
+    coordG.append('text').attr('x', margin.left - 6).attr('y', trackH.coord + 4)
+      .attr('text-anchor', 'end').style('font-size', '9px').style('fill', 'var(--text-2)').style('font-weight', '600')
+      .text('chr7');
+
+    yOff += trackH.coord + gap;
+
+    // Update coord label
+    d3.select('#coord-label').text(
+      `chr7:${Math.round(viewStart).toLocaleString()}-${Math.round(viewEnd).toLocaleString()} (${((viewEnd - viewStart) / 1000).toFixed(0)} kb)`
+    );
+
+    // Gene track
+    if (tracks.genes.visible) {
+      const gG = svg.append('g').attr('transform', `translate(0,${yOff})`);
+      gG.append('text').attr('x', margin.left - 6).attr('y', trackH.genes / 2 + 3)
+        .attr('text-anchor', 'end').style('font-size', '9px').style('fill', 'var(--text-2)').style('font-weight', '600')
+        .text('Genes');
+
+      genes.forEach((gene, gi) => {
+        const gx1 = x(gene.start), gx2 = x(gene.end);
+        if (gx2 < margin.left || gx1 > margin.left + w) return;
+        const row = gi % 3;
+        const gy = 8 + row * 24;
+
+        // Gene line (intron)
+        gG.append('line')
+          .attr('x1', Math.max(margin.left, gx1)).attr('x2', Math.min(margin.left + w, gx2))
+          .attr('y1', gy + 6).attr('y2', gy + 6)
+          .attr('stroke', '#2563eb').attr('stroke-width', 1.5);
+
+        // Exons
+        gene.exons.forEach(([s, e]) => {
+          const ex1 = x(s), ex2 = x(e);
+          if (ex2 < margin.left || ex1 > margin.left + w) return;
+          gG.append('rect')
+            .attr('x', Math.max(margin.left, ex1))
+            .attr('width', Math.max(2, Math.min(margin.left + w, ex2) - Math.max(margin.left, ex1)))
+            .attr('y', gy).attr('height', 12)
+            .attr('fill', '#2563eb').attr('rx', 2)
+            .style('cursor', 'pointer')
+            .on('mouseenter', (event) => {
+              tip.style.opacity = 1;
+              tip.innerHTML = `<strong>${gene.name}</strong><br>${gene.desc}`;
+              tip.style.left = (event.clientX + 12) + 'px';
+              tip.style.top = (event.clientY - 10) + 'px';
+            })
+            .on('mouseleave', () => { tip.style.opacity = 0; });
+        });
+
+        // Direction arrow
+        const arrowX = gene.strand === '+' ? Math.min(margin.left + w - 5, gx2 + 3) : Math.max(margin.left + 5, gx1 - 3);
+        if (arrowX > margin.left && arrowX < margin.left + w) {
+          const dir = gene.strand === '+' ? 1 : -1;
+          gG.append('path')
+            .attr('d', `M${arrowX},${gy + 6} l${dir * 5},-4 l0,8 z`)
+            .attr('fill', '#2563eb').attr('opacity', 0.7);
+        }
+
+        // Label
+        const labelX = (gx1 + gx2) / 2;
+        if (labelX > margin.left && labelX < margin.left + w) {
+          gG.append('text').attr('x', labelX).attr('y', gy + 24)
+            .attr('text-anchor', 'middle').style('font-size', '8px').style('fill', 'var(--text)')
+            .style('font-weight', '600').text(gene.name);
+        }
+      });
+
+      yOff += trackH.genes + gap;
+    }
+
+    // Expression track
+    if (tracks.expr.visible) {
+      const eG = svg.append('g').attr('transform', `translate(0,${yOff})`);
+      eG.append('text').attr('x', margin.left - 6).attr('y', trackH.expr / 2 + 3)
+        .attr('text-anchor', 'end').style('font-size', '9px').style('fill', 'var(--text-2)').style('font-weight', '600')
+        .text('Expr');
+
+      const visible = exprData.filter(d => d.pos >= viewStart && d.pos <= viewEnd);
+      const yScale = d3.scaleLinear().domain([0, d3.max(visible, d => d.val) || 1]).range([trackH.expr, 0]);
+
+      const area = d3.area()
+        .x(d => x(d.pos))
+        .y0(trackH.expr)
+        .y1(d => yScale(d.val))
+        .curve(d3.curveBasis);
+
+      eG.append('path').datum(visible).attr('d', area)
+        .attr('fill', '#e74c3c').attr('opacity', 0.4);
+      eG.append('path').datum(visible).attr('d', d3.line().x(d => x(d.pos)).y(d => yScale(d.val)).curve(d3.curveBasis))
+        .attr('fill', 'none').attr('stroke', '#e74c3c').attr('stroke-width', 1.5);
+
+      yOff += trackH.expr + gap;
+    }
+
+    // CpG track
+    if (tracks.cpg.visible) {
+      const cG = svg.append('g').attr('transform', `translate(0,${yOff})`);
+      cG.append('text').attr('x', margin.left - 6).attr('y', trackH.cpg / 2 + 3)
+        .attr('text-anchor', 'end').style('font-size', '9px').style('fill', 'var(--text-2)').style('font-weight', '600')
+        .text('CpG');
+
+      cpgIslands.forEach(cpg => {
+        const cx1 = x(cpg.start), cx2 = x(cpg.end);
+        if (cx2 < margin.left || cx1 > margin.left + w) return;
+        cG.append('rect')
+          .attr('x', Math.max(margin.left, cx1))
+          .attr('width', Math.max(3, Math.min(margin.left + w, cx2) - Math.max(margin.left, cx1)))
+          .attr('y', 4).attr('height', trackH.cpg - 8)
+          .attr('fill', '#2ecc71').attr('opacity', 0.6).attr('rx', 3)
+          .on('mouseenter', (event) => {
+            tip.style.opacity = 1;
+            tip.innerHTML = `CpG Island<br>${cpg.start.toLocaleString()} - ${cpg.end.toLocaleString()} (${((cpg.end - cpg.start) / 1000).toFixed(1)} kb)`;
+            tip.style.left = (event.clientX + 12) + 'px';
+            tip.style.top = (event.clientY - 10) + 'px';
+          })
+          .on('mouseleave', () => { tip.style.opacity = 0; });
+      });
+
+      yOff += trackH.cpg + gap;
+    }
+
+    // Conservation track
+    if (tracks.cons.visible) {
+      const sG = svg.append('g').attr('transform', `translate(0,${yOff})`);
+      sG.append('text').attr('x', margin.left - 6).attr('y', trackH.cons / 2 + 3)
+        .attr('text-anchor', 'end').style('font-size', '9px').style('fill', 'var(--text-2)').style('font-weight', '600')
+        .text('Cons.');
+
+      const visible = consData.filter(d => d.pos >= viewStart && d.pos <= viewEnd);
+      const yScale = d3.scaleLinear().domain([0, 1]).range([trackH.cons, 0]);
+
+      const area = d3.area()
+        .x(d => x(d.pos))
+        .y0(trackH.cons)
+        .y1(d => yScale(d.val))
+        .curve(d3.curveStep);
+
+      sG.append('path').datum(visible).attr('d', area)
+        .attr('fill', '#9b59b6').attr('opacity', 0.3);
+      sG.append('path').datum(visible).attr('d', d3.line().x(d => x(d.pos)).y(d => yScale(d.val)).curve(d3.curveStep))
+        .attr('fill', 'none').attr('stroke', '#9b59b6').attr('stroke-width', 1);
+    }
+
+    // Pan interaction
+    let dragStart = null, domainStart = null;
+    svg.call(d3.drag()
+      .on('start', (event) => {
+        dragStart = event.x;
+        domainStart = [viewStart, viewEnd];
+        svg.style('cursor', 'grabbing');
+      })
+      .on('drag', (event) => {
+        const dx = event.x - dragStart;
+        const domainWidth = domainStart[1] - domainStart[0];
+        const shift = -dx * (domainWidth / w);
+        viewStart = Math.max(regionStart, Math.min(regionEnd - domainWidth, domainStart[0] + shift));
+        viewEnd = viewStart + domainWidth;
+        render();
+      })
+      .on('end', () => { svg.style('cursor', 'grab'); })
+    );
+
+    // Zoom via wheel
+    svg.on('wheel', (event) => {
+      event.preventDefault();
+      const factor = event.deltaY > 0 ? 1.2 : 1 / 1.2;
+      const center = x.invert(event.offsetX);
+      const newWidth = Math.max(20000, Math.min(regionLen, (viewEnd - viewStart) * factor));
+      const ratio = (center - viewStart) / (viewEnd - viewStart);
+      viewStart = Math.max(regionStart, center - newWidth * ratio);
+      viewEnd = Math.min(regionEnd, viewStart + newWidth);
+      if (viewEnd > regionEnd) { viewEnd = regionEnd; viewStart = viewEnd - newWidth; }
+      render();
+    }, { passive: false });
+  }
+
+  render();
+
+  d3.select('#btn-zoom-in').on('click', () => {
+    const center = (viewStart + viewEnd) / 2;
+    const newWidth = Math.max(20000, (viewEnd - viewStart) / 2);
+    viewStart = center - newWidth / 2;
+    viewEnd = center + newWidth / 2;
+    render();
+  });
+
+  d3.select('#btn-zoom-out').on('click', () => {
+    const center = (viewStart + viewEnd) / 2;
+    const newWidth = Math.min(regionLen, (viewEnd - viewStart) * 2);
+    viewStart = Math.max(regionStart, center - newWidth / 2);
+    viewEnd = Math.min(regionEnd, viewStart + newWidth);
+    render();
+  });
+
+  d3.select('#btn-reset').on('click', () => {
+    viewStart = regionStart;
+    viewEnd = regionEnd;
+    render();
+  });
+})();
+
+// ─── Figure 2: Gene Anatomy ───
+(function() {
+  const container = d3.select('#anatomy-diagram');
+  const W = 600, H = 100;
+  const svg = container.append('svg').attr('width', W).attr('height', H)
+    .attr('viewBox', `0 0 ${W} ${H}`).style('max-width', '100%').style('height', 'auto');
+
+  const y = 40;
+  // UTR (medium height)
+  svg.append('rect').attr('x', 40).attr('y', y - 4).attr('width', 40).attr('height', 8).attr('fill', '#93c5fd').attr('rx', 2);
+  // Intron line
+  svg.append('line').attr('x1', 80).attr('x2', 140).attr('y1', y).attr('y2', y).attr('stroke', '#2563eb').attr('stroke-width', 1.5);
+  // Exon 1
+  svg.append('rect').attr('x', 140).attr('y', y - 8).attr('width', 60).attr('height', 16).attr('fill', '#2563eb').attr('rx', 2);
+  // Intron
+  svg.append('line').attr('x1', 200).attr('x2', 280).attr('y1', y).attr('y2', y).attr('stroke', '#2563eb').attr('stroke-width', 1.5);
+  // Exon 2
+  svg.append('rect').attr('x', 280).attr('y', y - 8).attr('width', 80).attr('height', 16).attr('fill', '#2563eb').attr('rx', 2);
+  // Intron
+  svg.append('line').attr('x1', 360).attr('x2', 420).attr('y1', y).attr('y2', y).attr('stroke', '#2563eb').attr('stroke-width', 1.5);
+  // Exon 3
+  svg.append('rect').attr('x', 420).attr('y', y - 8).attr('width', 50).attr('height', 16).attr('fill', '#2563eb').attr('rx', 2);
+  // UTR
+  svg.append('rect').attr('x', 470).attr('y', y - 4).attr('width', 35).attr('height', 8).attr('fill', '#93c5fd').attr('rx', 2);
+  // Arrow
+  svg.append('path').attr('d', `M515,${y} l8,-5 l0,10 z`).attr('fill', '#2563eb');
+
+  // Labels
+  const labels = [
+    { x: 60, text: "5' UTR" }, { x: 110, text: "Intron" },
+    { x: 170, text: "Exon 1" }, { x: 240, text: "Intron" },
+    { x: 320, text: "Exon 2" }, { x: 390, text: "Intron" },
+    { x: 445, text: "Exon 3" }, { x: 487, text: "3' UTR" }
+  ];
+  labels.forEach(l => {
+    svg.append('text').attr('x', l.x).attr('y', y + 30)
+      .attr('text-anchor', 'middle').style('font-size', '9px').style('fill', 'var(--text-2)').text(l.text);
+  });
+
+  svg.append('text').attr('x', 530).attr('y', y + 4).style('font-size', '10px').style('fill', '#2563eb').style('font-weight', '600').text('→ 3\'');
+  svg.append('text').attr('x', 20).attr('y', y + 4).attr('text-anchor', 'end').style('font-size', '10px').style('fill', '#2563eb').style('font-weight', '600').text('5\' ←');
+})();
+
+// ─── Figure 3: Convergence ───
+(function() {
+  const container = d3.select('#convergence-browser');
+  const W = 600, H = 200;
+  const margin = { left: 60, right: 15 };
+  const w = W - margin.left - margin.right;
+
+  const svg = container.append('svg').attr('width', W).attr('height', H)
+    .attr('viewBox', `0 0 ${W} ${H}`).style('max-width', '100%').style('height', 'auto');
+
+  // Zoom into EGFR region
+  const zStart = 55_070_000, zEnd = 55_120_000;
+  const x = d3.scaleLinear().domain([zStart, zEnd]).range([margin.left, margin.left + w]);
+
+  // Gene
+  const gene = genes[2]; // SEC61G
+  let yOff = 10;
+  svg.append('text').attr('x', margin.left - 6).attr('y', yOff + 8).attr('text-anchor', 'end').style('font-size', '8px').style('fill', 'var(--text-2)').style('font-weight', '600').text('Gene');
+  svg.append('line').attr('x1', x(gene.start)).attr('x2', x(gene.end)).attr('y1', yOff + 8).attr('y2', yOff + 8).attr('stroke', '#2563eb').attr('stroke-width', 1.5);
+  gene.exons.forEach(([s, e]) => {
+    svg.append('rect').attr('x', x(s)).attr('width', x(e) - x(s)).attr('y', yOff + 2).attr('height', 12).attr('fill', '#2563eb').attr('rx', 2);
+  });
+  svg.append('text').attr('x', (x(gene.start) + x(gene.end)) / 2).attr('y', yOff + 26).attr('text-anchor', 'middle').style('font-size', '8px').style('fill', '#2563eb').style('font-weight', '600').text(gene.name);
+
+  // CpG
+  yOff = 45;
+  svg.append('text').attr('x', margin.left - 6).attr('y', yOff + 8).attr('text-anchor', 'end').style('font-size', '8px').style('fill', 'var(--text-2)').style('font-weight', '600').text('CpG');
+  cpgIslands.filter(c => c.start >= zStart && c.end <= zEnd).forEach(cpg => {
+    svg.append('rect').attr('x', x(cpg.start)).attr('width', x(cpg.end) - x(cpg.start)).attr('y', yOff + 2).attr('height', 12).attr('fill', '#2ecc71').attr('opacity', 0.6).attr('rx', 3);
+  });
+
+  // Expression
+  yOff = 75;
+  svg.append('text').attr('x', margin.left - 6).attr('y', yOff + 25).attr('text-anchor', 'end').style('font-size', '8px').style('fill', 'var(--text-2)').style('font-weight', '600').text('Expr');
+  const eH = 50;
+  const visible = exprData.filter(d => d.pos >= zStart && d.pos <= zEnd);
+  const yScale = d3.scaleLinear().domain([0, d3.max(visible, d => d.val) || 1]).range([yOff + eH, yOff]);
+  svg.append('path').datum(visible)
+    .attr('d', d3.area().x(d => x(d.pos)).y0(yOff + eH).y1(d => yScale(d.val)).curve(d3.curveBasis))
+    .attr('fill', '#e74c3c').attr('opacity', 0.35);
+
+  // Conservation
+  yOff = 140;
+  svg.append('text').attr('x', margin.left - 6).attr('y', yOff + 20).attr('text-anchor', 'end').style('font-size', '8px').style('fill', 'var(--text-2)').style('font-weight', '600').text('Cons.');
+  const cH = 40;
+  const cVisible = consData.filter(d => d.pos >= zStart && d.pos <= zEnd);
+  const cY = d3.scaleLinear().domain([0, 1]).range([yOff + cH, yOff]);
+  svg.append('path').datum(cVisible)
+    .attr('d', d3.area().x(d => x(d.pos)).y0(yOff + cH).y1(d => cY(d.val)).curve(d3.curveStep))
+    .attr('fill', '#9b59b6').attr('opacity', 0.3);
+
+  // Highlight box
+  svg.append('rect').attr('x', x(55_047_000)).attr('width', x(55_075_000) - x(55_047_000))
+    .attr('y', 0).attr('height', H)
+    .attr('fill', 'var(--accent)').attr('opacity', 0.06)
+    .attr('stroke', 'var(--accent)').attr('stroke-width', 1).attr('stroke-dasharray', '4,3');
+})();
+</script>
+</body>
+</html>

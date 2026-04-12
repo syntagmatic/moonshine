@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dimensionality Reduction — Bioinformatics Visualization</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --article-width: 740px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem;
+  --line-height: 1.6;
+  --text: #1a1a2e;
+  --text-2: #4a4a6a;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --bg: #fafafa;
+  --fig-bg: #ffffff;
+  --border: #e2e2e8;
+}
+
+body { font-family: var(--body-font); font-size: var(--body-size); line-height: var(--line-height); color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased; }
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
+h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+p { margin: 0 0 1rem; }
+a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+a:hover { color: #1d4ed8; }
+
+.header { padding: 4rem 0 2rem; border-bottom: 1px solid var(--border); margin-bottom: 2.5rem; }
+.header .back { font-family: var(--heading-font); font-size: 0.85rem; display: inline-block; margin-bottom: 1.5rem; }
+.header .subtitle { font-family: var(--heading-font); font-size: 1.15rem; color: var(--text-2); margin-bottom: 0; max-width: 580px; }
+
+.figure { margin: 2rem 0; padding: 1.5rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.figure-wide { margin-left: -2rem; margin-right: -2rem; }
+.figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; line-height: 1.4; }
+.figure-label { font-weight: 600; color: var(--text); }
+
+.insight { background: var(--accent-light); border-left: 3px solid var(--accent); padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 4px 4px 0; }
+.insight p { margin: 0; }
+
+.controls { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); }
+.controls label { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; }
+.controls input[type="range"] { width: 120px; accent-color: var(--accent); }
+
+.btn { font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600; padding: 0.45rem 1.1rem; border-radius: 5px; border: 1px solid var(--border); background: var(--fig-bg); color: var(--text); cursor: pointer; transition: background 0.15s, border-color 0.15s; user-select: none; }
+.btn:hover { border-color: var(--accent); background: var(--accent-light); }
+.btn.active { border-color: var(--accent); background: var(--accent); color: white; }
+.toggle-group { display: flex; gap: 0; }
+.toggle-group .btn { border-radius: 0; }
+.toggle-group .btn:first-child { border-radius: 5px 0 0 5px; }
+.toggle-group .btn:last-child { border-radius: 0 5px 5px 0; }
+.toggle-group .btn + .btn { border-left: none; }
+
+svg text { font-family: var(--heading-font); }
+
+.tip { position: fixed; pointer-events: none; background: var(--text); color: white; font-family: var(--heading-font); font-size: 0.75rem; padding: 0.3rem 0.55rem; border-radius: 4px; opacity: 0; transition: opacity 0.12s; z-index: 10; white-space: nowrap; }
+
+.legend-item { display: flex; align-items: center; gap: 0.35rem; font-family: var(--heading-font); font-size: 0.8rem; color: var(--text-2); cursor: pointer; }
+.legend-swatch { width: 10px; height: 10px; border-radius: 50%; }
+.legend-row { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 0.75rem; }
+
+@media (max-width: 640px) { .figure-wide { margin-left: 0; margin-right: 0; } h1 { font-size: 1.75rem; } }
+</style>
+</head>
+<body>
+
+<div class="article">
+
+  <header class="header">
+    <a class="back" href="index.html">&larr; Bioinformatics Visualization</a>
+    <h1>Dimensionality Reduction</h1>
+    <p class="subtitle">When every cell is its own experiment: how UMAP, t-SNE, and PCA compress thousands of dimensions into a picture you can see.</p>
+  </header>
+
+  <p>Single-cell RNA sequencing measures gene expression in individual cells, not bulk tissue. A typical experiment profiles 5,000 to 50,000 cells, each described by the expression levels of 20,000+ genes. Each cell is a point in a 20,000-dimensional space.</p>
+
+  <p>No human can visualize 20,000 dimensions. <strong>Dimensionality reduction</strong> algorithms compress those dimensions down to two, producing a scatter plot where similar cells land near each other. Different cell types form distinct clusters.</p>
+
+  <h2>Three Algorithms, One Dataset</h2>
+
+  <p>Below is a simulated single-cell dataset: 600 cells from five cell types. Toggle between PCA, t-SNE, and UMAP to see how each algorithm arranges the same cells. The colors represent true cell type.</p>
+
+  <div class="figure figure-wide" id="fig-methods">
+    <div class="controls">
+      <div class="toggle-group" id="method-toggle">
+        <button class="btn active" data-method="umap">UMAP</button>
+        <button class="btn" data-method="tsne">t-SNE</button>
+        <button class="btn" data-method="pca">PCA</button>
+      </div>
+      <label>Spread: <input type="range" id="spread-slider" min="0.5" max="3" value="1" step="0.1"> <span id="spread-val" style="min-width: 2em; font-variant-numeric: tabular-nums;">1.0</span></label>
+    </div>
+    <div class="legend-row" id="legend"></div>
+    <div id="scatter-main"></div>
+    <p class="figure-caption"><span class="figure-label">Figure 1.</span> The same 600 cells visualized by three different algorithms. UMAP preserves both local and global structure. t-SNE emphasizes local neighborhoods. PCA preserves variance but can overlap distinct types.</p>
+  </div>
+
+  <div class="insight">
+    <p>No dimensionality reduction is "correct." Each makes trade-offs. PCA is linear and fast but can mix overlapping clusters. t-SNE separates clusters well but distorts distances between them. UMAP balances both and is currently the most popular for single-cell data.</p>
+  </div>
+
+  <h2>What the Clusters Mean</h2>
+
+  <p>In real experiments, the clusters don't come with labels. Biologists identify cell types by looking at which genes are highly expressed in each cluster. Click a cluster below to see its marker genes.</p>
+
+  <div class="figure figure-wide" id="fig-markers">
+    <div class="legend-row" id="legend2"></div>
+    <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+      <div id="scatter-markers" style="flex: 1; min-width: 300px;"></div>
+      <div id="marker-panel" style="flex: 0 0 220px; font-family: var(--heading-font); font-size: 0.85rem;">
+        <div style="color: var(--text-2); margin-bottom: 0.5rem;">Click a cluster to see markers</div>
+        <div id="marker-list"></div>
+      </div>
+    </div>
+    <p class="figure-caption"><span class="figure-label">Figure 2.</span> Click any cluster to reveal its marker genes. In real data, markers like CD3 (T cells) or CD19 (B cells) tell you what each cluster is.</p>
+  </div>
+
+  <h2>The Danger of Over-Reading</h2>
+
+  <p>It's tempting to interpret every gap and distance in a dimensionality reduction plot. But many visual features are artifacts of the algorithm, not the biology:</p>
+
+  <ul style="margin: 0 0 1rem 1.5rem;">
+    <li>The <strong>distance between clusters</strong> in t-SNE is meaningless. Two clusters far apart might be more similar than two clusters nearby.</li>
+    <li>The <strong>size of a cluster</strong> is partly an artifact of local density. t-SNE expands dense regions and compresses sparse ones.</li>
+    <li>Different <strong>random seeds</strong> produce different layouts. If a pattern only appears with one seed, it's not real.</li>
+  </ul>
+
+  <div class="figure figure-wide" id="fig-seeds">
+    <div class="controls">
+      <button class="btn" id="btn-reseed">New random seed</button>
+      <span id="seed-label" style="font-family: var(--mono-font); font-size: 0.8rem;">seed: 42</span>
+    </div>
+    <div id="scatter-seeds"></div>
+    <p class="figure-caption"><span class="figure-label">Figure 3.</span> Click "New random seed" to regenerate the embedding with different initialization. The clusters rearrange, but the same cells stay grouped. Absolute positions are arbitrary; relative groupings are meaningful.</p>
+  </div>
+
+  <div class="insight">
+    <p>The golden rule of dimensionality reduction: trust the clusters, not the coordinates. If cells consistently group together across seeds, that's a real biological signal. The spatial arrangement between clusters is negotiable.</p>
+  </div>
+
+  <p>Once you've identified clusters, the next question is often: <em>where on the genome are the relevant genes located?</em> That's where the <a href="05-genome-browser.html">genome browser</a> comes in.</p>
+
+</div>
+
+<div class="tip" id="tip"></div>
+
+<script>
+// ─── Seeded RNG ───
+function mulberry32(seed) {
+  return function() {
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+let currentSeed = 42;
+let rng = mulberry32(currentSeed);
+function rnorm(mu, sigma) {
+  const u1 = rng(), u2 = rng();
+  return mu + sigma * Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+}
+
+// ─── Cell Types ───
+const cellTypes = [
+  { name: 'T cells', color: '#e74c3c', markers: ['CD3D', 'CD3E', 'IL7R', 'LEF1', 'TCF7'] },
+  { name: 'B cells', color: '#3498db', markers: ['CD19', 'MS4A1', 'CD79A', 'PAX5', 'BANK1'] },
+  { name: 'Monocytes', color: '#2ecc71', markers: ['CD14', 'LYZ', 'S100A8', 'FCGR3A', 'CST3'] },
+  { name: 'NK cells', color: '#9b59b6', markers: ['NKG7', 'GNLY', 'KLRD1', 'PRF1', 'GZMA'] },
+  { name: 'Dendritic', color: '#f39c12', markers: ['FCER1A', 'CLEC10A', 'CD1C', 'HLA-DRA', 'ITGAX'] }
+];
+
+const nCells = 600;
+const cellsPerType = nCells / cellTypes.length;
+
+// Generate base high-dimensional centroids (fake 10D)
+function generateCells(seed) {
+  const r = mulberry32(seed);
+  const norm = (mu, sig) => {
+    const u1 = r(), u2 = r();
+    return mu + sig * Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+  };
+
+  const centroids = cellTypes.map((_, i) => {
+    return d3.range(10).map(() => norm(0, 3));
+  });
+  // Separate centroids
+  centroids.forEach((c, i) => { c[0] += (i - 2) * 4; c[1] += ((i * 7) % 5 - 2) * 3; });
+
+  const cells = [];
+  cellTypes.forEach((ct, ti) => {
+    for (let i = 0; i < cellsPerType; i++) {
+      const hd = centroids[ti].map(v => norm(v, 1.2));
+      cells.push({ type: ti, typeName: ct.name, color: ct.color, hd });
+    }
+  });
+
+  return cells;
+}
+
+// Fake PCA: project onto first 2 principal-ish components
+function fakePCA(cells) {
+  return cells.map(c => ({ ...c, x: c.hd[0], y: c.hd[1] }));
+}
+
+// Fake t-SNE: exaggerate cluster separation, add noise
+function fakeTSNE(cells, seed) {
+  const r = mulberry32(seed + 1000);
+  const norm = (mu, sig) => {
+    const u1 = r(), u2 = r();
+    return mu + sig * Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+  };
+
+  // Place cluster centers in a ring
+  const angles = cellTypes.map((_, i) => (i / cellTypes.length) * Math.PI * 2 + norm(0, 0.3));
+  const radii = cellTypes.map(() => 8 + norm(0, 1));
+
+  return cells.map(c => {
+    const angle = angles[c.type];
+    const radius = radii[c.type];
+    return {
+      ...c,
+      x: radius * Math.cos(angle) + norm(0, 1.5),
+      y: radius * Math.sin(angle) + norm(0, 1.5)
+    };
+  });
+}
+
+// Fake UMAP: tighter clusters, some global structure preserved
+function fakeUMAP(cells, seed, spread) {
+  const r = mulberry32(seed + 2000);
+  const norm = (mu, sig) => {
+    const u1 = r(), u2 = r();
+    return mu + sig * Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+  };
+
+  // Layout reflects some of the PCA structure
+  const offsets = [[-4, -3], [4, -2], [0, 4], [-5, 3], [5, 3]];
+
+  return cells.map(c => ({
+    ...c,
+    x: offsets[c.type][0] * 1.5 + c.hd[0] * 0.2 + norm(0, spread * 0.8),
+    y: offsets[c.type][1] * 1.5 + c.hd[1] * 0.2 + norm(0, spread * 0.8)
+  }));
+}
+
+let cells = generateCells(currentSeed);
+const tip = document.getElementById('tip');
+
+// ─── Figure 1: Method Toggle ───
+(function() {
+  const container = d3.select('#scatter-main');
+  const W = 560, H = 440;
+  const margin = { top: 10, right: 10, bottom: 10, left: 10 };
+  const w = W - margin.left - margin.right;
+  const h = H - margin.top - margin.bottom;
+
+  const svg = container.append('svg').attr('width', W).attr('height', H)
+    .attr('viewBox', `0 0 ${W} ${H}`).style('max-width', '100%').style('height', 'auto');
+  const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+
+  let currentMethod = 'umap';
+  let spread = 1.0;
+
+  // Legend
+  const legend = d3.select('#legend');
+  cellTypes.forEach(ct => {
+    const item = legend.append('div').attr('class', 'legend-item');
+    item.append('div').attr('class', 'legend-swatch').style('background', ct.color);
+    item.append('span').text(ct.name);
+  });
+
+  function getEmbedding() {
+    if (currentMethod === 'pca') return fakePCA(cells);
+    if (currentMethod === 'tsne') return fakeTSNE(cells, currentSeed);
+    return fakeUMAP(cells, currentSeed, spread);
+  }
+
+  function render() {
+    g.selectAll('*').remove();
+    const embedded = getEmbedding();
+
+    const xExt = d3.extent(embedded, d => d.x);
+    const yExt = d3.extent(embedded, d => d.y);
+    const pad = 0.1;
+    const xRange = xExt[1] - xExt[0] || 1;
+    const yRange = yExt[1] - yExt[0] || 1;
+
+    const x = d3.scaleLinear().domain([xExt[0] - pad * xRange, xExt[1] + pad * xRange]).range([0, w]);
+    const y = d3.scaleLinear().domain([yExt[0] - pad * yRange, yExt[1] + pad * yRange]).range([h, 0]);
+
+    g.selectAll('.cell-dot')
+      .data(embedded)
+      .enter().append('circle')
+      .attr('class', 'cell-dot')
+      .attr('cx', d => x(d.x))
+      .attr('cy', d => y(d.y))
+      .attr('r', 3.5)
+      .attr('fill', d => d.color)
+      .attr('opacity', 0.65)
+      .on('mouseenter', (event, d) => {
+        tip.style.opacity = 1;
+        tip.innerHTML = `${d.typeName}`;
+        tip.style.left = (event.clientX + 12) + 'px';
+        tip.style.top = (event.clientY - 10) + 'px';
+      })
+      .on('mouseleave', () => { tip.style.opacity = 0; });
+
+    // Method label
+    const labels = { umap: 'UMAP', tsne: 't-SNE', pca: 'PCA' };
+    g.append('text').attr('x', 6).attr('y', 16).style('font-size', '13px').style('font-weight', '700').style('fill', 'var(--text-2)').text(labels[currentMethod]);
+  }
+
+  render();
+
+  d3.selectAll('#method-toggle .btn').on('click', function() {
+    d3.selectAll('#method-toggle .btn').classed('active', false);
+    d3.select(this).classed('active', true);
+    currentMethod = this.dataset.method;
+    render();
+  });
+
+  d3.select('#spread-slider').on('input', function() {
+    spread = +this.value;
+    d3.select('#spread-val').text(spread.toFixed(1));
+    render();
+  });
+
+  window.renderMainScatter = render;
+})();
+
+// ─── Figure 2: Marker Genes ───
+(function() {
+  const container = d3.select('#scatter-markers');
+  const W = 400, H = 380;
+  const margin = { top: 10, right: 10, bottom: 10, left: 10 };
+  const w = W - margin.left - margin.right;
+  const h = H - margin.top - margin.bottom;
+
+  const svg = container.append('svg').attr('width', W).attr('height', H)
+    .attr('viewBox', `0 0 ${W} ${H}`).style('max-width', '100%').style('height', 'auto');
+  const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+
+  const legend2 = d3.select('#legend2');
+  cellTypes.forEach(ct => {
+    const item = legend2.append('div').attr('class', 'legend-item');
+    item.append('div').attr('class', 'legend-swatch').style('background', ct.color);
+    item.append('span').text(ct.name);
+  });
+
+  const embedded = fakeUMAP(cells, 42, 1.0);
+  const xExt = d3.extent(embedded, d => d.x);
+  const yExt = d3.extent(embedded, d => d.y);
+  const pad = 0.1;
+  const xRange = xExt[1] - xExt[0] || 1;
+  const yRange = yExt[1] - yExt[0] || 1;
+
+  const x = d3.scaleLinear().domain([xExt[0] - pad * xRange, xExt[1] + pad * xRange]).range([0, w]);
+  const y = d3.scaleLinear().domain([yExt[0] - pad * yRange, yExt[1] + pad * yRange]).range([h, 0]);
+
+  const dots = g.selectAll('.cell-dot')
+    .data(embedded)
+    .enter().append('circle')
+    .attr('cx', d => x(d.x))
+    .attr('cy', d => y(d.y))
+    .attr('r', 3.5)
+    .attr('fill', d => d.color)
+    .attr('opacity', 0.6)
+    .style('cursor', 'pointer')
+    .on('click', (event, d) => selectCluster(d.type));
+
+  function selectCluster(typeIdx) {
+    dots.transition().duration(300)
+      .attr('opacity', d => d.type === typeIdx ? 0.85 : 0.12)
+      .attr('r', d => d.type === typeIdx ? 4.5 : 2.5);
+
+    const ct = cellTypes[typeIdx];
+    let html = `<div style="font-weight: 600; color: ${ct.color}; margin-bottom: 0.5rem;">${ct.name}</div>`;
+    html += '<div style="color: var(--text-2); font-size: 0.8rem; margin-bottom: 0.35rem;">Top marker genes:</div>';
+    ct.markers.forEach(m => {
+      html += `<div style="padding: 0.2rem 0; border-bottom: 1px solid var(--border);">${m}</div>`;
+    });
+    d3.select('#marker-list').html(html);
+  }
+})();
+
+// ─── Figure 3: Random Seeds ───
+(function() {
+  const container = d3.select('#scatter-seeds');
+  const W = 560, H = 380;
+  const margin = { top: 10, right: 10, bottom: 10, left: 10 };
+  const w = W - margin.left - margin.right;
+  const h = H - margin.top - margin.bottom;
+
+  const svg = container.append('svg').attr('width', W).attr('height', H)
+    .attr('viewBox', `0 0 ${W} ${H}`).style('max-width', '100%').style('height', 'auto');
+  const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+
+  let seedCounter = 42;
+
+  function render() {
+    g.selectAll('*').remove();
+    const embedded = fakeUMAP(cells, seedCounter, 1.0);
+
+    const xExt = d3.extent(embedded, d => d.x);
+    const yExt = d3.extent(embedded, d => d.y);
+    const pad = 0.1;
+    const xRange = xExt[1] - xExt[0] || 1;
+    const yRange = yExt[1] - yExt[0] || 1;
+
+    const x = d3.scaleLinear().domain([xExt[0] - pad * xRange, xExt[1] + pad * xRange]).range([0, w]);
+    const y = d3.scaleLinear().domain([yExt[0] - pad * yRange, yExt[1] + pad * yRange]).range([h, 0]);
+
+    // Animate in
+    g.selectAll('.cell-dot')
+      .data(embedded)
+      .enter().append('circle')
+      .attr('cx', d => x(d.x))
+      .attr('cy', d => y(d.y))
+      .attr('r', 0)
+      .attr('fill', d => d.color)
+      .attr('opacity', 0.65)
+      .transition().duration(500).delay((_, i) => i * 0.5)
+      .attr('r', 3.5);
+  }
+
+  render();
+
+  d3.select('#btn-reseed').on('click', () => {
+    seedCounter = Math.floor(Math.random() * 10000);
+    cells = generateCells(seedCounter);
+    d3.select('#seed-label').text(`seed: ${seedCounter}`);
+    render();
+    if (window.renderMainScatter) window.renderMainScatter();
+  });
+})();
+</script>
+</body>
+</html>
