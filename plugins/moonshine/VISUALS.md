@@ -5,136 +5,29 @@ description: D3 v7 visualization patterns for interactive technical explanations
 
 # Visuals
 
-D3 v7 visualization patterns for moonshine explanations. Self-contained HTML, vanilla JS, no build tools.
+D3 v7 visualization patterns for moonshine explanations. For the HTML scaffold, CSS foundation, and article layout, see `ARTICLE.md`.
 
-## Foundation
+D3 owns the DOM. No framework abstraction layer. Use `.join()` for data binding, `selection.call()` for reusable chart functions, `d3.dispatch` for cross-chart communication (see State Coordination in `ARTICLE.md`). Load D3 from CDN: `https://d3js.org/d3.v7.min.js`.
 
-### HTML Scaffold
+Use CSS custom properties from the article scaffold (`var(--text)`, `var(--accent)`, etc.) in SVG style attributes. Never hardcode colors the palette already defines.
 
-Every moonshine explanation is a single HTML file: D3 from CDN, Google Fonts, inline CSS with custom properties, article container, figures with captions. No bundler, no framework.
+## Rendering Technology
 
-```html
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Explanation Title</title>
-<script src="https://d3js.org/d3.v7.min.js"></script>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
-<style>
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-:root {
-  --article-width: 740px;
-  --body-font: 'Source Serif 4', Georgia, serif;
-  --heading-font: 'Source Sans 3', system-ui, sans-serif;
-  --mono-font: 'Source Code Pro', monospace;
-  --body-size: 1.125rem;
-  --line-height: 1.6;
-  --text: #1a1a2e;
-  --text-2: #4a4a6a;
-  --accent: #2563eb;
-  --accent-light: #dbeafe;
-  --bg: #fafafa;
-  --fig-bg: #ffffff;
-  --border: #e2e2e8;
-}
-body { font-family: var(--body-font); font-size: var(--body-size);
-  line-height: var(--line-height); color: var(--text); background: var(--bg); }
-.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
-h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
-.figure { margin: 2rem 0; padding: 1.5rem; background: var(--fig-bg);
-  border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
-.figure-caption { font-family: var(--heading-font); font-size: 0.85rem;
-  color: var(--text-2); margin-top: 0.75rem; }
-.figure-label { font-weight: 600; color: var(--text); }
-.insight { background: var(--accent-light); border-left: 3px solid var(--accent);
-  padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 4px 4px 0; }
-svg text { font-family: var(--heading-font); }
-svg .axis text { font-size: 11px; fill: var(--text-2); }
-svg .axis line, svg .axis path { stroke: var(--border); }
-</style>
-</head>
-<body>
-<div class="article">
-  <header class="header"><h1>Title</h1></header>
-  <div class="figure" id="fig-1"><!-- D3 renders here --></div>
-</div>
-<script>
-// All visualization code here, in IIFEs to avoid globals
-</script>
-</body>
-</html>
-```
+Choose the technology that fits each figure. Start with SVG and only switch when you have a reason to.
 
-**Judgment:** The template uses `--text`, `--text-2`, `--accent`, `--bg`, `--fig-bg`, `--border` throughout. Reference these in D3 code via `"var(--text)"` in SVG style attributes. Never hardcode colors that the palette already defines.
+**SVG** is the default for most explanatory figures. Crisp text, CSS styling, accessibility, DOM-based interaction. Works well under ~2,000 elements.
 
-**Pitfall:** Forgetting `box-sizing: border-box` causes padding to overflow figure containers. The reset on `*` prevents this globally.
+**Canvas 2D** for dense data (2K-100K points), real-time animation, or pixel-level effects. Requires manual hit detection (quadtree for hover) and loses DOM accessibility without extra work.
 
-### State Coordination
+**WebGL** for massive datasets (100K+) or GPU-computed effects. High setup cost. Use only when Canvas can't keep up.
 
-Cross-chart communication without a framework. `d3.dispatch` is the event bus; a shared state object is the source of truth.
+**HTML + CSS** for tables, icon arrays, text-heavy layouts, and simple progress indicators. Underrated. A well-styled HTML table is a visualization.
 
-```js
-const dispatch = d3.dispatch("select", "hover", "filter");
-const state = { selected: new Set(), hovered: null, param: 0.5 };
+**Hybrid** Canvas for the data layer, SVG for axes and labels, HTML for controls and tooltips. Often the right answer for complex figures.
 
-// Chart A listens
-dispatch.on("select.chartA", keys => {
-  state.selected = new Set(keys);
-  renderChartA();
-});
+**Libraries:** D3 v7 is the primary tool. Use additional libraries when they're the right fit: d3-sankey for Sankey diagrams, topojson-client for geographic data, KaTeX for math. Load from CDN. Prefer fewer dependencies.
 
-// Chart B emits
-brushGroup.on("brush end", event => {
-  if (!event.selection) return;
-  const keys = data.filter(d => inBrush(d, event.selection)).map(d => d.id);
-  dispatch.call("select", null, keys);
-});
-```
-
-**Judgment:** Use `d3.dispatch` for 2-5 charts. For deeper state (zoom + filter + sort + brush), use a store:
-
-```js
-function createStore(init) {
-  let s = { ...init };
-  const subs = new Set();
-  return {
-    get: () => s,
-    set(u) { s = { ...s, ...u }; for (const fn of subs) fn(s); },
-    sub(fn) { subs.add(fn); return () => subs.delete(fn); },
-  };
-}
-```
-
-**Pitfall:** Feedback loops. Chart A updates state, state triggers Chart A redraw, which re-emits. Fix: pass a `source` parameter and skip if the event originated from this chart. Or guard with `if (!event.sourceEvent) return`.
-
-### Responsive Layout
-
-Observe container size, not window. Redraw on resize with the new dimensions.
-
-```js
-const container = document.getElementById("fig-1");
-const ro = new ResizeObserver(([entry]) => {
-  const { width } = entry.contentRect;
-  if (width > 0) render(width);
-});
-ro.observe(container);
-```
-
-Use `viewBox` only for decorative SVGs where text scaling does not matter. For charts with axes and labels, always redraw on resize so tick counts and font sizes adapt.
-
-```js
-const svg = d3.select("#fig-1").append("svg")
-    .attr("viewBox", [0, 0, width, height]);
-```
-
-**Judgment:** Redraw > viewBox for any chart with readable text. viewBox shrinks 14px text to 7px at half width.
-
-**Pitfall:** ResizeObserver infinite loop. If chart content changes container height, observer fires again. Fix: observe a wrapper with CSS-determined size, not chart-determined size. Set `overflow: hidden` on the wrapper.
-
-Touch events: always use `pointerenter`/`pointerleave` over `mouseenter`/`mouseleave`. Pointer events unify mouse, touch, and pen.
+**Judgment:** The explanation's job is to communicate, not to benchmark. Switch to Canvas only when you hit a performance wall you can feel.
 
 ## Interaction
 
@@ -150,15 +43,6 @@ slider.addEventListener("input", () => {
   valSpan.textContent = state.param;
   dispatch.call("filter", null, state);
 });
-```
-
-CSS for controls (already in the scaffold):
-```css
-.controls {
-  display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;
-  font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2);
-}
-.controls input[type="range"] { width: 160px; accent-color: var(--accent); }
 ```
 
 **Judgment:** One slider per parameter. Checkboxes for on/off toggles. Radio buttons for mutually exclusive modes. Keep controls inside the `.figure` container, above the chart.
@@ -229,8 +113,6 @@ dispatch.on("select.chart", keys => {
 });
 ```
 
-Clear brush on click outside: in the brush `end` handler, `if (!event.selection)` means the brush was cleared.
-
 **Pitfall:** Brush coordinates are pixels. After resize, they map to wrong data values. Convert to data domain before resize, restore after.
 
 ### Scroll-Driven Narrative
@@ -248,14 +130,6 @@ steps.forEach(el => observer.observe(el));
 
 const stages = [showOverview, splitByGroup, highlightOutliers];
 function goToStep(i) { stages[i](); }
-```
-
-CSS for sticky figure:
-```css
-.scroll-container { display: flex; gap: 2rem; }
-.scroll-figure { position: sticky; top: 2rem; flex: 1; height: fit-content; }
-.scroll-steps { flex: 1; }
-.step { min-height: 60vh; padding: 2rem 0; }
 ```
 
 **Judgment:** Step-based (discrete triggers) for most explanations. Progress-based (continuous scroll percentage) only when properties should scrub smoothly (e.g., rotating a 3D view).
@@ -277,6 +151,8 @@ handle.call(drag);
 ```
 
 **Pitfall:** Forgetting to set `cursor: grab` on the draggable and `cursor: grabbing` during drag. Without visual cues, users don't discover the interaction.
+
+**Pitfall:** Hover information stopping during drag. If a figure supports both hover (showing values) and drag (moving elements), both should work simultaneously. Don't let drag suppress hover updates.
 
 ## Motion
 
@@ -303,6 +179,8 @@ Easing: `easeCubicOut` for responsive UI (fast start, gentle stop). `easeLinear`
 
 **Pitfall:** Animating from undefined. If an element has no initial position, the transition starts from 0,0. Always set initial attributes in the enter callback before transitioning.
 
+**Pitfall:** Demonstrations that move too fast. When a probe particle moves through a field or an animation shows cause-and-effect, the reader needs time to see the response. Err on the side of too slow. A demonstration that takes 3 seconds to play teaches more than one that finishes in 0.5 seconds.
+
 ### Choreography
 
 Sequence multi-stage transitions. Coordinated delays are more robust than `transition.end()` promises (which reject on interruption or empty selections).
@@ -327,30 +205,11 @@ function staged(data) {
 
 Stagger with delay: `.delay((d, i) => i * 30)`. Keep total stagger under 500ms.
 
-For async sequencing: `await transition.end()` between stages. Wrap in try/catch since interrupted transitions reject.
-
-Use `requestAnimationFrame` for custom animation loops (e.g., continuous force simulation rendering).
-
 ### Shape Morphing
 
-Path interpolation via resampling: resample both source and target paths to N evenly-spaced points, then interpolate the arrays per frame.
+Parametric morphs for shapes that share parameters (circle to rect via cornerRadius, bar to arc via angle/radius). Point resampling for shapes that differ in topology: resample both to 128 evenly-spaced points, interpolate per frame.
 
-Parametric morphs are simpler when shapes share parameters. Circle to rect via cornerRadius:
-
-```js
-const states = {
-  circle: { w: 40, h: 40, rx: 20 },
-  rect:   { w: 60, h: 40, rx: 0 },
-};
-function morphTo(s) {
-  rects.transition().duration(600)
-    .attr("width", s.w).attr("height", s.h).attr("rx", s.rx);
-}
-```
-
-Bar to pie via arc parameter tweening: represent both states as arcs so D3 interpolates the angles and radii directly.
-
-**Judgment:** Parametric morphs preserve true curves (circle stays circular). Resampling produces N-gons, visually smooth at 128 points. Use parametric when shapes share parameters, resampling only when they differ in topology.
+**Judgment:** Morphing should prove equivalence ("this bar chart and this pie chart show the same data"). Don't morph between unrelated states for spectacle.
 
 **Pitfall:** `d3.interpolateString` on SVG path `d` attributes produces garbage when paths have different commands. Always use parametric interpolation or point resampling.
 
@@ -362,301 +221,128 @@ Bar to pie via arc parameter tweening: represent both states as arcs so D3 inter
 const line = d3.line().x(d => x(d.date)).y(d => y(d.val))
     .defined(d => d.val != null)
     .curve(d3.curveBasis);
-const area = d3.area().x(d => x(d.date))
-    .y0(height).y1(d => y(d.val))
-    .curve(d3.curveBasis);
 ```
 
 Curve types: `curveBasis` for smooth, `curveStep` for discrete, `curveLinear` (default) for connecting points. `curveMonotoneX` for sparklines (no overshoot).
 
 Multi-series: group data, one `<path>` per group. Confidence bands: area between `y0(d => y(d.lower))` and `y1(d => y(d.upper))`.
 
-**Pitfall:** Missing `.defined()` on line generators. Without it, null values draw to (0,0), creating spikes that look like data crashes.
+**Pitfall:** Missing `.defined()` on line generators. Without it, null values draw to (0,0).
 
 ### Bar & Histogram
 
-Vertical bars: `scaleBand` for x, `scaleLinear` for y. Horizontal: swap axes.
+Vertical bars: `scaleBand` for x, `scaleLinear` for y. Horizontal: swap axes. Grouped: nested `scaleBand`. Stacked: `d3.stack()`. Histogram: `d3.bin()` to bucket continuous data.
 
-```js
-const x = d3.scaleBand(data.map(d => d.name), [0, innerWidth]).padding(0.2);
-const y = d3.scaleLinear([0, d3.max(data, d => d.val)], [innerHeight, 0]);
-
-g.selectAll("rect").data(data).join("rect")
-    .attr("x", d => x(d.name)).attr("width", x.bandwidth())
-    .attr("y", d => y(d.val)).attr("height", d => innerHeight - y(d.val))
-    .attr("fill", "var(--accent)");
-```
-
-Grouped bars: nested `scaleBand` within each category. Stacked: `d3.stack()` computes y0/y1 per layer.
-
-Histogram: `d3.bin()` to bucket continuous data, then bar chart on the bins.
-
-**Pitfall:** Bar charts must include zero in the y-domain. A bar from 50 to 80 makes 80 look almost double 50 if the baseline is at 50.
+**Pitfall:** Bar charts must include zero in the y-domain.
 
 ### Scatter & Bubble
 
-Both axes `scaleLinear`. Size encoding: `scaleSqrt` for area perception, not `scaleLinear` on radius.
+Both axes `scaleLinear`. Size encoding: `scaleSqrt` for area perception, not `scaleLinear` on radius. Jitter for overlapping points. Density contours for very dense data: `d3.contourDensity()`.
 
-```js
-const r = d3.scaleSqrt([0, d3.max(data, d => d.pop)], [2, 30]);
-g.selectAll("circle").data(data).join("circle")
-    .attr("cx", d => x(d.gdp)).attr("cy", d => y(d.life))
-    .attr("r", d => r(d.pop))
-    .attr("fill", d => color(d.region)).attr("opacity", 0.7);
-```
-
-Jitter for overlapping points: offset by small random amount. Density contours for very dense data: `d3.contourDensity()`.
-
-**Pitfall:** Using `scaleLinear` for bubble radius. The eye reads area, not radius. A point with 4x the value should have 2x the radius (4x the area). `scaleSqrt` handles this.
+**Pitfall:** Using `scaleLinear` for bubble radius. The eye reads area, not radius. `scaleSqrt` handles this.
 
 ### Heatmap & Matrix
 
-Grid of rects, `scaleBand` for both axes. Color: `scaleSequential` + `interpolateBlues` (single-hue) or `interpolateViridis` (multi-hue, colorblind-safe).
+Grid of rects, `scaleBand` for both axes. Color: `scaleSequential` + `interpolateBlues` or `interpolateViridis`. Add cell labels when grid is coarse (cells > 30px).
 
-```js
-const color = d3.scaleSequential(d3.interpolateBlues)
-    .domain([0, d3.max(matrix.flat())]);
-g.selectAll("rect").data(cells).join("rect")
-    .attr("x", d => xBand(d.col)).attr("y", d => yBand(d.row))
-    .attr("width", xBand.bandwidth()).attr("height", yBand.bandwidth())
-    .attr("fill", d => color(d.value));
-```
-
-Add cell labels when grid is coarse (cells > 30px): append `<text>` at cell center.
-
-Adjacency matrix: same pattern, nodes on both axes. Sort by cluster then degree to reveal community structure as dense diagonal blocks.
+Adjacency matrix: nodes on both axes. Sort by cluster to reveal community structure as dense diagonal blocks.
 
 ### Network & Graph
 
-Node-link: `d3.forceSimulation` with forces for link springs, charge repulsion, and centering.
+Node-link: `d3.forceSimulation` with forces for link springs, charge repulsion, and centering. Chord: `d3.chord()` + `d3.ribbon()`. Sankey: `d3-sankey` (separate CDN import). Arc diagram: nodes on a line, links as curved arcs.
 
-```js
-const sim = d3.forceSimulation(nodes)
-    .force("link", d3.forceLink(links).id(d => d.id).distance(60))
-    .force("charge", d3.forceManyBody().strength(-80))
-    .force("center", d3.forceCenter(width / 2, height / 2))
-    .on("tick", () => {
-      linkSel.attr("x1", d => d.source.x).attr("y1", d => d.source.y)
-             .attr("x2", d => d.target.x).attr("y2", d => d.target.y);
-      nodeSel.attr("cx", d => d.x).attr("cy", d => d.y);
-    });
-```
-
-Chord diagram: `d3.chord()` + `d3.ribbon()` for group-to-group flow. Requires a square matrix.
-
-Sankey: `d3-sankey` (separate import: `https://cdn.jsdelivr.net/npm/d3-sankey@0.12/dist/d3-sankey.min.js`).
-
-Arc diagram: nodes on a line, links as curved arcs above/below.
-
-**Judgment:** Node-link for topology (how things connect). Matrix for density (which pairs connect). Chord for flow volumes between groups. Sankey for quantities through a pipeline. Node-link becomes a hairball past ~500 nodes; switch to matrix.
+**Judgment:** Node-link for topology. Matrix for density. Chord for flow volumes. Sankey for quantities through a pipeline. Node-link becomes a hairball past ~500 nodes.
 
 ### Hierarchy
 
-Build the tree: `d3.hierarchy()` from nested data, `d3.stratify()` from flat id/parentId data.
+Build: `d3.hierarchy()` from nested data, `d3.stratify()` from flat id/parentId. Tree: `d3.tree()`. Treemap: `d3.treemap()`. Pack: `d3.pack()`. Sunburst: `d3.partition()` + `d3.arc()`.
 
-```js
-const root = d3.hierarchy(nested).sum(d => d.value).sort((a, b) => b.value - a.value);
-```
-
-Tree: `d3.tree().size([height, width])` for parent-child topology. Links via `d3.linkHorizontal()`.
-
-Treemap: `d3.treemap().size([width, height]).padding(2)(root)` for size comparison within hierarchy. Each leaf gets `x0, y0, x1, y1`.
-
-Pack: `d3.pack().size([width, height]).padding(3)(root)` for nested containment. Each node gets `x, y, r`.
-
-Sunburst: `d3.partition().size([2 * Math.PI, radius])(root)` + `d3.arc()`. Map x to angle, y to radius. Apply `scaleSqrt` on radius so outer rings don't dominate.
-
-Collapse/expand: toggle `node.children = node.children ? null : node._children`, recompute layout, transition.
-
-**Judgment:** Treemap for size comparison (rectangles beat arcs and circles for area judgment). Tree for tracing paths. Pack for grouping. Sunburst for full hierarchy with depth. Wide and shallow (2-3 levels) favors treemap; narrow and deep (5+) favors sunburst.
+**Judgment:** Treemap for size comparison. Tree for tracing paths. Pack for grouping. Sunburst for full hierarchy with depth.
 
 ### Distributions
 
-Box plot: compute quartiles, whiskers, and outlier dots from sorted data.
+Box plot: quartiles, whiskers, outlier dots. Violin: `d3.bin()` to build density, mirror as area. Bee swarm: `d3.forceSimulation` with `forceX` + `forceCollide`, pre-compute with `.stop(); .tick(120)`. Ridgeline: stacked area charts offset vertically.
 
-```js
-const sorted = Float64Array.from(values).sort();
-const q1 = d3.quantile(sorted, 0.25), med = d3.quantile(sorted, 0.5);
-const q3 = d3.quantile(sorted, 0.75), iqr = q3 - q1;
-const whiskerLo = d3.min(sorted.filter(v => v >= q1 - 1.5 * iqr));
-const whiskerHi = d3.max(sorted.filter(v => v <= q3 + 1.5 * iqr));
-```
-
-Violin: `d3.bin()` to build density, mirror as area left and right. Or use a Gaussian KDE. Bandwidth choice is editorial: too small creates false peaks, too large merges real modes.
-
-Bee swarm: `d3.forceSimulation` with `forceX` pinning to data value and `forceCollide` preventing overlap. No `forceY`.
-
-```js
-d3.forceSimulation(data)
-    .force("x", d3.forceX(d => xScale(d.value)).strength(0.8))
-    .force("collide", d3.forceCollide(3).strength(0.7))
-    .stop().tick(120);
-```
-
-Ridgeline: stacked area charts offset vertically by category. Render bottom-to-top so lower rows appear in front.
-
-Strip/jitter: one axis categorical, other continuous. Add random offset for overlap.
-
-**Judgment:** Box plot hides bimodality. Violin shows shape but hides individuals. Bee swarm shows every point but degrades past ~500 per group. Choose based on what matters: summary (box), shape (violin), or individual observations (bee swarm).
+**Judgment:** Box plot hides bimodality. Violin shows shape but hides individuals. Bee swarm shows every point but degrades past ~500 per group.
 
 ### Small Multiples
 
-Grid of the same chart type repeated across categories. Shared scales for cross-panel comparison.
+Grid of the same chart repeated across categories. Shared scales (compute domains from full dataset before per-panel loop). Only draw y-axis on leftmost column, x-axis on bottom row.
 
-```js
-const keys = [...d3.group(data, d => d.cat).keys()];
-const cols = Math.ceil(Math.sqrt(keys.length));
-keys.forEach((key, i) => {
-  const col = i % cols, row = Math.floor(i / cols);
-  const gPanel = svg.append("g")
-      .attr("transform", `translate(${col * cellW}, ${row * cellH})`);
-  renderPanel(gPanel, grouped.get(key), sharedX, sharedY);
-});
-```
-
-Shared scales: compute domains from the full dataset before the per-panel loop. Independent scales hide magnitude differences, misleading viewers.
-
-Only draw y-axis on leftmost column, x-axis on bottom row. Redundant axes waste 30-40% of each panel's pixel budget.
-
-Synchronized interaction: brush in one panel broadcasts to all via dispatch. Guard with `if (!event.sourceEvent) return` to prevent infinite loops.
-
-**Pitfall:** Creating scales inside the per-panel loop with `d3.extent(panelData)` accidentally produces independent scales. Compute shared domains once before the loop.
+**Pitfall:** Creating scales inside the per-panel loop accidentally produces independent scales.
 
 ### Sparklines
 
-Tiny line charts (60-80px wide, 20px tall). No axes, no labels. Context comes from surrounding text or table.
-
-```js
-const x = d3.scaleLinear([0, data.length - 1], [1, w - 1]);
-const y = d3.scaleLinear(d3.extent(data), [h - 1, 1]);
-const line = d3.line((d, i) => x(i), d => y(d)).curve(d3.curveMonotoneX);
-svg.append("path").datum(data).attr("d", line)
-    .attr("fill", "none").attr("stroke", "currentColor").attr("stroke-width", 1.5);
-svg.append("circle")
-    .attr("cx", x(data.length - 1)).attr("cy", y(data.at(-1)))
-    .attr("r", 1.5).attr("fill", "var(--accent)");
-```
-
-Embed in table cells or inline in prose. CSS: `svg { vertical-align: middle; margin: 0 2px; }`.
-
-Band for normal range: area between `lo` and `hi` values behind the line. Dot for current value at the endpoint.
-
-Use shared y-domains when sparklines sit side by side, or magnitude differences become invisible.
+Tiny line charts (60-80px wide, 20px tall). No axes. `curveMonotoneX` for no overshoot. End dot for current value. Shared y-domains when sparklines sit side by side.
 
 ## Polish
 
 ### Scales & Axes
 
-Scale selection: `scaleLinear` (default quantitative), `scaleLog` (spans 2+ orders, strictly positive), `scaleSqrt` (area encoding), `scaleBand` (categorical bars), `scaleUtc` (temporal), `scaleOrdinal` (categorical color).
+`scaleLinear` (default quantitative), `scaleLog` (spans 2+ orders, strictly positive), `scaleSqrt` (area encoding), `scaleBand` (categorical), `scaleUtc` (temporal).
 
-```js
-const x = d3.scaleUtc(d3.extent(data, d => d.date), [0, innerWidth]);
-const y = d3.scaleLinear([0, d3.max(data, d => d.val)], [innerHeight, 0]).nice();
-g.append("g").attr("transform", `translate(0,${innerHeight})`).call(d3.axisBottom(x));
-g.append("g").call(d3.axisLeft(y));
-```
+Responsive ticks: `ticks(Math.max(2, innerWidth / 80))`. Label collision: reduce tick count first, truncate, stagger, rotate as last resort.
 
-Tick formatting: `d3.format(".0%")` for percentages, `d3.format(",.0f")` for integers, `d3.timeFormat("%b %Y")` for dates.
-
-Responsive ticks: `ticks(Math.max(2, innerWidth / 80))`. D3's `.ticks(n)` is a suggestion; use `.tickValues([...])` for exact control.
-
-Label collision: reduce tick count first, then truncate with tooltip, then stagger, then rotate 45 degrees as last resort:
-
-```js
-axisGroup.selectAll("text")
-    .attr("transform", "rotate(-45)")
-    .attr("text-anchor", "end")
-    .attr("dx", "-0.5em").attr("dy", "0.3em");
-```
-
-**Pitfall:** `.nice()` on bar charts can push the lower bound below zero, breaking the zero baseline. Skip `.nice()` when the domain has semantic meaning (0-100%, explicit range).
+**Pitfall:** `.nice()` on bar charts can push the lower bound below zero.
 
 ### Color
 
-Sequential: `d3.scaleSequential(d3.interpolateBlues)` (single hue) or `d3.scaleSequential(d3.interpolateViridis)` (multi-hue, colorblind-safe).
+Sequential: `interpolateBlues` (single hue) or `interpolateViridis` (multi-hue, colorblind-safe). Diverging: `scaleDiverging` with meaningful midpoint. Categorical: `schemeTableau10` (up to 10). Colorblind-safe: Tableau10, viridis, Tol Bright.
 
-Diverging: `d3.scaleDiverging([min, midpoint, max], d3.interpolateRdBu)`. The midpoint must be meaningful (zero, average, threshold). Without a meaningful midpoint, use sequential.
-
-Categorical: `d3.scaleOrdinal(d3.schemeTableau10)` for up to 10 categories. Beyond 10, group into top-N + "other".
-
-```js
-const color = d3.scaleOrdinal(d3.schemeTableau10);
-bars.attr("fill", d => color(d.category));
-```
-
-Colorblind-safe defaults: Tableau10, viridis, Paul Tol's Bright palette:
-```js
-const tolBright = ["#4477AA","#EE6677","#228833","#CCBB44","#66CCEE","#AA3377","#BBBBBB"];
-```
-
-WCAG contrast: text against background needs minimum 4.5:1 ratio. Test `--text` against `--bg` and `--fig-bg`. For data marks, ensure labels are readable against fill colors.
-
-Dark mode: respect `prefers-color-scheme` via CSS custom properties. Invert grays (swap `--text` and `--bg`), keep hue-bearing colors but adjust lightness. Use Tol Vibrant on dark backgrounds instead of Tol Bright.
-
-```css
-@media (prefers-color-scheme: dark) {
-  :root { --text: #e8e6dd; --text-2: #a0a0b4; --bg: #1a1a2e;
-    --fig-bg: #22223a; --border: #3a3a52; --accent: #60a5fa; }
-}
-```
+WCAG contrast: 4.5:1 minimum for text against background.
 
 ### Annotation
 
-Direct labeling of data points beats legends when there are 5 or fewer series. Leader lines connect data point to label:
+Direct labeling beats legends for 5 or fewer series. Leader lines connect data point to label. Reference lines for thresholds (dashed, lighter than data). Force-based label placement to avoid overlap: pre-compute with `simulation.stop(); simulation.tick(120)`.
 
-```js
-const callout = g.append("g");
-callout.append("line")
-    .attr("x1", x(d.date)).attr("y1", y(d.val))
-    .attr("x2", x(d.date) + dx).attr("y2", y(d.val) + dy)
-    .attr("stroke", "var(--text-2)").attr("stroke-width", 0.7);
-callout.append("text")
-    .attr("x", x(d.date) + dx).attr("y", y(d.val) + dy - 4)
-    .attr("font-size", 12).attr("fill", "var(--text)")
-    .text(d.label);
-```
-
-Reference lines for thresholds: horizontal/vertical rules with labels.
-
-```js
-g.append("line")
-    .attr("x1", 0).attr("x2", innerWidth)
-    .attr("y1", y(threshold)).attr("y2", y(threshold))
-    .attr("stroke", "var(--accent)").attr("stroke-dasharray", "4,2");
-```
-
-Force-based label placement to avoid overlap: run a secondary simulation with `forceCollide` on label bounding boxes. Pre-compute (no animation): `simulation.stop(); simulation.tick(120);`.
-
-**Judgment:** Annotate the surprising, not the obvious. 1-3 callouts per chart maximum. More than 3 means you have a list, not a story. Use tooltips for everything else.
-
-**Pitfall:** Labels overflow chart bounds. Always check `label.x + label.width < innerWidth` and flip direction if needed.
+**Judgment:** Annotate the surprising, not the obvious. 1-3 callouts per chart maximum.
 
 ### Typography in SVG
 
-`text-anchor` controls horizontal alignment: `start` (left), `middle` (center), `end` (right).
+`text-anchor` for horizontal alignment. `dy="0.35em"` to vertically center. `<tspan>` for multi-line. `<foreignObject>` for HTML content (equations, styled text).
 
-Use `dy="0.35em"` to vertically center text on its coordinate (moves baseline to middle).
+Font: use `var(--heading-font)` for all SVG text. Body font is for article prose, not chart labels.
 
-```js
-g.append("text")
-    .attr("x", x(d.date)).attr("y", y(d.val))
-    .attr("dy", "0.35em").attr("text-anchor", "middle")
-    .attr("font-family", "var(--heading-font)")
-    .attr("font-size", 12).attr("fill", "var(--text)")
-    .text(d.label);
-```
+**Math rendering:** KaTeX from CDN for equations. `katex.render(expression, element)` for display, `katex.renderToString(expression)` for inline.
 
-Multi-line text: `<tspan>` elements with `dy="1.2em"` for each line break.
+**Hover cross-references:** When a term in prose is hovered, highlight the corresponding element in a figure. Implement with `data-ref` attributes and shared hover events.
 
-```js
-const text = g.append("text").attr("x", tx).attr("y", ty);
-lines.forEach((line, i) => {
-  text.append("tspan").attr("x", tx).attr("dy", i === 0 ? 0 : "1.2em").text(line);
-});
-```
+**Pitfall:** `getComputedTextLength()` returns 0 if text is not yet in the DOM. Append first, then measure. For pre-layout measurement, use [pretext](https://github.com/chenglou/pretext) which computes text metrics from font tables directly.
 
-Rich text inside SVG: `<foreignObject>` for HTML content (paragraphs, equations, styled text).
+## Data
 
-Font: use `var(--heading-font)` (Source Sans 3) for all SVG text. Body font (Source Serif 4) is for article prose, not chart labels.
+### Inline Data
 
-**Pitfall:** `getComputedTextLength()` returns 0 if the text element is not yet in the DOM. Append first, then measure.
+For explanations, embed data directly as JS arrays or objects. No external fetches. The explanation must work offline. For synthetic data, use a seeded random number generator for reproducibility.
+
+### Transformations
+
+Group, aggregate, bin, sort, normalize, pivot. Use D3's built-in: `d3.group`, `d3.rollup`, `d3.bin`, `d3.stack`, `d3.hierarchy`, etc.
+
+### Generated Data
+
+When explaining a concept (not a dataset), generate synthetic data that demonstrates the concept clearly. Design the data to show the pattern. The data is in service of the explanation.
+
+## Iteration
+
+Generating a visualization in one pass often produces something that works but doesn't communicate well. Refine in passes:
+
+1. **Structure** Get the data, encoding, and layout right. Does the visualization type match the data question? Are scales and color correct?
+2. **Legibility** Can the reader identify values? Do labels fit? Is the palette accessible?
+3. **Interaction** Does this interaction build intuition that prose alone can't? Is it discoverable? Does it work on touch?
+4. **Narrative** Does an annotation highlight the key insight? Is the caption informative? Does the visual flow match the article's progression?
+5. **Stress** What happens at extreme values? During rapid interaction? At narrow widths (400px)? With `prefers-reduced-motion`?
+
+When an article has multiple figures, iterate across them: consistent color encoding, consistent scales where comparison matters, linked interactions that don't loop, and a visual progression that matches the narrative arc.
+
+## Performance
+
+**Budget:** 16ms per frame (60fps). SVG limit: ~2,000 elements. Canvas limit: ~100,000 elements. WebGL beyond that.
+
+**Dirty-flag rendering:** Track which layers changed, redraw only those. Coalesce rapid events with requestAnimationFrame.
+
+**Pre-computation:** Run expensive layouts (force simulation, label placement) synchronously before first render.
+
+## Accessibility
+
+Keyboard navigation via Tab/Arrow keys. ARIA labels on figures. Hidden data table as fallback for complex charts. Respect `prefers-reduced-motion` (instant state changes, not duration 0). Every figure needs a caption describing what the reader should notice.
