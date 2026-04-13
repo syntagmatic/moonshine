@@ -7,7 +7,7 @@ Stress test of moonshine's range: 20 working-prototype explanations about earthq
 - **Audience:** A friend living in Japan who is science-literate with lived earthquake experience, learning to use AI tools. English language.
 - **Quality target:** Working prototype. Each piece functions with real data and real interaction, prose is serviceable. Best ones get polished later.
 - **Data sources:** USGS Earthquake Catalog, JMA (Japan Meteorological Agency), NOAA Significant Earthquake Database. Mix of data strategies across pieces.
-- **Output:** Each explanation goes in `~/.agent/moonshine/japan-earthquakes/NN-slug/index.html` with optional `data/` folder.
+- **Output:** Each explanation goes in `docs/japan-earthquakes/NN-slug/index.html` with optional `data/` folder.
 
 ## The 20 Explainers
 
