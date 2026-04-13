@@ -6,21 +6,35 @@ user_invocable: true
 
 # Moonshine: Interactive Technical Explanations
 
-Moonshine helps users create interactive, web-based explanations of technical concepts. Inspired by [Distill.pub](https://distill.pub)'s argument that research distillation is valuable creative work, moonshine provides scaffolding to turn complex ideas into explorable, visual, interactive articles.
+Moonshine helps create interactive, web-based explanations of technical concepts. Inspired by [Distill.pub](https://distill.pub)'s argument that research distillation is valuable creative work, it provides scaffolding to turn complex ideas into explorable, visual, interactive articles.
 
 AI tools generate complexity faster than people can consume it. Moonshine is for bridging that gap: helping people digest and communicate technical concepts clearly.
 
-**Tech stack:** Self-contained HTML, vanilla JS, D3 v7. No build tools, no frameworks.
+**Reference files:**
+- `ARTICLE.md` HTML scaffold, CSS foundation, layout patterns, series structure
+- `VISUALS.md` D3 visualization patterns, interaction, rendering technology, iteration
 
-**Visualization patterns:** See `VISUALS.md` for D3 chart types, interaction recipes, and the moonshine style foundation.
+## Articles, Not Dashboards
 
-## How to Use This Skill
+This is the central principle. Everything else follows from it.
 
-**Do not skip to code.** The most common failure mode is jumping straight to scaffolding without understanding what the user is trying to explain and who they're explaining it to. Always start with story discovery.
+Moonshine makes explanatory articles where prose drives understanding and interactive figures serve the narrative. We are not making dashboards, data products, or slide decks. The difference matters because it shapes every decision:
 
-When a user invokes moonshine, guide them through this process:
+- An article has an author's voice and a progression of ideas. A dashboard has widgets.
+- An article's figures are embedded in an argument. A dashboard's charts stand alone.
+- An article earns attention through clarity. A dashboard demands attention through density.
 
-### 1. Clarify the Explanation (Story Discovery)
+When in doubt about a design choice, ask: "Would this feel at home in a Distill.pub article, or in a Grafana dashboard?" If the answer is dashboard, reconsider.
+
+We are also not making coding tutorials. Equations and their connection to behavior should be shown through interactive visualizations, not code listings. If pseudocode helps connect math to implementation, keep it minimal and pair it with the equation. Never show implementation code (framework boilerplate, shader code, API calls) unless the article is specifically about programming.
+
+## The Process
+
+**Do not skip to code.** The most common failure mode is jumping straight to scaffolding without understanding what the user is trying to explain and who they're explaining it to. The second most common failure mode is asking a few questions upfront and then writing the entire article in one shot.
+
+Moonshine is a conversation, not a generation pipeline. The process has natural checkpoints where you stop and check in with the user before continuing.
+
+### Phase 1: Story Discovery
 
 Before writing any code, have a conversation with the user. Ask questions and listen. You need to understand:
 
@@ -30,42 +44,67 @@ Before writing any code, have a conversation with the user. Ask questions and li
 - **What is the progression of understanding?** What does the reader need to learn first, second, third to arrive at the insight? Map the dependency chain of ideas.
 - **What misconceptions exist?** What do people commonly get wrong, and how can interaction expose the correct mental model?
 
-Ask these questions one or two at a time. Start with "What are you trying to explain?" and follow the thread. Wait for answers before moving on. If the user gives you all the context upfront, you can move faster, but if they give a brief prompt, slow down and ask. The quality of the explanation depends on how well you understand the concept and audience before you start building.
+Ask these questions one or two at a time. Start with "What are you trying to explain?" and follow the thread. Wait for answers before moving on. If the user gives you all the context upfront, you can move faster, but if they give a brief prompt, slow down and ask.
 
-### 2. Design the Interaction
+**Checkpoint:** Before moving to Phase 2, confirm the concept, audience, insight, and progression with the user. "Here's what I think we're building..." This is the single most important moment in the process. Get it wrong and everything downstream is wasted effort.
 
-For each concept in the progression, decide what combination of:
+### Phase 2: Article Structure
 
-- **Static prose** clear, concise writing with careful information hierarchy
-- **Static diagrams** D3-rendered figures that encode data visually
-- **Interactive explorations** sliders, hover states, click-to-reveal that let readers test their understanding
-- **Linked visualizations** multiple views that update together, showing the same data from different angles
-- **Scroll-driven narrative** content that transforms as the reader progresses
-- **Animated transitions** smooth interpolation between states to show how things change
+Now design the article at a high level. Present the user with a proposed structure:
 
-Every interaction should serve understanding. If a slider doesn't help the reader build intuition, remove it. Gratuitous interaction is worse than none.
+- What sections will the article have?
+- What is the role of each section in the progression? (introduces concept, builds intuition, shows application, etc.)
+- Where will interactive figures go, and what will they show?
+- What kind of interaction will each figure use? (slider, brush, scroll-driven, hover, etc.)
+- Is this a single article or a series?
 
-### 3. Scaffold the Project
-
-Create projects in `~/.agent/moonshine/project-name/`. This keeps generated explanations separate from the user's working directory. Create the directory if it doesn't exist.
+Write this as a short outline, not code. For each figure, describe it in prose: what it shows, what the reader can do with it, and what they should learn from it. This prose description is the spec. Something like:
 
 ```
-~/.agent/moonshine/project-name/
-  index.html          # Self-contained explanation (HTML + CSS + JS)
-  data/               # Optional external datasets
+1. Opening: what gradient descent is trying to do
+   Prose + static diagram of a loss landscape as a 3D surface
+
+2. The naive approach: why random search fails
+   Interactive: click to place random guesses on the surface, watch them miss the minimum
+
+3. Following the slope: the gradient points downhill
+   Interactive: drag a point on the surface, an arrow shows the gradient direction and magnitude
+
+4. Step size matters: too big overshoots, too small stalls
+   Explorable: slider controls learning rate, animation shows convergence path on the surface
+
+5. Putting it together: watch gradient descent solve a real problem
+   Scroll-driven: each scroll step reveals the next iteration, building the path incrementally
 ```
 
-Each explanation is a single HTML file with inline CSS and JS. D3 loads from CDN. No build tools, no npm install. Open the file in a browser and it works.
+**Checkpoint:** Share this outline with the user. Ask if the progression makes sense. Are there concepts missing? Is the order right? Should any section be interactive that isn't, or static that is? Do the prose descriptions of the figures capture what the user has in mind? This is cheap to change now and expensive to change after building.
 
-After scaffolding, open the result in the browser to verify.
+### Phase 3: Build One Section
 
-### 4. Build Iteratively
+Pick the most important interactive section and build it first. Not the whole article. One section.
 
-Start with prose and static figures. Add interaction only where it genuinely helps. Test with the question: "Does this interaction help the reader build a mental model they couldn't get from text alone?"
+Open it in the browser. Show the user. Ask:
+- Does this interaction teach what we intended?
+- Is the data/example well chosen?
+- Does the visual encoding make sense?
+
+Iterate on this section until it works before building the rest.
+
+### Phase 4: Complete the Article
+
+Build the remaining sections, following the structure from Phase 2. After each major section, open in the browser to verify. Prose should be written alongside the figures, not after, because the prose frames what the reader should notice in each figure.
+
+**Checkpoint:** Before delivering, review the complete article against the Anti-Slop checklist below.
+
+### Output
+
+Create projects in `~/.agent/moonshine/project-name/`. Each explanation is a self-contained HTML file. See `ARTICLE.md` for the scaffold template, layout patterns, and series structure.
+
+After building, open the result in the browser.
 
 ## Editorial Tone
 
-Moonshine articles should have clear and humble prose. We are helping people digest, not force-feeding them. Some guidelines:
+Moonshine articles should have clear and humble prose. We are helping people digest, not force-feeding them.
 
 - Avoid em dashes. Use commas, periods, or restructure the sentence.
 - Don't oversell. Say "this can help" not "this is a game-changer." Say "an appropriate metaphor" not "a precise metaphor."
@@ -75,142 +114,72 @@ Moonshine articles should have clear and humble prose. We are helping people dig
 
 The writing should feel like a knowledgeable colleague explaining something at a whiteboard, not a keynote presentation.
 
-## Core Design Principles
+## Anti-Slop
+
+AI coding tools have strong defaults that produce generic, recognizable output. Moonshine articles should not look like AI made them. They should look like a thoughtful person made them.
+
+The test is simple: does this look like an article, or does it look like a dashboard? Every rule below is a specific case of that question.
+
+**Dashboard patterns to avoid:**
+
+- **Numbered KPI cards** (big number + label + colored border). These are for monitoring, not explaining. If you need to show a quantity, put it in a sentence or a figure caption.
+- **Metric grids** (3-4 cards in a row showing counts/percentages). Same problem. An article introduces numbers in context, not in a grid of isolated stats.
+- **Status badges** (green/yellow/red pills). These encode operational state. Articles explain concepts, not system health.
+- **Card-heavy layouts** where every section is a rounded-corner box with a shadow. Articles use whitespace and typography for structure, not containers.
+- **Colored callout boxes** (blue "insight" boxes, green "tip" boxes). Information should flow as prose within the narrative. Callouts break reading flow. If something is important enough to highlight, write it as a strong sentence in the text.
+
+**Generic AI visual patterns to avoid:**
+
+- Inter, Roboto, or system-ui as the only font. Use the moonshine type stack (Source Serif 4, Source Sans 3, Source Code Pro) or choose fonts with intention.
+- Default blue (#3B82F6) + purple (#8B5CF6) accent palette. Choose colors that relate to the content.
+- Glowing box-shadows, pulsing animations, or gradient borders. These are decorative, not informative.
+- Emoji as section headers or bullet markers.
+- "Hero" sections with giant centered text and a gradient background on every page.
+
+**Prose patterns to avoid:**
+
+- Em dashes everywhere (covered in Editorial Tone).
+- Bold claims stated as universal truth ("This fundamentally changes...").
+- Numbered lists where prose would flow better. Not everything is a "3-step process."
+- Ending with a grand summary that restates everything just said.
+
+**The check:** Before delivering, scan the output. If you swapped the content for a different topic and nothing else needed to change, the design is too generic. The visual choices should relate to what's being explained.
+
+Adapted from the anti-slop patterns in [visual-explainer](https://github.com/nicobailon/visual-explainer) by nicobailon.
+
+## Design Principles
 
 These principles come from [Distill.pub](https://distill.pub) and the broader tradition of explanatory writing:
 
-### Information Hierarchy
+**Information hierarchy.** Three levels, always distinguishable. Primary: the key insight and its argument. Secondary: context, definitions, related concepts. Tertiary: technical details, proofs, edge cases (margin notes or expandable sections). Typography, spacing, and visual weight make this hierarchy clear without the reader having to read a word.
 
-- **Primary:** The key insight and its supporting argument
-- **Secondary:** Context, definitions, related concepts
-- **Tertiary:** Technical details, proofs, edge cases (often in margin notes or expandable sections)
+**Visual encoding.** Position and length are the most accurate channels; use them for the most important data. Color encodes categories or highlights, not quantitative information alone. Redundant encoding (color + position) improves accessibility. Consistent visual language across all figures.
 
-Use typography, spacing, and visual weight to make this hierarchy clear. The reader should be able to tell what matters most at a glance.
+**Typography.** Large readable body (18-20px), generous line height (1.5-1.6), constrained line length (60-75 chars), clear heading hierarchy. Monospace for code, KaTeX for math. Margin notes over footnotes.
 
-### Visual Encoding
+**Interaction patterns.**
 
-- Position and length are the most accurate visual channels. Use them for the most important data.
-- Color should encode categories or highlight, not carry quantitative information alone.
-- Redundant encoding (color + position) improves accessibility.
-- Consistent visual language across all figures in an article.
+| Pattern | Use When |
+|---------|----------|
+| Details-on-demand | Supplementary info would clutter the narrative |
+| Explorable explanation | The concept involves a parameter space to explore |
+| Linked views | The same data has multiple meaningful representations |
+| Scroll-driven narrative | The explanation has a natural sequence of reveals |
+| Animated transition | The path between two states is meaningful |
 
-### Typography for Technical Content
+## Pedagogy
 
-- Large, readable body text (18-20px)
-- Generous line height (1.5-1.6)
-- Constrained line length (60-75 characters)
-- Clear heading hierarchy
-- Monospace for code, math font for equations
-- Margin notes over footnotes (keep the reader's eyes near the content)
+These principles come from building real moonshine articles and noticing what gets corrected most often.
 
-### Interaction Patterns
+**Exaggerate for clarity.** Default parameter values should make phenomena dramatically visible. If you're showing viscosity, crank it up so the effect is obvious. If you're showing divergence between two methods, pick parameters where they clearly disagree. Pedagogical clarity trumps physical realism. The reader can always dial things down; they can't learn from effects too subtle to see.
 
-| Pattern | Use When | Example |
-|---------|----------|---------|
-| Details-on-demand | Supplementary info would clutter the main narrative | Hover a data point to see its values |
-| Explorable explanation | The concept involves a parameter space the reader should explore | Slider that changes a function's parameters and updates its plot |
-| Linked views | The same data has multiple meaningful representations | Scatterplot + histogram that highlight the same subset |
-| Scroll-driven narrative | The explanation has a natural sequence of reveals | Chart that builds up as the reader scrolls through the argument |
-| Animated transition | Two states are meaningfully different and the path between them matters | Morphing between two chart types to show they represent the same data |
+**Sensible defaults.** Every interactive figure must show something interesting before the reader touches anything. No blank canvases, no "click a particle to start", no grids of dots waiting to settle. Pre-select a default element, pre-populate with data, start the simulation in a state that already demonstrates the concept.
 
-## Template: HTML Scaffold
+**Slow enough to follow.** Animated demonstrations should move slowly enough that the reader can track cause and effect. When a particle moves through a field, the reader needs to see the field respond. When in doubt, go slower. The reader can always speed things up.
 
-```html
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Explanation Title</title>
-<script src="https://d3js.org/d3.v7.min.js"></script>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
-<style>
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+**Consistent conventions across figures.** If you show a radius as a dotted circle in one figure, show it the same way in every figure. If you color-code a variable blue in an equation, use that same blue everywhere it appears. Inconsistency forces the reader to re-learn the visual language in each figure.
 
-:root {
-  --article-width: 740px;
-  --body-font: 'Source Serif 4', Georgia, serif;
-  --heading-font: 'Source Sans 3', system-ui, sans-serif;
-  --mono-font: 'Source Code Pro', monospace;
-  --body-size: 1.125rem;
-  --line-height: 1.6;
-  --text: #1a1a2e;
-  --text-2: #4a4a6a;
-  --accent: #2563eb;
-  --accent-light: #dbeafe;
-  --bg: #fafafa;
-  --fig-bg: #ffffff;
-  --border: #e2e2e8;
-}
-
-body {
-  font-family: var(--body-font);
-  font-size: var(--body-size);
-  line-height: var(--line-height);
-  color: var(--text);
-  background: var(--bg);
-  -webkit-font-smoothing: antialiased;
-}
-
-.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
-h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
-h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
-h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
-h3 { font-size: 1.15rem; margin: 2rem 0 0.75rem; }
-p { margin: 0 0 1rem; }
-
-.figure { margin: 2rem 0; padding: 1.5rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; }
-.figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; }
-.figure-label { font-weight: 600; color: var(--text); }
-
-.insight { background: var(--accent-light); border-left: 3px solid var(--accent); padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 4px 4px 0; }
-.insight p { margin: 0; }
-
-.margin-note { font-size: 0.8125rem; color: var(--text-2); line-height: 1.4; border-left: 2px solid var(--border); padding-left: 0.75rem; margin: 1rem 0; }
-
-.controls { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); }
-
-svg text { font-family: var(--heading-font); }
-svg .axis text { font-size: 11px; fill: var(--text-2); }
-svg .axis line, svg .axis path { stroke: var(--border); }
-</style>
-</head>
-<body>
-<div class="article">
-  <header>
-    <h1>Title</h1>
-    <p style="font-family: var(--heading-font); font-size: 1.15rem; color: var(--text-2);">
-      A clear one-sentence description of what the reader will understand.
-    </p>
-  </header>
-
-  <!-- Sections go here -->
-
-</div>
-
-<script>
-// State coordination pattern (replaces React Context)
-const state = {};
-const dispatch = d3.dispatch('update', 'select', 'hover');
-
-// Visualization code goes here
-</script>
-</body>
-</html>
-```
-
-## D3 Integration
-
-Use `VISUALS.md` for visualization patterns. Key principles:
-
-- D3 owns the DOM. No framework abstraction layer.
-- Use `d3.dispatch` for cross-chart communication (see State Coordination in VISUALS.md).
-- Use `.join()` for data binding with enter/update/exit.
-- Use `selection.call()` to compose reusable chart functions.
-- Load D3 from CDN: `https://d3js.org/d3.v7.min.js`
-
-For any chart type (line, bar, scatter, network, hierarchy, heatmap, etc.), consult VISUALS.md for the pattern, judgment call, and common pitfall.
+**Looping animations reset cleanly.** If a demonstration loops, it should reset to its initial state, not carry over physics or accumulated values from the previous iteration.
 
 ## Reference Skills
 
