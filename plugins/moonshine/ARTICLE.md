@@ -147,6 +147,8 @@ The template uses CSS custom properties throughout. Reference them in D3 code vi
 - `--accent` / `--accent-light`: interactive elements, highlights, insight boxes
 - `--bg` / `--fig-bg` / `--border`: backgrounds and structure
 
+**Semantic colors:** For a series, define a small set of concept colors as CSS custom properties with a `--c-` prefix (e.g., `--c-kernel`, `--c-density`). Use them wherever the concept appears: figure rendering, KaTeX equations (`\color{#hex}{}`), inline prose (`.t-*` utility classes), and sequential or diverging scales anchored to a concept color. The vocabulary is part of the series design; define it in the plan and copy the `:root` block into every article.
+
 **Dark mode** (add when appropriate):
 ```css
 @media (prefers-color-scheme: dark) {

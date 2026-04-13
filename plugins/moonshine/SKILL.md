@@ -57,6 +57,7 @@ Now design the article at a high level. Present the user with a proposed structu
 - Where will interactive figures go, and what will they show?
 - What kind of interaction will each figure use? (slider, brush, scroll-driven, hover, etc.)
 - Is this a single article or a series?
+- If a series, does it need a semantic color vocabulary for recurring concepts? (see CSS Foundation in `ARTICLE.md`)
 
 Write this as a short outline, not code. For each figure, describe it in prose: what it shows, what the reader can do with it, and what they should learn from it. This prose description is the spec. Something like:
 
@@ -153,7 +154,7 @@ These principles come from [Distill.pub](https://distill.pub) and the broader tr
 
 **Information hierarchy.** Three levels, always distinguishable. Primary: the key insight and its argument. Secondary: context, definitions, related concepts. Tertiary: technical details, proofs, edge cases (margin notes or expandable sections). Typography, spacing, and visual weight make this hierarchy clear without the reader having to read a word.
 
-**Visual encoding.** Position and length are the most accurate channels; use them for the most important data. Color encodes categories or highlights, not quantitative information alone. Redundant encoding (color + position) improves accessibility. Consistent visual language across all figures.
+**Visual encoding.** Position and length are the most accurate channels; use them for the most important data. Color works for categories, highlights, and quantitative values, especially in dense or spatial displays. Redundant encoding (color + position) improves accessibility. Consistent visual language across all figures.
 
 **Typography.** Large readable body (18-20px), generous line height (1.5-1.6), constrained line length (60-75 chars), clear heading hierarchy. Monospace for code, KaTeX for math. Margin notes over footnotes.
 

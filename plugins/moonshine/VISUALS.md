@@ -51,7 +51,7 @@ slider.addEventListener("input", () => {
 
 ### Hover & Tooltips
 
-Positioned HTML div, not SVG `<title>`. Show on `pointerenter`, hide on `pointerleave`, position near cursor and clamp to viewport.
+For dense figures (many polylines, bars, or nodes), dim siblings and promote the hovered element on `pointerenter`; restore on `pointerleave`. For detail values, use a positioned HTML div, not SVG `<title>`. Position near cursor and clamp to viewport.
 
 ```js
 const tip = d3.select("body").append("div")
@@ -154,6 +154,14 @@ handle.call(drag);
 
 **Pitfall:** Hover information stopping during drag. If a figure supports both hover (showing values) and drag (moving elements), both should work simultaneously. Don't let drag suppress hover updates.
 
+### Bidirectional Manipulation
+
+When a concept appears in two views, both views should accept input. If dragging in one view updates the other, the other should be draggable back. The reader should never have to guess which side is the "input."
+
+For continuous mappings, constrain drag to the valid range. For discrete mappings, use click or toggle. When drag must follow a curve or manifold, precompute a position-to-parameter lookup and snap to the nearest valid state.
+
+**Pitfall:** Forgetting to sync external controls. If a slider and a draggable handle both control the same value, moving one must update the other.
+
 ## Motion
 
 ### Transitions
@@ -176,6 +184,8 @@ svg.selectAll("circle")
 Interrupt previous transitions before starting new ones: `selection.interrupt()`.
 
 Easing: `easeCubicOut` for responsive UI (fast start, gentle stop). `easeLinear` for continuous data playback. `easeCubicInOut` for smooth position changes.
+
+**Judgment:** Skip transitions for discrete rearrangements triggered by drag (reordering axes, swapping panels, moving items between groups). The reader's hand already tracks position; animation competes.
 
 **Pitfall:** Animating from undefined. If an element has no initial position, the transition starts from 0,0. Always set initial attributes in the enter callback before transitioning.
 
@@ -228,6 +238,8 @@ Curve types: `curveBasis` for smooth, `curveStep` for discrete, `curveLinear` (d
 Multi-series: group data, one `<path>` per group. Confidence bands: area between `y0(d => y(d.lower))` and `y1(d => y(d.upper))`.
 
 **Pitfall:** Missing `.defined()` on line generators. Without it, null values draw to (0,0).
+
+**Pitfall:** Parametric curves with asymptotes. Split the parameter range at known singularities and draw each branch as a separate path. Let the SVG clip path handle visual clipping rather than breaking the curve generator at the boundary.
 
 ### Bar & Histogram
 

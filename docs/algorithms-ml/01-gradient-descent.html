@@ -24,7 +24,18 @@
   --bg: #fafafa;
   --fig-bg: #ffffff;
   --border: #e2e2e8;
+  --c-data: #2563eb;
+  --c-model: #8b5cf6;
+  --c-prediction: #0891b2;
+  --c-loss: #ef4444;
+  --c-target: #10b981;
 }
+
+.t-data { color: var(--c-data); font-weight: 600; }
+.t-model { color: var(--c-model); font-weight: 600; }
+.t-prediction { color: var(--c-prediction); font-weight: 600; }
+.t-loss { color: var(--c-loss); font-weight: 600; }
+.t-target { color: var(--c-target); font-weight: 600; }
 
 body {
   font-family: var(--body-font);
@@ -254,7 +265,7 @@ svg text {
 <div class="article">
 
 <div class="header">
-  <a class="back" href="index.html">&larr; Prose Visuals</a>
+  <a class="back" href="index.html">&larr; Algorithms &amp; ML</a>
   <h1>How Gradient Descent Finds Minima</h1>
   <p class="subtitle">Finding the bottom of a bowl you cannot see.</p>
 </div>
@@ -416,9 +427,12 @@ the gradient from a small random subset: a <em>mini-batch</em>.
 
 <p>
 The estimate is noisy. A single sample gives a gradient that points in roughly the right
-direction but wanders. A larger batch gives a cleaner estimate but costs more. The slider
-below controls batch size. Watch how the gradient arrows become more aligned as the batch
-grows.
+direction but wanders. A larger batch gives a cleaner estimate but costs more. Below is
+the same regression loss viewed as a surface in parameter space: every point in the plot
+is a choice of <em>w</em> and <em>b</em>, shaded by how badly that choice fits the data.
+A walker starts at a fixed point and descends by following the gradient at each step —
+but each step uses a different random mini-batch, so batch size literally controls the
+noise in the learning path.
 </p>
 
 <div class="figure figure-wide" id="fig-batch">
@@ -432,10 +446,11 @@ grows.
     <button class="btn" id="batch-resample">Resample</button>
   </div>
   <div class="arrow-legend">
-    <div class="swatch"><div class="swatch-color" style="background:var(--accent); height:3px;"></div> True gradient (full batch)</div>
-    <div class="swatch"><div class="swatch-color" style="background:#ef4444; height:2px;"></div> Mini-batch gradients</div>
+    <div class="swatch"><div class="swatch-color" style="background:var(--c-data); opacity:0.55; height:3px;"></div> Loss contours</div>
+    <div class="swatch"><div class="swatch-color" style="background:var(--c-loss); height:3px;"></div> Walker path</div>
+    <div class="swatch"><div class="swatch-color" style="background:var(--c-target); height:3px;"></div> True minimum</div>
   </div>
-  <div class="figure-caption"><span class="figure-label">Figure 4.</span> Each point is a data sample. The thick blue arrow is the true gradient (computed over all data). Thin red arrows are mini-batch gradient estimates. As batch size increases, the estimates converge toward the true gradient.</div>
+  <div class="figure-caption"><span class="figure-label">Figure 4.</span> The regression loss as a surface in parameter space. Darker contours are lower loss; the green dot is the optimal <em>(w, b)</em>. The walker starts at the open circle and takes fifty gradient steps, each computed from a fresh random mini-batch. At batch size 1, the walker zigzags visibly. At batch size 64, it descends almost straight to the minimum.</div>
 </div>
 
 <p>
@@ -453,6 +468,11 @@ tend to generalize better.
   everything I have seen so far, here is where to step next."
   </p>
 </div>
+
+  <footer class="footer" style="margin-top:4rem;padding-top:2rem;border-top:1px solid var(--border);font-family:var(--heading-font);font-size:0.85rem;color:var(--text-2);">
+    <p>Part of <a href="index.html" style="color:var(--text-2);">Algorithms &amp; ML</a>. Next: <a href="02-attention-mechanism.html" style="color:var(--accent);">The Attention Mechanism</a>.</p>
+    <p>Built with <a href="https://github.com/enjalot/moonshine" style="color:var(--text-2);">moonshine</a>.</p>
+  </footer>
 
 </div><!-- .article -->
 
@@ -1302,42 +1322,66 @@ const rng = mulberry32(42);
 
 
 // =============================================
-// FIGURE 4: Stochastic vs Batch
+// FIGURE 4: SGD in Parameter Space
 // =============================================
+// A walker descends the loss surface L(w, b) starting from a fixed point.
+// Each step uses a fresh mini-batch, so batch size literally controls the
+// noise in the learning path. Batch=1 zigzags; batch=N descends cleanly.
 (function() {
   const container = d3.select('#batch-viz');
-  const margin = {top: 20, right: 20, bottom: 40, left: 50};
+  const margin = {top: 18, right: 18, bottom: 46, left: 54};
   let W, H, width, height;
 
-  // Generate synthetic data: 2D points with a linear relationship + noise
+  // Synthetic regression data: y = trueW x + trueB + noise
   const N = 64;
+  const trueW = 0.7, trueB = 1.2;
   const data = [];
   for (let i = 0; i < N; i++) {
     const x = rng() * 8 - 4;
-    const y = 0.7 * x + 1.2 + (rng() - 0.5) * 3;
-    data.push({x, y, idx: i});
+    const y = trueW * x + trueB + (rng() - 0.5) * 3;
+    data.push({x, y});
   }
 
-  // True gradient direction (full batch): compute average gradient of MSE w.r.t. (w, b)
-  // Model: y_hat = w*x + b, loss = mean((y - y_hat)^2)
-  // For visualization, we show the gradient as a 2D arrow in data space
-  // We'll compute the gradient of loss w.r.t. predictions, projected back to x,y
-  const trueW = 0.7, trueB = 1.2;
-
-  // True gradient in data space: direction of steepest descent for the mean
-  function computeTrueGradient(points) {
-    let gx = 0, gy = 0;
-    for (const p of points) {
-      // Gradient of squared loss landscape: which direction to move predictions
-      gx += -2 * (p.y - (trueW * p.x + trueB)) * trueW;
-      gy += -2 * (p.y - (trueW * p.x + trueB));
+  // MSE loss and gradient over a batch of points
+  function loss(w, b, batch) {
+    let s = 0;
+    for (const p of batch) { const e = p.y - (w * p.x + b); s += e * e; }
+    return s / batch.length;
+  }
+  function gradient(w, b, batch) {
+    let gw = 0, gb = 0;
+    for (const p of batch) {
+      const e = p.y - (w * p.x + b);
+      gw += -2 * p.x * e;
+      gb += -2 * e;
     }
-    return [gx / points.length, gy / points.length];
+    return [gw / batch.length, gb / batch.length];
   }
 
-  // For mini-batch: sample random subset and compute gradient
+  // Parameter-space domain, starting point, descent schedule
+  const wDomain = [-2.5, 3.5];
+  const bDomain = [-2.5, 5];
+  const startW = -1.8, startB = 4.2;
+  const lr = 0.018;
+  const maxSteps = 50;
+
+  // Precompute L(w, b) on a grid for contour drawing
+  const gridRes = 60;
+  const lossGrid = new Array(gridRes * gridRes);
+  for (let j = 0; j < gridRes; j++) {
+    for (let i = 0; i < gridRes; i++) {
+      const w = wDomain[0] + (wDomain[1] - wDomain[0]) * (i / (gridRes - 1));
+      const b = bDomain[0] + (bDomain[1] - bDomain[0]) * (j / (gridRes - 1));
+      lossGrid[j * gridRes + i] = loss(w, b, data);
+    }
+  }
+  const minLoss = d3.min(lossGrid);
+  const maxLoss = d3.max(lossGrid);
+  const levels = d3.range(9).map(i => minLoss + Math.pow(i / 8, 1.7) * (maxLoss - minLoss));
+  const contours = d3.contours().size([gridRes, gridRes]).thresholds(levels)(lossGrid);
+
+  // Seeded Fisher-Yates mini-batch sampler
   function sampleBatch(batchSize) {
-    // Fisher-Yates shuffle with seeded RNG
     const indices = d3.range(N);
     for (let i = N - 1; i > 0; i--) {
       const j = Math.floor(rng() * (i + 1));
@@ -1346,160 +1390,180 @@ const rng = mulberry32(42);
     return indices.slice(0, batchSize).map(i => data[i]);
   }
 
-  function computeMiniBatchGradients(batchSize, numBatches) {
-    const grads = [];
-    for (let b = 0; b < numBatches; b++) {
+  // Run the walker: each step samples a fresh mini-batch and takes a gradient step
+  function runWalker(batchSize) {
+    const path = [[startW, startB]];
+    for (let s = 0; s < maxSteps; s++) {
+      const [pw, pb] = path[path.length - 1];
       const batch = sampleBatch(batchSize);
-      grads.push(computeTrueGradient(batch));
+      const [gw, gb] = gradient(pw, pb, batch);
+      const nw = Math.max(wDomain[0], Math.min(wDomain[1], pw - lr * gw));
+      const nb = Math.max(bDomain[0], Math.min(bDomain[1], pb - lr * gb));
+      path.push([nw, nb]);
     }
-    return grads;
+    return path;
   }
 
   const svg = container.append('svg')
-    .attr('aria-label', 'Scatter plot showing data points with true gradient arrow and mini-batch gradient arrows.');
+    .attr('aria-label', 'Loss-landscape contours in parameter space with a walker performing stochastic gradient descent from a fixed starting point toward the true minimum.');
   const gMain = svg.append('g');
+  const gContours = gMain.append('g').attr('class', 'contours');
+  const gWalker = gMain.append('g').attr('class', 'walker');
+  const gMarkers = gMain.append('g').attr('class', 'markers');
+  const gAxes = gMain.append('g').attr('class', 'axes');
 
   let xScale, yScale;
   let currentBatchSize = 1;
-  let miniGrads = [];
+  let walkerPath = [];
 
   function recompute() {
     currentBatchSize = parseInt(d3.select('#batch-slider').property('value'));
-    const numArrows = currentBatchSize === N ? 1 : Math.min(12, Math.max(6, Math.floor(30 / Math.sqrt(currentBatchSize))));
-    miniGrads = currentBatchSize === N ? [] : computeMiniBatchGradients(currentBatchSize, numArrows);
+    walkerPath = runWalker(currentBatchSize);
     d3.select('#batch-val').text(`${currentBatchSize} / ${N}`);
   }
 
   function render() {
     const rect = container.node().getBoundingClientRect();
     W = rect.width;
-    H = Math.min(W * 0.65, 400);
+    H = Math.min(W * 0.7, 440);
     width = W - margin.left - margin.right;
     height = H - margin.top - margin.bottom;
 
     svg.attr('width', W).attr('height', H);
     gMain.attr('transform', `translate(${margin.left},${margin.top})`);
 
-    xScale = d3.scaleLinear().domain([-5, 5]).range([0, width]);
-    yScale = d3.scaleLinear().domain([-4, 6]).range([height, 0]);
+    xScale = d3.scaleLinear().domain(wDomain).range([0, width]);
+    yScale = d3.scaleLinear().domain(bDomain).range([height, 0]);
 
-    gMain.selectAll('*').remove();
+    // Contours (loss surface)
+    const project = d3.geoTransform({
+      point: function(x, y) {
+        const w = wDomain[0] + (wDomain[1] - wDomain[0]) * (x / (gridRes - 1));
+        const b = bDomain[0] + (bDomain[1] - bDomain[0]) * (y / (gridRes - 1));
+        this.stream.point(xScale(w), yScale(b));
+      }
+    });
+    const geoPath = d3.geoPath().projection(project);
+    const color = d3.scaleSequential().domain([maxLoss, minLoss]).interpolator(d3.interpolateBlues);
 
-    // Grid
-    gMain.append('g')
+    gContours.selectAll('path')
+      .data(contours)
+      .join('path')
+      .attr('d', geoPath)
+      .attr('fill', d => color(d.value))
+      .attr('fill-opacity', 0.42)
+      .attr('stroke', 'var(--c-data)')
+      .attr('stroke-opacity', 0.25)
+      .attr('stroke-width', 0.6);
+
+    // Axes (no interior grid lines; the contours are the grid)
+    gAxes.selectAll('*').remove();
+    gAxes.append('g')
       .call(d3.axisBottom(xScale).ticks(Math.max(3, width / 80)))
       .attr('transform', `translate(0,${height})`)
       .call(g => g.select('.domain').attr('stroke', '#999'))
-      .call(g => g.selectAll('.tick line').attr('stroke', '#eee').attr('y1', -height))
+      .call(g => g.selectAll('.tick line').attr('stroke', 'none'))
       .call(g => g.selectAll('.tick text').attr('fill', 'var(--text-2)').style('font-size', '0.75rem'));
-    gMain.append('g')
+    gAxes.append('g')
       .call(d3.axisLeft(yScale).ticks(Math.max(3, height / 80)))
       .call(g => g.select('.domain').attr('stroke', '#999'))
-      .call(g => g.selectAll('.tick line').attr('stroke', '#eee').attr('x2', width))
+      .call(g => g.selectAll('.tick line').attr('stroke', 'none'))
       .call(g => g.selectAll('.tick text').attr('fill', 'var(--text-2)').style('font-size', '0.75rem'));
+    gAxes.append('text')
+      .attr('x', width / 2).attr('y', height + 38)
+      .attr('text-anchor', 'middle')
+      .attr('fill', 'var(--text-2)').style('font-size', '0.8rem')
+      .style('font-family', 'var(--heading-font)')
+      .text('weight w');
+    gAxes.append('text')
+      .attr('transform', 'rotate(-90)')
+      .attr('x', -height / 2).attr('y', -40)
+      .attr('text-anchor', 'middle')
+      .attr('fill', 'var(--text-2)').style('font-size', '0.8rem')
+      .style('font-family', 'var(--heading-font)')
+      .text('bias b');
 
-    // Data points
-    gMain.selectAll('circle.data-pt')
-      .data(data)
-      .enter().append('circle')
-      .attr('class', 'data-pt')
-      .attr('cx', d => xScale(d.x))
-      .attr('cy', d => yScale(d.y))
-      .attr('r', 4)
-      .attr('fill', 'var(--accent)')
-      .attr('fill-opacity', 0.35)
-      .attr('stroke', 'var(--accent)')
-      .attr('stroke-opacity', 0.6)
-      .attr('stroke-width', 1);
+    // Start + true minimum markers
+    gMarkers.selectAll('*').remove();
+    gMarkers.append('circle')
+      .attr('cx', xScale(startW)).attr('cy', yScale(startB))
+      .attr('r', 5).attr('fill', '#fff')
+      .attr('stroke', 'var(--text-2)').attr('stroke-width', 1.5);
+    gMarkers.append('text')
+      .attr('x', xScale(startW) + 9).attr('y', yScale(startB) + 4)
+      .attr('fill', 'var(--text-2)').style('font-size', '0.72rem')
+      .style('font-family', 'var(--heading-font)')
+      .text('start');
+    gMarkers.append('circle')
+      .attr('cx', xScale(trueW)).attr('cy', yScale(trueB))
+      .attr('r', 5).attr('fill', 'var(--c-target)')
+      .attr('stroke', '#fff').attr('stroke-width', 2);
+    gMarkers.append('text')
+      .attr('x', xScale(trueW) + 9).attr('y', yScale(trueB) + 4)
+      .attr('fill', 'var(--c-target)').style('font-size', '0.72rem')
+      .style('font-family', 'var(--heading-font)').style('font-weight', '600')
+      .text('true minimum');
 
-    // Arrow helpers
-    const arrowOrigin = [0, 1.2]; // center of data cloud
+    drawWalker();
+  }
 
-    // Arrowhead marker
-    svg.selectAll('defs').remove();
-    const defs = svg.append('defs');
+  function drawWalker() {
+    gWalker.interrupt();
+    gWalker.selectAll('*').remove();
 
-    defs.append('marker')
-      .attr('id', 'arrow-true')
-      .attr('viewBox', '0 0 10 6')
-      .attr('refX', 10).attr('refY', 3)
-      .attr('markerWidth', 8).attr('markerHeight', 5)
-      .attr('orient', 'auto')
-      .append('path').attr('d', 'M0,0 L10,3 L0,6 Z').attr('fill', 'var(--accent)');
-
-    defs.append('marker')
-      .attr('id', 'arrow-mini')
-      .attr('viewBox', '0 0 10 6')
-      .attr('refX', 10).attr('refY', 3)
-      .attr('markerWidth', 7).attr('markerHeight', 4)
-      .attr('orient', 'auto')
-      .append('path').attr('d', 'M0,0 L10,3 L0,6 Z').attr('fill', '#ef4444');
-
-    // True gradient arrow
-    const tg = computeTrueGradient(data);
-    const tgMag = Math.sqrt(tg[0] * tg[0] + tg[1] * tg[1]);
-    const tgNorm = tgMag > 0 ? [tg[0] / tgMag, tg[1] / tgMag] : [0, 0];
-
-    const arrowLen = 80;
-    gMain.append('line')
-      .attr('class', 'true-grad')
-      .attr('x1', xScale(arrowOrigin[0]))
-      .attr('y1', yScale(arrowOrigin[1]))
-      .attr('x2', xScale(arrowOrigin[0]) + tgNorm[0] * arrowLen)
-      .attr('y2', yScale(arrowOrigin[1]) - tgNorm[1] * arrowLen)
-      .attr('stroke', 'var(--accent)')
-      .attr('stroke-width', 3.5)
-      .attr('stroke-linecap', 'round')
-      .attr('marker-end', 'url(#arrow-true)');
-
-    // Mini-batch gradient arrows
-    if (currentBatchSize < N) {
-      miniGrads.forEach(mg => {
-        const mgMag = Math.sqrt(mg[0] * mg[0] + mg[1] * mg[1]);
-        const mgNorm = mgMag > 0 ? [mg[0] / mgMag, mg[1] / mgMag] : [0, 0];
-        const len = 55;
-
-        gMain.append('line')
-          .attr('class', 'mini-grad')
-          .attr('x1', xScale(arrowOrigin[0]))
-          .attr('y1', yScale(arrowOrigin[1]))
-          .attr('x2', xScale(arrowOrigin[0]) + mgNorm[0] * len)
-          .attr('y2', yScale(arrowOrigin[1]) - mgNorm[1] * len)
-          .attr('stroke', '#ef4444')
-          .attr('stroke-width', 1.5)
-          .attr('stroke-opacity', 0.5)
-          .attr('stroke-linecap', 'round')
-          .attr('marker-end', 'url(#arrow-mini)');
-      });
+    const segments = [];
+    for (let k = 0; k < walkerPath.length - 1; k++) {
+      segments.push({from: walkerPath[k], to: walkerPath[k + 1], step: k});
     }
 
-    // Axis labels
-    gMain.append('text')
-      .attr('x', width / 2).attr('y', height + 34)
-      .attr('text-anchor', 'middle')
-      .attr('fill', 'var(--text-2)').style('font-size', '0.8rem')
-      .text('x');
-    gMain.append('text')
-      .attr('transform', `rotate(-90)`)
-      .attr('x', -height / 2).attr('y', -36)
-      .attr('text-anchor', 'middle')
-      .attr('fill', 'var(--text-2)').style('font-size', '0.8rem')
-      .text('y');
+    const stepMs = reducedMotion ? 0 : 35;
+    const drawMs = reducedMotion ? 0 : 120;
+
+    gWalker.selectAll('line.seg')
+      .data(segments)
+      .join('line')
+      .attr('class', 'seg')
+      .attr('stroke', 'var(--c-loss)')
+      .attr('stroke-width', 1.8)
+      .attr('stroke-linecap', 'round')
+      .attr('stroke-opacity', 0.85)
+      .attr('x1', d => xScale(d.from[0]))
+      .attr('y1', d => yScale(d.from[1]))
+      .attr('x2', d => xScale(d.from[0]))
+      .attr('y2', d => yScale(d.from[1]))
+      .transition()
+      .delay(d => d.step * stepMs)
+      .duration(drawMs)
+      .attr('x2', d => xScale(d.to[0]))
+      .attr('y2', d => yScale(d.to[1]));
+
+    gWalker.selectAll('circle.stepdot')
+      .data(walkerPath.slice(1))
+      .join('circle')
+      .attr('class', 'stepdot')
+      .attr('cx', d => xScale(d[0]))
+      .attr('cy', d => yScale(d[1]))
+      .attr('r', 0)
+      .attr('fill', 'var(--c-loss)')
+      .attr('fill-opacity', 0.7)
+      .transition()
+      .delay((d, i) => i * stepMs + drawMs * 0.6)
+      .duration(reducedMotion ? 0 : 100)
+      .attr('r', 1.8);
   }
 
   d3.select('#batch-slider').on('input', function() {
     recompute();
-    render();
+    drawWalker();
   });
-
   d3.select('#batch-resample').on('click', () => {
     recompute();
-    render();
+    drawWalker();
   });
 
   recompute();
   render();
-  new ResizeObserver(() => { render(); }).observe(container.node());
+  new ResizeObserver(() => render()).observe(container.node());
 })();
 </script>
 </body>

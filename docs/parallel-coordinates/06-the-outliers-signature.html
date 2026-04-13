@@ -26,6 +26,13 @@
   --bg: #fafafa;
   --fig-bg: #ffffff;
   --border: #e2e2e8;
+  /* Semantic colors: concepts in parallel coordinates */
+  --c-polyline: #2563eb;  /* blue - polylines, data lines */
+  --c-point: #059669;     /* green - points in Cartesian space */
+  --c-crossing: #dc2626;  /* red - crossings, convergence, highlights */
+  --c-brush: #7c3aed;     /* purple - brushed/selected regions */
+  --c-surface: #d97706;   /* amber - envelopes, surfaces, constraints */
+  --c-axis: #64748b;      /* slate - axes, structural */
 }
 
 body {
@@ -217,6 +224,12 @@ svg .tick-label {
   h1 { font-size: 1.75rem; }
   .article { padding: 1.5rem 1rem 4rem; }
 }
+.t-polyline { color: var(--c-polyline); font-weight: 600; }
+.t-point { color: var(--c-point); font-weight: 600; }
+.t-crossing { color: var(--c-crossing); font-weight: 600; }
+.t-brush { color: var(--c-brush); font-weight: 600; }
+.t-surface { color: var(--c-surface); font-weight: 600; }
+.t-axis { color: var(--c-axis); font-weight: 600; }
 </style>
 </head>
 <body>
@@ -246,6 +259,7 @@ svg .tick-label {
   <div class="controls">
     <button class="btn" id="btn-regen">Regenerate cluster</button>
   </div>
+  <p class="click-hint">Drag the red dots on the axes or use the sliders to adjust the outlier's deviation in each dimension.</p>
   <p class="figure-caption"><span class="figure-label">Figure 1.</span> A cluster of 80 points (blue) and one injected outlier (red). The sliders control how many standard deviations the outlier deviates in each dimension. Watch the red polyline separate from the bundle only at the axes where you push the slider.</p>
 </div>
 
@@ -301,8 +315,12 @@ svg .tick-label {
   <p><strong>Contextual outliers:</strong> A point can be an outlier relative to its cluster but not relative to the global population. If your data has multiple clusters, a point at the edge of Cluster A might sit squarely inside Cluster B. Brushing helps isolate these: constrain the axes to select Cluster A, and the contextual outlier reveals itself as the polyline that barely fits within the brush ranges.</p>
 </div>
 
-<p>The outlier's signature is a direct consequence of the parallel coordinates geometry. Because each axis represents one dimension, deviation in specific dimensions maps to deviation at specific axis pairs. The representation does not aggregate or summarize &mdash; it preserves the dimensional structure of the anomaly. This is what makes parallel coordinates a natural tool for high-dimensional anomaly diagnosis, not just detection.</p>
+<p>The outlier's signature is a direct consequence of the parallel coordinates geometry. Because each axis represents one dimension, deviation in specific dimensions maps to deviation at specific axis pairs. The representation does not aggregate or summarize. It preserves the dimensional structure of the anomaly. This is what makes parallel coordinates a natural tool for high-dimensional anomaly diagnosis, not just detection.</p>
 
+  <footer style="margin-top:4rem;padding-top:2rem;border-top:1px solid var(--border);font-family:var(--heading-font);font-size:0.85rem;color:var(--text-2);">
+    <p>Part of <a href="index.html" style="color:var(--text-2);">Parallel Coordinates</a>. Previous: <a href="05-finding-clusters.html" style="color:var(--accent);">Finding Clusters</a>. Next: <a href="07-inside-or-outside.html" style="color:var(--accent);">Inside or Outside</a>.</p>
+    <p>Built with <a href="https://github.com/enjalot/moonshine" style="color:var(--text-2);">moonshine</a>.</p>
+  </footer>
 </div>
 
 <script>
@@ -365,13 +383,13 @@ function polylinePath(point, xPositions, yScales) {
 function renderMath() {
   const el1 = document.getElementById('math-mahal');
   if (el1) katex.render(
-    'D_M(\\mathbf{x}) = \\sqrt{(\\mathbf{x} - \\boldsymbol{\\mu})^T \\, \\Sigma^{-1} \\, (\\mathbf{x} - \\boldsymbol{\\mu})}',
+    '\\color{#dc2626}{D_M}(\\color{#059669}{\\mathbf{x}}) = \\sqrt{(\\color{#059669}{\\mathbf{x}} - \\color{#059669}{\\boldsymbol{\\mu}})^T \\, \\Sigma^{-1} \\, (\\color{#059669}{\\mathbf{x}} - \\color{#059669}{\\boldsymbol{\\mu}})}',
     el1, { displayMode: true }
   );
   const el2 = document.getElementById('math-x');
-  if (el2) katex.render('\\mathbf{x}', el2, { displayMode: false });
+  if (el2) katex.render('\\color{#059669}{\\mathbf{x}}', el2, { displayMode: false });
   const el3 = document.getElementById('math-mu');
-  if (el3) katex.render('\\boldsymbol{\\mu}', el3, { displayMode: false });
+  if (el3) katex.render('\\color{#059669}{\\boldsymbol{\\mu}}', el3, { displayMode: false });
   const el4 = document.getElementById('math-sigma');
   if (el4) katex.render('\\Sigma', el4, { displayMode: false });
 }
@@ -430,7 +448,20 @@ renderMath();
     .attr('stroke-width', 2.5)
     .attr('stroke-linecap', 'round');
 
+  // Draggable dots on the outlier polyline at each axis
+  const dragDots = d3.range(ndims).map(i =>
+    svg.append('circle')
+      .attr('r', 5)
+      .attr('fill', outlierColor)
+      .attr('cursor', 'grab')
+      .attr('stroke', 'white')
+      .attr('stroke-width', 1.5)
+  );
+
   drawPCAxes(svg, d3.range(ndims), dimLabels, xPositions, yScales[0], height, padY);
+
+  // Raise drag dots above axes so they receive pointer events
+  dragDots.forEach(d => d.raise());
 
   function render() {
     // cluster lines
@@ -447,11 +478,42 @@ renderMath();
     // outlier
     const op = getOutlierPoint();
     outlierLine.attr('d', polylinePath(op, xPositions, yScales));
+
+    // position drag dots
+    op.forEach((v, i) => {
+      dragDots[i].attr('cx', xPositions[i]).attr('cy', yScales[i](v));
+    });
   }
   render();
 
   // sliders
   const sliderDiv = document.getElementById('sliders-inject');
+
+  // Attach drag behaviour to each dot
+  dragDots.forEach((dot, i) => {
+    dot.call(d3.drag()
+      .on('start', function() { d3.select(this).attr('cursor', 'grabbing'); })
+      .on('drag', function(event) {
+        // Invert pixel position to data value, clamp to axis domain
+        const val = Math.max(0, Math.min(10, yScales[i].invert(event.y)));
+        // Convert back to sigma offset
+        deviations[i] = (val - means[i]) / stds[i];
+        // Clamp to slider range
+        deviations[i] = Math.max(-5, Math.min(5, deviations[i]));
+        // Sync the slider
+        const slider = sliderDiv.querySelectorAll('input[type="range"]')[i];
+        slider.value = deviations[i];
+        slider.nextElementSibling.textContent = deviations[i].toFixed(1) + '\u03C3';
+        // Redraw outlier line and dots
+        const op = getOutlierPoint();
+        outlierLine.attr('d', polylinePath(op, xPositions, yScales));
+        op.forEach((v, j) => {
+          dragDots[j].attr('cx', xPositions[j]).attr('cy', yScales[j](v));
+        });
+      })
+      .on('end', function() { d3.select(this).attr('cursor', 'grab'); })
+    );
+  });
   dimLabels.forEach((label, i) => {
     const row = document.createElement('div');
     row.className = 'slider-row';
@@ -466,6 +528,9 @@ renderMath();
       valSpan.textContent = deviations[i].toFixed(1) + '\u03C3';
       const op = getOutlierPoint();
       outlierLine.attr('d', polylinePath(op, xPositions, yScales));
+      op.forEach((v, j) => {
+        dragDots[j].attr('cx', xPositions[j]).attr('cy', yScales[j](v));
+      });
     });
   });
 

@@ -26,6 +26,13 @@
   --bg: #fafafa;
   --fig-bg: #ffffff;
   --border: #e2e2e8;
+  /* Semantic colors: concepts in parallel coordinates */
+  --c-polyline: #2563eb;  /* blue - polylines, data lines */
+  --c-point: #059669;     /* green - points in Cartesian space */
+  --c-crossing: #dc2626;  /* red - crossings, convergence, highlights */
+  --c-brush: #7c3aed;     /* purple - brushed/selected regions */
+  --c-surface: #d97706;   /* amber - envelopes, surfaces, constraints */
+  --c-axis: #64748b;      /* slate - axes, structural */
 }
 
 body {
@@ -213,6 +220,12 @@ svg .tick-label {
   h1 { font-size: 1.75rem; }
   .article { padding: 1.5rem 1rem 4rem; }
 }
+.t-polyline { color: var(--c-polyline); font-weight: 600; }
+.t-point { color: var(--c-point); font-weight: 600; }
+.t-crossing { color: var(--c-crossing); font-weight: 600; }
+.t-brush { color: var(--c-brush); font-weight: 600; }
+.t-surface { color: var(--c-surface); font-weight: 600; }
+.t-axis { color: var(--c-axis); font-weight: 600; }
 </style>
 </head>
 <body>
@@ -277,7 +290,8 @@ svg .tick-label {
   <svg id="svg-newpatient"></svg>
   <div id="sliders-container"></div>
   <div id="prediction-result" class="prediction-box"></div>
-  <p class="figure-caption"><span class="figure-label">Figure 3.</span> A new patient's polyline (bold black) against the faded class bundles. Adjust the sliders to move the polyline and watch the nearest-centroid prediction update in real time. The decision boundary is the hyperplane equidistant from the two centroids.</p>
+  <p class="click-hint">Drag the dots on the axes or use the sliders to adjust the patient's measurements.</p>
+  <p class="figure-caption"><span class="figure-label">Figure 3.</span> A new patient's polyline (bold black) against the faded class bundles. Adjust the sliders or drag the dots directly on the axes to move the polyline and watch the nearest-centroid prediction update in real time. The decision boundary is the hyperplane equidistant from the two centroids.</p>
 </div>
 
 <p>The classification boundary here is a hyperplane in six-dimensional space, equidistant from the two class centroids. From <a href="03-surfaces-you-cant-see.html">explainer 03</a>, we know that hyperplanes leave a specific geometric signature in parallel coordinates. The decision surface is not visible as a single line; it is the implicit boundary embedded in the gap between the two bundles.</p>
@@ -303,6 +317,10 @@ svg .tick-label {
   <p><strong>Subgroup analysis is hyperplane slicing.</strong> Brushing the age axis restricts the data to a slab in 6D space. The class separation within that slab may be stronger or weaker than in the full dataset. Different slabs reveal different diagnostic signatures, which is why clinical guidelines often stratify by age.</p>
 </div>
 
+  <footer style="margin-top:4rem;padding-top:2rem;border-top:1px solid var(--border);font-family:var(--heading-font);font-size:0.85rem;color:var(--text-2);">
+    <p>Part of <a href="index.html" style="color:var(--text-2);">Parallel Coordinates</a>. Previous: <a href="09-process-control.html" style="color:var(--accent);">Process Control</a>. Next: <a href="11-collision-courses.html" style="color:var(--accent);">Collision Courses</a>.</p>
+    <p>Built with <a href="https://github.com/enjalot/moonshine" style="color:var(--text-2);">moonshine</a>.</p>
+  </footer>
 </div>
 
 <script>
@@ -400,7 +418,7 @@ function cohenD(featureKey) {
 
 // Render KaTeX
 katex.render(
-  'd = \\frac{\\bar{x}_1 - \\bar{x}_0}{s_p}, \\quad s_p = \\sqrt{\\frac{(n_0 - 1)s_0^2 + (n_1 - 1)s_1^2}{n_0 + n_1 - 2}}',
+  '\\color{#dc2626}{d} = \\frac{\\color{#059669}{\\bar{x}_1} - \\color{#059669}{\\bar{x}_0}}{\\color{#64748b}{s_p}}, \\quad \\color{#64748b}{s_p} = \\sqrt{\\frac{(n_0 - 1)s_0^2 + (n_1 - 1)s_1^2}{n_0 + n_1 - 2}}',
   document.getElementById('math-cohen-d'),
   { displayMode: true }
 );
@@ -535,9 +553,13 @@ function drawPC(svgSel, featureOrder, opts) {
       svg.append('circle')
         .attr('cx', xScale(i))
         .attr('cy', yScales[f.key](newPatient[f.key]))
-        .attr('r', 4)
+        .attr('r', 5)
         .attr('fill', '#1a1a2e')
-        .attr('class', 'new-patient-dot');
+        .attr('stroke', 'white')
+        .attr('stroke-width', 1.5)
+        .attr('cursor', 'grab')
+        .attr('class', 'new-patient-dot')
+        .datum({ featureIndex: i, featureKey: f.key });
     });
   }
 
@@ -702,13 +724,10 @@ function drawPC(svgSel, featureOrder, opts) {
     return { cls: d0 <= d1 ? 0 : 1, d0, d1 };
   }
 
-  function renderFig3() {
-    drawPC(d3.select('#svg-newpatient'), features, {
-      alphaHealthy: healthyFaded,
-      alphaDisease: diseaseFaded,
-      newPatient: patient,
-    });
+  // Store slider DOM elements keyed by feature
+  const sliderMap = {};
 
+  function updatePredictionBox() {
     const pred = predict();
     const box = document.getElementById('prediction-result');
     if (pred.cls === 0) {
@@ -722,6 +741,52 @@ function drawPC(svgSel, featureOrder, opts) {
       box.style.color = '#dc2626';
       box.style.border = '1px solid rgba(239, 68, 68, 0.3)';
     }
+  }
+
+  function renderFig3() {
+    const result = drawPC(d3.select('#svg-newpatient'), features, {
+      alphaHealthy: healthyFaded,
+      alphaDisease: diseaseFaded,
+      newPatient: patient,
+    });
+
+    updatePredictionBox();
+
+    // Attach drag to patient dots
+    const { svg, xScale, yScales, lineGen } = result;
+    const patientPath = svg.select('.new-patient-line');
+
+    svg.selectAll('.new-patient-dot').call(
+      d3.drag()
+        .on('start', function() { d3.select(this).attr('cursor', 'grabbing'); })
+        .on('drag', function(event, datum) {
+          const f = features[datum.featureIndex];
+          const scale = yScales[f.key];
+          // Clamp to axis range
+          const [lo, hi] = [ranges[f.key][0], ranges[f.key][1]];
+          const rawVal = scale.invert(event.y);
+          const step = steps[f.key];
+          const clamped = Math.round(Math.min(hi, Math.max(lo, rawVal)) / step) * step;
+          patient[f.key] = clamped;
+
+          // Update dot position
+          d3.select(this).attr('cy', scale(clamped));
+
+          // Update patient polyline
+          const pts = features.map((ft, i) => [xScale(i), yScales[ft.key](patient[ft.key])]);
+          patientPath.attr('d', lineGen(pts));
+
+          // Sync slider and value display
+          const sl = sliderMap[f.key];
+          if (sl) {
+            sl.input.value = clamped;
+            sl.val.textContent = f.key === 'oldpeak' ? clamped.toFixed(1) : clamped;
+          }
+
+          updatePredictionBox();
+        })
+        .on('end', function() { d3.select(this).attr('cursor', 'grab'); })
+    );
   }
 
   // Create sliders
@@ -754,6 +819,7 @@ function drawPC(svgSel, featureOrder, opts) {
     row.appendChild(slider);
     row.appendChild(val);
     container.appendChild(row);
+    sliderMap[f.key] = { input: slider, val };
   });
 
   renderFig3();
