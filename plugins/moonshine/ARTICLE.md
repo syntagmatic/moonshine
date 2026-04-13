@@ -9,7 +9,7 @@ How moonshine explanations are built as self-contained HTML files. This covers t
 
 ## Tech Stack
 
-Self-contained HTML, vanilla JS, D3 v7 from CDN. No build tools, no frameworks. Open the file in a browser and it works.
+Self-contained HTML, vanilla JS, D3 v7 from CDN. Open the file in a browser and it works.
 
 ## Output Location
 

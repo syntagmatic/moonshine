@@ -6,7 +6,7 @@
 
 AI tools generate complexity faster than people can consume it. Inspired by [Distill.pub](https://distill.pub), moonshine helps apply distillation to the flood of technical output, turning complex ideas into explorable, visual, interactive articles.
 
-Each explanation is a self-contained HTML file with vanilla JS and D3 v7. No build tools, no frameworks. Open the file in a browser and it works.
+Each explanation is a self-contained HTML file with vanilla JS and D3 v7. Open the file in a browser and it works.
 
 ```
 > /shine how gradient descent finds minima
