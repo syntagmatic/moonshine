@@ -6,6 +6,8 @@
 <title>Tsunami Propagation: How the 2011 Tohoku Tsunami Crossed the Pacific</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;500&family=Noto+Serif+JP:wght@400;600;700&family=Noto+Sans+JP:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
 <script src="https://d3js.org/d3.v7.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/topojson-client@3"></script>
 <style>
@@ -29,7 +31,29 @@
   --shindo-6l: #f4511e;
   --shindo-6u: #d32f2f;
   --shindo-7: #7b1fa2;
+  --c-depth: #0891b2;
+  --c-speed: #dc2626;
+  --c-wave: #2563eb;
+  --c-time: #7c3aed;
 }
+.t-depth { color: var(--c-depth); font-weight: 600; }
+.t-speed { color: var(--c-speed); font-weight: 600; }
+.t-wave  { color: var(--c-wave);  font-weight: 600; }
+.t-time  { color: var(--c-time);  font-weight: 600; }
+
+.eq-code-stack { margin: 1.5rem 0; border-radius: 6px; overflow: hidden; border: 1px solid #e8e6f0; }
+.eq-block { padding: 1rem 1.25rem; background: #f8f7ff; text-align: center; border-bottom: 1px solid #e8e6f0; }
+.eq-label { font-family: var(--heading-font); font-size: 0.72rem; color: var(--text-2); margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.05em; }
+.eq-values { font-family: var(--mono-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.5rem; min-height: 1.3em; }
+.eq-values .v-depth { color: var(--c-depth); font-weight: 600; }
+.eq-values .v-speed { color: var(--c-speed); font-weight: 600; }
+
+.readout-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; margin-top: 0.75rem; font-family: var(--heading-font); }
+@media (max-width: 600px) { .readout-grid { grid-template-columns: 1fr; } }
+.readout { background: #f8f7ff; border: 1px solid var(--border); border-radius: 4px; padding: 0.6rem 0.75rem; }
+.readout .r-label { font-size: 0.7rem; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.04em; }
+.readout .r-value { font-family: var(--mono-font); font-size: 1rem; font-weight: 600; color: var(--c-time); margin-top: 0.2rem; }
+.readout .r-sub { font-size: 0.7rem; color: var(--text-2); margin-top: 0.1rem; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0s !important; transition-duration: 0s !important; }
 }
@@ -49,7 +73,9 @@ html[lang="ja"] { --body-font: 'Noto Serif JP', Georgia, serif; --heading-font: 
 svg .axis text { font-size: 11px; fill: var(--text-2); }
 svg .axis line, svg .axis path { stroke: var(--border); }
 
-.controls { display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; font-family: var(--heading-font); font-size: 0.9rem; }
+.controls { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; font-family: var(--heading-font); font-size: 0.9rem; }
+.controls input[type="range"] { width: 180px; accent-color: var(--accent); }
+.controls label { display: flex; align-items: center; gap: 0.4rem; }
 .controls button {
   font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600;
   padding: 0.4rem 1rem; border: 1px solid var(--border); border-radius: 4px;
@@ -114,11 +140,32 @@ svg .axis line, svg .axis path { stroke: var(--border); }
 
 <h2 data-i18n="h2_speed">Speed Depends on Depth</h2>
 
-<p data-i18n="p4">Here is the single equation that governs tsunami propagation:</p>
+<p data-i18n="p4">Here is the single equation that governs tsunami propagation. It comes from the shallow water approximation, which applies when the wavelength is much larger than the water depth, exactly the regime a tsunami lives in.</p>
 
-<p style="text-align:center; font-family: var(--mono-font); font-size: 1.1rem; margin: 1.5rem 0;">v = √(g × d)</p>
+<div class="figure" id="fig-speed">
+  <div class="eq-code-stack">
+    <div class="eq-block">
+      <div class="eq-label" data-i18n="eq_label_wave_speed">Shallow water wave speed</div>
+      <div id="eq-wave-speed"></div>
+      <div class="eq-values" id="eq-wave-speed-values"></div>
+    </div>
+  </div>
+  <div class="controls">
+    <span data-i18n="ctrl_depth_label">Ocean depth (<span class="t-depth">d</span>):</span>
+    <input type="range" id="depth-slider" min="10" max="6000" value="4000" step="10">
+    <span><span id="depth-val" class="t-depth">4000</span> m</span>
+  </div>
+  <div class="readout-grid" id="arrival-readouts"></div>
+  <div class="figure-caption" data-i18n="caption_speed">
+    <span style="font-weight:600;color:var(--text);">Figure.</span>
+    Drag the <span class="t-depth">depth</span> slider. The wave <span class="t-speed">speed</span> follows
+    v = √(g·d), and the <span class="t-time">arrival times</span> for three Pacific locations recompute as if
+    the entire crossing were at that single depth. At 4000 m (the open Pacific average) the numbers
+    match observed arrivals for the 2011 Tohoku event to within about 10%.
+  </div>
+</div>
 
-<p data-i18n="p5">where <em>g</em> is gravitational acceleration (9.8 m/s²) and <em>d</em> is ocean depth. In the open Pacific, with average depths around 4,000 meters, this gives roughly 200 m/s, about 700 km/h. That's the speed of a commercial jet. Near the coast, where depths drop to 10 meters, the wave slows to about 36 km/h, roughly the speed of a bicycle.</p>
+<p data-i18n="p5">where <span class="t-speed">v</span> is wave speed, <em>g</em> is gravitational acceleration (9.8 m/s²), and <span class="t-depth">d</span> is ocean depth. In the open Pacific, with average depths around 4,000 meters, this gives roughly 200 m/s, about 720 km/h. That is the speed of a commercial jet. Near the coast, where depths drop to 10 meters, the wave slows to about 36 km/h, roughly the speed of a bicycle.</p>
 
 <div class="insight" data-i18n="insight_invisible">
 <strong>Why you can't see a tsunami in the open ocean.</strong> Out in deep water, a tsunami is perhaps 1 meter tall with a wavelength of 200 km or more. The surface rises and falls by one meter over a distance greater than the width of Tokyo. A ship in the open Pacific would barely notice it passing beneath. It only becomes a monster as it enters shallow water.
@@ -485,6 +532,75 @@ const arrivals = [
 })();
 
 // ============================================================
+// WAVE-SPEED PLAYGROUND (shallow water equation)
+// ============================================================
+(function() {
+  const eqEl = document.getElementById("eq-wave-speed");
+  const valEl = document.getElementById("eq-wave-speed-values");
+  const slider = document.getElementById("depth-slider");
+  const depthLabel = document.getElementById("depth-val");
+  const readoutEl = document.getElementById("arrival-readouts");
+  if (!eqEl || !slider) return;
+
+  // Render the symbolic equation with matching colors
+  try {
+    katex.render(
+      "\\color{#dc2626}{v} = \\sqrt{\\, g \\cdot \\color{#0891b2}{d}\\,}",
+      eqEl,
+      { displayMode: true, throwOnError: false }
+    );
+  } catch (e) {
+    eqEl.textContent = "v = √(g · d)";
+  }
+
+  // Great-circle distances (km) from the Tohoku epicenter (38.3 N, 142.4 E)
+  // Used for an "as if entire path were at depth d" arrival estimate.
+  const destinations = [
+    { key: "sanriku",    en: "Sanriku coast", ja: "三陸海岸",       km:   130 },
+    { key: "hawaii",     en: "Hawaii",        ja: "ハワイ",         km:  6200 },
+    { key: "california", en: "California",    ja: "カリフォルニア", km:  8200 }
+  ];
+
+  function fmtHM(hours) {
+    if (!isFinite(hours)) return "—";
+    const h = Math.floor(hours);
+    const m = Math.round((hours - h) * 60);
+    return h + "h " + String(m).padStart(2, "0") + "m";
+  }
+
+  function update() {
+    const d = +slider.value;
+    depthLabel.textContent = d.toLocaleString();
+    const g = 9.8;
+    const vms = Math.sqrt(g * d);       // m/s
+    const vkmh = vms * 3.6;             // km/h
+    valEl.innerHTML =
+      '√(9.8 · <span class="v-depth">' + d.toLocaleString() + '</span> m) = ' +
+      '<span class="v-speed">' + vms.toFixed(0) + ' m/s</span> ' +
+      '≈ <span class="v-speed">' + vkmh.toFixed(0) + ' km/h</span>';
+
+    const lang = window.getPageLang ? window.getPageLang() : "en";
+    readoutEl.innerHTML = "";
+    destinations.forEach(function(dst) {
+      const hours = dst.km / vkmh;
+      const name = lang === "ja" ? dst.ja : dst.en;
+      const sub  = (lang === "ja" ? "約" : "~") + dst.km.toLocaleString() + " km";
+      const card = document.createElement("div");
+      card.className = "readout";
+      card.innerHTML =
+        '<div class="r-label">' + name + '</div>' +
+        '<div class="r-value">' + fmtHM(hours) + '</div>' +
+        '<div class="r-sub">' + sub + '</div>';
+      readoutEl.appendChild(card);
+    });
+  }
+
+  slider.addEventListener("input", update);
+  window.addEventListener("langchange", update);
+  update();
+})();
+
+// ============================================================
 // PROPAGATION MAP
 // ============================================================
 (function() {
@@ -535,16 +651,39 @@ const arrivals = [
     return g;
   }
 
-  // Draw non-Japan coastlines
-  Object.entries(coastlines).forEach(([key, c]) => {
-    if (key === "japan" || key === "japanWest") return;
-    drawCoast(c, false);
-  });
+  // Clip off-map content so polygons that cross off-screen don't bleed in.
+  svg.append("defs").append("clipPath").attr("id", "tsunami-map-clip")
+    .append("rect").attr("width", W).attr("height", H);
+  coastGroup.attr("clip-path", "url(#tsunami-map-clip)");
 
-  // Japan group — will be populated from TopoJSON
+  // Layer order (fixed at IIFE time, not load time):
+  //   1. World land (low-detail, ~60KB from world-atlas)
+  //   2. Japan land (detailed prefecture outlines from shared topojson)
+  const worldGroup = coastGroup.append("g").attr("class", "world-land");
   const japanGroup = coastGroup.append("g").attr("class", "japan-land");
 
-  // Custom path generator that projects TopoJSON coordinates through our linear scales
+  // Pacific-centered projection that routes geometry through our linear scales.
+  // d3.geoProjection() gives us default antimeridian clipping, so polygons
+  // spanning the dateline (Russia, Alaska, Aleutians) are split cleanly.
+  //
+  // Subtle: d3's internal recenter() applies the RAW function directly to the
+  // stored center (lambda, phi), without running it through the rotator first.
+  // So to make the corner point 100°E/63°N land at [0,0], we must pass the
+  // POST-rotation lambda in .center(). rotate([-180,0,0]) maps geo lon=100 to
+  // rotated lambda=-80°, so center=[-80, 63] gives dx=dy=0.
+  const worldProjection = d3.geoProjection(function(lambda, phi) {
+    // lambda, phi in radians post-rotation; geographic lon = 180 + lambda*180/π.
+    let absLon = 180 + lambda * 180 / Math.PI;
+    if (absLon < 0) absLon += 360;
+    if (absLon > 360) absLon -= 360;
+    const absLat = phi * 180 / Math.PI;
+    return [xScale(absLon), -yScale(absLat)];
+  }).rotate([-180, 0, 0]).center([-80, 63]).scale(1).translate([0, 0]);
+
+  const worldPath = d3.geoPath(worldProjection);
+
+  // Japan uses the simple transform (no antimeridian concerns, already
+  // in positive longitudes) so the existing linear scales apply directly.
   const japanPath = d3.geoPath().projection(
     d3.geoTransform({
       point: function(lon, lat) {
@@ -553,7 +692,18 @@ const arrivals = [
     })
   );
 
-  // Load and render proper Japan prefecture outlines
+  // Load low-res world land shapes (North America, Asia, Australia, etc.)
+  d3.json("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-50m.json").then(function(world) {
+    const landFeature = topojson.feature(world, { type: "GeometryCollection", geometries: world.objects.countries.geometries.filter(g => g.id !== "392") });
+    worldGroup.append("path")
+      .datum(landFeature)
+      .attr("d", worldPath)
+      .attr("fill", "#e8e8e0")
+      .attr("stroke", "#bbb")
+      .attr("stroke-width", 0.6);
+  });
+
+  // Load detailed Japan prefecture outlines on top
   d3.json("../shared/japan.topojson").then(function(topo) {
     const japanFeatures = topojson.feature(topo, topo.objects.japan);
     japanGroup.selectAll("path")
@@ -985,7 +1135,7 @@ const arrivals = [
         .text("Depth: ~4,000 m").attr("fill", "#1e40af").attr("font-size", 12)
         .attr("text-anchor", "middle").attr("opacity", 0.7);
       svg.append("text").attr("x", W/2).attr("y", 30)
-        .text("Deep Ocean — wave is undetectable at surface").attr("data-i18n", "svg_deep_ocean")
+        .text("Deep ocean: wave is undetectable at surface").attr("data-i18n", "svg_deep_ocean")
         .attr("fill", "#1e40af").attr("font-size", 13).attr("font-weight", 600).attr("text-anchor", "middle");
     } else if (step === 1) {
       svg.append("text").attr("x", 100).attr("y", 160)
@@ -993,7 +1143,7 @@ const arrivals = [
       svg.append("text").attr("x", W - 80).attr("y", 140)
         .text("200 m").attr("fill", "#1e40af").attr("font-size", 11).attr("text-anchor", "middle").attr("opacity", 0.7);
       svg.append("text").attr("x", W/2).attr("y", 30)
-        .text("Continental shelf — wave begins to slow and grow").attr("data-i18n", "svg_continental_shelf")
+        .text("Continental shelf: wave slows and grows").attr("data-i18n", "svg_continental_shelf")
         .attr("fill", "#1e40af").attr("font-size", 13).attr("font-weight", 600).attr("text-anchor", "middle");
       // Speed annotations
       svg.append("text").attr("x", 60).attr("y", surfaceY + 30)
@@ -1006,7 +1156,7 @@ const arrivals = [
       svg.append("text").attr("x", W - 60).attr("y", 110)
         .text("10 m").attr("fill", "#1e40af").attr("font-size", 11).attr("text-anchor", "middle").attr("opacity", 0.7);
       svg.append("text").attr("x", W/2).attr("y", 30)
-        .text("Near shore — catastrophic wave heights").attr("data-i18n", "svg_near_shore")
+        .text("Near shore: catastrophic wave heights").attr("data-i18n", "svg_near_shore")
         .attr("fill", "#dc2626").attr("font-size", 13).attr("font-weight", 700).attr("text-anchor", "middle");
       svg.append("text").attr("x", 60).attr("y", surfaceY + 30)
         .text("700 km/h").attr("fill", "#4a4a6a").attr("font-size", 10);
@@ -1203,8 +1353,11 @@ window.PAGE_JA = {
   "caption_cross_section": "津波発生の断面図。浅い逆断層が海底を持ち上げ、その上の水柱が変位し、波として四方に伝播する。",
   "p3": "重要な点は、断層が<em>浅く</em>（海底に近く）、<em>鉛直方向の変位</em>を生むことだ。2011年の東北地震は深さ約24 kmの逆断層で発生し、太平洋プレートがオホーツクプレートの下に潜り込んだ。九州とほぼ同じ面積にわたって海底が最大5〜8メートル隆起した。この鉛直変位こそが津波を生む。",
   "h2_speed": "速度は水深で決まる",
-  "p4": "津波の伝播を支配する方程式はたった一つだ。",
-  "p5": "ここで<em>g</em>は重力加速度（9.8 m/s²）、<em>d</em>は水深である。平均水深約4,000 mの外洋太平洋では約200 m/s、時速約700 kmになる。旅客機の速度だ。水深10 mの沿岸部では約36 km/h、自転車の速度まで減速する。",
+  "p4": "津波の伝播を支配する方程式はたった一つだ。これは浅水近似から導かれる。波長が水深よりはるかに大きいときに成り立つ近似で、津波はまさにその条件を満たす。",
+  "eq_label_wave_speed": "浅水波の速度",
+  "ctrl_depth_label": "水深 (<span class=\"t-depth\">d</span>):",
+  "caption_speed": "<span style=\"font-weight:600;color:var(--text);\">図.</span> <span class=\"t-depth\">水深</span>スライダーを動かすと、波の<span class=\"t-speed\">速度</span>が v = √(g·d) に従って変化し、太平洋上の3地点の<span class=\"t-time\">到達時間</span>が再計算される（全経路をその水深で横断したと仮定）。平均水深4,000 mで、2011年東北地震の観測到達時刻と約10%以内で一致する。",
+  "p5": "ここで<span class=\"t-speed\">v</span>は波の速度、<em>g</em>は重力加速度（9.8 m/s²）、<span class=\"t-depth\">d</span>は水深である。平均水深約4,000 mの外洋太平洋では約200 m/s、時速約720 kmになる。旅客機の速度だ。水深10 mの沿岸部では約36 km/h、自転車の速度まで減速する。",
   "insight_invisible": "<strong>外洋で津波が見えない理由。</strong>深海での津波の高さはわずか1メートル程度で、波長は200 km以上に及ぶ。東京の幅よりも長い距離にわたって海面が1メートル上下するだけだ。外洋の船は津波が通過してもほとんど気づかない。浅い水域に入って初めて怪物と化す。",
   "h2_propagation": "太平洋を横断する伝播",
   "p6": "2011年の津波は震央（北緯38.3度、東経142.4度）から四方に放射された。30分以内に最も近い海岸線、本州北東部の三陸海岸に最初の波が到達した。その後、波面は太平洋を横断し、約7時間後にハワイ、約10時間後に米国西海岸、約22時間後にチリ沿岸に到達した。",

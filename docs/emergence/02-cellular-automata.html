@@ -24,6 +24,9 @@
   --bg: #fafafa;
   --fig-bg: #ffffff;
   --border: #e2e2e8;
+  --c-agent: #2563eb;
+  --c-env: #10b981;
+  --c-danger: #ef4444;
 }
 body {
   font-family: var(--body-font);
@@ -56,24 +59,11 @@ code {
   padding: 0.15em 0.4em;
   border-radius: 3px;
 }
-.header {
-  padding: 4rem 0 2rem;
-  border-bottom: 1px solid var(--border);
-  margin-bottom: 2.5rem;
-}
-.header .back {
-  font-family: var(--heading-font);
-  font-size: 0.85rem;
-  display: inline-block;
-  margin-bottom: 1.5rem;
-}
-.header .subtitle {
-  font-family: var(--heading-font);
-  font-size: 1.15rem;
-  color: var(--text-2);
-  margin-bottom: 0;
-  max-width: 580px;
-}
+
+header { margin-bottom: 3rem; }
+.back-link { font-family: var(--heading-font); font-size: 0.85rem; text-decoration: none; color: var(--text-2); display: inline-block; margin-bottom: 1rem; }
+.subtitle { font-family: var(--heading-font); font-size: 1.15rem; color: var(--text-2); max-width: 600px; }
+
 .figure {
   margin: 2rem 0;
   padding: 1.5rem;
@@ -102,7 +92,7 @@ code {
   display: flex;
   flex-wrap: wrap;
   gap: 1rem;
-  margin-top: 1rem;
+  margin-bottom: 1rem;
   font-family: var(--heading-font);
   font-size: 0.85rem;
 }
@@ -142,13 +132,13 @@ code {
   font-family: var(--heading-font);
   font-size: 0.85rem;
   font-weight: 600;
-  padding: 0.4rem 1rem;
-  border-radius: 5px;
+  padding: 0.35rem 0.85rem;
+  border-radius: 4px;
   border: 1px solid var(--border);
   background: var(--fig-bg);
   color: var(--text);
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
+  transition: all 0.15s;
   user-select: none;
 }
 .btn:hover { border-color: var(--accent); background: var(--accent-light); }
@@ -241,11 +231,11 @@ svg text { font-family: var(--heading-font); }
 <body>
 <div class="article">
 
-  <div class="header">
-    <a href="index.html" class="back">&larr; Emergence</a>
-    <h1>Cellular Automata: Computation from Nothing</h1>
+  <header>
+    <a href="index.html" class="back-link">&larr; Emergence Series</a>
+    <h1>Cellular Automata</h1>
     <p class="subtitle">A grid of cells following one rule can produce anything from static patterns to universal computers.</p>
-  </div>
+  </header>
 
   <p>Take a row of cells. Each cell is on or off. To decide what happens next, look at each cell and its two neighbors. That is three bits, eight possible inputs. A rule assigns an output to each input. There are 256 such rules. Some produce nothing interesting. A few produce everything.</p>
 
@@ -336,10 +326,23 @@ svg text { font-family: var(--heading-font); }
 
   <p>This is the core lesson of cellular automata. You do not need complicated rules to get complicated behavior. You do not need a central controller to get coordination. You do not need to design complexity. You just need a rule, a grid, and time.</p>
 
+<footer style="margin-top: 4rem; padding-top: 2rem; border-top: 1px solid var(--border); font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2);">
+  <p>Next: <a href="03-reaction-diffusion.html" style="color: var(--accent);">Reaction-Diffusion</a> &rarr;</p>
+  <p style="margin-top: 1rem; opacity: 0.6;">Built with <a href="https://github.com/enjalot/moonshine" style="color: var(--text-2);">moonshine</a>.</p>
+</footer>
+
 </div>
 
 <!-- ======== SCRIPTS ======== -->
 <script>
+// --- State & Dispatch ---
+const state = {
+  ea: { rule: 110, running: false, grid: [] },
+  gol: { playing: false, speed: 10, grid: null },
+  edge: { selectedClass: 'IV' }
+};
+const dispatch = d3.dispatch('eaUpdate', 'golUpdate', 'edgeUpdate');
+
 // ── Elementary Automata ──
 (function() {
   const COLS = 101;
@@ -347,12 +350,7 @@ svg text { font-family: var(--heading-font); }
   const container = document.getElementById('elementary-svg');
   let cellSize, svgW, svgH;
   let svg, cellGroup;
-  let grid = [];
-  let running = false;
-  let animId = null;
-  let ruleNum = 110;
   let ruleBits = [];
-  const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   function parseRule(n) {
     const bits = [];
@@ -361,8 +359,8 @@ svg text { font-family: var(--heading-font); }
   }
 
   function initGrid() {
-    grid = [new Uint8Array(COLS)];
-    grid[0][Math.floor(COLS / 2)] = 1;
+    state.ea.grid = [new Uint8Array(COLS)];
+    state.ea.grid[0][Math.floor(COLS / 2)] = 1;
   }
 
   function nextRow(prev) {
@@ -377,23 +375,15 @@ svg text { font-family: var(--heading-font); }
     return row;
   }
 
-  function measure() {
+  function buildSVG() {
     const w = container.clientWidth;
     cellSize = Math.max(2, Math.floor(w / COLS));
     svgW = cellSize * COLS;
     svgH = cellSize * MAX_ROWS;
-  }
-
-  function buildSVG() {
-    measure();
     d3.select(container).selectAll('svg').remove();
     svg = d3.select(container).append('svg')
-      .attr('width', svgW)
-      .attr('height', svgH)
-      .style('display', 'block')
-      .style('margin', '0 auto')
-      .style('max-width', '100%')
-      .style('background', '#fff');
+      .attr('width', svgW).attr('height', svgH)
+      .style('display', 'block').style('margin', '0 auto').style('max-width', '100%').style('background', '#fff');
     cellGroup = svg.append('g');
   }
 
@@ -401,111 +391,74 @@ svg text { font-family: var(--heading-font); }
     for (let c = 0; c < COLS; c++) {
       if (row[c]) {
         cellGroup.append('rect')
-          .attr('x', c * cellSize)
-          .attr('y', r * cellSize)
-          .attr('width', cellSize)
-          .attr('height', cellSize)
-          .attr('fill', '#1a1a2e');
+          .attr('x', c * cellSize).attr('y', r * cellSize)
+          .attr('width', cellSize).attr('height', cellSize)
+          .attr('fill', 'var(--c-agent)');
       }
     }
   }
 
   function drawAll() {
     cellGroup.selectAll('*').remove();
-    grid.forEach(function(row, r) { drawRow(row, r); });
+    state.ea.grid.forEach((row, r) => drawRow(row, r));
     drawTopRowOverlay();
   }
 
   function drawTopRowOverlay() {
     svg.selectAll('.top-overlay').remove();
-    var overlay = svg.append('g').attr('class', 'top-overlay');
+    const overlay = svg.append('g').attr('class', 'top-overlay');
     for (let c = 0; c < COLS; c++) {
       overlay.append('rect')
-        .attr('x', c * cellSize)
-        .attr('y', 0)
-        .attr('width', cellSize)
-        .attr('height', cellSize)
+        .attr('x', c * cellSize).attr('y', 0)
+        .attr('width', cellSize).attr('height', cellSize)
         .attr('fill', 'transparent')
-        .attr('stroke', grid.length === 1 ? '#e2e2e8' : 'none')
+        .attr('stroke', state.ea.grid.length === 1 ? 'var(--border)' : 'none')
         .attr('stroke-width', 0.5)
         .style('cursor', 'pointer')
-        .datum(c)
-        .on('click', function(event, col) {
-          if (grid.length > 1) return;
-          grid[0][col] = grid[0][col] ? 0 : 1;
+        .on('click', () => {
+          if (state.ea.grid.length > 1) return;
+          state.ea.grid[0][c] = state.ea.grid[0][c] ? 0 : 1;
           drawAll();
         });
     }
   }
 
   function step() {
-    if (grid.length >= MAX_ROWS) return false;
-    const last = grid[grid.length - 1];
+    if (state.ea.grid.length >= MAX_ROWS) return false;
+    const last = state.ea.grid[state.ea.grid.length - 1];
     const row = nextRow(last);
-    grid.push(row);
-    drawRow(row, grid.length - 1);
-    if (grid.length === 2) {
-      // Remove top-row grid lines after first step
-      svg.selectAll('.top-overlay').remove();
-    }
-    return grid.length < MAX_ROWS;
+    state.ea.grid.push(row);
+    drawRow(row, state.ea.grid.length - 1);
+    if (state.ea.grid.length === 2) svg.selectAll('.top-overlay').remove();
+    return state.ea.grid.length < MAX_ROWS;
   }
 
   function runLoop() {
-    if (!running) return;
-    const more = step();
-    if (!more) { stop(); return; }
-    animId = requestAnimationFrame(runLoop);
+    if (!state.ea.running) return;
+    if (!step()) { state.ea.running = false; document.getElementById('ea-run').textContent = 'Run'; return; }
+    requestAnimationFrame(runLoop);
   }
 
-  function stop() {
-    running = false;
-    if (animId) cancelAnimationFrame(animId);
-    animId = null;
-    document.getElementById('ea-run').textContent = 'Run';
-  }
-
-  function reset() {
-    stop();
-    initGrid();
-    drawAll();
-  }
-
-  // Controls
   document.getElementById('ea-rule-select').addEventListener('change', function() {
-    ruleNum = +this.value;
-    ruleBits = parseRule(ruleNum);
+    state.ea.rule = +this.value;
+    ruleBits = parseRule(state.ea.rule);
     reset();
   });
 
   document.getElementById('ea-run').addEventListener('click', function() {
-    if (running) { stop(); return; }
-    running = true;
-    this.textContent = 'Pause';
-    runLoop();
+    state.ea.running = !state.ea.running;
+    this.textContent = state.ea.running ? 'Pause' : 'Run';
+    if (state.ea.running) runLoop();
   });
 
-  document.getElementById('ea-step').addEventListener('click', function() {
-    if (running) stop();
-    step();
-  });
-
+  document.getElementById('ea-step').addEventListener('click', () => { state.ea.running = false; document.getElementById('ea-run').textContent = 'Run'; step(); });
   document.getElementById('ea-reset').addEventListener('click', reset);
 
-  // Init
-  ruleBits = parseRule(ruleNum);
-  buildSVG();
-  initGrid();
-  drawAll();
+  function reset() { state.ea.running = false; document.getElementById('ea-run').textContent = 'Run'; initGrid(); drawAll(); }
 
-  // Resize
-  const ro = new ResizeObserver(function() {
-    const prevGrid = grid.slice();
-    buildSVG();
-    grid = prevGrid;
-    drawAll();
-  });
-  ro.observe(container);
+  ruleBits = parseRule(state.ea.rule);
+  buildSVG(); initGrid(); drawAll();
+  new ResizeObserver(() => { buildSVG(); drawAll(); }).observe(container);
 })();
 
 // ── Conway's Game of Life ──
@@ -513,40 +466,27 @@ svg text { font-family: var(--heading-font); }
   const canvas = document.getElementById('gol-canvas');
   const ctx = canvas.getContext('2d');
   const CELL = 8;
-  let cols, rows;
-  let grid, nextGrid;
-  let playing = false;
-  let animId = null;
-  let speed = 10;
+  let cols, rows, nextGrid;
   let frameCount = 0;
   let drawing = false;
-  const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   function measure() {
     const rect = canvas.parentElement.getBoundingClientRect();
     const w = Math.floor(rect.width - 48);
     cols = Math.floor(w / CELL);
     rows = Math.floor(400 / CELL);
-    canvas.width = cols * CELL;
-    canvas.height = rows * CELL;
-    canvas.style.width = canvas.width + 'px';
-    canvas.style.height = canvas.height + 'px';
+    canvas.width = cols * CELL; canvas.height = rows * CELL;
+    canvas.style.width = canvas.width + 'px'; canvas.style.height = canvas.height + 'px';
   }
 
-  function makeGrid() {
-    return new Uint8Array(cols * rows);
-  }
-
-  function idx(c, r) { return r * cols + c; }
+  const idx = (c, r) => r * cols + c;
 
   function countNeighbors(g, c, r) {
     let n = 0;
     for (let dr = -1; dr <= 1; dr++) {
       for (let dc = -1; dc <= 1; dc++) {
         if (dr === 0 && dc === 0) continue;
-        const nc = (c + dc + cols) % cols;
-        const nr = (r + dr + rows) % rows;
-        n += g[idx(nc, nr)];
+        n += g[idx((c + dc + cols) % cols, (r + dr + rows) % rows)];
       }
     }
     return n;
@@ -555,397 +495,141 @@ svg text { font-family: var(--heading-font); }
   function stepLife() {
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
-        const i = idx(c, r);
-        const n = countNeighbors(grid, c, r);
-        if (grid[i]) {
-          nextGrid[i] = (n === 2 || n === 3) ? 1 : 0;
-        } else {
-          nextGrid[i] = (n === 3) ? 1 : 0;
-        }
+        const i = idx(c, r), n = countNeighbors(state.gol.grid, c, r);
+        nextGrid[i] = state.gol.grid[i] ? (n === 2 || n === 3 ? 1 : 0) : (n === 3 ? 1 : 0);
       }
     }
-    const tmp = grid;
-    grid = nextGrid;
-    nextGrid = tmp;
+    [state.gol.grid, nextGrid] = [nextGrid, state.gol.grid];
   }
 
   function drawGrid() {
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = '#1a1a2e';
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        if (grid[idx(c, r)]) {
-          ctx.fillRect(c * CELL, r * CELL, CELL - 1, CELL - 1);
-        }
-      }
-    }
-    // Light grid lines
-    ctx.strokeStyle = '#f0f0f4';
-    ctx.lineWidth = 0.5;
-    ctx.beginPath();
-    for (let c = 0; c <= cols; c++) {
-      ctx.moveTo(c * CELL, 0);
-      ctx.lineTo(c * CELL, rows * CELL);
-    }
-    for (let r = 0; r <= rows; r++) {
-      ctx.moveTo(0, r * CELL);
-      ctx.lineTo(cols * CELL, r * CELL);
-    }
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = 'var(--c-agent)';
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) if (state.gol.grid[idx(c, r)]) ctx.fillRect(c * CELL, r * CELL, CELL - 1, CELL - 1);
+    ctx.strokeStyle = '#f0f0f4'; ctx.lineWidth = 0.5; ctx.beginPath();
+    for (let c = 0; c <= cols; c++) { ctx.moveTo(c * CELL, 0); ctx.lineTo(c * CELL, rows * CELL); }
+    for (let r = 0; r <= rows; r++) { ctx.moveTo(0, r * CELL); ctx.lineTo(cols * CELL, r * CELL); }
     ctx.stroke();
   }
 
   function loop() {
-    if (!playing) return;
-    frameCount++;
-    if (frameCount % Math.max(1, 31 - speed) === 0) {
-      stepLife();
-      drawGrid();
-    }
-    animId = requestAnimationFrame(loop);
-  }
-
-  function stop() {
-    playing = false;
-    if (animId) cancelAnimationFrame(animId);
-    animId = null;
-    document.getElementById('gol-play').textContent = 'Play';
+    if (!state.gol.playing) return;
+    if (++frameCount % Math.max(1, 31 - state.gol.speed) === 0) { stepLife(); drawGrid(); }
+    requestAnimationFrame(loop);
   }
 
   function placePattern(name) {
-    stop();
-    grid = makeGrid();
-    nextGrid = makeGrid();
-    const cx = Math.floor(cols / 2);
-    const cy = Math.floor(rows / 2);
-    const cells = patterns[name];
-    cells.forEach(function(p) {
-      const c = cx + p[0];
-      const r = cy + p[1];
-      if (c >= 0 && c < cols && r >= 0 && r < rows) {
-        grid[idx(c, r)] = 1;
-      }
+    state.gol.playing = false; document.getElementById('gol-play').textContent = 'Play';
+    state.gol.grid.fill(0);
+    const cx = Math.floor(cols / 2), cy = Math.floor(rows / 2);
+    patterns[name].forEach(p => {
+      const c = cx + p[0], r = cy + p[1];
+      if (c >= 0 && c < cols && r >= 0 && r < rows) state.gol.grid[idx(c, r)] = 1;
     });
     drawGrid();
   }
 
   const patterns = {
-    'glider': [
-      [0,-1],[1,0],[1,1],[-1,1],[0,1]
-    ],
-    'glider-gun': (function() {
-      // Gosper glider gun, origin at top-left of pattern
-      const raw = [
-        [1,5],[1,6],[2,5],[2,6],
-        [11,5],[11,6],[11,7],[12,4],[12,8],[13,3],[13,9],[14,3],[14,9],
-        [15,6],[16,4],[16,8],[17,5],[17,6],[17,7],[18,6],
-        [21,3],[21,4],[21,5],[22,3],[22,4],[22,5],[23,2],[23,6],
-        [25,1],[25,2],[25,6],[25,7],
-        [35,3],[35,4],[36,3],[36,4]
-      ];
-      return raw.map(function(p) { return [p[0] - 18, p[1] - 5]; });
-    })(),
-    'pulsar': (function() {
-      const offsets = [];
-      const quarter = [
-        [2,1],[3,1],[4,1],
-        [1,2],[1,3],[1,4],
-        [6,2],[6,3],[6,4],
-        [2,6],[3,6],[4,6]
-      ];
-      quarter.forEach(function(p) {
-        offsets.push([p[0], p[1]]);
-        offsets.push([-p[0], p[1]]);
-        offsets.push([p[0], -p[1]]);
-        offsets.push([-p[0], -p[1]]);
-      });
-      return offsets;
-    })(),
-    'r-pentomino': [
-      [0,-1],[1,-1],[0,0],[-1,0],[0,1]
-    ]
+    'glider': [[0,-1],[1,0],[1,1],[-1,1],[0,1]],
+    'glider-gun': [[-17,0],[-17,1],[-16,0],[-16,1],[-7,0],[-7,1],[-7,2],[-6,-1],[-6,3],[-5,-2],[-5,4],[-4,-2],[-4,4],[-3,1],[-2,-1],[-2,3],[-1,0],[-1,1],[-1,2],[0,1],[3,-2],[3,-1],[3,0],[4,-2],[4,-1],[4,0],[5,-3],[5,1],[7,-4],[7,-3],[7,1],[7,2],[17,-2],[17,-1],[18,-2],[18,-1]],
+    'pulsar': (function() { const o = []; const q = [[2,1],[3,1],[4,1],[1,2],[1,3],[1,4],[6,2],[6,3],[6,4],[2,6],[3,6],[4,6]]; q.forEach(p => { o.push([p[0],p[1]],[-p[0],p[1]],[p[0],-p[1]],[-p[0],-p[1]]); }); return o; })(),
+    'r-pentomino': [[0,-1],[1,-1],[0,0],[-1,0],[0,1]]
   };
 
-  // Canvas mouse interaction
-  function toggleCell(e) {
+  canvas.addEventListener('mousedown', e => { drawing = true; paint(e); });
+  canvas.addEventListener('mousemove', e => { if (drawing) paint(e); });
+  document.addEventListener('mouseup', () => drawing = false);
+
+  function paint(e) {
     const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    const c = Math.floor((e.clientX - rect.left) * scaleX / CELL);
-    const r = Math.floor((e.clientY - rect.top) * scaleY / CELL);
-    if (c >= 0 && c < cols && r >= 0 && r < rows) {
-      grid[idx(c, r)] = grid[idx(c, r)] ? 0 : 1;
-      drawGrid();
-    }
+    const c = Math.floor((e.clientX - rect.left) * (canvas.width / rect.width) / CELL);
+    const r = Math.floor((e.clientY - rect.top) * (canvas.height / rect.height) / CELL);
+    if (c >= 0 && c < cols && r >= 0 && r < rows) { state.gol.grid[idx(c, r)] = 1; drawGrid(); }
   }
 
-  canvas.addEventListener('mousedown', function(e) {
-    drawing = true;
-    toggleCell(e);
-  });
-  canvas.addEventListener('mousemove', function(e) {
-    if (!drawing) return;
-    // While dragging, always set to alive (paint mode)
-    const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
-    const c = Math.floor((e.clientX - rect.left) * scaleX / CELL);
-    const r = Math.floor((e.clientY - rect.top) * scaleY / CELL);
-    if (c >= 0 && c < cols && r >= 0 && r < rows) {
-      grid[idx(c, r)] = 1;
-      drawGrid();
-    }
-  });
-  document.addEventListener('mouseup', function() { drawing = false; });
+  document.getElementById('gol-play').addEventListener('click', function() { state.gol.playing = !state.gol.playing; this.textContent = state.gol.playing ? 'Pause' : 'Play'; if (state.gol.playing) loop(); });
+  document.getElementById('gol-step').addEventListener('click', () => { state.gol.playing = false; document.getElementById('gol-play').textContent = 'Play'; stepLife(); drawGrid(); });
+  document.getElementById('gol-clear').addEventListener('click', () => { state.gol.playing = false; document.getElementById('gol-play').textContent = 'Play'; state.gol.grid.fill(0); drawGrid(); });
+  document.getElementById('gol-speed').addEventListener('input', function() { state.gol.speed = +this.value; document.getElementById('gol-speed-val').textContent = state.gol.speed; });
+  document.querySelectorAll('[data-pattern]').forEach(btn => btn.addEventListener('click', function() { placePattern(this.dataset.pattern); }));
 
-  // Controls
-  document.getElementById('gol-play').addEventListener('click', function() {
-    if (playing) { stop(); return; }
-    playing = true;
-    this.textContent = 'Pause';
-    frameCount = 0;
-    loop();
-  });
-
-  document.getElementById('gol-step').addEventListener('click', function() {
-    if (playing) stop();
-    stepLife();
-    drawGrid();
-  });
-
-  document.getElementById('gol-clear').addEventListener('click', function() {
-    stop();
-    grid = makeGrid();
-    nextGrid = makeGrid();
-    drawGrid();
-  });
-
-  const speedSlider = document.getElementById('gol-speed');
-  const speedVal = document.getElementById('gol-speed-val');
-  speedSlider.addEventListener('input', function() {
-    speed = +this.value;
-    speedVal.textContent = speed;
-  });
-
-  document.querySelectorAll('[data-pattern]').forEach(function(btn) {
-    btn.addEventListener('click', function() {
-      placePattern(this.dataset.pattern);
-    });
-  });
-
-  // Init
-  measure();
-  grid = makeGrid();
-  nextGrid = makeGrid();
+  measure(); state.gol.grid = new Uint8Array(cols * rows); nextGrid = new Uint8Array(cols * rows);
   placePattern('glider');
-
-  const ro = new ResizeObserver(function() {
-    const prevGrid = grid;
-    const prevCols = cols;
-    const prevRows = rows;
-    measure();
-    grid = makeGrid();
-    nextGrid = makeGrid();
-    // Copy what fits
-    for (let r = 0; r < Math.min(prevRows, rows); r++) {
-      for (let c = 0; c < Math.min(prevCols, cols); c++) {
-        grid[idx(c, r)] = prevGrid[r * prevCols + c];
-      }
-    }
-    drawGrid();
-  });
-  ro.observe(canvas.parentElement);
+  new ResizeObserver(() => { const prev = state.gol.grid, pc = cols, pr = rows; measure(); state.gol.grid = new Uint8Array(cols * rows); nextGrid = new Uint8Array(cols * rows); for (let r = 0; r < Math.min(pr, rows); r++) for (let c = 0; c < Math.min(pc, cols); c++) state.gol.grid[idx(c, r)] = prev[r * pc + c]; drawGrid(); }).observe(canvas.parentElement);
 })();
 
 // ── Edge of Chaos ──
 (function() {
-  const WIDTH = 101;
-  const HEIGHT = 50;
-  const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
+  const WIDTH = 101, HEIGHT = 50;
   const classes = [
-    {
-      id: 'I',
-      label: 'Class I',
-      desc: 'Uniform',
-      rule: 0,
-      explanation: 'All cells die. Information is destroyed.'
-    },
-    {
-      id: 'II',
-      label: 'Class II',
-      desc: 'Periodic',
-      rule: 108,
-      explanation: 'Repeating structures form. Stable but cannot compute.'
-    },
-    {
-      id: 'III',
-      label: 'Class III',
-      desc: 'Chaotic',
-      rule: 30,
-      explanation: 'Apparent randomness. Information cannot persist.'
-    },
-    {
-      id: 'IV',
-      label: 'Class IV',
-      desc: 'Complex',
-      rule: 110,
-      explanation: 'Localized structures interact. Computation lives here.'
-    }
+    { id: 'I', label: 'Class I', desc: 'Uniform', rule: 0, explanation: 'All cells die. Information is destroyed.' },
+    { id: 'II', label: 'Class II', desc: 'Periodic', rule: 108, explanation: 'Repeating structures form. Stable but cannot compute.' },
+    { id: 'III', label: 'Class III', desc: 'Chaotic', rule: 30, explanation: 'Apparent randomness. Information cannot persist.' },
+    { id: 'IV', label: 'Class IV', desc: 'Complex', rule: 110, explanation: 'Localized structures interact. Computation lives here.' }
   ];
 
-  function parseRule(n) {
-    const bits = [];
-    for (let i = 0; i < 8; i++) bits[i] = (n >> i) & 1;
-    return bits;
-  }
-
   function runCA(ruleNum, width, height) {
-    const bits = parseRule(ruleNum);
+    const bits = []; for (let i = 0; i < 8; i++) bits[i] = (ruleNum >> i) & 1;
     const rows = [new Uint8Array(width)];
-    // Random initial state for Class I-III, single cell for Class IV
-    if (ruleNum === 110) {
-      rows[0][Math.floor(width / 2)] = 1;
-    } else {
-      for (let i = 0; i < width; i++) {
-        rows[0][i] = Math.random() < 0.5 ? 1 : 0;
-      }
-    }
+    if (ruleNum === 110) rows[0][Math.floor(width / 2)] = 1; else for (let i = 0; i < width; i++) rows[0][i] = Math.random() < 0.5 ? 1 : 0;
     for (let r = 1; r < height; r++) {
-      const prev = rows[r - 1];
-      const row = new Uint8Array(width);
-      for (let c = 0; c < width; c++) {
-        const l = c > 0 ? prev[c - 1] : prev[width - 1];
-        const m = prev[c];
-        const ri = c < width - 1 ? prev[c + 1] : prev[0];
-        row[c] = bits[(l << 2) | (m << 1) | ri];
-      }
+      const prev = rows[r - 1], row = new Uint8Array(width);
+      for (let c = 0; c < width; c++) row[c] = bits[( (c > 0 ? prev[c - 1] : prev[width - 1]) << 2) | (prev[c] << 1) | (c < width - 1 ? prev[c + 1] : prev[0])];
       rows.push(row);
     }
     return rows;
   }
 
   function drawToCanvas(canvasEl, gridData, cellSize) {
-    const w = gridData[0].length;
-    const h = gridData.length;
-    canvasEl.width = w * cellSize;
-    canvasEl.height = h * cellSize;
-    const ctx = canvasEl.getContext('2d');
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(0, 0, canvasEl.width, canvasEl.height);
-    ctx.fillStyle = '#1a1a2e';
-    for (let r = 0; r < h; r++) {
-      for (let c = 0; c < w; c++) {
-        if (gridData[r][c]) {
-          ctx.fillRect(c * cellSize, r * cellSize, cellSize, cellSize);
-        }
-      }
-    }
+    const w = gridData[0].length, h = gridData.length;
+    canvasEl.width = w * cellSize; canvasEl.height = h * cellSize;
+    const ctx = canvasEl.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvasEl.width, canvasEl.height);
+    ctx.fillStyle = 'var(--c-agent)';
+    for (let r = 0; r < h; r++) for (let c = 0; c < w; c++) if (gridData[r][c]) ctx.fillRect(c * cellSize, r * cellSize, cellSize, cellSize);
   }
 
-  // Build thumbnails
-  const gridContainer = document.getElementById('class-grid');
-  const previewContainer = document.getElementById('edge-preview-container');
-  let selected = null;
-
-  classes.forEach(function(cls) {
-    const card = document.createElement('div');
-    card.className = 'class-card';
-    card.dataset.classId = cls.id;
-
-    const thumb = document.createElement('canvas');
-    const thumbData = runCA(cls.rule, 41, 25);
-    drawToCanvas(thumb, thumbData, 2);
+  const gridContainer = document.getElementById('class-grid'), previewContainer = document.getElementById('edge-preview-container');
+  classes.forEach(cls => {
+    const card = document.createElement('div'); card.className = 'class-card'; card.dataset.classId = cls.id;
+    const thumb = document.createElement('canvas'); drawToCanvas(thumb, runCA(cls.rule, 41, 25), 2);
     card.appendChild(thumb);
-
-    const label = document.createElement('div');
-    label.className = 'class-label';
-    label.textContent = cls.label;
-    card.appendChild(label);
-
-    const desc = document.createElement('div');
-    desc.className = 'class-desc';
-    desc.textContent = cls.desc;
-    card.appendChild(desc);
-
-    card.addEventListener('click', function() {
-      selectClass(cls, card);
-    });
-
+    const label = document.createElement('div'); label.className = 'class-label'; label.textContent = cls.label; card.appendChild(label);
+    const desc = document.createElement('div'); desc.className = 'class-desc'; desc.textContent = cls.desc; card.appendChild(desc);
+    card.addEventListener('click', () => selectClass(cls, card));
     gridContainer.appendChild(card);
   });
 
   function selectClass(cls, cardEl) {
-    document.querySelectorAll('.class-card').forEach(function(c) {
-      c.classList.remove('selected');
-    });
-    cardEl.classList.add('selected');
-    selected = cls;
-
-    previewContainer.innerHTML = '';
-    const previewCanvas = document.createElement('canvas');
-    previewContainer.appendChild(previewCanvas);
-
-    animatePreview(previewCanvas, cls.rule);
-
-    const explainP = document.createElement('div');
-    explainP.className = 'figure-caption';
-    explainP.style.marginTop = '0.5rem';
-    explainP.innerHTML = '<span class="figure-label">Rule ' + cls.rule + '.</span> ' + cls.explanation;
-    previewContainer.appendChild(explainP);
+    document.querySelectorAll('.class-card').forEach(c => c.classList.remove('selected'));
+    cardEl.classList.add('selected'); state.edge.selectedClass = cls.id;
+    previewContainer.innerHTML = ''; const canvas = document.createElement('canvas'); previewContainer.appendChild(canvas);
+    animatePreview(canvas, cls.rule);
+    const cap = document.createElement('div'); cap.className = 'figure-caption'; cap.style.marginTop = '0.5rem';
+    cap.innerHTML = `<span class="figure-label">Rule ${cls.rule}.</span> ${cls.explanation}`;
+    previewContainer.appendChild(cap);
   }
 
   function animatePreview(canvasEl, ruleNum) {
-    const bits = parseRule(ruleNum);
+    const bits = []; for (let i = 0; i < 8; i++) bits[i] = (ruleNum >> i) & 1;
     const cs = Math.max(2, Math.floor(previewContainer.clientWidth / WIDTH));
-    canvasEl.width = WIDTH * cs;
-    canvasEl.height = HEIGHT * cs;
-    const ctx = canvasEl.getContext('2d');
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(0, 0, canvasEl.width, canvasEl.height);
-
+    canvasEl.width = WIDTH * cs; canvasEl.height = HEIGHT * cs;
+    const ctx = canvasEl.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvasEl.width, canvasEl.height);
     const rows = [new Uint8Array(WIDTH)];
-    if (ruleNum === 110) {
-      rows[0][Math.floor(WIDTH / 2)] = 1;
-    } else {
-      for (let i = 0; i < WIDTH; i++) {
-        rows[0][i] = Math.random() < 0.5 ? 1 : 0;
-      }
-    }
-
-    // Draw first row
-    ctx.fillStyle = '#1a1a2e';
-    for (let c = 0; c < WIDTH; c++) {
-      if (rows[0][c]) ctx.fillRect(c * cs, 0, cs, cs);
-    }
-
+    if (ruleNum === 110) rows[0][Math.floor(WIDTH / 2)] = 1; else for (let i = 0; i < WIDTH; i++) rows[0][i] = Math.random() < 0.5 ? 1 : 0;
+    ctx.fillStyle = 'var(--c-agent)';
+    for (let c = 0; c < WIDTH; c++) if (rows[0][c]) ctx.fillRect(c * cs, 0, cs, cs);
     let currentRow = 0;
     function drawNext() {
       if (currentRow >= HEIGHT - 1) return;
-      currentRow++;
-      const prev = rows[currentRow - 1];
-      const row = new Uint8Array(WIDTH);
-      for (let c = 0; c < WIDTH; c++) {
-        const l = c > 0 ? prev[c - 1] : prev[WIDTH - 1];
-        const m = prev[c];
-        const r = c < WIDTH - 1 ? prev[c + 1] : prev[0];
-        row[c] = bits[(l << 2) | (m << 1) | r];
-      }
+      currentRow++; const prev = rows[currentRow - 1], row = new Uint8Array(WIDTH);
+      for (let c = 0; c < WIDTH; c++) row[c] = bits[( (c > 0 ? prev[c - 1] : prev[WIDTH - 1]) << 2) | (prev[c] << 1) | (c < WIDTH - 1 ? prev[c + 1] : prev[0])];
       rows.push(row);
-      ctx.fillStyle = '#1a1a2e';
-      for (let c = 0; c < WIDTH; c++) {
-        if (row[c]) ctx.fillRect(c * cs, currentRow * cs, cs, cs);
-      }
+      for (let c = 0; c < WIDTH; c++) if (row[c]) ctx.fillRect(c * cs, currentRow * cs, cs, cs);
       requestAnimationFrame(drawNext);
     }
     requestAnimationFrame(drawNext);
   }
-
-  // Auto-select Class IV on load
-  const classIVCard = gridContainer.querySelector('[data-class-id="IV"]');
-  if (classIVCard) {
-    selectClass(classes[3], classIVCard);
-  }
+  selectClass(classes[3], gridContainer.querySelector('[data-class-id="IV"]'));
 })();
 </script>
 </body>

@@ -292,13 +292,20 @@ svg .tick-label {
 
 <script>
 // ── Shared constants ──
-const pcBlue = '#2563eb';
+const cs = k => getComputedStyle(document.documentElement).getPropertyValue(k).trim();
+const C = {
+  polyline: cs('--c-polyline'), point: cs('--c-point'), crossing: cs('--c-crossing'),
+  brush: cs('--c-brush'), surface: cs('--c-surface'), axis: cs('--c-axis'),
+  text: cs('--text'), text2: cs('--text-2'), border: cs('--border'),
+};
+function alpha(hex, a) {
+  const r = parseInt(hex.slice(1,3), 16), g = parseInt(hex.slice(3,5), 16), b = parseInt(hex.slice(5,7), 16);
+  return `rgba(${r},${g},${b},${a})`;
+}
 const selectedAlpha = 0.55;
-const wedgeFill = 'rgba(220, 38, 38, 0.12)';
-const strumColor = '#dc2626';
-const axisStroke = '#e2e2e8';
-const labelColor = '#4a4a6a';
-const clusterColors = ['#2563eb', '#059669', '#d97706'];
+const wedgeFill = alpha(C.crossing, 0.12);
+const strumColor = C.crossing;
+const clusterColors = [C.polyline, C.point, C.surface];
 
 // ── KaTeX rendering ──
 function renderMath() {
@@ -386,7 +393,7 @@ function drawPCAxes(g, axisXPositions, yScale, labels, plotTop, plotBot) {
     g.append('line')
       .attr('x1', x).attr('y1', plotTop)
       .attr('x2', x).attr('y2', plotBot)
-      .attr('stroke', axisStroke).attr('stroke-width', 1);
+      .attr('stroke', C.border).attr('stroke-width', 1);
     g.append('text').attr('class', 'axis-label')
       .attr('x', x).attr('y', plotBot + 18)
       .attr('text-anchor', 'middle').text(labels[i]);
@@ -395,7 +402,7 @@ function drawPCAxes(g, axisXPositions, yScale, labels, plotTop, plotBot) {
       g.append('line')
         .attr('x1', x - 3).attr('y1', yScale(t))
         .attr('x2', x + 3).attr('y2', yScale(t))
-        .attr('stroke', axisStroke);
+        .attr('stroke', C.border);
     });
   });
 }
@@ -513,7 +520,7 @@ function drawPCAxes(g, axisXPositions, yScale, labels, plotTop, plotBot) {
   scatterG.append('rect')
     .attr('x', scLeft).attr('y', scTop)
     .attr('width', scRight - scLeft).attr('height', scBot - scTop)
-    .attr('fill', 'none').attr('stroke', axisStroke);
+    .attr('fill', 'none').attr('stroke', C.border);
   scatterG.append('text').attr('class', 'axis-label')
     .attr('x', (scLeft + scRight) / 2).attr('y', scBot + 18)
     .attr('text-anchor', 'middle').text('X2');
@@ -524,20 +531,20 @@ function drawPCAxes(g, axisXPositions, yScale, labels, plotTop, plotBot) {
     .text('X3');
   // Scatter ticks
   [0, 0.25, 0.5, 0.75, 1].forEach(t => {
-    scatterG.append('line').attr('x1', scXScale(t)).attr('y1', scBot).attr('x2', scXScale(t)).attr('y2', scBot + 3).attr('stroke', axisStroke);
-    scatterG.append('line').attr('x1', scLeft).attr('y1', scYScale(t)).attr('x2', scLeft - 3).attr('y2', scYScale(t)).attr('stroke', axisStroke);
+    scatterG.append('line').attr('x1', scXScale(t)).attr('y1', scBot).attr('x2', scXScale(t)).attr('y2', scBot + 3).attr('stroke', C.border);
+    scatterG.append('line').attr('x1', scLeft).attr('y1', scYScale(t)).attr('x2', scLeft - 3).attr('y2', scYScale(t)).attr('stroke', C.border);
   });
 
   svg.append('text').attr('class', 'axis-label')
     .attr('x', (pcLeft + pcRight) / 2).attr('y', 14)
-    .attr('text-anchor', 'middle').attr('fill', labelColor).text('Parallel Coordinates');
+    .attr('text-anchor', 'middle').attr('fill', C.text2).text('Parallel Coordinates');
   svg.append('text').attr('class', 'axis-label')
     .attr('x', (scLeft + scRight) / 2).attr('y', 14)
-    .attr('text-anchor', 'middle').attr('fill', labelColor).text('Scatterplot (X2 vs X3)');
+    .attr('text-anchor', 'middle').attr('fill', C.text2).text('Scatterplot (X2 vs X3)');
 
   // Highlight bands in scatterplot
   // bandX2 = vertical band (constrains scatter X axis = X2)
-  const bandX2 = scatterG.append('rect').attr('fill', 'rgba(37,99,235,0.1)').attr('stroke', pcBlue).attr('stroke-width', 1).attr('stroke-dasharray', '4 2').attr('visibility', 'hidden');
+  const bandX2 = scatterG.append('rect').attr('fill', 'rgba(37,99,235,0.1)').attr('stroke', C.polyline).attr('stroke-width', 1).attr('stroke-dasharray', '4 2').attr('visibility', 'hidden');
   // bandX3 = horizontal band (constrains scatter Y axis = X3)
   const bandX3 = scatterG.append('rect').attr('fill', 'rgba(5,150,105,0.1)').attr('stroke', '#059669').attr('stroke-width', 1).attr('stroke-dasharray', '4 2').attr('visibility', 'hidden');
 
@@ -618,10 +625,12 @@ function drawPCAxes(g, axisXPositions, yScale, labels, plotTop, plotBot) {
     d3.select('#status-linked-scatter').html(`<strong>${count}</strong> selected. ${bX2 ? 'X2 brush = vertical band.' : ''} ${bX3 ? 'X3 brush = horizontal band.' : ''} ${bX2 && bX3 ? 'Intersection = rectangle.' : ''}`);
   }
 
+  const pcBrushEls = {};
   axisX.forEach((x, i) => {
     const brush = d3.brushY()
       .extent([[x - brushWidth / 2, pcTop], [x + brushWidth / 2, pcBot]])
       .on('brush end', function(event) {
+        if (event.sourceEvent && event.sourceEvent._fromScatter) return;
         if (event.selection) {
           const [y0, y1] = event.selection;
           brushes[i] = [yScale.invert(y1), yScale.invert(y0)];
@@ -630,8 +639,36 @@ function drawPCAxes(g, axisXPositions, yScale, labels, plotTop, plotBot) {
         }
         updateLinked();
       });
-    brushGrp.append('g').call(brush);
+    const el = brushGrp.append('g').call(brush);
+    pcBrushEls[i] = { el, brush };
   });
+
+  // 2D brush on scatterplot → drives PC axis brushes 1 (X2) and 2 (X3)
+  const scBrush = d3.brush()
+    .extent([[scLeft, scTop], [scRight, scBot]])
+    .on('brush end', function(event) {
+      if (!event.selection) {
+        // Clear scatter-driven brushes
+        [1, 2].forEach(i => {
+          brushes[i] = null;
+          pcBrushEls[i].el.call(pcBrushEls[i].brush.move, null);
+        });
+        updateLinked();
+        return;
+      }
+      const [[sx0, sy0], [sx1, sy1]] = event.selection;
+      // Map scatter coords to data space
+      const x2Lo = scXScale.invert(sx0), x2Hi = scXScale.invert(sx1);
+      const x3Lo = scYScale.invert(sy1), x3Hi = scYScale.invert(sy0);
+      // Update PC brushes programmatically
+      brushes[1] = [x2Lo, x2Hi];
+      brushes[2] = [x3Lo, x3Hi];
+      const fakeEvent = { _fromScatter: true };
+      pcBrushEls[1].el.call(pcBrushEls[1].brush.move, [yScale(x2Hi), yScale(x2Lo)], fakeEvent);
+      pcBrushEls[2].el.call(pcBrushEls[2].brush.move, [yScale(x3Hi), yScale(x3Lo)], fakeEvent);
+      updateLinked();
+    });
+  svg.append('g').attr('class', 'scatter-brush').call(scBrush);
 })();
 
 
@@ -704,6 +741,7 @@ function drawPCAxes(g, axisXPositions, yScale, labels, plotTop, plotBot) {
   }
 
   function renderStrumLines() {
+    strumG.raise(); // keep strum elements above the interaction overlay
     const sel = strumG.selectAll('line.strum').data(strumLines);
     sel.enter().append('line').attr('class', 'strum')
       .merge(sel)
@@ -720,14 +758,32 @@ function drawPCAxes(g, axisXPositions, yScale, labels, plotTop, plotBot) {
       });
     sel.exit().remove();
 
-    // Circles at strum endpoints
-    const endData = strumLines.flatMap(s => [{x: s.x1, y: s.y1}, {x: s.x2, y: s.y2}]);
+    // Draggable circles at strum endpoints
+    const endData = strumLines.flatMap((s, i) => [
+      {strum: s, end: 0, x: s.x1, y: s.y1},
+      {strum: s, end: 1, x: s.x2, y: s.y2}
+    ]);
     const circs = strumG.selectAll('circle.strum-end').data(endData);
     circs.enter().append('circle').attr('class', 'strum-end')
       .merge(circs)
       .attr('cx', d => d.x).attr('cy', d => d.y)
-      .attr('r', 4).attr('fill', strumColor).attr('opacity', 0.7)
-      .attr('pointer-events', 'none');
+      .attr('r', 5).attr('fill', strumColor).attr('opacity', 0.7)
+      .attr('cursor', 'grab')
+      .call(d3.drag()
+        .on('start', function(event) {
+          event.sourceEvent.stopPropagation();
+          d3.select(this).attr('cursor', 'grabbing');
+        })
+        .on('drag', function(event, d) {
+          const nx = Math.max(axisX[0] + 5, Math.min(axisX[1] - 5, event.x));
+          const ny = Math.max(plotTop, Math.min(plotBot, event.y));
+          if (d.end === 0) { d.strum.x1 = nx; d.strum.y1 = ny; }
+          else { d.strum.x2 = nx; d.strum.y2 = ny; }
+          renderStrumLines();
+          updateStrumSelection();
+        })
+        .on('end', function() { d3.select(this).attr('cursor', 'grab'); })
+      );
     circs.exit().remove();
   }
 
@@ -795,12 +851,12 @@ function drawPCAxes(g, axisXPositions, yScale, labels, plotTop, plotBot) {
 
   // Scatter frame
   const scG = svg.append('g');
-  scG.append('rect').attr('x', scL).attr('y', scT).attr('width', scR - scL).attr('height', scB - scT).attr('fill', 'none').attr('stroke', axisStroke);
+  scG.append('rect').attr('x', scL).attr('y', scT).attr('width', scR - scL).attr('height', scB - scT).attr('fill', 'none').attr('stroke', C.border);
   scG.append('text').attr('class', 'axis-label').attr('x', (scL + scR) / 2).attr('y', scB + 18).attr('text-anchor', 'middle').text('X1');
   scG.append('text').attr('class', 'axis-label').attr('x', scL - 14).attr('y', (scT + scB) / 2).attr('text-anchor', 'middle').attr('transform', `rotate(-90, ${scL - 14}, ${(scT + scB) / 2})`).text('X2');
 
-  svg.append('text').attr('class', 'axis-label').attr('x', (pcLeft + pcRight) / 2).attr('y', 14).attr('text-anchor', 'middle').attr('fill', labelColor).text('Parallel Coordinates');
-  svg.append('text').attr('class', 'axis-label').attr('x', (scL + scR) / 2).attr('y', 14).attr('text-anchor', 'middle').attr('fill', labelColor).text('Scatterplot');
+  svg.append('text').attr('class', 'axis-label').attr('x', (pcLeft + pcRight) / 2).attr('y', 14).attr('text-anchor', 'middle').attr('fill', C.text2).text('Parallel Coordinates');
+  svg.append('text').attr('class', 'axis-label').attr('x', (scL + scR) / 2).attr('y', 14).attr('text-anchor', 'middle').attr('fill', C.text2).text('Scatterplot');
 
   // Wedge shape in scatterplot
   const wedgePath = scG.append('path').attr('fill', wedgeFill).attr('stroke', strumColor).attr('stroke-width', 1).attr('stroke-dasharray', '4 2').attr('d', '');
