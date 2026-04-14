@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>E8 Library Tests</title>
+<style>
+  body {
+    font-family: system-ui, -apple-system, sans-serif;
+    max-width: 720px;
+    margin: 2rem auto;
+    padding: 0 1rem;
+    color: #1a1a2e;
+    background: #fafafa;
+    line-height: 1.5;
+  }
+  h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
+  .subtitle { color: #4a4a6a; margin-bottom: 2rem; }
+  .result { padding: 0.75rem 1rem; border-radius: 4px; margin: 0.5rem 0; }
+  .pass { background: #dcfce7; color: #14532d; border-left: 4px solid #16a34a; }
+  .fail { background: #fee2e2; color: #7f1d1d; border-left: 4px solid #dc2626; }
+  .summary {
+    margin-top: 2rem;
+    padding: 1rem;
+    border-radius: 4px;
+    font-weight: 600;
+    font-size: 1.15rem;
+  }
+  .summary.all-pass { background: #dcfce7; color: #14532d; }
+  .summary.any-fail { background: #fee2e2; color: #7f1d1d; }
+  code { font-family: 'Source Code Pro', ui-monospace, monospace; font-size: 0.9em; }
+  .section { margin-top: 2rem; }
+  .section h2 { font-size: 1.1rem; margin-bottom: 0.5rem; }
+</style>
+</head>
+<body>
+
+<h1>E8 Library Tests</h1>
+<p class="subtitle">In-browser sanity checks for <code>e8-math.js</code> and <code>e8-viz.js</code>. Open in a browser; all rows should be green.</p>
+
+<div id="results"></div>
+<div id="summary" class="summary"></div>
+
+<script src="e8-math.js"></script>
+<script src="e8-viz.js"></script>
+<script>
+(function () {
+  var results = document.getElementById('results');
+  var summary = document.getElementById('summary');
+  var passed = 0;
+  var failed = 0;
+
+  function assert(name, condition, detail) {
+    var row = document.createElement('div');
+    row.className = 'result ' + (condition ? 'pass' : 'fail');
+    row.innerHTML = (condition ? '✓ ' : '✗ ') + '<strong>' + name + '</strong>' + (detail ? ' — <code>' + detail + '</code>' : '');
+    results.appendChild(row);
+    if (condition) passed++; else failed++;
+  }
+
+  function section(title) {
+    var h = document.createElement('h2');
+    h.textContent = title;
+    var wrap = document.createElement('div');
+    wrap.className = 'section';
+    wrap.appendChild(h);
+    results.appendChild(wrap);
+    return wrap;
+  }
+
+  // ───── Root system basics ─────
+  section('Root system');
+  assert('E8.roots.all() returns 240 roots',
+    E8.roots.all().length === 240,
+    'got ' + E8.roots.all().length);
+  assert('Integer family has 112 roots',
+    E8.roots.integer().length === 112,
+    'got ' + E8.roots.integer().length);
+  assert('Half-integer family has 128 roots',
+    E8.roots.halfInteger().length === 128,
+    'got ' + E8.roots.halfInteger().length);
+  var allSquaredLength2 = E8.roots.all().every(function (r) {
+    return Math.abs(E8.squaredLength(r) - 2) < 1e-10;
+  });
+  assert('All roots have squared length 2', allSquaredLength2);
+  var innerProducts = {};
+  var allRoots = E8.roots.all();
+  // Iterate all ordered pairs including α = β, so the observed set
+  // contains +2 (from self-pairs) and −2 (from antipodal pairs).
+  for (var i = 0; i < allRoots.length; i++) {
+    for (var j = 0; j < allRoots.length; j++) {
+      var d = Math.round(E8.dot(allRoots[i], allRoots[j]));
+      innerProducts[d] = (innerProducts[d] || 0) + 1;
+    }
+  }
+  var ipKeys = Object.keys(innerProducts).sort(function (a, b) {
+    return Number(a) - Number(b);
+  });
+  assert('Inner products ⟨α, β⟩ lie in {-2, -1, 0, 1, 2} for all α, β',
+    ipKeys.length === 5 && ipKeys.join(',') === '-2,-1,0,1,2',
+    'got ' + ipKeys.join(','));
+  assert('Exactly 240 self-pairs contribute +2 (one per root)',
+    innerProducts['2'] === 240,
+    'got ' + innerProducts['2']);
+  assert('Exactly 240 ordered antipodal pairs contribute −2',
+    innerProducts['-2'] === 240,
+    'got ' + innerProducts['-2']);
+
+  // ───── D_n family ─────
+  section('D_n family');
+  [2, 3, 4, 5, 8].forEach(function (n) {
+    var dnr = E8.dN.roots(n);
+    var expected = 2 * n * (n - 1);
+    assert('D_' + n + ' has 2·' + n + '·' + (n - 1) + ' = ' + expected + ' roots',
+      dnr.length === expected,
+      'got ' + dnr.length);
+  });
+  assert('D_8 root count equals E8 integer family count',
+    E8.dN.roots(8).length === E8.roots.integer().length);
+
+  // ───── Simple roots and Cartan matrix ─────
+  section('Simple roots and Cartan matrix');
+  assert('E8 has 8 simple roots', E8.simpleRoots.length === 8);
+  var simpleAllSquaredLength2 = E8.simpleRoots.every(function (r) {
+    return Math.abs(E8.squaredLength(r) - 2) < 1e-10;
+  });
+  assert('Each simple root has squared length 2', simpleAllSquaredLength2);
+  var cartanDiag = true;
+  for (var i = 0; i < 8; i++) {
+    if (E8.cartanMatrix[i][i] !== 2) cartanDiag = false;
+  }
+  assert('Cartan matrix diagonal is all 2', cartanDiag);
+  var cartanOffDiag = true;
+  for (var i = 0; i < 8; i++) {
+    for (var j = 0; j < 8; j++) {
+      if (i !== j && E8.cartanMatrix[i][j] !== 0 && E8.cartanMatrix[i][j] !== -1) {
+        cartanOffDiag = false;
+      }
+    }
+  }
+  assert('Cartan off-diagonal entries are 0 or -1', cartanOffDiag);
+  var cartanSymmetric = true;
+  for (var i = 0; i < 8; i++) {
+    for (var j = 0; j < 8; j++) {
+      if (E8.cartanMatrix[i][j] !== E8.cartanMatrix[j][i]) cartanSymmetric = false;
+    }
+  }
+  assert('Cartan matrix is symmetric', cartanSymmetric);
+
+  // ───── Dynkin diagram ─────
+  section('Dynkin diagram');
+  assert('Dynkin diagram has 7 edges', E8.dynkin.edges.length === 7);
+  assert('α₄ is the branch node (degree 3)',
+    E8.dynkin.adjacency[3].length === 3,
+    'α₄ adjacency: ' + JSON.stringify(E8.dynkin.adjacency[3]));
+  assert('α₁ is a leaf (degree 1)', E8.dynkin.adjacency[0].length === 1);
+  assert('α₂ is a leaf (degree 1)', E8.dynkin.adjacency[1].length === 1);
+  assert('α₈ is a leaf (degree 1)', E8.dynkin.adjacency[7].length === 1);
+
+  // ───── Root height and positivity ─────
+  section('Root heights and positive roots');
+  var heights = E8.roots.all().map(function (r) { return E8.rootHeight(r); });
+  var maxHeight = Math.max.apply(null, heights);
+  var minHeight = Math.min.apply(null, heights);
+  assert('Highest root has height 29', maxHeight === 29, 'got ' + maxHeight);
+  assert('Lowest root has height -29', minHeight === -29, 'got ' + minHeight);
+
+  var highestRoot = null;
+  for (var i = 0; i < E8.roots.all().length; i++) {
+    if (heights[i] === 29) { highestRoot = E8.roots.all()[i]; break; }
+  }
+  var marks = E8.rootAsSimpleCoefficients(highestRoot);
+  assert('Highest root marks are (2, 3, 4, 6, 5, 4, 3, 2)',
+    marks.join(',') === '2,3,4,6,5,4,3,2',
+    'got (' + marks.join(',') + ')');
+
+  var positiveCount = E8.roots.all().filter(function (r) {
+    return E8.isPositiveRoot(r);
+  }).length;
+  assert('120 positive roots', positiveCount === 120, 'got ' + positiveCount);
+
+  // ───── Simple-coefficient integrality ─────
+  section('Simple-coefficient decomposition');
+  var allIntegerCoeffs = E8.roots.all().every(function (r) {
+    var c = E8.rootAsSimpleCoefficients(r);
+    return c.every(function (k) { return Number.isInteger(k); });
+  });
+  assert('Every root decomposes into integer simple coefficients', allIntegerCoeffs);
+
+  var allSameSign = E8.roots.all().every(function (r) {
+    var c = E8.rootAsSimpleCoefficients(r);
+    var hasPos = c.some(function (k) { return k > 0; });
+    var hasNeg = c.some(function (k) { return k < 0; });
+    return !(hasPos && hasNeg);
+  });
+  assert('Every root has all-positive or all-negative coefficients (no mixed signs)', allSameSign);
+
+  // ───── Weyl reflections ─────
+  section('Weyl reflections and orbit');
+  assert('E8.reflect is a function', typeof E8.reflect === 'function');
+  var reflected = E8.reflect(E8.simpleRoots[1], E8.simpleRoots[0]);
+  assert('Reflection preserves squared length 2',
+    Math.abs(E8.squaredLength(reflected) - 2) < 1e-10,
+    'reflected |·|² = ' + E8.squaredLength(reflected));
+  assert('E8.weylGenerators has 8 simple reflections', E8.weylGenerators.length === 8);
+  var orbitAlpha1 = E8.orbit(E8.simpleRoots[0], E8.weylGenerators, 300);
+  assert('Weyl orbit of α₁ generates all 240 roots', orbitAlpha1.length === 240, 'got ' + orbitAlpha1.length);
+  assert('E8.weylOrder = 696,729,600', E8.weylOrder === 696729600);
+
+  // ───── Coxeter element and plane ─────
+  section('Coxeter element and plane');
+  assert('E8.coxeterNumber = 30', E8.coxeterNumber === 30);
+  assert('E8.exponents = {1, 7, 11, 13, 17, 19, 23, 29}',
+    E8.exponents.join(',') === '1,7,11,13,17,19,23,29');
+  // c^30 = identity
+  var xTest = E8.simpleRoots[0].slice();
+  for (var k = 0; k < 30; k++) xTest = E8.coxeterApply(xTest);
+  var diff30 = 0;
+  for (var k = 0; k < 8; k++) diff30 += Math.abs(xTest[k] - E8.simpleRoots[0][k]);
+  assert('c³⁰ returns to identity', diff30 < 1e-8, 'drift = ' + diff30);
+  // Coxeter plane basis orthonormal
+  var uu = E8.dot(E8.coxeterPlane.u, E8.coxeterPlane.u);
+  var vv = E8.dot(E8.coxeterPlane.v, E8.coxeterPlane.v);
+  var uv = E8.dot(E8.coxeterPlane.u, E8.coxeterPlane.v);
+  assert('Coxeter plane basis |u|² = 1', Math.abs(uu - 1) < 1e-9, 'got ' + uu);
+  assert('Coxeter plane basis |v|² = 1', Math.abs(vv - 1) < 1e-9, 'got ' + vv);
+  assert('Coxeter plane basis u ⊥ v', Math.abs(uv) < 1e-9, 'got ' + uv);
+  // Project 240 roots onto Coxeter plane, count distinct radii
+  var radii = {};
+  E8.roots.all().forEach(function (r) {
+    var p = E8.project.toCoxeterPlane(r);
+    var rr = Math.round(Math.sqrt(p[0] * p[0] + p[1] * p[1]) * 1000);
+    radii[rr] = (radii[rr] || 0) + 1;
+  });
+  var radKeys = Object.keys(radii);
+  assert('Coxeter plane projection has exactly 8 distinct radii', radKeys.length === 8, 'got ' + radKeys.length);
+  var allRingsAre30 = radKeys.every(function (k) { return radii[k] === 30; });
+  assert('Every Coxeter-plane ring has exactly 30 roots', allRingsAre30, '8 × 30 = 240');
+
+  // ───── Subsystems ─────
+  section('Subsystems by deletion');
+  assert('Deleting α₈ yields E₇ with 126 roots',
+    E8.subsystems.byDeletion(7).length === 126,
+    'got ' + E8.subsystems.byDeletion(7).length);
+  assert('Deleting α₁ yields D₇ with 84 roots',
+    E8.subsystems.byDeletion(0).length === 84,
+    'got ' + E8.subsystems.byDeletion(0).length);
+  assert('Deleting α₄ (branch) yields A₁ ⊕ A₂ ⊕ A₄ with 28 roots',
+    E8.subsystems.byDeletion(3).length === 28,
+    'got ' + E8.subsystems.byDeletion(3).length);
+
+  // ───── Lattice ─────
+  section('E8 lattice shells');
+  assert('Shell at squared length 2 has 240 vectors',
+    E8.lattice.shell(2).length === 240,
+    'got ' + E8.lattice.shell(2).length);
+  assert('Shell at squared length 4 has 2160 vectors',
+    E8.lattice.shell(4).length === 2160,
+    'got ' + E8.lattice.shell(4).length);
+  var density = E8.lattice.packingDensity;
+  var expectedDensity = Math.PI * Math.PI * Math.PI * Math.PI / 384;
+  assert('Packing density = π⁴/384 ≈ 0.2537',
+    Math.abs(density - expectedDensity) < 1e-10,
+    'got ' + density.toFixed(6));
+
+  // ───── Viz palette ─────
+  section('Viz library');
+  assert('E8.viz.colors defined', E8.viz && E8.viz.colors && typeof E8.viz.colors === 'object');
+  assert('E8.viz.figure defined', typeof E8.viz.figure === 'function');
+  assert('E8.viz.project3D defined', typeof E8.viz.project3D === 'function');
+  assert('E8.viz.parallelCoords defined', typeof E8.viz.parallelCoords === 'function');
+
+  // ───── Summary ─────
+  summary.className = 'summary ' + (failed === 0 ? 'all-pass' : 'any-fail');
+  summary.textContent = passed + ' passed, ' + failed + ' failed';
+})();
+</script>
+
+</body>
+</html>
