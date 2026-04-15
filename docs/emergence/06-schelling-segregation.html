@@ -167,6 +167,13 @@ At 50% or above, the separation becomes nearly total.
     </div>
   </div>
   <div class="controls">
+    <div class="control-group">
+      <label>Tolerance</label>
+      <div class="slider-row">
+        <input type="range" id="tol-slider-2" min="0" max="80" step="1" value="50">
+        <span class="val" id="tol-val-2">50%</span>
+      </div>
+    </div>
     <button class="btn" id="play-btn-2">Play</button>
     <button class="btn" id="reset-btn-2">Reset</button>
   </div>
@@ -193,13 +200,6 @@ or even seating at a cafeteria. The math does not care what the trait is.
 </div>
 
 <script>
-// --- State & Dispatch ---
-const state = {
-  tolerance: 0.33,
-  running: false
-};
-const dispatch = d3.dispatch('update', 'reset');
-
 // --- Formulas ---
 document.addEventListener("DOMContentLoaded", () => {
   if (window.katex) {
@@ -237,7 +237,8 @@ function setupHiDPI(canvas, w, h) {
 
 function drawGrid(ctx, grid, n, size, tol) {
   const cw = size / n;
-  ctx.clearRect(0, 0, size, size);
+  ctx.fillStyle = COLORS.empty;
+  ctx.fillRect(0, 0, size, size);
   for (let i = 0; i < grid.length; i++) {
     if (grid[i] === 0) continue;
     const r = Math.floor(i / n), c = i % n;
@@ -258,9 +259,51 @@ function drawGrid(ctx, grid, n, size, tol) {
   }
 }
 
+function calcSegregation(grid, n) {
+  let sum = 0, count = 0;
+  for (let i = 0; i < grid.length; i++) {
+    if (grid[i] === 0) continue;
+    let same = 0, total = 0;
+    const r = Math.floor(i/n), c = i%n;
+    for (let dr=-1; dr<=1; dr++) for (let dc=-1; dc<=1; dc++) {
+      if (dr===0 && dc===0) continue;
+      const nr=r+dr, nc=c+dc;
+      if (nr>=0 && nr<n && nc>=0 && nc<n && grid[nr*n+nc]!==0) {
+        total++; if (grid[nr*n+nc] === grid[i]) same++;
+      }
+    }
+    if (total > 0) { sum += same/total; count++; }
+  }
+  return count > 0 ? sum / count : 0;
+}
+
+function simStep(grid, n, tol) {
+  const unhappy = [], empty = [];
+  for (let i=0; i<grid.length; i++) {
+    if (grid[i] === 0) { empty.push(i); continue; }
+    let same=0, total=0; const r=Math.floor(i/n), c=i%n;
+    for (let dr=-1; dr<=1; dr++) for (let dc=-1; dc<=1; dc++) {
+      if (dr===0 && dc===0) continue;
+      const nr=r+dr, nc=c+dc;
+      if (nr>=0 && nr<n && nc>=0 && nc<n && grid[nr*n+nc]!==0) {
+        total++; if (grid[nr*n+nc] === grid[i]) same++;
+      }
+    }
+    if (total > 0 && (same/total) < tol) unhappy.push(i);
+  }
+  if (unhappy.length === 0) return false;
+  d3.shuffle(unhappy); d3.shuffle(empty);
+  for (let i=0; i<Math.min(unhappy.length, empty.length); i++) {
+    const u = unhappy[i], e = empty[i];
+    grid[e] = grid[u]; grid[u] = 0;
+  }
+  return true;
+}
+
 // Figure 1
 (function() {
   const container = document.getElementById('fig-setup');
+  if (!container) return;
   const canvas = document.getElementById('canvas-setup');
   const tolSlider = document.getElementById('tol-slider-1');
   const tolVal = document.getElementById('tol-val-1');
@@ -269,7 +312,8 @@ function drawGrid(ctx, grid, n, size, tol) {
   const stepCountEl = document.getElementById('step-count-1');
   const segIdxEl = document.getElementById('seg-idx-1');
 
-  let n = 50, grid, ctx, size, stepCount = 0, timer = null;
+  let n = 50, grid, ctx, size, stepCount = 0, timer = null, running = false;
+  let tolerance = parseInt(tolSlider.value) / 100;
 
   function init() {
     grid = createGrid(n, 0.1); stepCount = 0;
@@ -279,67 +323,160 @@ function drawGrid(ctx, grid, n, size, tol) {
   function render() {
     size = Math.min(container.clientWidth - 48, 500);
     ctx = setupHiDPI(canvas, size, size);
-    drawGrid(ctx, grid, n, size, state.tolerance);
+    drawGrid(ctx, grid, n, size, tolerance);
   }
 
   function updateStats() {
     stepCountEl.textContent = stepCount;
-    let sum = 0, count = 0;
-    for (let i = 0; i < grid.length; i++) {
-      if (grid[i] === 0) continue;
-      let same = 0, total = 0;
-      const r = Math.floor(i/n), c = i%n;
-      for (let dr=-1; dr<=1; dr++) for (let dc=-1; dc<=1; dc++) {
-        if (dr===0 && dc===0) continue;
-        const nr=r+dr, nc=c+dc;
-        if (nr>=0 && nr<n && nc>=0 && nc<n && grid[nr*n+nc]!==0) {
-          total++; if (grid[nr*n+nc] === grid[i]) same++;
-        }
-      }
-      if (total > 0) { sum += same/total; count++; }
-    }
-    segIdxEl.textContent = (sum/count).toFixed(3);
+    segIdxEl.textContent = calcSegregation(grid, n).toFixed(3);
   }
 
   function step() {
-    const unhappy = [], empty = [];
-    for (let i=0; i<grid.length; i++) {
-      if (grid[i] === 0) { empty.push(i); continue; }
-      let same=0, total=0; const r=Math.floor(i/n), c=i%n;
-      for (let dr=-1; dr<=1; dr++) for (let dc=-1; dc<=1; dc++) {
-        if (dr===0 && dc===0) continue;
-        const nr=r+dr, nc=c+dc;
-        if (nr>=0 && nr<n && nc>=0 && nc<n && grid[nr*n+nc]!==0) {
-          total++; if (grid[nr*n+nc] === grid[i]) same++;
-        }
-      }
-      if (total > 0 && (same/total) < state.tolerance) unhappy.push(i);
-    }
-    if (unhappy.length === 0) { stop(); return; }
-    d3.shuffle(unhappy); d3.shuffle(empty);
-    for (let i=0; i<Math.min(unhappy.length, empty.length); i++) {
-      const u = unhappy[i], e = empty[i];
-      grid[e] = grid[u]; grid[u] = 0;
-    }
+    const changed = simStep(grid, n, tolerance);
+    if (!changed) { stop(); return; }
     stepCount++; render(); updateStats();
   }
 
-  function stop() { state.running = false; clearInterval(timer); playBtn.textContent = 'Play'; }
+  function stop() { running = false; clearInterval(timer); playBtn.textContent = 'Play'; }
 
   tolSlider.addEventListener('input', e => {
-    state.tolerance = +e.target.value / 100;
+    tolerance = +e.target.value / 100;
     tolVal.textContent = e.target.value + '%';
     render(); updateStats();
   });
 
   playBtn.addEventListener('click', function() {
-    if (state.running) stop();
-    else { state.running = true; this.textContent = 'Pause'; timer = setInterval(step, 100); }
+    if (running) stop();
+    else { running = true; this.textContent = 'Pause'; timer = setInterval(step, 100); }
   });
 
   resetBtn.addEventListener('click', init);
   new ResizeObserver(render).observe(container);
   init();
+})();
+
+// Figure 2
+(function() {
+  const container = document.getElementById('fig-chart');
+  if (!container) return;
+  const canvas = document.getElementById('canvas-chart');
+  const svgEl = d3.select('#svg-chart');
+  const tolSlider = document.getElementById('tol-slider-2');
+  const tolVal = document.getElementById('tol-val-2');
+  const playBtn = document.getElementById('play-btn-2');
+  const resetBtn = document.getElementById('reset-btn-2');
+
+  let n = 50, grid, ctx, size, stepCount = 0, timer = null, running = false;
+  let history = [];
+  let tolerance = parseInt(tolSlider.value) / 100;
+
+  function init() {
+    grid = createGrid(n, 0.1); stepCount = 0; history = [];
+    history.push({ step: stepCount, seg: calcSegregation(grid, n) });
+    render(); renderChart();
+  }
+
+  function render() {
+    const parent = canvas.parentElement;
+    size = Math.min(parent.clientWidth, 400);
+    ctx = setupHiDPI(canvas, size, size);
+    drawGrid(ctx, grid, n, size, tolerance);
+  }
+
+  function renderChart() {
+    const parent = svgEl.node().parentElement;
+    const width = parent.clientWidth;
+    const height = size || 300;
+    
+    svgEl.attr('width', width).attr('height', height);
+    svgEl.selectAll('*').remove();
+    
+    const margin = {top: 20, right: 15, bottom: 30, left: 40};
+    const innerWidth = width - margin.left - margin.right;
+    const innerHeight = height - margin.top - margin.bottom;
+    
+    const g = svgEl.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+    
+    const xScale = d3.scaleLinear()
+      .domain([0, Math.max(100, stepCount)])
+      .range([0, innerWidth]);
+      
+    const yScale = d3.scaleLinear()
+      .domain([0.4, 1.0])
+      .range([innerHeight, 0]);
+      
+    g.append('g')
+      .attr('transform', `translate(0,${innerHeight})`)
+      .call(d3.axisBottom(xScale).ticks(5))
+      .attr('color', 'var(--text-2)')
+      .attr('font-family', 'var(--heading-font)');
+      
+    g.append('g')
+      .call(d3.axisLeft(yScale).ticks(5))
+      .attr('color', 'var(--text-2)')
+      .attr('font-family', 'var(--heading-font)');
+      
+    g.append('text')
+      .attr('x', innerWidth / 2)
+      .attr('y', innerHeight + margin.bottom)
+      .attr('text-anchor', 'middle')
+      .attr('font-family', 'var(--heading-font)')
+      .attr('font-size', '0.75rem')
+      .attr('fill', 'var(--text-2)')
+      .text('Steps');
+      
+    g.append('text')
+      .attr('transform', 'rotate(-90)')
+      .attr('x', -innerHeight / 2)
+      .attr('y', -margin.left + 10)
+      .attr('text-anchor', 'middle')
+      .attr('font-family', 'var(--heading-font)')
+      .attr('font-size', '0.75rem')
+      .attr('fill', 'var(--text-2)')
+      .text('Segregation Index');
+      
+    const line = d3.line()
+      .x(d => xScale(d.step))
+      .y(d => yScale(d.seg));
+      
+    g.append('path')
+      .datum(history)
+      .attr('fill', 'none')
+      .attr('stroke', 'var(--accent)')
+      .attr('stroke-width', 2)
+      .attr('d', line);
+  }
+
+  function step() {
+    const changed = simStep(grid, n, tolerance);
+    if (!changed) { stop(); return; }
+    stepCount++;
+    history.push({ step: stepCount, seg: calcSegregation(grid, n) });
+    render(); renderChart();
+  }
+
+  function stop() { running = false; clearInterval(timer); playBtn.textContent = 'Play'; }
+
+  tolSlider.addEventListener('input', e => {
+    tolerance = +e.target.value / 100;
+    tolVal.textContent = e.target.value + '%';
+    render(); // Update visual state for new tolerance
+  });
+
+  playBtn.addEventListener('click', function() {
+    if (running) stop();
+    else { running = true; this.textContent = 'Pause'; timer = setInterval(step, 100); }
+  });
+
+  resetBtn.addEventListener('click', init);
+  
+  new ResizeObserver(() => {
+    render();
+    renderChart();
+  }).observe(container);
+  
+  // Need to wait briefly to ensure layout is done for proper sizing
+  setTimeout(init, 50);
 })();
 </script>
 </body>

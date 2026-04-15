@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lie Library Tests</title>
+<style>
+  body {
+    font-family: system-ui, -apple-system, sans-serif;
+    max-width: 820px;
+    margin: 2rem auto;
+    padding: 0 1rem;
+    color: #1a1a2e;
+    background: #fafafa;
+    line-height: 1.5;
+  }
+  h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
+  .subtitle { color: #4a4a6a; margin-bottom: 2rem; }
+  .result { padding: 0.55rem 0.9rem; border-radius: 4px; margin: 0.3rem 0; font-size: 0.92rem; }
+  .pass { background: #dcfce7; color: #14532d; border-left: 4px solid #16a34a; }
+  .fail { background: #fee2e2; color: #7f1d1d; border-left: 4px solid #dc2626; }
+  .summary { margin-top: 2rem; padding: 1rem; border-radius: 4px; font-weight: 600; font-size: 1.15rem; }
+  .summary.all-pass { background: #dcfce7; color: #14532d; }
+  .summary.any-fail { background: #fee2e2; color: #7f1d1d; }
+  code { font-family: ui-monospace, 'Source Code Pro', monospace; font-size: 0.88em; }
+  .section { margin-top: 2rem; }
+  .section h2 { font-size: 1.05rem; margin-bottom: 0.5rem; color: #4a4a6a; }
+</style>
+</head>
+<body>
+
+<h1>Lie Library Tests</h1>
+<p class="subtitle">In-browser sanity checks for <code>lie-math.js</code>. Every row should be green.</p>
+
+<div id="results"></div>
+<div id="summary" class="summary"></div>
+
+<script src="lie-math.js"></script>
+<script>
+(function () {
+  var results = document.getElementById('results');
+  var summary = document.getElementById('summary');
+  var passed = 0;
+  var failed = 0;
+
+  function section(name) {
+    var h = document.createElement('h2');
+    h.textContent = name;
+    h.style.cssText = 'font-size: 1.05rem; margin-top: 1.75rem; margin-bottom: 0.5rem; color: #4a4a6a;';
+    results.appendChild(h);
+  }
+
+  function assert(name, condition, detail) {
+    var row = document.createElement('div');
+    row.className = 'result ' + (condition ? 'pass' : 'fail');
+    row.innerHTML = (condition ? '✓ ' : '✗ ') + '<strong>' + name + '</strong>' +
+      (detail ? ' — <code>' + detail + '</code>' : '');
+    results.appendChild(row);
+    if (condition) passed++; else failed++;
+  }
+
+  // ─── built-in checks from lie-math.js ────────────────────────────
+  section('Built-in sanity checks');
+  var builtinErrors = Lie._runChecks();
+  assert('Lie._runChecks() reports no errors',
+    builtinErrors.length === 0,
+    builtinErrors.length === 0 ? '18 root systems verified' : builtinErrors.join('; '));
+
+  // ─── root counts ─────────────────────────────────────────────────
+  section('Root counts and dimensions');
+  var cases = [
+    { name: 'A_1',  build: function () { return Lie.A(1);  }, dim: 3,   roots: 2   },
+    { name: 'A_4',  build: function () { return Lie.A(4);  }, dim: 24,  roots: 20  },
+    { name: 'B_3',  build: function () { return Lie.B(3);  }, dim: 21,  roots: 18  },
+    { name: 'C_3',  build: function () { return Lie.C(3);  }, dim: 21,  roots: 18  },
+    { name: 'D_5',  build: function () { return Lie.D(5);  }, dim: 45,  roots: 40  },
+    { name: 'E_6',  build: function () { return Lie.E6();  }, dim: 78,  roots: 72  },
+    { name: 'E_7',  build: function () { return Lie.E7();  }, dim: 133, roots: 126 },
+    { name: 'E_8',  build: function () { return Lie.E8();  }, dim: 248, roots: 240 },
+    { name: 'F_4',  build: function () { return Lie.F4();  }, dim: 52,  roots: 48  },
+    { name: 'G_2',  build: function () { return Lie.G2();  }, dim: 14,  roots: 12  }
+  ];
+  cases.forEach(function (c) {
+    var a;
+    try { a = c.build(); } catch (err) { assert(c.name + ' builds', false, err.message); return; }
+    assert(c.name + ' dimension = ' + c.dim, a.dim === c.dim, 'rank+|Δ|=' + (a.rank + a.roots.length));
+    assert(c.name + ' root count = ' + c.roots, a.roots.length === c.roots);
+    assert(c.name + ' positive roots = half of |Δ|', a.posRoots.length === c.roots / 2,
+      '|Δ⁺|=' + a.posRoots.length);
+  });
+
+  // ─── Cartan matrix spot checks ───────────────────────────────────
+  section('Cartan matrices (spot checks)');
+
+  function cartanEq(M, expected) {
+    if (M.length !== expected.length) return false;
+    for (var i = 0; i < M.length; i++) {
+      if (M[i].length !== expected[i].length) return false;
+      for (var j = 0; j < M[i].length; j++) {
+        if (M[i][j] !== expected[i][j]) return false;
+      }
+    }
+    return true;
+  }
+
+  assert('A_2 Cartan = [[2,-1],[-1,2]]',
+    cartanEq(Lie.A(2).cartan, [[2, -1], [-1, 2]]));
+  assert('B_2 Cartan = [[2,-2],[-1,2]]',
+    cartanEq(Lie.B(2).cartan, [[2, -2], [-1, 2]]));
+  assert('C_2 Cartan = [[2,-1],[-2,2]]',
+    cartanEq(Lie.C(2).cartan, [[2, -1], [-2, 2]]));
+  assert('G_2 Cartan = [[2,-1],[-3,2]]',
+    cartanEq(Lie.G2().cartan, [[2, -1], [-3, 2]]));
+  assert('F_4 Cartan matches Bourbaki',
+    cartanEq(Lie.F4().cartan, [[2, -1, 0, 0], [-1, 2, -2, 0], [0, -1, 2, -1], [0, 0, -1, 2]]));
+
+  // ─── Weyl group orbit sizes ──────────────────────────────────────
+  section('Weyl orbits of α_1');
+  function orbitOfAlpha1(a) {
+    return a.orbit(a.simpleRoots[0], a.roots.length + 50).length;
+  }
+  assert('A_3: orbit(α_1) = 12 (all roots)', orbitOfAlpha1(Lie.A(3)) === 12);
+  assert('B_3: orbit(α_1) = 12 (long roots only)', orbitOfAlpha1(Lie.B(3)) === 12);
+  assert('C_3: orbit(α_1) = 12 (short roots only)', orbitOfAlpha1(Lie.C(3)) === 12);
+  assert('D_4: orbit(α_1) = 24 (all roots)', orbitOfAlpha1(Lie.D(4)) === 24);
+  assert('F_4: orbit(α_1) = 24 (long roots only)', orbitOfAlpha1(Lie.F4()) === 24);
+  assert('G_2: orbit(α_1) = 6 (short roots only)', orbitOfAlpha1(Lie.G2()) === 6);
+  assert('E_8: orbit(α_1) = 240 (all roots)', orbitOfAlpha1(Lie.E8()) === 240);
+
+  // ─── Dynkin diagram shapes ───────────────────────────────────────
+  section('Dynkin diagrams');
+  assert('A_5 has 4 simple edges, no multiple edges',
+    (function () {
+      var d = Lie.A(5).dynkin;
+      if (d.edges.length !== 4) return false;
+      for (var i = 0; i < d.edges.length; i++) if (d.edges[i].mult !== 1) return false;
+      return true;
+    })());
+  assert('B_4 has one double edge with long→short arrow',
+    (function () {
+      var d = Lie.B(4).dynkin;
+      var doubles = d.edges.filter(function (e) { return e.mult === 2; });
+      return doubles.length === 1 && doubles[0].arrow !== null;
+    })());
+  assert('G_2 has one triple edge, long→short arrow from α_2 to α_1',
+    (function () {
+      var d = Lie.G2().dynkin;
+      return d.edges.length === 1 &&
+        d.edges[0].mult === 3 &&
+        d.edges[0].arrow[0] === 1 && d.edges[0].arrow[1] === 0;
+    })());
+  assert('E_8 has 7 simple edges, branch node α_4 has degree 3',
+    (function () {
+      var d = Lie.E8().dynkin;
+      if (d.edges.length !== 7) return false;
+      for (var i = 0; i < d.edges.length; i++) if (d.edges[i].mult !== 1) return false;
+      return d.adjacency[3].length === 3;
+    })());
+
+  // ─── Highest root of E_8 has correct marks ────────────────────────
+  section('Simple-root expansions');
+  assert('E_8 highest root has marks (2,3,4,6,5,4,3,2)',
+    (function () {
+      var a = Lie.E8();
+      var best = null, bestHeight = -Infinity;
+      for (var i = 0; i < a.roots.length; i++) {
+        var c = a.toSimpleCoefficients(a.roots[i]);
+        var h = c.reduce(function (s, x) { return s + x; }, 0);
+        if (h > bestHeight) { bestHeight = h; best = c; }
+      }
+      var expected = [2, 3, 4, 6, 5, 4, 3, 2];
+      if (bestHeight !== 29) return false;
+      for (var k = 0; k < 8; k++) if (best[k] !== expected[k]) return false;
+      return true;
+    })());
+  assert('A_2 highest root is α_1 + α_2',
+    (function () {
+      var a = Lie.A(2);
+      var best = null, bestHeight = -Infinity;
+      for (var i = 0; i < a.roots.length; i++) {
+        var c = a.toSimpleCoefficients(a.roots[i]);
+        var h = c[0] + c[1];
+        if (h > bestHeight) { bestHeight = h; best = c; }
+      }
+      return best[0] === 1 && best[1] === 1;
+    })());
+  assert('G_2 highest root is 3α_1 + 2α_2',
+    (function () {
+      var a = Lie.G2();
+      var best = null, bestHeight = -Infinity;
+      for (var i = 0; i < a.roots.length; i++) {
+        var c = a.toSimpleCoefficients(a.roots[i]);
+        var h = c[0] + c[1];
+        if (h > bestHeight) { bestHeight = h; best = c; }
+      }
+      return best[0] === 3 && best[1] === 2;
+    })());
+
+  // ─── Structural constants table ──────────────────────────────────
+  section('Structural constants');
+  assert('Lie.constants.E8 gives canonical values',
+    Lie.constants.E8.dim === 248 &&
+    Lie.constants.E8.coxeter === 30 &&
+    Lie.constants.E8.weyl === 696729600);
+  assert('Lie.constants.A(5) gives dim 35, coxeter 6, |W| 720',
+    (function () {
+      var c = Lie.constants.A(5);
+      return c.dim === 35 && c.coxeter === 6 && c.weyl === 720;
+    })());
+  assert('Lie.constants.D(4) gives dim 28, coxeter 6, |W| 192',
+    (function () {
+      var c = Lie.constants.D(4);
+      return c.dim === 28 && c.coxeter === 6 && c.weyl === 192;
+    })());
+
+  // ─── summary ─────────────────────────────────────────────────────
+  summary.textContent = passed + ' passed, ' + failed + ' failed';
+  summary.className = 'summary ' + (failed === 0 ? 'all-pass' : 'any-fail');
+})();
+</script>
+
+</body>
+</html>

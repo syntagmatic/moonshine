@@ -318,6 +318,17 @@ const state = {
 };
 const dispatch = d3.dispatch('update', 'reset');
 
+const COLORS = {
+  agent: "#2563eb",
+  env: "#10b981",
+  nest: "#92400e",
+  nestStroke: "#78350f",
+  food: "#10b981",
+  foodStroke: "#065f46",
+  obstacle: "#5a4a3a",
+  bg: "#f8f8fc"
+};
+
 // --- Formulas ---
 window.addEventListener('load', () => {
   if (window.katex) {
@@ -338,7 +349,7 @@ window.addEventListener('load', () => {
 
     function resize() {
       const rect = figure.getBoundingClientRect();
-      const w = Math.floor(rect.width - 48);
+      const w = Math.max(100, Math.floor(rect.width - 48));
       const h = Math.floor(w * aspectRatio);
       const dpr = window.devicePixelRatio || 1;
       canvas.width = w * dpr;
@@ -355,7 +366,7 @@ window.addEventListener('load', () => {
     return { canvas, ctx, figure, get W() { return W; }, get H() { return H; }, get cols() { return cols; }, get rows() { return rows; } };
   }
 
-  function createGrid(cols, rows) { return new Float32Array(cols * rows); }
+  function createGrid(cols, rows) { return new Float32Array(Math.max(0, cols * rows)); }
 
   function inObstacle(x, y, obstacles) {
     for (let i = 0; i < obstacles.length; i++) {
@@ -366,6 +377,7 @@ window.addEventListener('load', () => {
   }
 
   function drawPheromone(ctx, grid, cols, rows, W, H, scratch) {
+    if (cols <= 0 || rows <= 0) return;
     if (!scratch.canvas || scratch.canvas.width !== cols || scratch.canvas.height !== rows) {
       scratch.canvas = document.createElement("canvas");
       scratch.canvas.width = cols; scratch.canvas.height = rows;
@@ -376,9 +388,9 @@ window.addEventListener('load', () => {
     for (let i = 0; i < cols * rows; i++) {
       const v = Math.min(grid[i] / 8, 1);
       const idx = i * 4;
-      d[idx] = Math.floor(37 * v);
-      d[idx + 1] = Math.floor(99 * v);
-      d[idx + 2] = Math.floor(235 * v);
+      d[idx] = 37;
+      d[idx + 1] = 99;
+      d[idx + 2] = 235;
       d[idx + 3] = Math.floor(200 * v);
     }
     scratch.ctx.putImageData(imgData, 0, 0);
@@ -387,7 +399,7 @@ window.addEventListener('load', () => {
   }
 
   function drawObstacles(ctx, obstacles) {
-    ctx.fillStyle = "#5a4a3a";
+    ctx.fillStyle = COLORS.obstacle;
     for (let i = 0; i < obstacles.length; i++) {
       const o = obstacles[i];
       ctx.fillRect(o.x, o.y, o.w, o.h);
@@ -396,16 +408,16 @@ window.addEventListener('load', () => {
 
   function drawNest(ctx, x, y, r) {
     ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
-    ctx.fillStyle = "#92400e"; ctx.fill();
-    ctx.strokeStyle = "#78350f"; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = COLORS.nest; ctx.fill();
+    ctx.strokeStyle = COLORS.nestStroke; ctx.lineWidth = 2; ctx.stroke();
     ctx.fillStyle = "#ffffff"; ctx.font = "bold 11px var(--heading-font)";
     ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText("NEST", x, y);
   }
 
   function drawFood(ctx, x, y, r, label) {
     ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
-    ctx.fillStyle = "var(--c-env)"; ctx.fill();
-    ctx.strokeStyle = "#065f46"; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = COLORS.food; ctx.fill();
+    ctx.strokeStyle = COLORS.foodStroke; ctx.lineWidth = 2; ctx.stroke();
     ctx.fillStyle = "#ffffff"; ctx.font = "bold 10px var(--heading-font)";
     ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(label || "FOOD", x, y);
   }
@@ -414,7 +426,7 @@ window.addEventListener('load', () => {
     for (let i = 0; i < ants.length; i++) {
       const a = ants[i];
       ctx.beginPath(); ctx.arc(a.x, a.y, 2.5, 0, Math.PI * 2);
-      ctx.fillStyle = a.hasFood ? "var(--c-env)" : "var(--c-agent)";
+      ctx.fillStyle = a.hasFood ? COLORS.env : COLORS.agent;
       ctx.fill();
     }
   }
@@ -452,12 +464,12 @@ window.addEventListener('load', () => {
       const gc = Math.floor(sx / CELL), gr = Math.floor(sy / CELL);
       if (gc >= 0 && gc < cols && gr >= 0 && gr < rows) {
         let ph = grid[gr * cols + gc];
-        ph += Math.random() * 0.3;
+        ph += Math.random() * 0.2;
         if (ph > bestPh) { bestPh = ph; bestAngle = testAngle; }
       }
     }
     const wiggle = (Math.random() - 0.5) * 0.8;
-    const blendedAngle = bestPh > 0.2 ? bestAngle + wiggle * 0.3 : angle + wiggle * 1.5;
+    const blendedAngle = bestPh > 0.1 ? bestAngle + wiggle * 0.2 : angle + wiggle * 1.2;
     ant.vx = Math.cos(blendedAngle) * ant.speed;
     ant.vy = Math.sin(blendedAngle) * ant.speed;
     let nx = ant.x + ant.vx, ny = ant.y + ant.vy;
@@ -478,12 +490,24 @@ window.addEventListener('load', () => {
 
   function deposit(ant, grid, cols, depositRate) {
     const gc = Math.floor(ant.x / CELL), gr = Math.floor(ant.y / CELL);
-    if (gc >= 0 && gc < cols && gr >= 0 && gr < grid.length / cols) grid[gr * cols + gc] += depositRate;
+    const rows = grid.length / cols;
+    if (gc >= 0 && gc < cols && gr >= 0 && gr < rows) grid[gr * cols + gc] += depositRate;
   }
 
   function evaporate(grid, rate) {
     const decay = 1 - rate;
     for (let i = 0; i < grid.length; i++) { grid[i] *= decay; if (grid[i] < 0.01) grid[i] = 0; }
+  }
+
+  function diffuse(grid, cols, rows) {
+    const next = new Float32Array(grid.length);
+    for (let r = 1; r < rows - 1; r++) {
+      for (let c = 1; c < cols - 1; c++) {
+        const i = r * cols + c;
+        next[i] = (grid[i] * 4 + grid[i-1] + grid[i+1] + grid[i-cols] + grid[i+cols]) / 8;
+      }
+    }
+    grid.set(next);
   }
 
   function dist(x1, y1, x2, y2) { const dx = x1 - x2, dy = y1 - y2; return Math.sqrt(dx * dx + dy * dy); }
@@ -509,10 +533,14 @@ window.addEventListener('load', () => {
     const foodPos = () => ({ x: sim.W * 0.88, y: sim.H * 0.5 });
     function init() {
       ants = []; const np = nestPos();
-      for (let i = 0; i < ANT_COUNT; i++) { const a = createAnt(np.x, np.y); a.tripStart = 0; ants.push(a); }
+      if (sim.W > 0) {
+        for (let i = 0; i < ANT_COUNT; i++) { const a = createAnt(np.x, np.y); a.tripStart = 0; ants.push(a); }
+      }
       tripTimes = []; tick = 0;
     }
     function loop() {
+      if (sim.W <= 0) { requestAnimationFrame(loop); return; }
+      if (ants.length === 0) init();
       const np = nestPos(), fp = foodPos(); tick++;
       for (let i = 0; i < 3; i++) {
         ants.forEach(a => {
@@ -524,7 +552,7 @@ window.addEventListener('load', () => {
           }
         });
       }
-      sim.ctx.fillStyle = "#f8f8fc"; sim.ctx.fillRect(0, 0, sim.W, sim.H);
+      sim.ctx.fillStyle = COLORS.bg; sim.ctx.fillRect(0, 0, sim.W, sim.H);
       drawAnts(sim.ctx, ants); drawNest(sim.ctx, np.x, np.y, NEST_R); drawFood(sim.ctx, fp.x, fp.y, FOOD_R);
       document.getElementById("stat-random-deliveries").textContent = tripTimes.length;
       document.getElementById("stat-random-trip").textContent = tripTimes.length ? Math.round(d3.mean(tripTimes)) + " ticks" : "--";
@@ -543,12 +571,15 @@ window.addEventListener('load', () => {
     const nestPos = () => ({ x: sim.W * 0.12, y: sim.H * 0.5 });
     const foodPos = () => ({ x: sim.W * 0.88, y: sim.H * 0.5 });
     function init() {
+      if (sim.cols <= 0) return;
       grid = createGrid(sim.cols, sim.rows);
       ants = []; const np = nestPos();
       for (let i = 0; i < state.antCount; i++) { const a = createAnt(np.x, np.y); a.tripStart = 0; ants.push(a); }
       tripTimes = []; totalDeliveries = 0; tick = 0;
     }
     function loop() {
+      if (sim.W <= 0) { requestAnimationFrame(loop); return; }
+      if (!grid) init();
       const np = nestPos(), fp = foodPos(); tick++;
       for (let s = 0; s < 3; s++) {
         ants.forEach(a => {
@@ -562,7 +593,8 @@ window.addEventListener('load', () => {
         });
         evaporate(grid, state.evapRate);
       }
-      sim.ctx.fillStyle = "#f8f8fc"; sim.ctx.fillRect(0, 0, sim.W, sim.H);
+      diffuse(grid, sim.cols, sim.rows);
+      sim.ctx.fillStyle = COLORS.bg; sim.ctx.fillRect(0, 0, sim.W, sim.H);
       drawPheromone(sim.ctx, grid, sim.cols, sim.rows, sim.W, sim.H, pheroScratch);
       drawAnts(sim.ctx, ants); drawNest(sim.ctx, np.x, np.y, NEST_R); drawFood(sim.ctx, fp.x, fp.y, FOOD_R);
       document.getElementById("stat-phero-deliveries").textContent = totalDeliveries;
@@ -591,11 +623,14 @@ window.addEventListener('load', () => {
     const nestPos = () => ({ x: sim.W * 0.12, y: sim.H * 0.5 });
     const foodPos = () => ({ x: sim.W * 0.88, y: sim.H * 0.5 });
     function init() {
+      if (sim.cols <= 0) return;
       grid = createGrid(sim.cols, sim.rows); ants = []; const np = nestPos();
       for (let i = 0; i < ANT_COUNT; i++) { const a = createAnt(np.x, np.y); a.tripStart = 0; ants.push(a); }
       tripTimes = []; totalDeliveries = 0; tick = 0;
     }
     function loop() {
+      if (sim.W <= 0) { requestAnimationFrame(loop); return; }
+      if (!grid) init();
       const np = nestPos(), fp = foodPos(); tick++;
       for (let s = 0; s < 3; s++) {
         ants.forEach(a => {
@@ -610,7 +645,8 @@ window.addEventListener('load', () => {
         });
         evaporate(grid, 0.012);
       }
-      sim.ctx.fillStyle = "#f8f8fc"; sim.ctx.fillRect(0, 0, sim.W, sim.H);
+      diffuse(grid, sim.cols, sim.rows);
+      sim.ctx.fillStyle = COLORS.bg; sim.ctx.fillRect(0, 0, sim.W, sim.H);
       drawPheromone(sim.ctx, grid, sim.cols, sim.rows, sim.W, sim.H, pheroScratch);
       drawObstacles(sim.ctx, obstacles);
       if (drawing && drawStart && drawCurrent) {
@@ -623,7 +659,12 @@ window.addEventListener('load', () => {
       document.getElementById("stat-obs-trip").textContent = tripTimes.length ? Math.round(d3.mean(tripTimes)) + " ticks" : "--";
       requestAnimationFrame(loop);
     }
-    function getPos(e) { const r = sim.canvas.getBoundingClientRect(); return { x: (e.clientX || e.touches[0].clientX - r.left) * (sim.W / r.width), y: (e.clientY || e.touches[0].clientY - r.top) * (sim.H / r.height) }; }
+    function getPos(e) { 
+      const r = sim.canvas.getBoundingClientRect(); 
+      const clientX = e.clientX !== undefined ? e.clientX : (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
+      const clientY = e.clientY !== undefined ? e.clientY : (e.touches && e.touches[0] ? e.touches[0].clientY : 0);
+      return { x: (clientX - r.left) * (sim.W / r.width), y: (clientY - r.top) * (sim.H / r.height) }; 
+    }
     sim.canvas.addEventListener("mousedown", e => { drawing = true; drawStart = getPos(e); drawCurrent = drawStart; });
     sim.canvas.addEventListener("mousemove", e => { if (drawing) drawCurrent = getPos(e); });
     window.addEventListener("mouseup", e => {
@@ -652,11 +693,14 @@ window.addEventListener('load', () => {
       { x: sim.W * 0.78, y: sim.H * 0.45, label: "C" }, { x: sim.W * 0.92, y: sim.H * 0.15, label: "D" }
     ];
     function init() {
+      if (sim.cols <= 0) return;
       grid = createGrid(sim.cols, sim.rows); ants = []; const np = nestPos();
       for (let i = 0; i < ANT_COUNT; i++) { const a = createAnt(np.x, np.y); a.tripStart = 0; ants.push(a); }
       totalDeliveries = 0; tick = 0;
     }
     function loop() {
+      if (sim.W <= 0) { requestAnimationFrame(loop); return; }
+      if (!grid) init();
       const np = nestPos(), foods = foodSources(); tick++;
       for (let s = 0; s < 3; s++) {
         ants.forEach(a => {
@@ -667,7 +711,8 @@ window.addEventListener('load', () => {
         });
         evaporate(grid, 0.01);
       }
-      sim.ctx.fillStyle = "#f8f8fc"; sim.ctx.fillRect(0, 0, sim.W, sim.H);
+      diffuse(grid, sim.cols, sim.rows);
+      sim.ctx.fillStyle = COLORS.bg; sim.ctx.fillRect(0, 0, sim.W, sim.H);
       drawPheromone(sim.ctx, grid, sim.cols, sim.rows, sim.W, sim.H, pheroScratch);
       drawAnts(sim.ctx, ants); drawNest(sim.ctx, np.x, np.y, NEST_R);
       foods.forEach(f => drawFood(sim.ctx, f.x, f.y, FOOD_R, f.label));

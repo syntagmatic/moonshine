@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Natural Gradient Descent — Information Geometry</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
+<script src="lib/infogeo-math.js"></script>
+<script src="lib/infogeo-viz.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --article-width: 740px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem;
+  --line-height: 1.65;
+  --text: #1a1a2e;
+  --text-2: #4a4a6a;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --bg: #fafafa;
+  --fig-bg: #ffffff;
+  --border: #e2e2e8;
+  --c-sgd: #f59e0b;
+  --c-ngd: #2563eb;
+  --c-target: #dc2626;
+}
+
+body { font-family: var(--body-font); font-size: var(--body-size); line-height: var(--line-height); color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased; }
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
+
+h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+h3 { font-size: 1.15rem; margin: 2rem 0 0.75rem; }
+
+p { margin: 0 0 1rem; }
+a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+em { font-style: italic; }
+strong { font-weight: 700; }
+
+.back-link { font-family: var(--heading-font); font-size: 0.85rem; display: inline-block; margin-bottom: 1rem; }
+.header { padding: 3rem 0 2rem; border-bottom: 1px solid var(--border); margin-bottom: 2.5rem; }
+.header .subtitle { font-family: var(--heading-font); font-size: 1.15rem; color: var(--text-2); margin-bottom: 0; max-width: 640px; }
+
+.figure { margin: 2rem 0; padding: 1.5rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; line-height: 1.5; }
+.figure-label { font-weight: 600; color: var(--text); }
+
+.status-bar { font-family: var(--mono-font); font-size: 0.82rem; color: var(--text-2); padding: 0.6rem 0 0.1rem; min-height: 1.2em; }
+
+.insight { background: var(--accent-light); border-left: 3px solid var(--accent); padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 4px 4px 0; }
+.insight p { margin: 0; }
+
+.math-display { margin: 1.4rem 0; overflow-x: auto; }
+
+.btn { font-family: var(--heading-font); font-size: 0.82rem; font-weight: 600; padding: 0.45rem 1rem; border-radius: 5px; border: 1px solid var(--border); background: var(--fig-bg); color: var(--text); cursor: pointer; transition: background 0.15s, border-color 0.15s; }
+.btn:hover { border-color: var(--accent); background: var(--accent-light); }
+.btn-row { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.75rem; align-items: center; }
+
+.slider-row { display: flex; align-items: center; gap: 0.6rem; font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); min-width: 260px; }
+.slider-row label { min-width: 4.5em; font-weight: 600; color: var(--text); }
+.slider-row input[type=range] { flex: 1; accent-color: var(--accent); }
+.slider-row .val { font-family: var(--mono-font); color: var(--text); min-width: 3em; text-align: right; }
+
+.legend { display: flex; gap: 1rem; flex-wrap: wrap; margin-top: 0.5rem; font-family: var(--heading-font); font-size: 0.8rem; color: var(--text-2); }
+.legend span { display: inline-flex; align-items: center; gap: 0.4rem; }
+.legend .swatch { width: 14px; height: 3px; }
+
+.nav-footer { margin-top: 5rem; padding-top: 2rem; border-top: 1px solid var(--border); display: flex; justify-content: space-between; font-family: var(--heading-font); font-size: 0.9rem; }
+
+@media (max-width: 640px) { h1 { font-size: 1.9rem; } .slider-row { min-width: unset; } }
+</style>
+</head>
+<body>
+<div class="article">
+
+<a href="index.html" class="back-link">← Information Geometry</a>
+
+<div class="header">
+  <h1>Natural Gradient Descent</h1>
+  <p class="subtitle">Part 10 of 15. Vanilla SGD is the right way to descend a loss landscape only if the parameter space is Euclidean. On a statistical manifold it is subtly wrong, and the fix is to pre-multiply the gradient by the inverse Fisher matrix. The resulting algorithm is parameterisation-invariant, second-order-aware, and the reason every variational-inference and reinforcement-learning paper since 2000 has the phrase "natural gradient" in it.</p>
+</div>
+
+<p>You have done gradient descent before. The loss is a scalar function <span id="math-loss"></span> on some parameter space, you compute its gradient, you take a step in the opposite direction, you repeat. The update rule is</p>
+
+<div class="math-display" id="math-sgd-update"></div>
+
+<p>and the choice of step size <span id="math-eta-step"></span> is the tuning knob that makes or breaks the algorithm. Everyone who has trained a neural network has a war story about a learning rate that was too big and diverged, or too small and stalled. And almost everyone who has had that experience has suspected that the problem is not really the learning rate — it is that "unit step" means different things in different regions of the parameter space, and the gradient you computed has no way of knowing it.</p>
+
+<p>Information geometry is the framework that makes this suspicion formal. When your parameters are the parameters of a probability distribution, the "correct" notion of a unit step is the one given by the Fisher information metric — the same metric that made the Gaussian family hyperbolic in Part 2 and made the Pythagorean theorem work in Part 8. Using the Fisher metric to define "unit step" turns vanilla gradient descent into <strong>natural gradient descent</strong>, which was introduced by Shun-ichi Amari in 1998 and has quietly become the correct optimiser for most probabilistic models.</p>
+
+<h2>The problem with vanilla SGD</h2>
+
+<p>Consider the Gaussian MLE setup. You have a data set with empirical mean <span id="math-data-mean"></span> and empirical variance <span id="math-data-var"></span>, and you want to fit a Gaussian <span id="math-model"></span> to it by minimising the negative log-likelihood. The loss is</p>
+
+<div class="math-display" id="math-nll"></div>
+
+<p>which is convex in <span id="math-model-params"></span> for this simple case. The unique minimum is at <span id="math-optimum"></span>, and in fact the gradient has a clean closed form — the partial derivatives are</p>
+
+<div class="math-display" id="math-nll-grads"></div>
+
+<p>Now start your optimiser at, say, <span id="math-init"></span> — a Gaussian with the wrong mean and a very small variance. The <span id="math-sigma-grad"></span> gradient at this initial point is enormous, because the <span id="math-sigma-cubed"></span> denominator blows up. If your step size is set large enough to make meaningful progress on <span id="math-mu-mle"></span> — which has a small, well-behaved gradient — then the <span id="math-sigma-mle"></span> update will overshoot wildly. If you make the step size small enough to keep <span id="math-sigma-update"></span> under control, <span id="math-mu-update"></span> moves at a glacial pace. There is no single learning rate that is "right" for both directions simultaneously, and the optimiser either diverges or crawls.</p>
+
+<p>Worse: the problem is not actually about the <em>loss</em>. The loss is well-behaved, bounded below, and unimodal. The problem is that the <em>gradient</em> is not expressed in the units that the geometry wants. A "small" Euclidean step in <span id="math-sigma"></span> near <span id="math-small-sigma"></span> is a "huge" step in KL — it moves to a distribution that is enormously distinguishable from the starting one. The gradient was right about the direction of improvement; it was wrong about the <em>scale</em>.</p>
+
+<h2>The fix: pre-multiply by G⁻¹</h2>
+
+<p>Natural gradient descent replaces the Euclidean gradient with the <em>natural gradient</em>: the gradient measured in Fisher units. The update becomes</p>
+
+<div class="math-display" id="math-ngd-update"></div>
+
+<p>where <span id="math-fisher-mat"></span> is the Fisher information matrix at the current point. This is the same gradient-descent step with one extra step of re-expressing the gradient in the right units before taking the step. For our Gaussian example, the Fisher matrix is <span id="math-gaussian-fisher"></span>, so the inverse is <span id="math-gaussian-inverse"></span>, and the natural gradient update is</p>
+
+<div class="math-display" id="math-ngd-explicit"></div>
+
+<p>Every step of the update is scaled by <span id="math-sigma-squared"></span> — exactly the factor that was causing the Euclidean gradient to explode. Natural gradient absorbs the explosion into the metric and produces steps that are "unit length" in Fisher units regardless of where you are on the manifold. The dynamics are smooth, the trajectory looks sensible, and the algorithm converges for a much wider range of learning rates than vanilla SGD.</p>
+
+<div class="insight">
+  <p><strong>Why the inverse Fisher matrix?</strong> The natural gradient is the gradient raised by the metric: <span id="math-raising"></span>. In Riemannian language, the Euclidean gradient is a cotangent vector (a one-form), and the metric is the object that turns cotangents into tangents. If you want to add the gradient to your current position — which lives in the tangent space — you need to raise it first, and raising means multiplying by the inverse metric. Ordinary SGD skips this step and implicitly treats the Fisher matrix as the identity, which is only true if the parameter space is Euclidean.</p>
+</div>
+
+<h2>Side-by-side comparison</h2>
+
+<p>Figure 1 runs the two algorithms on the Gaussian MLE problem and draws their trajectories on the <span id="math-param-plane"></span> plane. The target Gaussian is the red dot at <span id="math-target-pt"></span>, the contour lines are the negative log-likelihood surface, and the two coloured trails trace the iterates of vanilla SGD (amber) and natural gradient descent (blue). Both use the same initial point, the same step size, and the same number of steps — the only difference is the metric.</p>
+
+<div id="fig-ngd-vs-sgd"></div>
+
+<p>Press "step" to advance one iteration of each optimiser, or "run" to animate. Notice what happens. The natural gradient (blue) moves decisively toward the target in a roughly straight line, bending as it turns to follow the curvature of the manifold but never overshooting. Vanilla SGD (amber) zigzags: it oscillates wildly in <span id="math-sigma2"></span> because the gradient there is so much bigger than in <span id="math-mu"></span>, and it takes many more steps to converge — or it diverges entirely if you bump the step size up. Try changing the step size and the initial point and see how the two behave.</p>
+
+<p>One subtle point that the figure makes visible: the natural gradient trajectory <em>is parameterisation-invariant</em>. If you re-did the same optimisation in <span id="math-sigma-squared-param"></span> coordinates instead of <span id="math-sigma-param"></span>, natural gradient would trace the same curve through the space of distributions — different coordinates, same geometric path. Vanilla SGD would give a different trajectory for the two parameterisations, because Euclidean distance in <span id="math-sigma-squared-p2"></span> is not Euclidean distance in <span id="math-sigma-p3"></span>. This invariance is the formal reason natural gradient is the "right" algorithm: it is the one that does not depend on how you labelled the parameters.</p>
+
+<h2>Natural gradient as the steepest descent in KL</h2>
+
+<p>Here is a re-derivation of the natural gradient that makes the parameterisation-invariance obvious. Vanilla SGD solves the following constrained optimisation at each step:</p>
+
+<div class="math-display" id="math-sgd-opt"></div>
+
+<p>In words, "find the direction <span id="math-d-vec"></span> of unit Euclidean length that decreases the loss the most". The answer, after a one-line Lagrangian calculation, is <span id="math-neg-grad"></span> — the negative of the (normalised) gradient. The Euclidean ball is a circle, the gradient vector is perpendicular to its level sets, and the unit-step answer is to go exactly along the gradient.</p>
+
+<p>Natural gradient solves the <em>same</em> optimisation problem but with a different notion of "unit length":</p>
+
+<div class="math-display" id="math-ngd-opt"></div>
+
+<p>Now "unit length" means "unit Fisher length" — equivalently, "a step that moves the distribution by one unit of KL divergence" (because locally KL equals the Fisher quadratic form). The answer is the natural gradient <span id="math-natural-answer"></span>, exactly as we derived. So natural gradient is <em>steepest descent in the KL metric</em>, and the coordinates you expressed the loss in are irrelevant — KL only cares about the distributions, not about your labels. Parameterisation invariance falls out immediately.</p>
+
+<h2>Connection to second-order methods</h2>
+
+<p>There is an eerie coincidence between natural gradient and Newton's method. Newton's method for minimising a loss <span id="math-loss2"></span> uses the inverse Hessian of the loss:</p>
+
+<div class="math-display" id="math-newton"></div>
+
+<p>The natural gradient uses the inverse Fisher matrix, which for a maximum-likelihood loss is the expected value of a second-derivative quantity. For correctly-specified exponential-family models, the Fisher matrix and the Hessian of the negative log-likelihood are numerically very close — they agree exactly in expectation when the model is at the truth. So natural gradient descent on an MLE problem is approximately Newton's method, and the two converge at the same rate in the neighbourhood of the optimum.</p>
+
+<p>The practical upshot: natural gradient gives you second-order convergence speed without the instabilities of computing the true Hessian on a complicated non-convex loss. The Fisher matrix is always positive-definite (unlike the Hessian, which can have negative eigenvalues in non-convex regions) and it is usually cheaper to approximate. For large neural networks it has to be approximated further — block-diagonally, Kronecker-factorised, or diagonally — because computing and inverting the full matrix is <span id="math-o-d-squared"></span> in the parameter count, and that is untenable for a billion-parameter model. The variants with names like K-FAC, SFN, and KFAC are all approximations of natural gradient, and they are used in production for training deep networks where the approximate second-order direction is worth the extra cost.</p>
+
+<div class="insight">
+  <p><strong>Natural gradient in the wild.</strong> You may have met natural gradient under other names. In reinforcement learning, it is the update rule of "natural policy gradient" and TRPO (which is natural policy gradient with a trust region). In variational inference, it is the update used by "stochastic variational inference" with the natural-gradient version of the ELBO — because the variational posterior parameters are the natural parameters of an exponential family, and the right descent direction is the natural one. In variational quantum computing, "Quantum Natural Gradient" uses the Quantum Fisher Information Matrix to escape the "barren plateaus" that otherwise stall parameterised quantum circuits. All of these are the same algorithm specialised to different substrates.</p>
+</div>
+
+<h2>What Act III looks like</h2>
+
+<p>Act II is now complete. You have a dually flat geometry on every exponential family, two privileged connections, a Pythagorean theorem that makes projection-based statistics work, the full Bregman framework that generalises it, and a correct gradient-descent algorithm that respects the manifold's geometry. That is enough machinery to cover the rest of statistical learning.</p>
+
+<p>Act III takes the machinery in a different direction. Parts 11 and 12 show what dually flat geometry looks like in two visual contexts: Bregman-Voronoi diagrams on statistical manifolds (where clustering algorithms live) and the EM algorithm as alternating e- and m-projection on a joint latent-variable space. Parts 13, 14, and 15 pivot toward the unclaimed frontier: the Fisher metric's mathematical isomorphism to the Weil-Petersson metric on moduli spaces of conformal field theories, the Koszul-Souriau interpretation of the j-function of Monstrous Moonshine as an entropic potential on a Lie-algebra thermodynamic manifold, and the suggestion that information geometry may hold the key to a purely geometric proof of the Moonshine conjectures. The tone shifts from "classical application" to "research frontier", and the series ends by pointing at what comes next rather than answering it.</p>
+
+<div class="nav-footer">
+  <a href="09-bregman-divergences.html">← Part 9: Bregman Divergences</a>
+  <a href="11-hyperbolic-and-bregman-voronoi.html">Part 11: Voronoi Diagrams →</a>
+</div>
+
+</div>
+
+<script>
+var TEX = [
+  ['math-loss',          'L(\\theta)'],
+  ['math-eta-step',      '\\eta'],
+  ['math-data-mean',     '\\bar{x}'],
+  ['math-data-var',      's^2'],
+  ['math-model',         '\\mathcal{N}(\\mu,\\sigma)'],
+  ['math-model-params',  '(\\mu,\\sigma)'],
+  ['math-optimum',       '(\\mu,\\sigma) = (\\bar x,\\,s)'],
+  ['math-init',          '(\\mu_0,\\sigma_0) = (-2,\\,0.25)'],
+  ['math-sigma-grad',    '\\partial L / \\partial \\sigma'],
+  ['math-sigma-cubed',   '\\sigma^3'],
+  ['math-mu-mle',        '\\mu'],
+  ['math-sigma-mle',     '\\sigma'],
+  ['math-sigma-update',  '\\sigma'],
+  ['math-mu-update',     '\\mu'],
+  ['math-sigma',         '\\sigma'],
+  ['math-small-sigma',   '\\sigma = 0.25'],
+  ['math-fisher-mat',    'G(\\theta)'],
+  ['math-gaussian-fisher','G = \\mathrm{diag}(1/\\sigma^2,\\,2/\\sigma^2)'],
+  ['math-gaussian-inverse','G^{-1} = \\mathrm{diag}(\\sigma^2,\\,\\sigma^2/2)'],
+  ['math-sigma-squared', '\\sigma^2'],
+  ['math-raising',       'v^\\sharp = g^{ij}(\\partial_j L)'],
+  ['math-param-plane',   '(\\mu,\\sigma)'],
+  ['math-target-pt',     '(\\bar x,\\,s)'],
+  ['math-sigma2',        '\\sigma'],
+  ['math-mu',            '\\mu'],
+  ['math-sigma-squared-param','(\\mu,\\sigma^2)'],
+  ['math-sigma-param',   '(\\mu,\\sigma)'],
+  ['math-sigma-squared-p2','(\\mu,\\sigma^2)'],
+  ['math-sigma-p3',      '(\\mu,\\sigma)'],
+  ['math-d-vec',         'd'],
+  ['math-neg-grad',      '-\\nabla L / \\lVert \\nabla L \\rVert'],
+  ['math-natural-answer','d = -G^{-1}\\nabla L'],
+  ['math-loss2',         'L'],
+  ['math-o-d-squared',   '\\mathcal{O}(d^2)\\text{-memory and } \\mathcal{O}(d^3)\\text{-compute}']
+];
+TEX.forEach(function(row){ IG.viz.renderMath(row[0], row[1], false); });
+
+IG.viz.renderMath('math-sgd-update',
+  '\\theta_{t+1} \\;=\\; \\theta_t \\;-\\; \\eta\\,\\nabla L(\\theta_t)', true);
+
+IG.viz.renderMath('math-nll',
+  'L(\\mu,\\sigma) \\;=\\; N\\!\\left[\\,\\log \\sigma \\;+\\; \\frac{s^2 + (\\bar x - \\mu)^2}{2\\sigma^2}\\,\\right]', true);
+
+IG.viz.renderMath('math-nll-grads',
+  '\\frac{\\partial L}{\\partial \\mu} = -\\frac{N\\,(\\bar x - \\mu)}{\\sigma^2}, \\qquad ' +
+  '\\frac{\\partial L}{\\partial \\sigma} = \\frac{N}{\\sigma} - \\frac{N\\,(s^2 + (\\bar x - \\mu)^2)}{\\sigma^3}', true);
+
+IG.viz.renderMath('math-ngd-update',
+  '\\theta_{t+1} \\;=\\; \\theta_t \\;-\\; \\eta\\,G(\\theta_t)^{-1}\\,\\nabla L(\\theta_t)', true);
+
+IG.viz.renderMath('math-ngd-explicit',
+  '\\mu_{t+1} = \\mu_t - \\eta\\,\\sigma_t^2 \\cdot \\partial_\\mu L, \\qquad ' +
+  '\\sigma_{t+1} = \\sigma_t - \\eta\\,\\tfrac{\\sigma_t^2}{2} \\cdot \\partial_\\sigma L', true);
+
+IG.viz.renderMath('math-sgd-opt',
+  '\\min_{d}\\ \\langle \\nabla L(\\theta),\\, d \\rangle \\quad \\text{subject to}\\quad \\lVert d \\rVert^2 \\leq 1', true);
+
+IG.viz.renderMath('math-ngd-opt',
+  '\\min_{d}\\ \\langle \\nabla L(\\theta),\\, d \\rangle \\quad \\text{subject to}\\quad d^\\top G(\\theta)\\, d \\leq 1', true);
+
+IG.viz.renderMath('math-newton',
+  '\\theta_{t+1} \\;=\\; \\theta_t \\;-\\; \\big[\\nabla^2 L(\\theta_t)\\big]^{-1}\\,\\nabla L(\\theta_t)', true);
+
+// ──────────────────────────────── Figure 1: SGD vs NGD ──
+(function() {
+  var container = document.getElementById('fig-ngd-vs-sgd');
+  var f = IG.viz.figure(container, {
+    id: 'fig-ngd-vs-sgd',
+    label: 'Figure 1.',
+    caption: 'Vanilla SGD (amber) and natural gradient descent (blue) on the Gaussian MLE loss. Target: data mean 1.5, data variance 1. Start: (−2, 0.25). Same learning rate, same step count.'
+  });
+  var colors = IG.viz.colors;
+  var W = 660, H = 460, pad = 50;
+  var svg = d3.select(f.slot).append('svg')
+    .attr('viewBox', '0 0 ' + W + ' ' + H).attr('width', '100%');
+
+  var muScale = d3.scaleLinear().domain([-3.2, 3.2]).range([pad, W - pad]);
+  var sigScale = d3.scaleLinear().domain([0.15, 3.2]).range([H - pad, pad]);
+
+  svg.append('g').attr('transform', 'translate(0,' + (H - pad) + ')')
+    .call(d3.axisBottom(muScale).ticks(7).tickSize(4))
+    .call(styleAxis);
+  svg.append('g').attr('transform', 'translate(' + pad + ',0)')
+    .call(d3.axisLeft(sigScale).ticks(6).tickSize(4))
+    .call(styleAxis);
+  svg.append('text').attr('x', W / 2).attr('y', H - 4)
+    .attr('text-anchor', 'middle').attr('font-family', 'var(--heading-font)')
+    .attr('font-size', 11).attr('fill', colors.textSec).text('μ');
+  svg.append('text').attr('transform', 'translate(14,' + (H / 2) + ') rotate(-90)')
+    .attr('text-anchor', 'middle').attr('font-family', 'var(--heading-font)')
+    .attr('font-size', 11).attr('fill', colors.textSec).text('σ');
+  function styleAxis(g) {
+    g.select('.domain').attr('stroke', colors.axis);
+    g.selectAll('text').attr('font-family', 'var(--heading-font)').attr('font-size', 10).attr('fill', colors.textSec);
+    g.selectAll('line').attr('stroke', colors.axis);
+  }
+
+  // Target
+  var target = { mean: 1.5, variance: 1.0, sigma: 1.0 };
+  var N = 1;
+
+  // Build a loss grid (for contouring) over the (mu, sigma) plane.
+  var nx = 72, ny = 56;
+  var lossValues = new Array(nx * ny);
+  var muLo = -3.2, muHi = 3.2, sigLo = 0.15, sigHi = 3.2;
+  var ddx = (muHi - muLo) / (nx - 1);
+  var ddy = (sigHi - sigLo) / (ny - 1);
+  for (var iy = 0; iy < ny; iy++) {
+    for (var ix = 0; ix < nx; ix++) {
+      var mu = muLo + ix * ddx;
+      var sig = sigLo + iy * ddy;
+      lossValues[iy * nx + ix] = IG.gaussianMLELoss(mu, sig, target.mean, target.variance, N);
+    }
+  }
+  var lossMin = d3.min(lossValues);
+  var lossMax = d3.max(lossValues);
+  var thresholds = d3.range(6).map(function(i) {
+    return lossMin + (lossMax - lossMin) * Math.pow((i + 1) / 7, 2);
+  });
+  var contourGen = d3.contours().size([nx, ny]).thresholds(thresholds);
+  var polys = contourGen(lossValues);
+  var contourLayer = svg.append('g').attr('class', 'contours');
+  polys.forEach(function(polygon) {
+    var d = polygon.coordinates.map(function(rings) {
+      return rings.map(function(ring) {
+        return ring.map(function(pt, i) {
+          // grid unit → (mu, sigma) → screen
+          var mu  = muLo + pt[0] * ddx;
+          var sig = sigLo + pt[1] * ddy;
+          return (i === 0 ? 'M' : 'L') + muScale(mu).toFixed(2) + ',' + sigScale(sig).toFixed(2);
+        }).join('') + 'Z';
+      }).join('');
+    }).join('');
+    contourLayer.append('path')
+      .attr('d', d)
+      .attr('fill', 'none')
+      .attr('stroke', colors.grid)
+      .attr('stroke-width', 1.1)
+      .attr('stroke-opacity', 0.8);
+  });
+
+  // Target dot
+  svg.append('circle')
+    .attr('cx', muScale(target.mean)).attr('cy', sigScale(target.sigma))
+    .attr('r', 7).attr('fill', '#dc2626').attr('stroke', '#ffffff').attr('stroke-width', 2);
+  svg.append('text')
+    .attr('x', muScale(target.mean) + 12).attr('y', sigScale(target.sigma) + 4)
+    .attr('font-family', 'var(--heading-font)').attr('font-size', 11).attr('fill', '#dc2626')
+    .attr('font-weight', 'bold').text('target');
+
+  // Optimisers
+  var init = { mu: -2.0, sigma: 0.25 };
+  var sgdState, ngdState, sgdHistory, ngdHistory;
+
+  function reset() {
+    sgdState = { mu: init.mu, sigma: init.sigma };
+    ngdState = { mu: init.mu, sigma: init.sigma };
+    sgdHistory = [[init.mu, init.sigma]];
+    ngdHistory = [[init.mu, init.sigma]];
+    render();
+  }
+
+  var lr = 0.03;
+
+  function step() {
+    // SGD step — clamp sigma to stay positive
+    var gs = IG.gaussianMLEGrad(sgdState.mu, sgdState.sigma, target.mean, target.variance, N);
+    var sgdNext = IG.gaussianEuclideanGradientStep(sgdState.mu, sgdState.sigma, gs.mu, gs.sigma, lr);
+    sgdState.mu = Math.max(muLo, Math.min(muHi, sgdNext.mu));
+    sgdState.sigma = Math.max(0.08, Math.min(sigHi, sgdNext.sigma));
+    sgdHistory.push([sgdState.mu, sgdState.sigma]);
+
+    // NGD step
+    var gn = IG.gaussianMLEGrad(ngdState.mu, ngdState.sigma, target.mean, target.variance, N);
+    var ngdNext = IG.gaussianNaturalGradientStep(ngdState.mu, ngdState.sigma, gn.mu, gn.sigma, lr);
+    ngdState.mu = Math.max(muLo, Math.min(muHi, ngdNext.mu));
+    ngdState.sigma = Math.max(0.08, Math.min(sigHi, ngdNext.sigma));
+    ngdHistory.push([ngdState.mu, ngdState.sigma]);
+
+    render();
+  }
+
+  var sgdPath = svg.append('path').attr('fill', 'none').attr('stroke', '#f59e0b').attr('stroke-width', 2.5);
+  var ngdPath = svg.append('path').attr('fill', 'none').attr('stroke', '#2563eb').attr('stroke-width', 2.5);
+  var sgdDot  = svg.append('circle').attr('r', 6).attr('fill', '#f59e0b').attr('stroke', '#ffffff').attr('stroke-width', 2);
+  var ngdDot  = svg.append('circle').attr('r', 6).attr('fill', '#2563eb').attr('stroke', '#ffffff').attr('stroke-width', 2);
+
+  function render() {
+    var line = d3.line().x(function(d) { return muScale(d[0]); }).y(function(d) { return sigScale(d[1]); });
+    sgdPath.attr('d', line(sgdHistory));
+    ngdPath.attr('d', line(ngdHistory));
+    sgdDot.attr('cx', muScale(sgdState.mu)).attr('cy', sigScale(sgdState.sigma));
+    ngdDot.attr('cx', muScale(ngdState.mu)).attr('cy', sigScale(ngdState.sigma));
+
+    var sgdLoss = IG.gaussianMLELoss(sgdState.mu, sgdState.sigma, target.mean, target.variance, N);
+    var ngdLoss = IG.gaussianMLELoss(ngdState.mu, ngdState.sigma, target.mean, target.variance, N);
+    var minLoss = IG.gaussianMLELoss(target.mean, target.sigma, target.mean, target.variance, N);
+    f.status.innerHTML =
+      'step ' + (sgdHistory.length - 1) +
+      '     SGD (μ, σ) = (' + sgdState.mu.toFixed(3) + ', ' + sgdState.sigma.toFixed(3) + ')  loss = <span style="color:#f59e0b;font-weight:700">' + sgdLoss.toFixed(3) + '</span>' +
+      '     NGD (μ, σ) = (' + ngdState.mu.toFixed(3) + ', ' + ngdState.sigma.toFixed(3) + ')  loss = <span style="color:#2563eb;font-weight:700">' + ngdLoss.toFixed(3) + '</span>' +
+      '     minimum = ' + minLoss.toFixed(3);
+  }
+
+  // Controls
+  var controls = document.createElement('div');
+  controls.className = 'btn-row';
+  var btnStep  = document.createElement('button'); btnStep.className  = 'btn'; btnStep.textContent  = 'Step';
+  var btnRun   = document.createElement('button'); btnRun.className   = 'btn'; btnRun.textContent   = 'Run 100';
+  var btnReset = document.createElement('button'); btnReset.className = 'btn'; btnReset.textContent = 'Reset';
+  var lrRow = document.createElement('div');
+  lrRow.className = 'slider-row';
+  lrRow.innerHTML = '<label>learning</label><input type="range" id="slider-lr" min="0.005" max="0.20" step="0.005"><span class="val" id="val-lr"></span>';
+  controls.appendChild(btnStep);
+  controls.appendChild(btnRun);
+  controls.appendChild(btnReset);
+  controls.appendChild(lrRow);
+  f.slot.appendChild(controls);
+
+  var lrSlider = lrRow.querySelector('#slider-lr');
+  var lrVal    = lrRow.querySelector('#val-lr');
+  lrSlider.value = lr;
+  lrVal.textContent = lr.toFixed(3);
+  lrSlider.addEventListener('input', function() {
+    lr = parseFloat(lrSlider.value);
+    lrVal.textContent = lr.toFixed(3);
+  });
+
+  btnStep.addEventListener('click', step);
+  btnReset.addEventListener('click', reset);
+  btnRun.addEventListener('click', function() {
+    for (var i = 0; i < 100; i++) step();
+  });
+
+  var legend = document.createElement('div');
+  legend.className = 'legend';
+  legend.innerHTML =
+    '<span><span class="swatch" style="background:#f59e0b"></span> Vanilla SGD trajectory</span>' +
+    '<span><span class="swatch" style="background:#2563eb"></span> Natural gradient trajectory</span>' +
+    '<span><span class="swatch" style="background:#dc2626"></span> target (MLE optimum)</span>';
+  f.slot.appendChild(legend);
+
+  reset();
+})();
+</script>
+</body>
+</html>
