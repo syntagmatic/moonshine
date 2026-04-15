@@ -1,6 +1,6 @@
 # Exceptional Arcade · Track H: Headliners
 
-The headline series of the Exceptional Arcade. Six showcase interactives, each embodying one architectural principle from the E8 research report. Track H is deliberately *not* a fluency drill track — these are the marquee cabinets, the ones a visitor steps up to first.
+The headline series of the Exceptional Arcade. Seven showcase interactives (one prequel H0 plus six principled exhibits H1–H6), each embodying one architectural principle from the E8 research report. Track H is deliberately *not* a fluency drill track — these are the marquee cabinets, the ones a visitor steps up to first.
 
 ## Why "headliners"
 
@@ -41,7 +41,15 @@ Per-file structure:
 
 No scoring, no localStorage, no difficulty tiers. Those belong in the drill tracks.
 
-## The six pieces
+## The seven pieces
+
+### H0 · Ascent to E₈
+
+**Principle.** Simple Lie algebras are built rank by rank. The chain A₁ → A₂ → A₃ → D₄ → D₅ → E₆ → E₇ → E₈ adds one simple root at a time, growing the Dynkin diagram by one node per step. Every root system above is a subsystem of every root system below it in the chain, and the root counts (2 → 6 → 12 → 24 → 40 → 72 → 126 → 240) tell you exactly how much the algebra gains at each step.
+
+**Exhibit.** An animated step-through of all eight stages. At each step the Dynkin diagram grows by one node (highlighted in red), the 240-root Coxeter-plane picture gains a new constellation of lit points (the roots that just joined the sub-algebra), and the readouts show rank, algebra name, Coxeter number, and total root count. Play automatically, or scrub manually with Next / Back buttons or 8 step buttons for jump-to. The branch-outward addition order starts at α₄ so that D₄ appears correctly as the first branched diagram in step 4.
+
+**Why it earns its spot.** Every other H-exhibit assumes you already know what E₈ is. This one shows you where E₈ *comes from* — it's the construction story, positioned at H0 as the opening movement of the series.
 
 ### H1 · Flatland Sections
 
