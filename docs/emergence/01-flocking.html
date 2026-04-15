@@ -419,11 +419,11 @@ function updateBoids(boids, w, h, opts) {
     b.x += b.vx * speedMult;
     b.y += b.vy * speedMult;
 
-    // Wrap edges
-    if (b.x < 0) b.x += w;
-    if (b.x > w) b.x -= w;
-    if (b.y < 0) b.y += h;
-    if (b.y > h) b.y -= h;
+    // Wrap edges safely
+    if (b.x < 0) b.x = (b.x % w) + w;
+    if (b.x >= w) b.x = b.x % w;
+    if (b.y < 0) b.y = (b.y % h) + h;
+    if (b.y >= h) b.y = b.y % h;
   }
 }
 
@@ -445,8 +445,8 @@ function drawBoid(ctx, b, size, color) {
 
 function getCanvasDims(container) {
   const rect = container.getBoundingClientRect();
-  const w = Math.floor(rect.width - 48); // 1.5rem padding each side
-  const h = Math.min(420, Math.floor(w * 0.6));
+  const w = Math.max(100, Math.floor(rect.width - 48)); // 1.5rem padding each side
+  const h = Math.min(420, Math.max(100, Math.floor(w * 0.6)));
   return { w, h };
 }
 
@@ -478,6 +478,11 @@ function setupCanvas(canvas, w, h) {
   let dims = getCanvasDims(container);
   let ctx = setupCanvas(canvas, dims.w, dims.h);
   let boids = createBoids(200, dims.w, dims.h);
+  let isVisible = true;
+
+  new IntersectionObserver(entries => {
+    isVisible = entries[0].isIntersecting;
+  }).observe(container);
 
   sepSlider.addEventListener('input', function() {
     state.rules.separation = +this.value;
@@ -505,12 +510,14 @@ function setupCanvas(canvas, w, h) {
   }).observe(container);
 
   function tick() {
-    updateBoids(boids, dims.w, dims.h, state.rules);
-    ctx.clearRect(0, 0, dims.w, dims.h);
-    ctx.fillStyle = '#f8f8fc';
-    ctx.fillRect(0, 0, dims.w, dims.h);
-    for (let i = 0; i < boids.length; i++) {
-      drawBoid(ctx, boids[i], 5, 'var(--c-agent)');
+    if (isVisible && !REDUCED_MOTION) {
+      updateBoids(boids, dims.w, dims.h, state.rules);
+      ctx.clearRect(0, 0, dims.w, dims.h);
+      ctx.fillStyle = '#f8f8fc';
+      ctx.fillRect(0, 0, dims.w, dims.h);
+      for (let i = 0; i < boids.length; i++) {
+        drawBoid(ctx, boids[i], 5, 'var(--c-agent)');
+      }
     }
     requestAnimationFrame(tick);
   }
@@ -531,6 +538,11 @@ function setupCanvas(canvas, w, h) {
   let boids = createBoids(120, dims.w, dims.h);
   const fov = 270;
   const fovRad = (fov / 360) * Math.PI;
+  let isVisible = false;
+
+  new IntersectionObserver(entries => {
+    isVisible = entries[0].isIntersecting;
+  }).observe(container);
 
   radiusSlider.addEventListener('input', function() {
     state.visionRadius = +this.value;
@@ -556,64 +568,66 @@ function setupCanvas(canvas, w, h) {
   }).observe(container);
 
   function tick() {
-    updateBoids(boids, dims.w, dims.h, { radius: state.visionRadius, ...state.rules, fov: fov });
-    ctx.clearRect(0, 0, dims.w, dims.h);
-    ctx.fillStyle = '#f8f8fc';
-    ctx.fillRect(0, 0, dims.w, dims.h);
+    if (isVisible && !REDUCED_MOTION) {
+      updateBoids(boids, dims.w, dims.h, { radius: state.visionRadius, ...state.rules, fov: fov });
+      ctx.clearRect(0, 0, dims.w, dims.h);
+      ctx.fillStyle = '#f8f8fc';
+      ctx.fillRect(0, 0, dims.w, dims.h);
 
-    const visibleSet = new Set();
-    if (state.selectedBoid >= 0 && state.selectedBoid < boids.length) {
-      const sb = boids[state.selectedBoid];
-      const bAngle = Math.atan2(sb.vy, sb.vx);
-      const r2 = state.visionRadius * state.visionRadius;
+      const visibleSet = new Set();
+      if (state.selectedBoid >= 0 && state.selectedBoid < boids.length) {
+        const sb = boids[state.selectedBoid];
+        const bAngle = Math.atan2(sb.vy, sb.vx);
+        const r2 = state.visionRadius * state.visionRadius;
 
-      ctx.save();
-      ctx.globalAlpha = 0.1;
-      ctx.fillStyle = 'var(--c-agent)';
-      ctx.beginPath();
-      ctx.moveTo(sb.x, sb.y);
-      ctx.arc(sb.x, sb.y, state.visionRadius, bAngle - fovRad, bAngle + fovRad);
-      ctx.closePath();
-      ctx.fill();
-      ctx.globalAlpha = 0.35;
-      ctx.strokeStyle = 'var(--c-agent)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.arc(sb.x, sb.y, state.visionRadius, bAngle - fovRad, bAngle + fovRad);
-      ctx.lineTo(sb.x, sb.y);
-      ctx.closePath();
-      ctx.stroke();
-      ctx.restore();
+        ctx.save();
+        ctx.globalAlpha = 0.1;
+        ctx.fillStyle = 'var(--c-agent)';
+        ctx.beginPath();
+        ctx.moveTo(sb.x, sb.y);
+        ctx.arc(sb.x, sb.y, state.visionRadius, bAngle - fovRad, bAngle + fovRad);
+        ctx.closePath();
+        ctx.fill();
+        ctx.globalAlpha = 0.35;
+        ctx.strokeStyle = 'var(--c-agent)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(sb.x, sb.y, state.visionRadius, bAngle - fovRad, bAngle + fovRad);
+        ctx.lineTo(sb.x, sb.y);
+        ctx.closePath();
+        ctx.stroke();
+        ctx.restore();
 
-      for (let j = 0; j < boids.length; j++) {
-        if (j === state.selectedBoid) continue;
-        const o = boids[j];
-        const dx = o.x - sb.x, dy = o.y - sb.y;
-        const dist2 = dx * dx + dy * dy;
-        if (dist2 > r2) continue;
-        const angle = Math.atan2(dy, dx);
-        let diff = angle - bAngle;
-        if (diff > Math.PI) diff -= 2 * Math.PI;
-        if (diff < -Math.PI) diff += 2 * Math.PI;
-        if (Math.abs(diff) <= fovRad) visibleSet.add(j);
+        for (let j = 0; j < boids.length; j++) {
+          if (j === state.selectedBoid) continue;
+          const o = boids[j];
+          const dx = o.x - sb.x, dy = o.y - sb.y;
+          const dist2 = dx * dx + dy * dy;
+          if (dist2 > r2) continue;
+          const angle = Math.atan2(dy, dx);
+          let diff = angle - bAngle;
+          if (diff > Math.PI) diff -= 2 * Math.PI;
+          if (diff < -Math.PI) diff += 2 * Math.PI;
+          if (Math.abs(diff) <= fovRad) visibleSet.add(j);
+        }
       }
-    }
 
-    for (let i = 0; i < boids.length; i++) {
-      if (i === state.selectedBoid) continue;
-      const color = visibleSet.has(i) ? 'var(--c-agent)' : (state.selectedBoid >= 0 ? '#b0b0c0' : 'var(--c-agent)');
-      drawBoid(ctx, boids[i], 5, color);
-    }
-    if (state.selectedBoid >= 0 && state.selectedBoid < boids.length) {
-      drawBoid(ctx, boids[state.selectedBoid], 6, 'var(--c-danger)');
-      ctx.save();
-      ctx.strokeStyle = 'var(--c-danger)';
-      ctx.lineWidth = 1.5;
-      const sb = boids[state.selectedBoid];
-      ctx.beginPath();
-      ctx.arc(sb.x, sb.y, 8, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.restore();
+      for (let i = 0; i < boids.length; i++) {
+        if (i === state.selectedBoid) continue;
+        const color = visibleSet.has(i) ? 'var(--c-agent)' : (state.selectedBoid >= 0 ? '#b0b0c0' : 'var(--c-agent)');
+        drawBoid(ctx, boids[i], 5, color);
+      }
+      if (state.selectedBoid >= 0 && state.selectedBoid < boids.length) {
+        drawBoid(ctx, boids[state.selectedBoid], 6, 'var(--c-danger)');
+        ctx.save();
+        ctx.strokeStyle = 'var(--c-danger)';
+        ctx.lineWidth = 1.5;
+        const sb = boids[state.selectedBoid];
+        ctx.beginPath();
+        ctx.arc(sb.x, sb.y, 8, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
     }
     requestAnimationFrame(tick);
   }
@@ -636,6 +650,11 @@ function setupCanvas(canvas, w, h) {
   let boids = createBoids(200, dims.w, dims.h);
   const TRAIL_LEN = 40;
   let history = boids.map(() => []);
+  let isVisible = false;
+
+  new IntersectionObserver(entries => {
+    isVisible = entries[0].isIntersecting;
+  }).observe(container);
 
   speedSlider.addEventListener('input', function() {
     state.speed = +this.value;
@@ -660,38 +679,40 @@ function setupCanvas(canvas, w, h) {
   }).observe(container);
 
   function tick() {
-    updateBoids(boids, dims.w, dims.h, { ...state.rules, speedMult: state.speed });
-    if (state.trails) {
-      for (let i = 0; i < boids.length; i++) {
-        history[i].push({ x: boids[i].x, y: boids[i].y });
-        if (history[i].length > TRAIL_LEN) history[i].shift();
-      }
-    }
-    ctx.clearRect(0, 0, dims.w, dims.h);
-    ctx.fillStyle = '#f8f8fc';
-    ctx.fillRect(0, 0, dims.w, dims.h);
-
-    if (state.trails) {
-      for (let i = 0; i < boids.length; i++) {
-        const h = history[i];
-        if (h.length < 2) continue;
-        ctx.beginPath();
-        ctx.moveTo(h[0].x, h[0].y);
-        for (let t = 1; t < h.length; t++) {
-          const dx = Math.abs(h[t].x - h[t-1].x);
-          const dy = Math.abs(h[t].y - h[t-1].y);
-          if (dx > dims.w * 0.5 || dy > dims.h * 0.5) ctx.moveTo(h[t].x, h[t].y);
-          else ctx.lineTo(h[t].x, h[t].y);
+    if (isVisible && !REDUCED_MOTION) {
+      updateBoids(boids, dims.w, dims.h, { ...state.rules, speedMult: state.speed });
+      if (state.trails) {
+        for (let i = 0; i < boids.length; i++) {
+          history[i].push({ x: boids[i].x, y: boids[i].y });
+          if (history[i].length > TRAIL_LEN) history[i].shift();
         }
-        ctx.strokeStyle = 'var(--c-agent)';
-        ctx.globalAlpha = 0.15;
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-        ctx.globalAlpha = 1.0;
       }
-    }
-    for (let i = 0; i < boids.length; i++) {
-      drawBoid(ctx, boids[i], 5, 'var(--c-agent)');
+      ctx.clearRect(0, 0, dims.w, dims.h);
+      ctx.fillStyle = '#f8f8fc';
+      ctx.fillRect(0, 0, dims.w, dims.h);
+
+      if (state.trails) {
+        for (let i = 0; i < boids.length; i++) {
+          const h = history[i];
+          if (h.length < 2) continue;
+          ctx.beginPath();
+          ctx.moveTo(h[0].x, h[0].y);
+          for (let t = 1; t < h.length; t++) {
+            const dx = Math.abs(h[t].x - h[t-1].x);
+            const dy = Math.abs(h[t].y - h[t-1].y);
+            if (dx > dims.w * 0.5 || dy > dims.h * 0.5) ctx.moveTo(h[t].x, h[t].y);
+            else ctx.lineTo(h[t].x, h[t].y);
+          }
+          ctx.strokeStyle = 'var(--c-agent)';
+          ctx.globalAlpha = 0.15;
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+          ctx.globalAlpha = 1.0;
+        }
+      }
+      for (let i = 0; i < boids.length; i++) {
+        drawBoid(ctx, boids[i], 5, 'var(--c-agent)');
+      }
     }
     requestAnimationFrame(tick);
   }
@@ -710,6 +731,11 @@ function setupCanvas(canvas, w, h) {
   let ctx = setupCanvas(canvas, dims.w, dims.h);
   let boids = createBoids(200, dims.w, dims.h);
   let predators = [];
+  let isVisible = false;
+
+  new IntersectionObserver(entries => {
+    isVisible = entries[0].isIntersecting;
+  }).observe(container);
 
   canvas.style.cursor = 'crosshair';
   canvas.addEventListener('click', function(e) {
@@ -727,29 +753,31 @@ function setupCanvas(canvas, w, h) {
   }).observe(container);
 
   function tick() {
-    updateBoids(boids, dims.w, dims.h, { ...state.rules, predators: predators });
-    ctx.clearRect(0, 0, dims.w, dims.h);
-    ctx.fillStyle = '#f8f8fc';
-    ctx.fillRect(0, 0, dims.w, dims.h);
+    if (isVisible && !REDUCED_MOTION) {
+      updateBoids(boids, dims.w, dims.h, { ...state.rules, predators: predators });
+      ctx.clearRect(0, 0, dims.w, dims.h);
+      ctx.fillStyle = '#f8f8fc';
+      ctx.fillRect(0, 0, dims.w, dims.h);
 
-    for (let p = 0; p < predators.length; p++) {
-      ctx.save();
-      ctx.globalAlpha = 0.06;
-      ctx.fillStyle = 'var(--c-danger)';
-      ctx.beginPath(); ctx.arc(predators[p].x, predators[p].y, 80, 0, Math.PI * 2); ctx.fill();
-      ctx.restore();
+      for (let p = 0; p < predators.length; p++) {
+        ctx.save();
+        ctx.globalAlpha = 0.06;
+        ctx.fillStyle = 'var(--c-danger)';
+        ctx.beginPath(); ctx.arc(predators[p].x, predators[p].y, 80, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
 
-      ctx.save();
-      ctx.fillStyle = 'var(--c-danger)';
-      ctx.beginPath(); ctx.arc(predators[p].x, predators[p].y, 6, 0, Math.PI * 2); ctx.fill();
-      ctx.strokeStyle = 'var(--c-danger)';
-      ctx.lineWidth = 1.5; ctx.globalAlpha = 0.3;
-      ctx.beginPath(); ctx.arc(predators[p].x, predators[p].y, 80, 0, Math.PI * 2); ctx.stroke();
-      ctx.restore();
-    }
+        ctx.save();
+        ctx.fillStyle = 'var(--c-danger)';
+        ctx.beginPath(); ctx.arc(predators[p].x, predators[p].y, 6, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = 'var(--c-danger)';
+        ctx.lineWidth = 1.5; ctx.globalAlpha = 0.3;
+        ctx.beginPath(); ctx.arc(predators[p].x, predators[p].y, 80, 0, Math.PI * 2); ctx.stroke();
+        ctx.restore();
+      }
 
-    for (let i = 0; i < boids.length; i++) {
-      drawBoid(ctx, boids[i], 5, 'var(--c-agent)');
+      for (let i = 0; i < boids.length; i++) {
+        drawBoid(ctx, boids[i], 5, 'var(--c-agent)');
+      }
     }
     requestAnimationFrame(tick);
   }

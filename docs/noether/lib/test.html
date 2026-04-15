@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>noether-math sanity checks</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<script src="noether-math.js"></script>
+<script src="noether-viz.js"></script>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 800px; margin: 2rem auto; padding: 0 1rem; color: #1a1a2e; }
+  h1 { font-size: 1.4rem; }
+  h2 { font-size: 1.1rem; margin-top: 1.5rem; color: #4a4a6a; }
+  .pass { color: #059669; }
+  .fail { color: #dc2626; font-weight: 600; }
+  pre { background: #f1f5f9; padding: 0.5rem 0.75rem; border-radius: 4px; font-size: 0.85rem; overflow-x: auto; }
+  .row { margin: 0.25rem 0; font-family: 'Source Code Pro', monospace; font-size: 0.85rem; }
+</style>
+</head>
+<body>
+<h1>noether-math.js sanity checks</h1>
+<p>A battery of unit tests run in-browser. Pass count is reported at the bottom.</p>
+
+<div id="output"></div>
+
+<script>
+var out = document.getElementById('output');
+var passes = 0, fails = 0;
+
+function section(name) {
+  var h = document.createElement('h2');
+  h.textContent = name;
+  out.appendChild(h);
+}
+function check(name, ok, detail) {
+  var row = document.createElement('div');
+  row.className = 'row';
+  row.innerHTML = (ok ? '<span class="pass">\u2713</span> ' : '<span class="fail">\u2717</span> ') + name +
+    (detail ? ' \u2014 ' + detail : '');
+  out.appendChild(row);
+  if (ok) passes++; else fails++;
+}
+function near(a, b, tol) { return Math.abs(a - b) <= (tol || 1e-8); }
+function vnear(a, b, tol) {
+  if (a.length !== b.length) return false;
+  for (var i = 0; i < a.length; i++) if (!near(a[i], b[i], tol)) return false;
+  return true;
+}
+
+// ─── 2×2 matrices ─────────────────────────────────────────
+section('2\u00D72 matrix helpers');
+var R90 = NOETHER.mat2.rot(Math.PI / 2);
+check('rot(π/2) applied to (1,0) = (0,1)',
+  vnear(NOETHER.mat2.apply(R90, [1, 0]), [0, 1], 1e-10),
+  JSON.stringify(NOETHER.mat2.apply(R90, [1, 0])));
+check('det(rot(π/3)) = 1',
+  near(NOETHER.mat2.det(NOETHER.mat2.rot(Math.PI / 3)), 1));
+var M = NOETHER.mat2.make(1, 2, 3, 4);
+check('det(1,2;3,4) = -2', near(NOETHER.mat2.det(M), -2));
+var MN = NOETHER.mat2.mul(M, NOETHER.mat2.make(5, 6, 7, 8));
+check('(1,2;3,4) × (5,6;7,8) = (19,22;43,50)',
+  MN[0][0] === 19 && MN[0][1] === 22 && MN[1][0] === 43 && MN[1][1] === 50);
+
+// ─── D4 group structure ───────────────────────────────────
+section('D\u2084 group structure');
+var D4 = NOETHER.groups.D4;
+check('D\u2084 has order 8', D4.order === 8 && D4.elements.length === 8);
+
+// Every element should have det = ±1 and the group should be closed under
+// composition.
+var allUnitDet = true;
+for (var i = 0; i < D4.elements.length; i++) {
+  var d = NOETHER.mat2.det(D4.elements[i].mat);
+  if (Math.abs(Math.abs(d) - 1) > 1e-10) allUnitDet = false;
+}
+check('every D\u2084 element has det = \u00B11', allUnitDet);
+
+// Four rotations should have det +1, four reflections should have det -1.
+var posDet = D4.elements.filter(function (g) { return NOETHER.mat2.det(g.mat) > 0; });
+check('D\u2084 has 4 rotations (det +1)', posDet.length === 4);
+
+// r applied to (1, 0) should give (0, 1). r² should give (-1, 0). etc.
+var r = D4.elements[1].mat;
+var r1 = NOETHER.mat2.apply(r, [1, 0]);
+var r2 = NOETHER.mat2.apply(r, r1);
+var r3 = NOETHER.mat2.apply(r, r2);
+var r4 = NOETHER.mat2.apply(r, r3);
+check('r\u00B9 (1,0) = (0,1)', vnear(r1, [0, 1]));
+check('r\u00B2 (1,0) = (-1,0)', vnear(r2, [-1, 0]));
+check('r\u00B3 (1,0) = (0,-1)', vnear(r3, [0, -1]));
+check('r\u2074 (1,0) = (1,0)', vnear(r4, [1, 0]));
+
+// ─── D4 orbit of (1, 0) ──────────────────────────────────
+section('D\u2084 orbits and stabilizers');
+var orbit10 = NOETHER.action.orbit([1, 0], D4);
+check('orbit of (1, 0) under D\u2084 has 4 elements',
+  orbit10.length === 4,
+  'got ' + orbit10.length);
+
+// Stabilizer of (0,0): should be all 8 elements.
+var stabOrigin = NOETHER.action.stabilizer([0, 0], D4);
+check('stabilizer of origin = full group', stabOrigin.length === 8);
+
+// Stabilizer of (1, 1): just e and the reflection across y=x.
+var stabDiag = NOETHER.action.stabilizer([1, 1], D4);
+check('stabilizer of (1,1) has order 2', stabDiag.length === 2);
+
+// Orbit-stabilizer on (1, 0): |orbit| × |stab| = 8
+var stab10 = NOETHER.action.stabilizer([1, 0], D4);
+check('orbit-stabilizer at (1,0): 4 × 2 = 8',
+  orbit10.length * stab10.length === 8);
+
+// ─── S3 acting on (a, b, c) ──────────────────────────────
+section('S\u2083 permutation action');
+var S3 = NOETHER.groups.S3;
+check('S\u2083 has order 6', S3.elements.length === 6);
+
+var x = [10, 20, 30];
+var orbitX = NOETHER.action.orbit(x, S3, function (a, b) {
+  return a[0] === b[0] && a[1] === b[1] && a[2] === b[2];
+});
+check('orbit of (10,20,30) under S\u2083 has 6 elements',
+  orbitX.length === 6);
+
+// Apply (12) — the transposition swapping slots 0 and 1.
+var swap12 = S3.elements[1];
+var swapped = S3.act(swap12, [1, 2, 3]);
+check('(12) \u00B7 [1,2,3] = [2,1,3]',
+  swapped[0] === 2 && swapped[1] === 1 && swapped[2] === 3,
+  JSON.stringify(swapped));
+
+// Apply (123).
+var cycle123 = S3.elements[4];
+var cycled = S3.act(cycle123, [1, 2, 3]);
+check('(123) \u00B7 [1,2,3] = [3,1,2]',
+  cycled[0] === 3 && cycled[1] === 1 && cycled[2] === 2,
+  JSON.stringify(cycled));
+
+// ─── invariants ──────────────────────────────────────────
+section('Invariant checking');
+var samples = [[1, 2, 3], [0, 0, 0], [-1, 5, 2], [7, 7, 7], [-3, 4, -4]];
+var sumCheck = NOETHER.invariants.check(
+  function (v) { return v[0] + v[1] + v[2]; }, S3, samples);
+check('sum(a,b,c) is S\u2083-invariant', sumCheck.invariant);
+
+var firstCoord = NOETHER.invariants.check(
+  function (v) { return v[0]; }, S3, samples);
+check('first coordinate is NOT S\u2083-invariant', !firstCoord.invariant);
+
+var productCheck = NOETHER.invariants.check(
+  function (v) { return v[0] * v[1] * v[2]; }, S3, samples);
+check('product(a,b,c) is S\u2083-invariant', productCheck.invariant);
+
+var maxCheck = NOETHER.invariants.check(
+  function (v) { return Math.max(v[0], v[1], v[2]); }, S3, samples);
+check('max(a,b,c) is S\u2083-invariant', maxCheck.invariant);
+
+var distCheck = NOETHER.invariants.check(
+  function (v) { return Math.sqrt(v[0] * v[0] + v[1] * v[1]); },
+  NOETHER.groups.D4,
+  [[1, 0], [2, 3], [-1, 5], [0.5, 0.5]]);
+check('||v|| is D\u2084-invariant', distCheck.invariant);
+
+// ─── binary forms ────────────────────────────────────────
+section('Binary forms and discriminants');
+var q = NOETHER.forms.quadratic(1, 2, 1); // (x+y)²
+check('discriminant(x\u00B2 + 2xy + y\u00B2) = 0', near(NOETHER.forms.discriminant(q), 0));
+
+var q2 = NOETHER.forms.quadratic(1, 0, -1); // x² − y²
+check('discriminant(x\u00B2 \u2212 y\u00B2) = 4', near(NOETHER.forms.discriminant(q2), 4));
+
+// Transform q2 by diag(2, 3): x → 2x, y → 3y. New form: 4x² − 9y², disc = 144.
+var M23 = NOETHER.mat2.make(2, 0, 0, 3);
+var q2T = NOETHER.forms.transform(q2, M23);
+check('transform(x\u00B2 \u2212 y\u00B2) by diag(2,3) \u2192 4x\u00B2 \u2212 9y\u00B2',
+  q2T.coeffs[0] === 4 && q2T.coeffs[1] === 0 && q2T.coeffs[2] === -9,
+  JSON.stringify(q2T.coeffs));
+check('new discriminant = (det M)\u00B2 \u00B7 old disc = 36 \u00B7 4 = 144',
+  near(NOETHER.forms.discriminant(q2T), 144));
+
+// Random GL2 test: discriminant should transform as (det M)² · disc.
+var randM = NOETHER.mat2.make(1, 2, -1, 3); // det = 3 + 2 = 5
+var disc0 = NOETHER.forms.discriminant(q2);
+var discT = NOETHER.forms.discriminant(NOETHER.forms.transform(q2, randM));
+check('quadratic discriminant has weight 2',
+  near(discT, 25 * disc0),
+  'expected ' + (25 * disc0) + ', got ' + discT);
+
+// Cubic form x³ (single triple root), disc = 0.
+var cTriple = NOETHER.forms.cubic(1, 0, 0, 0);
+check('discriminant(x\u00B3) = 0', near(NOETHER.forms.discriminant(cTriple), 0));
+
+// Cubic form x³ − xy² = x(x−y)(x+y). Discriminant should be nonzero (three
+// distinct roots). Classical formula gives Δ = 4 for this form.
+var cCubic = NOETHER.forms.cubic(1, 0, -1, 0);
+check('discriminant(x\u00B3 \u2212 xy\u00B2) = 4', near(NOETHER.forms.discriminant(cCubic), 4));
+
+// Transform by diag(2, 3): det = 6, weight = 6, so new disc = 6⁶ · 4 = 186624.
+var cT = NOETHER.forms.transform(cCubic, NOETHER.mat2.make(2, 0, 0, 3));
+check('cubic discriminant has weight 6',
+  near(NOETHER.forms.discriminant(cT), Math.pow(6, 6) * 4),
+  'expected ' + (Math.pow(6, 6) * 4) + ', got ' + NOETHER.forms.discriminant(cT));
+
+// ─── Lagrangian: free particle action ────────────────────
+section('Lagrangian action and RK4');
+// Free particle L = ½ q̇². Straight-line path from (0, 0) to (1, 1) over
+// t ∈ [0, 1]: q(t) = t, so q̇ = 1, L = 1/2, S = 1/2.
+var path = [];
+for (var i = 0; i <= 100; i++) {
+  var t = i / 100;
+  path.push([t, t]);
+}
+var L_free = function (q, qdot) { return 0.5 * qdot * qdot; };
+var S = NOETHER.lagrangian.action(L_free, path);
+check('action of straight-line path for free particle = 0.5', near(S, 0.5, 1e-3));
+
+// RK4 on harmonic oscillator qdotdot = -q. Period 2π. After one period
+// (steps = 1000, dt = 0.00628), q should return to initial value.
+var history = NOETHER.lagrangian.rk4(
+  function (q, v, t) { return -q; },
+  1, 0, 2 * Math.PI / 1000, 1000);
+var final = history[history.length - 1];
+check('harmonic oscillator returns to q = 1 after one period',
+  near(final.q, 1, 1e-3),
+  'got ' + final.q.toFixed(6));
+check('harmonic oscillator returns to qdot ≈ 0 after one period',
+  near(final.qdot, 0, 1e-3),
+  'got ' + final.qdot.toFixed(6));
+
+// Energy conservation check: ½ v² + ½ q² should be constant = ½.
+var e0 = 0.5 * history[0].qdot * history[0].qdot + 0.5 * history[0].q * history[0].q;
+var eFinal = 0.5 * final.qdot * final.qdot + 0.5 * final.q * final.q;
+check('harmonic oscillator conserves energy',
+  near(e0, eFinal, 1e-4),
+  'E(0) = ' + e0.toFixed(6) + ', E(T) = ' + eFinal.toFixed(6));
+
+// ─── summary ─────────────────────────────────────────────
+var summary = document.createElement('h2');
+summary.style.marginTop = '2rem';
+summary.innerHTML = passes + ' passed, ' +
+  (fails > 0
+    ? '<span class="fail">' + fails + ' failed</span>'
+    : '<span class="pass">0 failed</span>');
+out.appendChild(summary);
+</script>
+</body>
+</html>

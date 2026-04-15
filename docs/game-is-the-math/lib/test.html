@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CGT Library Tests</title>
+<style>
+  body {
+    font-family: system-ui, -apple-system, sans-serif;
+    max-width: 720px;
+    margin: 2rem auto;
+    padding: 0 1rem;
+    color: #1a1a2e;
+    background: #fafafa;
+    line-height: 1.5;
+  }
+  h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
+  .subtitle { color: #4a4a6a; margin-bottom: 2rem; }
+  .result { padding: 0.7rem 1rem; border-radius: 4px; margin: 0.5rem 0; }
+  .pass { background: #dcfce7; color: #14532d; border-left: 4px solid #16a34a; }
+  .fail { background: #fee2e2; color: #7f1d1d; border-left: 4px solid #dc2626; }
+  .summary { margin-top: 2rem; padding: 1rem; border-radius: 4px; font-weight: 600; font-size: 1.15rem; }
+  .summary.all-pass { background: #dcfce7; color: #14532d; }
+  .summary.any-fail { background: #fee2e2; color: #7f1d1d; }
+  code { font-family: 'Source Code Pro', ui-monospace, monospace; font-size: 0.9em; }
+  .section { margin-top: 2rem; }
+  .section h2 { font-size: 1.1rem; margin-bottom: 0.5rem; }
+</style>
+</head>
+<body>
+
+<h1>The Game Is the Math — Library Tests</h1>
+<p class="subtitle">In-browser sanity checks for <code>cgt-math.js</code> and <code>cgt-games.js</code>.</p>
+
+<div id="results"></div>
+<div id="summary" class="summary"></div>
+
+<script src="cgt-math.js"></script>
+<script src="cgt-games.js"></script>
+<script>
+(function () {
+  var results = document.getElementById('results');
+  var summary = document.getElementById('summary');
+  var passed = 0;
+  var failed = 0;
+
+  function assert(name, condition, detail) {
+    var row = document.createElement('div');
+    row.className = 'result ' + (condition ? 'pass' : 'fail');
+    row.innerHTML = (condition ? '&#10003; ' : '&#10007; ') + '<strong>' + name + '</strong>' + (detail ? ' &mdash; <code>' + detail + '</code>' : '');
+    results.appendChild(row);
+    if (condition) passed++; else failed++;
+  }
+
+  function section(title) {
+    var h = document.createElement('h2');
+    h.textContent = title;
+    var wrap = document.createElement('div');
+    wrap.className = 'section';
+    wrap.appendChild(h);
+    results.appendChild(wrap);
+  }
+
+  section('mex operator');
+  assert('mex of empty set is 0', CGT.math.mex([]) === 0);
+  assert('mex({0,1,2}) = 3', CGT.math.mex([0, 1, 2]) === 3);
+  assert('mex({1,2}) = 0', CGT.math.mex([1, 2]) === 0);
+  assert('mex({0,2,3}) = 1', CGT.math.mex([0, 2, 3]) === 1);
+  assert('mex({0,1,2,3,5}) = 4', CGT.math.mex([0, 1, 2, 3, 5]) === 4);
+  assert('mex with Set object', CGT.math.mex(new Set([0, 1])) === 2);
+
+  section('XOR (Nim sum)');
+  assert('xor([3,5,7]) = 1', CGT.math.xor([3, 5, 7]) === 1);
+  assert('xor([1,2,3]) = 0', CGT.math.xor([1, 2, 3]) === 0);
+  assert('xor([]) = 0', CGT.math.xor([]) === 0);
+  assert('xor([4,4]) = 0', CGT.math.xor([4, 4]) === 0);
+
+  section('Grundy values');
+  var subtractionOpts = function (n) {
+    var r = [];
+    if (n >= 1) r.push(n - 1);
+    if (n >= 2) r.push(n - 2);
+    return r;
+  };
+  // Grundy values of "take 1 or 2" subtraction game are 0,1,2,0,1,2,...
+  var grundySequence = [];
+  for (var n = 0; n < 9; n++) {
+    grundySequence.push(CGT.math.grundyValue(n, subtractionOpts, new Map()));
+  }
+  assert('Subtraction {1,2} Grundy sequence is 0,1,2,0,1,2,...',
+    grundySequence.join(',') === '0,1,2,0,1,2,0,1,2',
+    'got ' + grundySequence.join(','));
+
+  // Nim heap Grundy values are just the heap sizes.
+  var heapSizes = [];
+  for (var n = 0; n < 6; n++) {
+    heapSizes.push(CGT.math.grundyValue([n], CGT.games.nim.options, new Map()));
+  }
+  assert('Nim single heap Grundy = heap size',
+    heapSizes.join(',') === '0,1,2,3,4,5',
+    'got ' + heapSizes.join(','));
+
+  section('Nim engine');
+  assert('Nim terminal: (0,0,0)', CGT.games.nim.isTerminal([0, 0, 0]));
+  assert('Nim not terminal: (1,0,0)', !CGT.games.nim.isTerminal([1, 0, 0]));
+  assert('Nim xor (3,5,7) = 1', CGT.games.nim.xorValue([3, 5, 7]) === 1);
+  assert('Nim xor (2,2) = 0', CGT.games.nim.xorValue([2, 2]) === 0);
+
+  var normalMove = CGT.games.nim.optimalMove([3, 5, 7]);
+  assert('Nim normal optimal from (3,5,7) lands on xor=0',
+    normalMove && CGT.games.nim.xorValue(normalMove.next) === 0,
+    normalMove ? normalMove.next.join(',') : 'null');
+
+  var normalLose = CGT.games.nim.optimalMove([1, 2, 3]);
+  assert('Nim normal returns a move from losing (1,2,3)',
+    normalLose !== null);
+
+  section('Misère Nim');
+  // (1) losing → any move, game over for player
+  var m1 = CGT.games.nim.optimalMove([1], { convention: 'misere' });
+  assert('Misère (1): any move, resulting in (0)',
+    m1 && m1.next.join(',') === '0',
+    m1 ? m1.next.join(',') : 'null');
+
+  // (2, 1) winning: should move to (0, 1) which is losing misère (1 odd)
+  var m21 = CGT.games.nim.optimalMove([2, 1], { convention: 'misere' });
+  assert('Misère (2,1) → (0,1)',
+    m21 && m21.next.join(',') === '0,1',
+    m21 ? m21.next.join(',') : 'null');
+
+  // (3, 1, 1) winning: should move to (1, 1, 1) which is losing misère (3 odd)
+  var m311 = CGT.games.nim.optimalMove([3, 1, 1], { convention: 'misere' });
+  assert('Misère (3,1,1) → (1,1,1)',
+    m311 && m311.next.join(',') === '1,1,1',
+    m311 ? m311.next.join(',') : 'null');
+
+  // (2, 2) losing misère: any move
+  var m22 = CGT.games.nim.optimalMove([2, 2], { convention: 'misere' });
+  assert('Misère (2,2) returns any move (losing position)',
+    m22 !== null);
+
+  // Fat position with xor != 0 but multi-big: normal Nim strategy
+  var m53 = CGT.games.nim.optimalMove([5, 3], { convention: 'misere' });
+  assert('Misère (5,3) normal-style move to xor=0',
+    m53 && CGT.games.nim.xorValue(m53.next) === 0,
+    m53 ? m53.next.join(',') : 'null');
+
+  section('Summary');
+  summary.className = 'summary ' + (failed === 0 ? 'all-pass' : 'any-fail');
+  summary.textContent = passed + ' passed, ' + failed + ' failed';
+})();
+</script>
+
+</body>
+</html>
