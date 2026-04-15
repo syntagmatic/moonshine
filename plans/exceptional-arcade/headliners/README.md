@@ -106,10 +106,11 @@ These helpers are added *as the headliners need them*, not all upfront.
 ## Phase state
 
 - [x] **Phase 0** — write this plan
-- [ ] **Phase 1** — add Track H to the arcade index, build H1 (Flatland Sections)
-- [ ] **Phase 2** — build H2 (Projection Pluralism), H3 (Golden Fold)
-- [ ] **Phase 3** — build H4 (Viazovska's Tuner), H5 (Particle Fusion)
-- [ ] **Phase 4** — build H6 (Density Climb), audit pass across all six for visual consistency
+- [x] **Phase 1** — add Track H to the arcade index, build H1 (Flatland Sections)
+- [x] **Phase 2** — build H2 (Projection Pluralism), H3 (Golden Fold)
+- [x] **Phase 3** — build H4 (Viazovska's Tuner), H5 (Particle Fusion)
+- [x] **Phase 4** — build H6 (Density Climb) and complete audit pass
+- [ ] **Phase 5 (future)** — optional: more exhibits from the report's remaining principles (multi-plane rotation, Clifford unfolding, genome/music isomorphisms). These live in a notional Track J and are not planned for the first release.
 
 ## Files
 

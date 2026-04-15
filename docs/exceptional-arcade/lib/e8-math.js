@@ -778,11 +778,19 @@
   // and Groups" (3rd ed.), chapter 1 tables, cross-checked against the
   // LMFDB lattice record for the proven-optimal dimensions.
 
+  // Proven-optimal dimensions for general sphere packings (not just lattice):
+  //   dim 1: trivial (any non-overlapping union of unit intervals)
+  //   dim 2: Thue 1890 / Fejes Tóth 1940 — hexagonal packing
+  //   dim 3: Hales 1998 / formally verified 2014 — Kepler's conjecture (FCC)
+  //   dim 8: Viazovska 2016 — E₈
+  //   dim 24: Cohn-Kumar-Miller-Radchenko-Viazovska 2017 — Leech lattice
+  // For dim 4, D₄ is proven to be the densest lattice packing (Korkin-Zolotareff
+  // 1877) but whether it is densest among all packings remains open.
   var packingDensities = [
     { dim:  1, best: 1.00000000, cubic: 1.00000000, name: 'ℤ',            proven: true  },
     { dim:  2, best: 0.90689968, cubic: 0.78539816, name: 'A₂ hexagonal', proven: true  },
     { dim:  3, best: 0.74048048, cubic: 0.52359878, name: 'A₃ = D₃ (FCC)', proven: true  },
-    { dim:  4, best: 0.61685028, cubic: 0.30842514, name: 'D₄',           proven: true  },
+    { dim:  4, best: 0.61685028, cubic: 0.30842514, name: 'D₄',           proven: false },
     { dim:  5, best: 0.46525762, cubic: 0.16449341, name: 'D₅',           proven: false },
     { dim:  6, best: 0.37294683, cubic: 0.08074551, name: 'E₆',           proven: false },
     { dim:  7, best: 0.29530478, cubic: 0.03691223, name: 'E₇',           proven: false },
