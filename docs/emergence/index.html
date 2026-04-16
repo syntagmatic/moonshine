@@ -327,10 +327,11 @@ function tri(ctx, x, y, a, r, color) {
 }
 function dot(ctx, x, y, r, color) { ctx.fillStyle = color; ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill(); }
 function line(ctx, x1, y1, x2, y2, color, w) { ctx.strokeStyle = color; ctx.lineWidth = w||1.5; ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke(); }
+function clamp(val, min, max) { return Math.max(min, Math.min(max, val)); }
+function dist(x1, y1, x2, y2) { return Math.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2); }
 
 // 01 flock - a coordinated stream of agents following a curve
 createThumb('flock', (ctx) => {
-  const path = [];
   for (let i = 0; i < 15; i++) {
     const t = i / 14;
     const x = 15 + t * 50;
@@ -346,96 +347,75 @@ createThumb('flock', (ctx) => {
 });
 // 02 ca - Rule 30-style triangular growth
 createThumb('ca', (ctx) => {
-  const size = 5;
-  for (let r = 0; r < 12; r++) {
-    for (let c = 0; c <= r; c++) {
-      const x = 40 + (c - r / 2) * (size + 1);
-      const y = 10 + r * (size + 1);
-      // Pseudo-rule 30 look
-      const on = (r === 0 && c === 0) || (Math.sin(r * r + c * 7) > 0);
-      if (on) {
-        ctx.fillStyle = r > 8 ? C.pattern : C.agent;
-        ctx.fillRect(x, y, size, size);
+  const size = 3;
+  const rows = 20;
+  let row = new Array(rows * 2).fill(0);
+  row[rows] = 1;
+  for (let r = 0; r < rows; r++) {
+    let nextRow = new Array(rows * 2).fill(0);
+    for (let c = 1; c < row.length - 1; c++) {
+      if (row[c]) {
+        const x = 40 + (c - rows) * size;
+        const y = 10 + r * size;
+        ctx.fillStyle = (c + r) % 3 === 0 ? C.pattern : C.agent;
+        ctx.fillRect(x, y, size - 0.5, size - 0.5);
       }
+      // Simplified Rule 30-like logic for visual texture
+      const left = row[c-1], me = row[c], right = row[c+1];
+      nextRow[c] = left ^ (me || right) ? 1 : 0;
     }
+    row = nextRow;
   }
 });
 // 03 rd - Labyrinthine reaction-diffusion stripes
 createThumb('rd', (ctx) => {
-  ctx.strokeStyle = C.pattern;
-  ctx.lineWidth = 5;
-  ctx.lineCap = 'round';
+  ctx.strokeStyle = C.pattern; ctx.lineWidth = 5; ctx.lineCap = 'round';
   ctx.beginPath();
-  // Drawing some organic "brain coral" or stripe patterns
   ctx.moveTo(15, 20); ctx.bezierCurveTo(30, 10, 40, 40, 20, 50);
   ctx.moveTo(40, 15); ctx.bezierCurveTo(60, 5, 70, 40, 50, 45);
   ctx.moveTo(35, 60); ctx.bezierCurveTo(50, 75, 75, 50, 60, 30);
   ctx.stroke();
-  ctx.strokeStyle = '#fff';
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.stroke();
 });
 // 04 traffic - congested circular road
 createThumb('traffic', (ctx) => {
-  ctx.strokeStyle = C.muted;
-  ctx.lineWidth = 6;
-  ctx.beginPath();
-  ctx.arc(40, 40, 28, 0, Math.PI * 2);
-  ctx.stroke();
-  // Normal traffic
+  ctx.strokeStyle = C.muted; ctx.lineWidth = 6;
+  ctx.beginPath(); ctx.arc(40, 40, 28, 0, Math.PI * 2); ctx.stroke();
   for (let a = 0; a < Math.PI * 1.2; a += 0.4) {
-    const x = 40 + Math.cos(a) * 28;
-    const y = 40 + Math.sin(a) * 28;
-    dot(ctx, x, y, 2.5, C.agent);
+    dot(ctx, 40 + Math.cos(a) * 28, 40 + Math.sin(a) * 28, 2.5, C.agent);
   }
-  // The Jam
   for (let a = Math.PI * 1.3; a < Math.PI * 1.8; a += 0.15) {
-    const x = 40 + Math.cos(a) * 28;
-    const y = 40 + Math.sin(a) * 28;
-    dot(ctx, x, y, 3, C.feedback);
+    dot(ctx, 40 + Math.cos(a) * 28, 40 + Math.sin(a) * 28, 3, C.feedback);
   }
 });
 // 05 epidemic - branching transmission tree
 createThumb('epidemic', (ctx) => {
-  const root = [40, 15];
-  const nodes = [root, [25, 35], [55, 35], [15, 55], [35, 55], [50, 55], [70, 55]];
+  const root = [40, 15], nodes = [root, [25, 35], [55, 35], [15, 55], [35, 55], [50, 55], [70, 55]];
   const edges = [[0, 1], [0, 2], [1, 3], [1, 4], [2, 5], [2, 6]];
-  edges.forEach(([a, b]) => {
-    line(ctx, nodes[a][0], nodes[a][1], nodes[b][0], nodes[b][1], C.muted, 1);
-  });
-  nodes.forEach((n, i) => {
-    dot(ctx, n[0], n[1], 3.5, i < 3 ? C.feedback : C.agent);
-  });
+  edges.forEach(([a, b]) => line(ctx, nodes[a][0], nodes[a][1], nodes[b][0], nodes[b][1], C.muted, 1));
+  nodes.forEach((n, i) => dot(ctx, n[0], n[1], 3.5, i < 3 ? C.feedback : C.agent));
 });
 // 06 segregation - clustered blocks
 createThumb('segregation', (ctx) => {
   const s = 8;
-  for (let r = 0; r < 8; r++) {
-    for (let c = 0; c < 8; c++) {
-      const x = 8 + c * s, y = 8 + r * s;
-      // Clustered logic
-      const val = Math.sin(r * 0.6) + Math.cos(c * 0.6);
-      if (Math.abs(val) > 0.2) {
-        ctx.fillStyle = val > 0 ? C.agent : C.feedback;
-        ctx.fillRect(x, y, s - 1, s - 1);
-      }
+  for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+    const val = Math.sin(r * 0.6) + Math.cos(c * 0.6);
+    if (Math.abs(val) > 0.2) {
+      ctx.fillStyle = val > 0 ? C.agent : C.feedback;
+      ctx.fillRect(8 + c * s, 8 + r * s, s - 1, s - 1);
     }
   }
 });
 // 07 predprey - coupled population cycles
 createThumb('predprey', (ctx) => {
   ctx.lineWidth = 2.5;
-  // Prey cycle
-  ctx.strokeStyle = C.agent;
-  ctx.beginPath();
+  ctx.strokeStyle = C.agent; ctx.beginPath();
   for (let x = 5; x < 75; x++) {
     const y = 40 + Math.sin(x / 6) * 20;
     x === 5 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
   }
   ctx.stroke();
-  // Predator cycle (lagging)
-  ctx.strokeStyle = C.feedback;
-  ctx.beginPath();
+  ctx.strokeStyle = C.feedback; ctx.beginPath();
   for (let x = 5; x < 75; x++) {
     const y = 40 + Math.sin(x / 6 - 1.2) * 20;
     x === 5 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
@@ -445,439 +425,645 @@ createThumb('predprey', (ctx) => {
 // 08 sandpile - a toppling grid highlight
 createThumb('sandpile', (ctx) => {
   const s = 12;
-  for (let r = 0; r < 4; r++) {
-    for (let c = 0; c < 4; c++) {
-      const x = 18 + c * (s + 1), y = 18 + r * (s + 1);
-      const intensity = (r === 1 && c === 2) ? 4 : (r + c) % 4;
-      ctx.fillStyle = intensity === 4 ? C.critical : (intensity > 2 ? C.agent : C.muted);
-      ctx.globalAlpha = intensity === 4 ? 1 : 0.4;
-      ctx.fillRect(x, y, s, s);
-      ctx.globalAlpha = 1;
+  for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) {
+    const x = 18 + c * (s + 1), y = 18 + r * (s + 1);
+    const intensity = (r === 1 && c === 2) ? 4 : (r + c) % 4;
+    ctx.fillStyle = intensity === 4 ? C.critical : (intensity > 2 ? C.agent : C.muted);
+    ctx.globalAlpha = intensity === 4 ? 1 : 0.4;
+    ctx.fillRect(x, y, s, s); ctx.globalAlpha = 1;
+  }
+  ctx.strokeStyle = C.feedback; ctx.lineWidth = 2;
+  const cx = 18 + 2 * (s + 1) + s / 2, cy = 18 + 1 * (s + 1) + s / 2;
+  [[0, -1], [0, 1], [1, 0], [-1, 0]].forEach(([dx, dy]) => line(ctx, cx + dx * 4, cy + dy * 4, cx + dx * 12, cy + dy * 12, C.feedback));
+});
+// 09 ants - pheromone trail convergence
+createThumb('ants', (ctx) => {
+  dot(ctx, 15, 15, 5, C.muted); dot(ctx, 65, 65, 5, C.critical);
+  ctx.strokeStyle = C.pattern; ctx.lineWidth = 6; ctx.globalAlpha = 0.3;
+  ctx.beginPath(); ctx.moveTo(15, 15); ctx.quadraticCurveTo(60, 10, 65, 65); ctx.stroke();
+  ctx.globalAlpha = 1.0;
+  for (let i = 1; i < 8; i++) {
+    const t = i / 8;
+    const x = 15 * (1-t)*(1-t) + 60 * 2 * (1-t) * t + 65 * t * t;
+    const y = 15 * (1-t)*(1-t) + 10 * 2 * (1-t) * t + 65 * t * t;
+    dot(ctx, x, y, 1.8, C.agent);
+  }
+});
+// 10 bubbles - market peak and crash
+createThumb('bubbles', (ctx) => {
+  ctx.strokeStyle = C.feedback; ctx.lineWidth = 2.5;
+  ctx.beginPath(); ctx.moveTo(10, 70); ctx.quadraticCurveTo(40, 65, 55, 15); ctx.lineTo(60, 70); ctx.stroke();
+  ctx.strokeStyle = C.critical;
+  for (let a = 0; a < Math.PI * 2; a += Math.PI / 4) line(ctx, 55 + Math.cos(a) * 4, 15 + Math.sin(a) * 4, 55 + Math.cos(a) * 8, 15 + Math.sin(a) * 8, C.critical, 1);
+});
+// 11 langton - the emergence of the "highway"
+createThumb('langton', (ctx) => {
+  ctx.fillStyle = "#f1f5f9"; ctx.fillRect(5, 5, 70, 70);
+  for (let i = 0; i < 40; i++) {
+    ctx.fillStyle = Math.random() > 0.5 ? C.muted : "#fff";
+    ctx.fillRect(10 + Math.random() * 30, 10 + Math.random() * 30, 4, 4);
+  }
+  ctx.fillStyle = C.pattern;
+  for (let i = 0; i < 8; i++) { ctx.fillRect(30 + i * 5, 30 + i * 5, 4, 4); ctx.fillRect(34 + i * 5, 30 + i * 5, 4, 4); }
+  dot(ctx, 70, 70, 2.5, C.feedback);
+});
+// 12 dla - organic fractal branching
+createThumb('dla', (ctx) => {
+  const grow = (x, y, angle, len, depth) => {
+    if (depth <= 0) return;
+    const x2 = x + Math.cos(angle) * len, y2 = y + Math.sin(angle) * len;
+    line(ctx, x, y, x2, y2, C.pattern, depth * 0.5);
+    grow(x2, y2, angle + 0.5, len * 0.8, depth - 1); grow(x2, y2, angle - 0.7, len * 0.7, depth - 1);
+  };
+  for (let a = 0; a < Math.PI * 2; a += Math.PI / 3) grow(40, 40, a, 12, 5);
+});
+// 13 fire - burning front on a hex grid
+createThumb('fire', (ctx) => {
+  const r = 7;
+  const dx = r * 1.5;
+  const dy = r * Math.sqrt(3);
+  for (let i = 0; i < 5; i++) {
+    for (let j = 0; j < 5; j++) {
+      const x = 12 + i * dx;
+      const y = 12 + j * dy + (i % 2) * (dy / 2);
+      // Diagonal fire front
+      const state = (i + j);
+      ctx.fillStyle = state < 3 ? "#cbd5e1" : (state < 5 ? C.feedback : C.agent);
+      ctx.beginPath();
+      for (let k = 0; k < 6; k++) {
+        const a = k * Math.PI / 3;
+        const px = x + Math.cos(a) * (r - 1);
+        const py = y + Math.sin(a) * (r - 1);
+        k === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+      }
+      ctx.fill();
     }
   }
-  // Explosion arrows
-  ctx.strokeStyle = C.feedback;
-  ctx.lineWidth = 2;
-  const cx = 18 + 2 * (s + 1) + s / 2, cy = 18 + 1 * (s + 1) + s / 2;
-  [[0, -1], [0, 1], [1, 0], [-1, 0]].forEach(([dx, dy]) => {
-    line(ctx, cx + dx * 4, cy + dy * 4, cx + dx * 12, cy + dy * 12, C.feedback);
-  });
 });
-// 09 ants - path between two dots
-createThumb('ants', (ctx) => {
-  dot(ctx, 12, 15, 6, C.pattern); dot(ctx, 68, 65, 6, C.pattern);
-  for (let i=1; i<8; i++) {
-    const t = i/8; dot(ctx, 12 + t*56 + Math.sin(t*5)*4, 15 + t*50, 2, C.agent);
-  }
-});
-// 10 bubbles - rising circles
-createThumb('bubbles', (ctx) => {
-  ctx.strokeStyle = C.feedback; ctx.lineWidth = 1.5;
-  [[20,60,4],[30,45,6],[45,55,5],[55,30,8],[35,18,7],[60,15,4]].forEach(([x,y,r]) => {
-    ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.stroke();
-  });
-});
-// 11 langton - grid with highlighted path
-createThumb('langton', (ctx) => {
-  ctx.strokeStyle = C.muted; ctx.lineWidth = 0.5;
-  for (let i=0; i<=8; i++) { line(ctx, 8+i*8, 8, 8+i*8, 72, C.muted, 0.5); line(ctx, 8, 8+i*8, 72, 8+i*8, C.muted, 0.5); }
-  const path = [[2,2],[3,2],[3,3],[4,3],[4,4],[4,5],[5,5],[5,6]];
-  path.forEach(([c,r]) => { ctx.fillStyle = C.pattern; ctx.fillRect(8+c*8, 8+r*8, 8, 8); });
-  dot(ctx, 8+5*8+4, 8+6*8+4, 2, C.feedback);
-});
-// 12 dla - branching tree
-createThumb('dla', (ctx) => {
-  ctx.strokeStyle = C.pattern; ctx.lineWidth = 1.5;
-  const branch = (x, y, a, len, depth) => {
-    if (depth === 0) return;
-    const x2 = x + Math.cos(a)*len, y2 = y + Math.sin(a)*len;
-    line(ctx, x, y, x2, y2, C.pattern, 1.5);
-    branch(x2, y2, a - 0.5, len*0.75, depth-1);
-    branch(x2, y2, a + 0.5, len*0.75, depth-1);
-  };
-  branch(40, 72, -Math.PI/2, 14, 4);
-});
-// 13 fire - hex cells with burning
-createThumb('fire', (ctx) => {
-  const colors = [C.agent, C.agent, C.feedback, C.agent, C.critical, C.agent, C.feedback, C.agent, C.agent];
-  for (let i=0; i<9; i++) {
-    const x = 15 + (i%3)*22, y = 15 + Math.floor(i/3)*22;
-    ctx.fillStyle = colors[i];
-    ctx.beginPath();
-    for (let k=0; k<6; k++) { const a = k*Math.PI/3; const px = x+Math.cos(a)*9, py = y+Math.sin(a)*9; k===0?ctx.moveTo(px,py):ctx.lineTo(px,py); }
-    ctx.closePath(); ctx.fill();
-  }
-});
-// 14 slime - branching network
+// 14 slime - optimized resource network
 createThumb('slime', (ctx) => {
-  const nodes = [[40,40],[15,20],[65,15],[70,45],[55,70],[20,60],[40,15]];
-  const edges = [[0,1],[0,2],[0,3],[0,4],[0,5],[0,6],[1,6],[3,4]];
-  edges.forEach(([a,b]) => line(ctx, nodes[a][0], nodes[a][1], nodes[b][0], nodes[b][1], C.rule, 1.5));
-  nodes.forEach(n => dot(ctx, n[0], n[1], 3, C.pattern));
+  const points = [[20, 20], [60, 20], [20, 60], [60, 60], [40, 40]];
+  // Thick "veins"
+  ctx.strokeStyle = C.rule;
+  ctx.lineCap = 'round';
+  points.forEach(p => {
+    ctx.lineWidth = 6; ctx.globalAlpha = 0.15;
+    line(ctx, 40, 40, p[0], p[1], C.rule);
+    ctx.lineWidth = 2; ctx.globalAlpha = 1.0;
+    line(ctx, 40, 40, p[0], p[1], C.rule);
+  });
+  points.forEach(p => dot(ctx, p[0], p[1], 4, C.pattern));
 });
-// 15 wave - interference rings
+// 15 wave - 2D interference field
 createThumb('wave', (ctx) => {
-  ctx.strokeStyle = C.pattern; ctx.lineWidth = 1;
-  [25, 55].forEach(cx => {
-    for (let r=4; r<=24; r+=5) { ctx.beginPath(); ctx.arc(cx, 40, r, 0, Math.PI*2); ctx.stroke(); }
-  });
+  const step = 4;
+  for (let y = 0; y < 80; y += step) {
+    for (let x = 0; x < 80; x += step) {
+      const d1 = Math.sqrt((x - 25) ** 2 + (y - 40) ** 2);
+      const d2 = Math.sqrt((x - 55) ** 2 + (y - 40) ** 2);
+      const v = Math.sin(d1 * 0.4) + Math.sin(d2 * 0.4);
+      ctx.fillStyle = C.pattern;
+      ctx.globalAlpha = Math.abs(v) / 2;
+      ctx.fillRect(x, y, step, step);
+    }
+  }
+  ctx.globalAlpha = 1;
+  dot(ctx, 25, 40, 2, "#fff");
+  dot(ctx, 55, 40, 2, "#fff");
 });
-// 16 genetic - bar chart
+// 16 genetic - fitness landscape climb
 createThumb('genetic', (ctx) => {
-  const h = [30, 45, 20, 60, 35, 50, 25, 55];
-  h.forEach((v, i) => { ctx.fillStyle = (i===3) ? C.critical : C.agent; ctx.fillRect(8 + i*9, 72-v, 7, v); });
+  // Landscape contours
+  ctx.strokeStyle = C.muted; ctx.globalAlpha = 0.2;
+  for (let r = 8; r < 40; r += 8) {
+    ctx.beginPath(); ctx.arc(40, 30, r, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(25, 55, r * 0.7, 0, Math.PI * 2); ctx.stroke();
+  }
+  // Populations climbing
+  ctx.globalAlpha = 1.0;
+  for (let i = 0; i < 20; i++) {
+    const t = Math.random();
+    const peak = Math.random() > 0.3 ? [40, 30] : [25, 55];
+    const r = (1 - t) * 25;
+    const a = Math.random() * Math.PI * 2;
+    const x = peak[0] + Math.cos(a) * r, y = peak[1] + Math.sin(a) * r;
+    dot(ctx, x, y, 1.5, C.agent);
+    if (t > 0.8) dot(ctx, x, y, 2.5, C.critical); // "Fittest"
+  }
+  // Mutation "noise"
+  for (let i = 0; i < 5; i++) dot(ctx, Math.random()*80, Math.random()*80, 1, C.muted);
 });
-// 17 chaos - Lorenz butterfly: two spiraling lobes with two close start dots that will diverge
+// 17 chaos - the Lorenz butterfly
 createThumb('chaos', (ctx) => {
-  ctx.strokeStyle = C.pattern; ctx.lineWidth = 1.1;
-  // Left lobe (spiral inward)
+  let x = 0.1, y = 0, z = 0;
+  const s = 10, r = 28, b = 8/3;
+  const dt = 0.015;
+  ctx.strokeStyle = C.pattern;
+  ctx.lineWidth = 0.8;
   ctx.beginPath();
-  for (let t = 0; t < 72; t++) {
-    const a = -Math.PI / 2 + (t / 72) * Math.PI * 2.4;
-    const r = 18 - t * 0.20;
-    const x = 28 + Math.cos(a) * r;
-    const y = 42 + Math.sin(a) * r * 0.75;
-    t === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  for (let i = 0; i < 1200; i++) {
+    const dx = s * (y - x);
+    const dy = x * (r - z) - y;
+    const dz = x * y - b * z;
+    x += dx * dt; y += dy * dt; z += dz * dt;
+    // Projection: map (x, z) to (0..80, 0..80)
+    // Lorenz x is roughly -20..20, z is 0..50
+    const px = 40 + x * 1.5;
+    const py = 75 - z * 1.2;
+    i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
   }
   ctx.stroke();
-  // Right lobe (mirrored)
-  ctx.beginPath();
-  for (let t = 0; t < 72; t++) {
-    const a = -Math.PI / 2 - (t / 72) * Math.PI * 2.4;
-    const r = 18 - t * 0.20;
-    const x = 52 - Math.cos(a) * r;
-    const y = 42 + Math.sin(a) * r * 0.75;
-    t === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-  }
-  ctx.stroke();
-  // Two very close starting conditions that would end far apart — the essence of chaos
-  dot(ctx, 39, 42, 1.8, C.critical);
-  dot(ctx, 41, 42, 1.8, C.feedback);
+  dot(ctx, 40, 40, 2, C.critical); // Initial condition seed
 });
-// 18 walk - smooth meandering diffusive walk (free curve through space)
+// 18 walk - meandering diffusion history
 createThumb('walk', (ctx) => {
-  const path = [[40,40],[44,36],[48,40],[44,46],[40,50],[46,54],[52,50],[58,54],[54,60],[46,62],[38,58],[32,62],[26,56],[30,50],[24,44]];
-  ctx.strokeStyle = C.agent; ctx.lineWidth = 1.5;
+  let x = 40, y = 40;
   ctx.beginPath();
-  path.forEach(([x,y], i) => i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y));
+  ctx.moveTo(x, y);
+  ctx.strokeStyle = C.agent;
+  ctx.lineWidth = 2;
+  for (let i = 0; i < 30; i++) {
+    x += (Math.random() - 0.5) * 15;
+    y += (Math.random() - 0.5) * 15;
+    x = clamp(x, 10, 70); y = clamp(y, 10, 70);
+    ctx.lineTo(x, y);
+  }
   ctx.stroke();
-  // Small step dots along the path
-  path.forEach(([x,y], i) => {
-    if (i === 0) dot(ctx, x, y, 2.2, C.critical);
-    else if (i === path.length - 1) dot(ctx, x, y, 2.2, C.feedback);
-    else dot(ctx, x, y, 1, C.agent);
-  });
+  dot(ctx, 40, 40, 3, C.critical);
+  dot(ctx, x, y, 3, C.feedback);
 });
-// 19 vortex - two counter-rotating spirals
+// 19 vortex - von Kármán vortex street
 createThumb('vortex', (ctx) => {
-  ctx.strokeStyle = C.rule; ctx.lineWidth = 1.2;
-  [[25, 30, 1], [55, 50, -1]].forEach(([cx, cy, dir]) => {
+  const obstacleX = 20, obstacleY = 40, r = 6;
+  dot(ctx, obstacleX, obstacleY, r, C.muted);
+  // Alternating vortices
+  for (let i = 0; i < 4; i++) {
+    const vx = 35 + i * 14;
+    const vy = 40 + (i % 2 === 0 ? 10 : -10);
+    const dir = i % 2 === 0 ? 1 : -1;
+    // Spiral vortex
+    ctx.strokeStyle = C.rule; ctx.lineWidth = 1;
     ctx.beginPath();
-    for (let t=0; t<30; t++) { const a = t*0.4*dir; const r = t*0.5; const x = cx+Math.cos(a)*r, y = cy+Math.sin(a)*r; t===0?ctx.moveTo(x,y):ctx.lineTo(x,y); }
+    for (let a = 0; a < Math.PI * 3; a += 0.2) {
+      const radius = a * 1.5;
+      const px = vx + Math.cos(a * dir) * radius;
+      const py = vy + Math.sin(a * dir) * radius;
+      a === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+    }
     ctx.stroke();
-  });
+  }
+  // Streamlines
+  ctx.strokeStyle = C.muted; ctx.globalAlpha = 0.3;
+  for (let sy = 10; sy < 80; sy += 15) {
+    line(ctx, 5, sy, 75, sy + Math.sin(sy) * 5, C.muted, 1);
+  }
+  ctx.globalAlpha = 1.0;
 });
-// 20 opinion - two clusters with boundary
+// 20 opinion - social influence clustering
 createThumb('opinion', (ctx) => {
-  for (let i=0; i<10; i++) dot(ctx, 10 + Math.random()*25, 15 + Math.random()*50, 2.5, C.agent);
-  for (let i=0; i<10; i++) dot(ctx, 48 + Math.random()*25, 15 + Math.random()*50, 2.5, C.feedback);
-  line(ctx, 40, 8, 40, 72, C.critical, 1.5);
-});
-// 21 neural - 3-layer network
-createThumb('neural', (ctx) => {
-  const L = [[15,20],[15,40],[15,60]];
-  const M = [[40,15],[40,35],[40,55],[40,72]];
-  const R = [[65,25],[65,55]];
-  L.forEach(a => M.forEach(b => line(ctx, a[0], a[1], b[0], b[1], C.muted, 0.5)));
-  M.forEach(a => R.forEach(b => line(ctx, a[0], a[1], b[0], b[1], C.muted, 0.5)));
-  [...L, ...M, ...R].forEach(n => dot(ctx, n[0], n[1], 3, C.agent));
-});
-// 22 crystal - hexagonal snowflake
-createThumb('crystal', (ctx) => {
-  ctx.strokeStyle = C.pattern; ctx.lineWidth = 1.5;
-  for (let k=0; k<6; k++) {
-    const a = k*Math.PI/3;
-    line(ctx, 40, 40, 40+Math.cos(a)*25, 40+Math.sin(a)*25, C.pattern, 1.5);
-    const mx = 40+Math.cos(a)*14, my = 40+Math.sin(a)*14;
-    line(ctx, mx, my, mx+Math.cos(a+1)*6, my+Math.sin(a+1)*6, C.pattern, 1);
-    line(ctx, mx, my, mx+Math.cos(a-1)*6, my+Math.sin(a-1)*6, C.pattern, 1);
-  }
-});
-// 23 wasp - hex nest
-createThumb('wasp', (ctx) => {
-  const hex = (x, y, r) => { ctx.beginPath(); for (let k=0; k<6; k++) { const a = k*Math.PI/3 + Math.PI/6; const px = x+Math.cos(a)*r, py = y+Math.sin(a)*r; k===0?ctx.moveTo(px,py):ctx.lineTo(px,py); } ctx.closePath(); };
-  ctx.strokeStyle = C.critical; ctx.lineWidth = 1;
-  const r = 9, dx = r*Math.sqrt(3), dy = r*1.5;
-  for (let row=0; row<4; row++) for (let col=0; col<4; col++) {
-    const x = 12 + col*dx + (row%2)*dx/2, y = 15 + row*dy;
-    hex(x, y, r-1); ctx.stroke();
-  }
-});
-// 24 sorting - sorted bars
-createThumb('sorting', (ctx) => {
-  for (let i=0; i<10; i++) { ctx.fillStyle = C.pattern; ctx.fillRect(8+i*7, 72 - (i+1)*6, 6, (i+1)*6); }
-});
-// 25 lenia - soft blobs
-createThumb('lenia', (ctx) => {
-  [[25, 30, 12], [55, 35, 10], [35, 58, 14]].forEach(([x, y, r]) => {
-    const g = ctx.createRadialGradient(x, y, 0, x, y, r);
-    g.addColorStop(0, C.pattern); g.addColorStop(1, 'rgba(139,92,246,0)');
-    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill();
+  const pts = d3.range(20).map(() => [15 + Math.random() * 50, 15 + Math.random() * 50]);
+  pts.forEach((p, i) => {
+    const color = p[0] < 40 ? C.agent : C.feedback;
+    pts.forEach((other, j) => {
+      if (i < j && dist(p[0], p[1], other[0], other[1]) < 15) {
+        line(ctx, p[0], p[1], other[0], other[1], C.muted, 0.5);
+      }
+    });
+    dot(ctx, p[0], p[1], 3, color);
   });
 });
-// 26 termite - mound silhouette with a deterministic lattice of inner chambers + a few termites outside
+// 21 neural - stylized signal flow
+createThumb('neural', (ctx) => {
+  const layers = [3, 4, 2];
+  const nodes = [];
+  layers.forEach((count, i) => {
+    const x = 20 + i * 20;
+    for (let j = 0; j < count; j++) {
+      const y = 40 + (j - (count - 1) / 2) * 15;
+      nodes.push({ x, y, layer: i });
+    }
+  });
+  nodes.forEach(n => {
+    nodes.filter(other => other.layer === n.layer + 1).forEach(other => {
+      line(ctx, n.x, n.y, other.x, other.y, C.muted, 0.5);
+      if (Math.random() > 0.6) line(ctx, n.x, n.y, other.x, other.y, C.agent, 1.2);
+    });
+  });
+  nodes.forEach(n => dot(ctx, n.x, n.y, 3, C.agent));
+});
+// 22 crystal - branching hexagonal symmetry
+createThumb('crystal', (ctx) => {
+  ctx.strokeStyle = C.pattern;
+  ctx.lineWidth = 2;
+  const cx = 40, cy = 40;
+  for (let i = 0; i < 6; i++) {
+    const a = i * Math.PI / 3;
+    const x = cx + Math.cos(a) * 30;
+    const y = cy + Math.sin(a) * 30;
+    line(ctx, cx, cy, x, y, C.pattern, 2);
+    for (let t = 0.4; t < 1; t += 0.3) {
+      const px = cx + (x - cx) * t;
+      const py = cy + (y - cy) * t;
+      const sa = 0.8;
+      line(ctx, px, py, px + Math.cos(a + sa) * 8, py + Math.sin(a + sa) * 8, C.pattern, 1.2);
+      line(ctx, px, py, px + Math.cos(a - sa) * 8, py + Math.sin(a - sa) * 8, C.pattern, 1.2);
+    }
+  }
+});
+// 23 wasp - tiered hexagonal nest structure
+createThumb('wasp', (ctx) => {
+  const hex = (x, y, r, color) => {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    for (let k = 0; k < 6; k++) {
+      const a = k * Math.PI / 3 + Math.PI / 6;
+      ctx.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r);
+    }
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = "#fff"; ctx.lineWidth = 0.5; ctx.stroke();
+  };
+  const r = 8;
+  const dy = r * 1.5;
+  const dx = r * Math.sqrt(3);
+  for (let i = 0; i < 3; i++) {
+    for (let j = 0; j < 3; j++) {
+      const x = 20 + i * dx + (j % 2) * dx / 2;
+      const y = 20 + j * dy;
+      hex(x, y, r, i + j > 2 ? C.critical : C.muted);
+    }
+  }
+});
+// 24 sorting - parallel comparator network
+createThumb('sorting', (ctx) => {
+  const wires = 5;
+  const dy = 12;
+  const x0 = 10, x1 = 70;
+  for (let i = 0; i < wires; i++) {
+    line(ctx, x0, 15 + i * dy, x1, 15 + i * dy, C.muted, 1);
+  }
+  const comps = [[0, 1, 20], [2, 3, 25], [1, 2, 35], [0, 1, 50], [3, 4, 45], [2, 3, 55]];
+  comps.forEach(([w1, w2, x]) => {
+    line(ctx, x, 15 + w1 * dy, x, 15 + w2 * dy, C.pattern, 2);
+    dot(ctx, x, 15 + w1 * dy, 2, C.pattern);
+    dot(ctx, x, 15 + w2 * dy, 2, C.pattern);
+  });
+});
+// 25 lenia - organic, multi-lobed soft creature
+createThumb('lenia', (ctx) => {
+  const cx = 40, cy = 40;
+  const lobes = 5;
+  ctx.beginPath();
+  for (let a = 0; a < Math.PI * 2; a += 0.1) {
+    const r = 22 + Math.sin(a * lobes) * 6;
+    const x = cx + Math.cos(a) * r;
+    const y = cy + Math.sin(a) * r;
+    a === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+  const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, 30);
+  g.addColorStop(0, C.pattern);
+  g.addColorStop(1, "rgba(139, 92, 246, 0.2)");
+  ctx.fillStyle = g;
+  ctx.fill();
+  // Core highlight
+  dot(ctx, cx, cy, 4, "#fff");
+});
+// 26 termite - complex branching mound structure
 createThumb('termite', (ctx) => {
   ctx.fillStyle = C.muted;
-  ctx.beginPath(); ctx.moveTo(15, 68); ctx.quadraticCurveTo(40, 8, 65, 68); ctx.closePath(); ctx.fill();
-  // Inner chamber lattice (pattern that emerges from stigmergy)
-  const chambers = [[40,22],[32,34],[48,34],[25,46],[40,46],[55,46],[30,58],[40,58],[50,58]];
-  chambers.forEach(([x,y]) => dot(ctx, x, y, 2, C.pattern));
-  // Individual termite agents outside the mound
-  dot(ctx, 10, 58, 1.6, C.agent);
-  dot(ctx, 70, 52, 1.6, C.agent);
+  ctx.beginPath();
+  ctx.moveTo(10, 75);
+  ctx.bezierCurveTo(20, 10, 60, 10, 70, 75);
+  ctx.fill();
+  // Internal tunnels
+  ctx.strokeStyle = "#fff";
+  ctx.lineWidth = 2;
+  ctx.globalAlpha = 0.4;
+  ctx.beginPath();
+  ctx.moveTo(40, 75); ctx.lineTo(40, 30);
+  ctx.moveTo(40, 50); ctx.lineTo(25, 40);
+  ctx.moveTo(40, 55); ctx.lineTo(55, 45);
+  ctx.stroke();
+  ctx.globalAlpha = 1.0;
+  // Emerging pattern dots
+  [[35,35],[45,25],[30,55],[50,45]].forEach(p => dot(ctx, p[0], p[1], 2.5, C.pattern));
 });
-// 27 sync - row of oscillators in phase
+// 27 sync - collective firefly flashing
 createThumb('sync', (ctx) => {
-  for (let i=0; i<6; i++) {
-    const phase = i===5 ? 0.3 : 0;
-    dot(ctx, 14 + i*11, 40, 4, C.pattern);
-    dot(ctx, 14 + i*11, 40 - 12 + phase*10, 1.5, C.feedback);
-  }
-  ctx.strokeStyle = C.muted; ctx.lineWidth = 0.5;
-  for (let i=0; i<6; i++) { ctx.beginPath(); ctx.arc(14+i*11, 40, 10, 0, Math.PI*2); ctx.stroke(); }
-});
-// 28 bz - spiral wave
-createThumb('bz', (ctx) => {
-  ctx.strokeStyle = C.pattern; ctx.lineWidth = 2.5;
-  ctx.beginPath();
-  for (let t=0; t<60; t++) { const a = t*0.3; const r = t*0.5; const x = 40+Math.cos(a)*r, y = 40+Math.sin(a)*r; t===0?ctx.moveTo(x,y):ctx.lineTo(x,y); }
-  ctx.stroke();
-});
-// 29 morph - gradient rings
-createThumb('morph', (ctx) => {
-  const g = ctx.createRadialGradient(40, 40, 5, 40, 40, 35);
-  g.addColorStop(0, C.critical); g.addColorStop(0.5, C.pattern); g.addColorStop(1, C.agent);
-  ctx.fillStyle = g; ctx.fillRect(0, 0, 80, 80);
-});
-// 30 swarm - wedge/V-formation pointing up-right (clearly organized, direction-aligned)
-createThumb('swarm', (ctx) => {
-  // Lead particle at front, rest fanning back in a V
-  const pts = [[60,18],[52,26],[44,34],[36,42],[28,50],[20,58],[52,14],[44,22],[36,30],[28,38],[60,30],[52,38],[44,46]];
-  pts.forEach(([x,y]) => tri(ctx, x, y, -Math.PI / 6, 3.8, C.agent));
-});
-// 31 network - hub and spoke
-createThumb('network', (ctx) => {
-  const spokes = 8;
-  for (let i=0; i<spokes; i++) {
-    const a = i*2*Math.PI/spokes; const x = 40+Math.cos(a)*28, y = 40+Math.sin(a)*28;
-    line(ctx, 40, 40, x, y, C.muted, 1);
-    dot(ctx, x, y, 2.5, C.agent);
-  }
-  dot(ctx, 40, 40, 6, C.feedback);
-});
-// 32 glass - random arrows
-createThumb('glass', (ctx) => {
-  for (let r=0; r<4; r++) for (let c=0; c<4; c++) {
-    const a = ((r*7 + c*13) % 8) * Math.PI/4;
-    tri(ctx, 15 + c*17, 15 + r*17, a, 5, C.critical);
-  }
-});
-// 33 spatial - chase wave
-createThumb('spatial', (ctx) => {
-  ctx.strokeStyle = C.agent; ctx.lineWidth = 2;
-  ctx.beginPath(); for (let x=0; x<80; x++) { const y = 30 + Math.sin(x/10)*8; x===0?ctx.moveTo(x,y):ctx.lineTo(x,y); } ctx.stroke();
-  ctx.strokeStyle = C.feedback; ctx.beginPath();
-  for (let x=0; x<80; x++) { const y = 52 + Math.sin(x/10 - 1)*8; x===0?ctx.moveTo(x,y):ctx.lineTo(x,y); } ctx.stroke();
-});
-// 34 saw - self-avoiding walk on an explicit lattice (grid-constrained path)
-createThumb('saw', (ctx) => {
-  // Faint grid backdrop to make the lattice explicit
-  ctx.strokeStyle = C.muted; ctx.lineWidth = 0.4; ctx.globalAlpha = 0.35;
-  for (let i = 10; i <= 70; i += 10) {
-    ctx.beginPath(); ctx.moveTo(i, 10); ctx.lineTo(i, 70); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(10, i); ctx.lineTo(70, i); ctx.stroke();
-  }
-  ctx.globalAlpha = 1;
-  // Self-avoiding path that never revisits a cell
-  const path = [[20,60],[20,50],[30,50],[30,60],[40,60],[40,40],[30,40],[30,30],[50,30],[50,50],[60,50],[60,20],[40,20]];
-  ctx.strokeStyle = C.pattern; ctx.lineWidth = 2.2;
-  ctx.beginPath();
-  path.forEach(([x,y], i) => i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y));
-  ctx.stroke();
-  dot(ctx, path[0][0], path[0][1], 2.4, C.critical);
-  dot(ctx, path[path.length-1][0], path[path.length-1][1], 2.4, C.feedback);
-});
-// 35 majority - two domains
-createThumb('majority', (ctx) => {
-  for (let r=0; r<8; r++) for (let c=0; c<8; c++) {
-    const left = c < 4 + Math.sin(r*0.8)*1.5;
-    ctx.fillStyle = left ? C.agent : C.feedback;
-    ctx.fillRect(8 + c*8, 8 + r*8, 7, 7);
-  }
-});
-// 36 ffire - percolation tree
-createThumb('ffire', (ctx) => {
-  ctx.strokeStyle = C.feedback; ctx.lineWidth = 1.5;
-  const recur = (x, y, a, len, d) => {
-    if (d === 0) return;
-    const x2 = x+Math.cos(a)*len, y2 = y+Math.sin(a)*len;
-    line(ctx, x, y, x2, y2, C.feedback, 1.5);
-    recur(x2, y2, a-0.6, len*0.7, d-1);
-    recur(x2, y2, a+0.6, len*0.7, d-1);
-  };
-  recur(40, 72, -Math.PI/2, 16, 4);
-});
-// 37 ratchet - asymmetric sawtooth potential with a particle being pumped along it
-createThumb('ratchet', (ctx) => {
-  // Sawtooth landscape (slow ramp up, steep drop — asymmetric)
-  ctx.strokeStyle = C.muted; ctx.lineWidth = 1.2; ctx.fillStyle = C.muted; ctx.globalAlpha = 0.15;
-  ctx.beginPath();
-  ctx.moveTo(5, 72); ctx.lineTo(5, 56);
-  for (let i = 0; i < 5; i++) {
-    const x0 = 5 + i * 14;
-    ctx.lineTo(x0 + 12, 34);
-    ctx.lineTo(x0 + 14, 56);
-  }
-  ctx.lineTo(75, 72); ctx.closePath(); ctx.fill();
-  ctx.globalAlpha = 1;
-  // Draw only the landscape surface line on top
-  ctx.beginPath(); ctx.moveTo(5, 56);
-  for (let i = 0; i < 5; i++) {
-    const x0 = 5 + i * 14;
-    ctx.lineTo(x0 + 12, 34);
-    ctx.lineTo(x0 + 14, 56);
-  }
-  ctx.stroke();
-  // Particles sitting in successive valleys (ghosted past positions + current)
-  dot(ctx, 19, 52, 2.5, C.agent);
-  ctx.globalAlpha = 0.4; dot(ctx, 33, 52, 2.5, C.agent); ctx.globalAlpha = 1;
-  ctx.globalAlpha = 0.15; dot(ctx, 47, 52, 2.5, C.agent); ctx.globalAlpha = 1;
-  // Directional motion arrow above — net drift from random thermal noise
-  ctx.strokeStyle = C.feedback; ctx.lineWidth = 1.5;
-  ctx.beginPath(); ctx.moveTo(14, 18); ctx.lineTo(56, 18); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(56, 18); ctx.lineTo(52, 15); ctx.lineTo(52, 21); ctx.closePath();
-  ctx.fillStyle = C.feedback; ctx.fill();
-});
-// 38 tumor - branching growth
-createThumb('tumor', (ctx) => {
-  ctx.fillStyle = C.feedback;
-  [[40,40,10],[30,28,6],[52,32,7],[55,55,6],[28,52,5],[20,35,4],[60,45,5]].forEach(([x,y,r]) => dot(ctx, x, y, r, C.feedback));
-});
-// 39 fish - tight regular rectangular school (in contrast to the irregular flock and V swarm)
-createThumb('fish', (ctx) => {
-  for (let r = 0; r < 4; r++) for (let c = 0; c < 5; c++) {
-    tri(ctx, 18 + c * 11, 20 + r * 13, 0, 3.4, C.agent);
-  }
-});
-// 40 phase - two-tone sharp boundary
-createThumb('phase', (ctx) => {
-  ctx.fillStyle = C.agent; ctx.fillRect(0, 0, 80, 40);
-  ctx.fillStyle = C.feedback; ctx.fillRect(0, 40, 80, 40);
-  line(ctx, 0, 40, 80, 40, C.critical, 2);
-});
-// 41 river - drainage tree
-createThumb('river', (ctx) => {
-  ctx.strokeStyle = C.agent; ctx.lineWidth = 1;
-  line(ctx, 40, 75, 40, 50, C.agent, 2.5);
-  line(ctx, 40, 50, 25, 30, C.agent, 2);
-  line(ctx, 40, 50, 58, 35, C.agent, 2);
-  line(ctx, 25, 30, 15, 18, C.agent, 1.2);
-  line(ctx, 25, 30, 30, 12, C.agent, 1.2);
-  line(ctx, 58, 35, 52, 15, C.agent, 1.2);
-  line(ctx, 58, 35, 70, 20, C.agent, 1.2);
-});
-// 42 trails - footpath network
-createThumb('trails', (ctx) => {
-  const nodes = [[15,15],[65,15],[15,65],[65,65],[40,40]];
-  const edges = [[0,4],[1,4],[2,4],[3,4],[0,1],[2,3]];
-  edges.forEach(([a,b]) => line(ctx, nodes[a][0], nodes[a][1], nodes[b][0], nodes[b][1], C.rule, 2));
-  nodes.forEach(n => dot(ctx, n[0], n[1], 3, C.pattern));
-});
-// 43 galaxy - spiral arms
-createThumb('galaxy', (ctx) => {
-  for (let arm=0; arm<2; arm++) {
-    for (let t=0; t<30; t++) {
-      const a = t*0.25 + arm*Math.PI; const r = 2 + t*1.1;
-      dot(ctx, 40+Math.cos(a)*r, 40+Math.sin(a)*r, 1.2, C.pattern);
+  const points = [[20,30],[40,25],[60,35],[30,55],[50,60],[15,65]];
+  points.forEach((p, i) => {
+    const active = i < 4;
+    if (active) {
+      const g = ctx.createRadialGradient(p[0], p[1], 0, p[0], p[1], 12);
+      g.addColorStop(0, C.feedback); g.addColorStop(1, "transparent");
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(p[0], p[1], 12, 0, Math.PI*2); ctx.fill();
     }
-  }
-  dot(ctx, 40, 40, 4, C.critical);
-});
-// 44 immune - Y-antibodies around target
-createThumb('immune', (ctx) => {
-  dot(ctx, 40, 40, 8, C.feedback);
-  const arms = [[15,15],[65,15],[15,65],[65,65]];
-  arms.forEach(([x,y]) => {
-    line(ctx, x, y, x + (40-x)*0.3, y + (40-y)*0.3, C.agent, 1.5);
-    line(ctx, x, y, x-4, y-4, C.agent, 1.5);
-    line(ctx, x, y, x+4, y-4, C.agent, 1.5);
+    dot(ctx, p[0], p[1], 3, active ? "#fff" : C.muted);
   });
 });
-// 45 coral - branching coral
-createThumb('coral', (ctx) => {
-  ctx.strokeStyle = C.pattern; ctx.lineWidth = 2;
-  line(ctx, 40, 75, 40, 45, C.pattern, 2.5);
-  line(ctx, 40, 60, 25, 40, C.pattern, 2);
-  line(ctx, 40, 55, 55, 35, C.pattern, 2);
-  line(ctx, 25, 40, 15, 22, C.pattern, 1.5);
-  line(ctx, 25, 40, 30, 20, C.pattern, 1.5);
-  line(ctx, 55, 35, 65, 20, C.pattern, 1.5);
-  line(ctx, 40, 45, 42, 18, C.pattern, 1.5);
+// 28 bz - rotating chemical spiral
+createThumb('bz', (ctx) => {
+  const cx = 40, cy = 40;
+  for (let phase = 0; phase < 3; phase++) {
+    ctx.strokeStyle = C.pattern;
+    ctx.lineWidth = 4;
+    ctx.globalAlpha = 1 - (phase * 0.3);
+    ctx.beginPath();
+    const startA = phase * 0.5;
+    for (let a = 0; a < Math.PI * 4; a += 0.1) {
+      const r = a * 3;
+      const px = cx + Math.cos(a + startA) * r;
+      const py = cy + Math.sin(a + startA) * r;
+      if (r > 38) break;
+      a === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+    }
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1.0;
+  dot(ctx, cx, cy, 3, C.critical);
 });
-// 46 lightning - jagged bolt
-createThumb('lightning', (ctx) => {
-  ctx.strokeStyle = C.critical; ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.moveTo(40, 8);
-  ctx.lineTo(30, 25); ctx.lineTo(45, 35); ctx.lineTo(28, 50); ctx.lineTo(42, 60); ctx.lineTo(30, 72);
-  ctx.stroke();
-  line(ctx, 45, 35, 58, 30, C.critical, 1);
-  line(ctx, 28, 50, 15, 55, C.critical, 1);
+// 29 morph - developmental chemical gradient
+createThumb('morph', (ctx) => {
+  const g = ctx.createLinearGradient(0, 0, 80, 80);
+  g.addColorStop(0, C.critical);
+  g.addColorStop(0.5, C.pattern);
+  g.addColorStop(1, C.agent);
+  ctx.fillStyle = g;
+  ctx.fillRect(5, 5, 70, 70);
+  // Developing "cells"
+  for (let i = 0; i < 12; i++) {
+    const x = 15 + Math.random() * 50, y = 15 + Math.random() * 50;
+    dot(ctx, x, y, 3, "#fff");
+  }
 });
-// 47 audio - sound waves
-createThumb('audio', (ctx) => {
-  ctx.strokeStyle = C.rule; ctx.lineWidth = 1.5;
+// 30 swarm - self-assembling circular formation
+createThumb('swarm', (ctx) => {
+  ctx.strokeStyle = C.muted;
+  ctx.setLineDash([2, 2]);
+  ctx.beginPath(); ctx.arc(40, 40, 25, 0, Math.PI * 2); ctx.stroke();
+  ctx.setLineDash([]);
+  for (let a = 0; a < Math.PI * 2; a += Math.PI / 6) {
+    const x = 40 + Math.cos(a) * 25;
+    const y = 40 + Math.sin(a) * 25;
+    tri(ctx, x, y, a + Math.PI / 2, 4, C.agent);
+  }
+});
+// 31 network - preferential attachment hub
+createThumb('network', (ctx) => {
+  const hub = [40, 40];
+  const others = d3.range(12).map(i => {
+    const a = (i / 12) * Math.PI * 2;
+    const r = 25 + Math.random() * 10;
+    return [40 + Math.cos(a) * r, 40 + Math.sin(a) * r];
+  });
+  ctx.strokeStyle = C.muted;
+  others.forEach(p => line(ctx, hub[0], hub[1], p[0], p[1], C.muted, 0.8));
+  others.forEach(p => dot(ctx, p[0], p[1], 2.5, C.agent));
+  dot(ctx, hub[0], hub[1], 6, C.feedback);
+});
+// 32 glass - frustrated alignment (up/down spins)
+createThumb('glass', (ctx) => {
+  const s = 14;
+  for (let r = 0; r < 4; r++) {
+    for (let c = 0; c < 4; c++) {
+      const x = 18 + c * 15, y = 18 + r * 15;
+      const up = (r + c) % 2 === 0;
+      ctx.fillStyle = up ? C.agent : C.critical;
+      ctx.beginPath();
+      if (up) { // Up arrow
+        ctx.moveTo(x, y-5); ctx.lineTo(x+4, y+2); ctx.lineTo(x-4, y+2);
+      } else { // Down arrow
+        ctx.moveTo(x, y+5); ctx.lineTo(x+4, y-2); ctx.lineTo(x-4, y-2);
+      }
+      ctx.fill();
+    }
+  }
+});
+// 33 spatial - pursuit-escape traveling waves
+createThumb('spatial', (ctx) => {
+  // Waves of prey (green-ish/blue) followed by predators (red)
+  for (let i = 0; i < 3; i++) {
+    const ox = i * 25 - 10;
+    // Prey front
+    ctx.fillStyle = C.agent;
+    ctx.beginPath();
+    ctx.moveTo(ox, 10);
+    ctx.bezierCurveTo(ox + 10, 10, ox + 15, 40, ox + 10, 70);
+    ctx.lineTo(ox + 5, 70);
+    ctx.bezierCurveTo(ox + 10, 40, ox + 5, 10, ox, 10);
+    ctx.fill();
+    // Predator wave following
+    ctx.fillStyle = C.feedback;
+    ctx.beginPath();
+    const px = ox - 8;
+    ctx.moveTo(px, 10);
+    ctx.bezierCurveTo(px + 8, 10, px + 12, 40, px + 8, 70);
+    ctx.lineTo(px + 4, 70);
+    ctx.bezierCurveTo(px + 8, 40, px + 4, 10, px, 10);
+    ctx.fill();
+  }
+  // Boundary line
+  ctx.strokeStyle = C.muted; ctx.lineWidth = 1;
+  line(ctx, 5, 40, 75, 40, C.muted, 0.5);
+});
+// 34 saw - self-avoiding polymer chain
+createThumb('saw', (ctx) => {
+  const path = [[15,65],[15,45],[30,45],[30,65],[50,65],[50,30],[30,30],[30,15],[65,15],[65,55],[75,55]];
+  ctx.strokeStyle = C.pattern;
+  ctx.lineWidth = 3;
+  ctx.lineJoin = 'round';
   ctx.beginPath();
-  for (let x=0; x<80; x++) { const env = Math.sin(x/80*Math.PI); const y = 40 + Math.sin(x/3)*env*25; x===0?ctx.moveTo(x,y):ctx.lineTo(x,y); }
+  path.forEach((p, i) => i === 0 ? ctx.moveTo(p[0], p[1]) : ctx.lineTo(p[0], p[1]));
+  ctx.stroke();
+  dot(ctx, 15, 65, 4, C.critical);
+});
+// 35 majority - boundary smoothing (soap film)
+createThumb('majority', (ctx) => {
+  ctx.fillStyle = C.agent;
+  ctx.fillRect(5, 5, 70, 70);
+  ctx.fillStyle = C.feedback;
+  ctx.beginPath();
+  ctx.moveTo(5, 40);
+  ctx.bezierCurveTo(30, 30, 50, 50, 75, 40);
+  ctx.lineTo(75, 75); ctx.lineTo(5, 75);
+  ctx.fill();
+  ctx.strokeStyle = "#fff"; ctx.lineWidth = 2;
   ctx.stroke();
 });
-// 48 excitable - spiral wave (heart)
-createThumb('excitable', (ctx) => {
-  ctx.strokeStyle = C.feedback; ctx.lineWidth = 3;
-  ctx.beginPath();
-  for (let t=0; t<50; t++) { const a = t*0.35; const r = t*0.6; const x = 40+Math.cos(a)*r, y = 40+Math.sin(a)*r; t===0?ctx.moveTo(x,y):ctx.lineTo(x,y); }
-  ctx.stroke();
+// 36 ffire - power-law clusters
+createThumb('ffire', (ctx) => {
+  // Small clusters
+  [[20,20,4],[25,25,3],[50,60,5],[55,55,4],[60,65,3]].forEach(p => dot(ctx, p[0], p[1], p[2], C.agent));
+  // Large burning cluster
+  ctx.fillStyle = C.feedback;
+  ctx.beginPath(); ctx.arc(45, 35, 12, 0, Math.PI*2); ctx.fill();
+  dot(ctx, 45, 35, 4, C.critical);
 });
-// 49 mus - rhythmic pulse
-createThumb('mus', (ctx) => {
-  line(ctx, 5, 40, 75, 40, C.muted, 1);
-  const h = [20, 35, 15, 40, 25, 45, 18, 30];
-  h.forEach((v, i) => { ctx.fillStyle = i%3===0 ? C.feedback : C.agent; ctx.fillRect(8 + i*9, 40 - v/2, 5, v); });
-});
-// 50 meta - five mini symbols, one per palette concept, arranged in a 5-up grid
-createThumb('meta', (ctx) => {
-  // agent: three dots (individuals) top-left
-  [[14,18],[21,16],[18,23]].forEach(([x,y]) => dot(ctx, x, y, 1.8, C.agent));
-  // rule: two dots connected by a line (local interaction) top-right
-  dot(ctx, 50, 18, 2, C.rule); dot(ctx, 64, 18, 2, C.rule);
-  line(ctx, 52, 18, 62, 18, C.rule, 1.1);
-  // pattern: three concentric rings (emergent structure) center
-  ctx.strokeStyle = C.pattern; ctx.lineWidth = 1;
-  [3, 6, 9].forEach(r => { ctx.beginPath(); ctx.arc(40, 42, r, 0, Math.PI * 2); ctx.stroke(); });
-  // critical: step function (threshold) bottom-left
-  ctx.strokeStyle = C.critical; ctx.lineWidth = 1.5;
+// 37 ratchet - asymmetric potential pumping
+createThumb('ratchet', (ctx) => {
+  ctx.strokeStyle = C.muted; ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.moveTo(8, 65); ctx.lineTo(18, 65); ctx.lineTo(18, 55); ctx.lineTo(28, 55);
-  ctx.stroke();
-  // feedback: spiral (amplification) bottom-right
-  ctx.strokeStyle = C.feedback; ctx.lineWidth = 1.2;
-  ctx.beginPath();
-  for (let t = 0; t < 32; t++) {
-    const a = t * 0.38, r = t * 0.22;
-    const x = 58 + Math.cos(a) * r;
-    const y = 60 + Math.sin(a) * r;
-    t === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  for (let i = 0; i < 4; i++) {
+    const x = 10 + i * 18;
+    ctx.lineTo(x + 12, 30); ctx.lineTo(x + 15, 55);
   }
   ctx.stroke();
+  dot(ctx, 35, 35, 4, C.agent);
+  // Pumping arrow
+  ctx.strokeStyle = C.feedback; ctx.lineWidth = 2;
+  line(ctx, 20, 20, 60, 20, C.feedback);
+  ctx.beginPath(); ctx.moveTo(60, 20); ctx.lineTo(55, 16); ctx.lineTo(55, 24); ctx.fill();
+});
+// 38 tumor - invasive branching growth
+createThumb('tumor', (ctx) => {
+  const cx = 40, cy = 40;
+  ctx.fillStyle = C.feedback;
+  dot(ctx, cx, cy, 12, C.feedback);
+  for (let a = 0; a < Math.PI * 2; a += Math.PI / 4) {
+    const x = cx + Math.cos(a) * 15;
+    const y = cy + Math.sin(a) * 15;
+    dot(ctx, x, y, 6, C.feedback);
+    dot(ctx, x + Math.cos(a) * 8, y + Math.sin(a) * 8, 3, C.feedback);
+  }
+  dot(ctx, cx, cy, 5, "#444"); // Necrotic core
+});
+// 39 fish - high-density coordinated school
+createThumb('fish', (ctx) => {
+  const cx = 40, cy = 40;
+  for (let i = 0; i < 20; i++) {
+    const r = Math.random() * 25;
+    const a = Math.random() * Math.PI * 2;
+    tri(ctx, cx + Math.cos(a) * r, cy + Math.sin(a) * r, 0.2, 3, C.agent);
+  }
+});
+// 40 phase - Ising model domains
+createThumb('phase', (ctx) => {
+  const s = 5;
+  for (let r = 0; r < 14; r++) {
+    for (let c = 0; c < 14; c++) {
+      const on = Math.sin(r * 0.5) * Math.cos(c * 0.5) > 0;
+      ctx.fillStyle = on ? C.agent : C.feedback;
+      ctx.fillRect(5 + c * s, 5 + r * s, s - 0.5, s - 0.5);
+    }
+  }
+});
+// 41 river - fractal drainage basin
+createThumb('river', (ctx) => {
+  ctx.strokeStyle = C.agent;
+  const drawRiver = (x, y, a, len, d) => {
+    if (d <= 0) return;
+    const x2 = x + Math.cos(a) * len, y2 = y + Math.sin(a) * len;
+    line(ctx, x, y, x2, y2, C.agent, d * 0.8);
+    drawRiver(x2, y2, a - 0.4, len * 0.8, d - 1);
+    drawRiver(x2, y2, a + 0.3, len * 0.7, d - 1);
+  };
+  drawRiver(40, 75, -Math.PI / 2, 18, 5);
+});
+// 42 trails - reinforced desire paths
+createThumb('trails', (ctx) => {
+  const nodes = [[15, 15], [65, 15], [40, 65]];
+  ctx.strokeStyle = C.rule;
+  ctx.lineWidth = 4; ctx.globalAlpha = 0.2;
+  line(ctx, 15, 15, 40, 65, C.rule); line(ctx, 65, 15, 40, 65, C.rule);
+  ctx.lineWidth = 1.5; ctx.globalAlpha = 1.0;
+  line(ctx, 15, 15, 40, 65, C.rule); line(ctx, 65, 15, 40, 65, C.rule);
+  nodes.forEach(p => dot(ctx, p[0], p[1], 4, C.pattern));
+});
+// 43 galaxy - gravitational spiral collapse
+createThumb('galaxy', (ctx) => {
+  const cx = 40, cy = 40;
+  for (let i = 0; i < 100; i++) {
+    const t = i / 100;
+    const a = t * Math.PI * 8;
+    const r = t * 30;
+    dot(ctx, cx + Math.cos(a) * r, cy + Math.sin(a) * r, 1, C.pattern);
+  }
+  dot(ctx, cx, cy, 5, C.critical);
+});
+// 44 immune - antibody recognition
+createThumb('immune', (ctx) => {
+  const target = [40, 40];
+  dot(ctx, target[0], target[1], 10, C.feedback);
+  for (let a = 0; a < Math.PI * 2; a += Math.PI / 3) {
+    const x = target[0] + Math.cos(a) * 18;
+    const y = target[1] + Math.sin(a) * 18;
+    // Y-shape antibody
+    ctx.strokeStyle = C.agent; ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(a) * 8, y + Math.sin(a) * 8);
+    ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(a+0.8) * -6, y + Math.sin(a+0.8) * -6);
+    ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(a-0.8) * -6, y + Math.sin(a-0.8) * -6);
+    ctx.stroke();
+  }
+});
+// 45 coral - competitive branching growth
+createThumb('coral', (ctx) => {
+  ctx.strokeStyle = C.pattern;
+  const grow = (x, y, a, len, d) => {
+    if (d <= 0) return;
+    const x2 = x + Math.cos(a) * len, y2 = y + Math.sin(a) * len;
+    line(ctx, x, y, x2, y2, C.pattern, d * 0.6);
+    if (Math.random() > 0.2) grow(x2, y2, a - 0.5, len * 0.8, d - 1);
+    if (Math.random() > 0.2) grow(x2, y2, a + 0.5, len * 0.8, d - 1);
+  };
+  grow(30, 70, -Math.PI / 2 - 0.2, 12, 5);
+  grow(50, 70, -Math.PI / 2 + 0.3, 10, 4);
+});
+// 46 lightning - bifurcating electrical bolt
+createThumb('lightning', (ctx) => {
+  ctx.strokeStyle = C.critical; ctx.lineWidth = 2;
+  let cur = [40, 5];
+  ctx.beginPath(); ctx.moveTo(cur[0], cur[1]);
+  for (let i = 0; i < 6; i++) {
+    cur = [cur[0] + (Math.random() - 0.5) * 20, cur[1] + 12];
+    ctx.lineTo(cur[0], cur[1]);
+    if (i === 3) {
+      const side = [cur[0] + 15, cur[1] + 5];
+      line(ctx, cur[0], cur[1], side[0], side[1], C.critical, 1);
+    }
+  }
+  ctx.stroke();
+});
+// 47 audio - synchronized acoustic flocking
+createThumb('audio', (ctx) => {
+  ctx.strokeStyle = C.rule; ctx.lineWidth = 1.5;
+  for (let i = 0; i < 3; i++) {
+    ctx.beginPath();
+    for (let x = 0; x < 80; x++) {
+      const y = 40 + Math.sin(x * 0.2 + i) * 15 + Math.sin(x * 0.5) * 5;
+      x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+});
+// 48 excitable - spiral target patterns
+createThumb('excitable', (ctx) => {
+  ctx.strokeStyle = C.feedback; ctx.lineWidth = 2;
+  for (let r = 5; r < 40; r += 8) {
+    ctx.beginPath(); ctx.arc(40, 40, r, 0, Math.PI * 1.5); ctx.stroke();
+  }
+  dot(ctx, 40, 40, 3, C.critical);
+});
+// 49 mus - 1/f frequency cascade
+createThumb('mus', (ctx) => {
+  const bars = 15;
+  for (let i = 0; i < bars; i++) {
+    const h = 10 + Math.random() * 50;
+    ctx.fillStyle = i % 4 === 0 ? C.feedback : C.agent;
+    ctx.fillRect(5 + i * 5, 75 - h, 3, h);
+  }
+});
+// 50 meta - conceptual synthesis (handful of principles)
+createThumb('meta', (ctx) => {
+  const center = [40, 40];
+  [C.agent, C.rule, C.pattern, C.critical, C.feedback].forEach((color, i) => {
+    const a = (i / 5) * Math.PI * 2;
+    const x = center[0] + Math.cos(a) * 25;
+    const y = center[1] + Math.sin(a) * 25;
+    line(ctx, center[0], center[1], x, y, C.muted, 0.5);
+    dot(ctx, x, y, 5, color);
+  });
+  dot(ctx, center[0], center[1], 4, "#fff");
 });
 </script>
 </body>
