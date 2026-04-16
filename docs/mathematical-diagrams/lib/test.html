@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>diagram-math.js — Sanity Checks</title>
+<script src="diagram-math.js"></script>
+<style>
+body { font-family: 'Source Code Pro', monospace; font-size: 14px; max-width: 800px; margin: 2rem auto; padding: 0 1rem; background: #fafafa; color: #1a1a2e; }
+h1 { font-family: 'Source Sans 3', system-ui, sans-serif; font-size: 1.5rem; margin-bottom: 1rem; }
+h2 { font-family: 'Source Sans 3', system-ui, sans-serif; font-size: 1.1rem; margin: 2rem 0 0.5rem; color: #4a4a6a; }
+.test { padding: 0.3rem 0; border-bottom: 1px solid #e2e2e8; }
+.pass { color: #059669; }
+.fail { color: #dc2626; font-weight: bold; }
+.summary { margin-top: 2rem; padding: 1rem; border-radius: 6px; font-weight: 600; }
+.summary.all-pass { background: #d1fae5; color: #065f46; }
+.summary.has-fail { background: #fee2e2; color: #991b1b; }
+</style>
+</head>
+<body>
+<h1>diagram-math.js — Sanity Checks</h1>
+<div id="results"></div>
+<div id="summary"></div>
+
+<script>
+var results = document.getElementById('results');
+var passed = 0, failed = 0;
+
+function assert(name, condition, detail) {
+  var div = document.createElement('div');
+  div.className = 'test';
+  if (condition) {
+    div.innerHTML = '<span class="pass">PASS</span> ' + name;
+    passed++;
+  } else {
+    div.innerHTML = '<span class="fail">FAIL</span> ' + name + (detail ? ' — ' + detail : '');
+    failed++;
+  }
+  results.appendChild(div);
+}
+
+function section(title) {
+  var h = document.createElement('h2');
+  h.textContent = title;
+  results.appendChild(h);
+}
+
+// ─── Poset ───
+section('Poset');
+
+var bool3 = Diag.poset.boolean(3);
+assert('Boolean(3) has 8 elements', bool3.elements.length === 8);
+assert('Boolean(3) has 12 covers', bool3.covers.length === 12);
+
+var div30 = Diag.poset.divisors(30);
+assert('Divisors(30) = {1,2,3,5,6,10,15,30}', div30.elements.length === 8);
+assert('Divisors(30) has correct covers',
+  div30.covers.some(function (c) { return c[0] === 1 && c[1] === 2; }) &&
+  div30.covers.some(function (c) { return c[0] === 6 && c[1] === 30; }));
+
+var layers = Diag.poset.layers(bool3.elements, bool3.covers);
+assert('Boolean(3) layers: bottom=0, top=3', layers[0] === 0 && layers[7] === 3);
+
+var up = Diag.poset.upset(0, bool3.elements, bool3.covers);
+assert('Boolean(3) upset(∅) = all 8 elements', up.length === 8);
+
+var down = Diag.poset.downset(7, bool3.elements, bool3.covers);
+assert('Boolean(3) downset(top) = all 8 elements', down.length === 8);
+
+assert('Boolean(3) is a lattice', Diag.poset.isLattice(bool3.elements, bool3.covers));
+assert('Divisors(30) is a lattice', Diag.poset.isLattice(div30.elements, div30.covers));
+
+var face = Diag.poset.faceLattice();
+assert('Face lattice of cube has 28 elements', face.elements.length === 28,
+  'got ' + face.elements.length);
+
+// ─── Sugiyama ───
+section('Sugiyama layout');
+
+var pos = Diag.sugiyama.layout(bool3.elements, bool3.covers, layers, 400, 300, 30);
+assert('Sugiyama produces positions for all nodes', pos.length === 8);
+assert('Bottom node at y=30 (pad)', Math.abs(pos[0].y - 30) < 1);
+assert('Top node at y=270 (height-pad)', Math.abs(pos[7].y - 270) < 1);
+
+// ─── Partition ───
+section('Partition');
+
+assert('validate [5,3,2,1] = true', Diag.partition.validate([5,3,2,1]));
+assert('validate [3,5,1] = false', !Diag.partition.validate([3,5,1]));
+assert('sum [5,3,2,1] = 11', Diag.partition.sum([5,3,2,1]) === 11);
+
+var conj = Diag.partition.conjugate([4,2,1]);
+assert('conjugate [4,2,1] = [3,2,1,1]',
+  conj.length === 4 && conj[0] === 3 && conj[1] === 2 && conj[2] === 1 && conj[3] === 1,
+  JSON.stringify(conj));
+
+assert('hook(0,0) of [4,2,1] = 6', Diag.partition.hook([4,2,1], 0, 0) === 6,
+  'got ' + Diag.partition.hook([4,2,1], 0, 0));
+
+assert('hookLengthCount [2,1] = 2', Diag.partition.hookLengthCount([2,1]) === 2);
+assert('hookLengthCount [3,2,1] = 16', Diag.partition.hookLengthCount([3,2,1]) === 16);
+
+var stair4 = Diag.partition.presets.staircase(4);
+assert('staircase(4) = [4,3,2,1]', stair4[0] === 4 && stair4[3] === 1);
+
+var rect = Diag.partition.presets.rectangle(2, 3);
+assert('rectangle(2,3) = [3,3]', rect.length === 2 && rect[0] === 3 && rect[1] === 3);
+
+// Self-conjugate check
+var sc = [3,2,1];
+var scConj = Diag.partition.conjugate(sc);
+assert('[3,2,1] is self-conjugate', JSON.stringify(sc) === JSON.stringify(scConj));
+
+// ─── Group ───
+section('Group');
+
+var z4 = Diag.group.cyclic(4);
+assert('Z_4 has 4 elements', z4.order === 4);
+assert('Z_4: 2+3 = 1', z4.mult(2, 3) === 1);
+assert('Z_4: inv(3) = 1', z4.inv(3) === 1);
+
+var s3 = Diag.group.s3();
+assert('S_3 has 6 elements', s3.order === 6);
+assert('S_3: e*x = x', s3.mult(0, 3) === 3);
+
+var d4 = Diag.group.d4();
+assert('D_4 has 8 elements', d4.order === 8);
+assert('D_4: r^4 = e', d4.mult(d4.mult(d4.mult(1, 1), 1), 1) === 0);
+assert('D_4: s^2 = e', d4.mult(4, 4) === 0);
+
+var v4 = Diag.group.klein4();
+assert('V_4: a*b = ab', v4.mult(1, 2) === 3);
+assert('V_4: every element is self-inverse', v4.elements.every(function (e) { return v4.mult(e, e) === 0; }));
+
+var q8 = Diag.group.q8();
+assert('Q_8 has 8 elements', q8.order === 8);
+assert('Q_8: i*j = k', q8.mult(2, 4) === 6);
+assert('Q_8: j*i = -k', q8.mult(4, 2) === 7);
+
+var edges = Diag.group.cayleyEdges(z4, [1]);
+assert('Cayley edges of Z_4 with gen 1: 4 edges', edges.length === 4);
+
+var cat = Diag.group.catalog();
+assert('Catalog has 8 groups', cat.length === 8);
+
+// ─── Braid ───
+section('Braid');
+
+assert('format [1,-2,1] = σ₁ σ₂⁻¹ σ₁',
+  Diag.braid.format([1, -2, 1]) === 'σ₁ σ₂⁻¹ σ₁');
+
+assert('cancel [1,-1] = []', Diag.braid.cancel([1, -1]).length === 0);
+assert('cancel [1,2,-2,-1] = []', Diag.braid.cancel([1, 2, -2, -1]).length === 0);
+
+var perm = Diag.braid.permutation([1], 3);
+assert('σ_1 on 3 strands: swap 0,1', perm[0] === 1 && perm[1] === 0 && perm[2] === 2);
+
+var paths = Diag.braid.strandPaths([1, 2], 3);
+assert('strandPaths returns n+1 position arrays', paths.length === 3);
+
+// ─── Knot ───
+section('Knot');
+
+var tref = Diag.knot.presets.trefoil();
+assert('Trefoil has crossing number 3', tref.crossingNumber === 3);
+
+var figEight = Diag.knot.presets.figureEight();
+assert('Figure-eight has crossing number 4', figEight.crossingNumber === 4);
+
+assert('Writhe of trefoil crossings = 3',
+  Diag.knot.writhe(tref.crossings.map(function (c) { return { sign: c.sign }; })) === 3);
+
+// ─── Commutative Diagrams ───
+section('Commutative Diagrams');
+
+var sq = Diag.commDiag.presets.square();
+assert('Square preset has 4 nodes', sq.nodes.length === 4);
+assert('Square preset has 4 arrows', sq.arrows.length === 4);
+
+var snake = Diag.commDiag.presets.snakeLemma();
+assert('Snake lemma has 10 nodes', snake.nodes.length === 10);
+
+var exact = Diag.commDiag.presets.exactSequence();
+assert('Exact sequence has 5 nodes', exact.nodes.length === 5);
+
+// ─── String Diagrams ───
+section('String Diagrams');
+
+var comp = Diag.string.presets.composition();
+assert('Composition has 2 boxes', comp.boxes.length === 2);
+
+var tensor = Diag.string.presets.tensor();
+assert('Tensor has 2 boxes', tensor.boxes.length === 2);
+assert('Tensor has 2 inputs, 2 outputs', tensor.nInputs === 2 && tensor.nOutputs === 2);
+
+var cnot = Diag.string.presets.cnot();
+assert('CNOT preset exists', cnot.name === 'CNOT gate');
+
+// ─── Dynkin ───
+section('Dynkin Diagrams');
+
+var a4 = Diag.dynkin.build('A4');
+assert('A4 has 4 nodes', a4.nodes.length === 4);
+assert('A4 has 3 edges', a4.edges.length === 3);
+assert('A4 edges are all mult=1', a4.edges.every(function (e) { return e.mult === 1; }));
+
+var e6 = Diag.dynkin.build('E6');
+assert('E6 has 6 nodes', e6.nodes.length === 6);
+assert('E6 has 5 edges', e6.edges.length === 5);
+
+var g2 = Diag.dynkin.build('G2');
+assert('G2 has 2 nodes', g2.nodes.length === 2);
+assert('G2 has triple bond', g2.edges[0].mult === 3);
+
+var cartanA3 = Diag.dynkin.cartanMatrix(Diag.dynkin.build('A3'));
+assert('Cartan(A3) diagonal = 2', cartanA3[0][0] === 2 && cartanA3[1][1] === 2);
+assert('Cartan(A3) off-diag = -1', cartanA3[0][1] === -1 && cartanA3[1][0] === -1);
+assert('Cartan(A3) non-adjacent = 0', cartanA3[0][2] === 0);
+
+var adeList = Diag.dynkin.adeList();
+assert('ADE list has A1-A8, D4-D8, E6-E8', adeList.length === 16);
+
+var catDynkin = Diag.dynkin.catalog();
+assert('Full catalog includes B,C,F4,G2', catDynkin.indexOf('F4') >= 0 && catDynkin.indexOf('G2') >= 0);
+
+var posD5 = Diag.dynkin.layout(Diag.dynkin.build('D5'), 400, 200, 30);
+assert('D5 layout has 5 positions', posD5.length === 5);
+
+// ─── Quiver ───
+section('Quiver Diagrams');
+
+var qA3 = Diag.quiver.presets.a3();
+assert('A3 quiver has 3 vertices', qA3.vertices.length === 3);
+assert('A3 quiver has 2 arrows', qA3.arrows.length === 2);
+
+var qTri = Diag.quiver.presets.triangle();
+assert('Triangle quiver has 3 arrows', qTri.arrows.length === 3);
+
+var qKron = Diag.quiver.presets.kronecker();
+assert('Kronecker has 2 parallel arrows', qKron.arrows.length === 2);
+
+var mutated = Diag.quiver.mutate(qA3, 1);
+assert('Mutating A3 at vertex 1 reverses arrows through 1',
+  mutated.arrows.some(function (a) { return a.from === 1 && a.to === 0; }));
+
+// ─── Dessin ───
+section('Dessins d\'Enfants');
+
+var seg = Diag.dessin.presets.segment();
+assert('Segment has 1 black, 1 white, 1 edge', seg.black.length === 1 && seg.white.length === 1 && seg.edges.length === 1);
+
+var star5 = Diag.dessin.presets.star(5);
+assert('Star(5) has 5 white vertices', star5.white.length === 5);
+assert('Star(5) has 5 edges', star5.edges.length === 5);
+
+var passportStar = Diag.dessin.passport(star5);
+assert('Star(5) passport: black=[5]', passportStar.black[0] === 5);
+
+var eulerSeg = Diag.dessin.euler(seg);
+assert('Segment euler: V=2, E=1', eulerSeg.V === 2 && eulerSeg.E === 1);
+
+var tetra = Diag.dessin.presets.tetrahedron();
+assert('Tetrahedron has 3 black + 3 white', tetra.black.length === 3 && tetra.white.length === 3);
+
+// ─── Weight ───
+section('Weight Diagrams');
+
+var sl2fund = Diag.weight.sl2(1);
+assert('sl2 fund has dim 2', sl2fund.dim === 2);
+assert('sl2 fund weights: [1], [-1]', sl2fund.weights.length === 2);
+
+var sl2spin1 = Diag.weight.sl2(2);
+assert('sl2 spin-1 has dim 3', sl2spin1.dim === 3);
+
+assert('sl3Dim(1,0) = 3', Diag.weight.sl3Dim(1, 0) === 3);
+assert('sl3Dim(1,1) = 8', Diag.weight.sl3Dim(1, 1) === 8);
+assert('sl3Dim(2,0) = 6', Diag.weight.sl3Dim(2, 0) === 6);
+
+var cart = Diag.weight.toCartesian([1, 1]);
+assert('toCartesian([1,1]) gives expected x', Math.abs(cart.x - 1.5) < 0.01);
+
+var sl3adj = Diag.weight.presets.sl3_adj();
+assert('sl3 adjoint preset exists', sl3adj.algebra === 'sl₃');
+
+// ─── Chord ───
+section('Chord Diagrams');
+
+var ch1 = Diag.chord.presets.single();
+assert('Single chord: n=1', ch1.n === 1);
+
+var cross2 = Diag.chord.presets.crossing2();
+assert('2 crossing chords: 1 intersection', Diag.chord.intersections(cross2) === 1);
+
+var par2 = Diag.chord.presets.parallel2();
+assert('2 parallel chords: 0 intersections', Diag.chord.intersections(par2) === 0);
+
+var allCross = Diag.chord.presets.allCross3();
+assert('3 all-crossing: 3 intersections', Diag.chord.intersections(allCross) === 3);
+
+var chLayout = Diag.chord.layout(ch1, 100, 100, 50);
+assert('Chord layout gives 2 positions', chLayout.length === 2);
+
+assert('4T relation description exists', Diag.chord.fourT.description.length > 0);
+
+// ─── Tangle ───
+section('Tangle Diagrams');
+
+var t0 = Diag.tangle.presets.zero();
+assert('Zero tangle has no crossings', t0.crossings.length === 0);
+
+var tInf = Diag.tangle.presets.infinity();
+assert('Infinity tangle has type infinity', tInf.type === 'infinity');
+
+var t2 = Diag.tangle.presets.twist2();
+assert('[2] twist has 2 crossings', t2.crossings.length === 2);
+
+var rt = Diag.tangle.rational([2, 3]);
+assert('rational([2,3]) has 5 crossings', rt.crossings.length === 5);
+
+var frac = Diag.tangle.fraction([2, 3]);
+assert('fraction([2,3]) = 7/3', frac.p === 7 && frac.q === 3,
+  'got ' + frac.p + '/' + frac.q);
+
+var frac2 = Diag.tangle.fraction([3, 2, 1]);
+assert('fraction([3,2,1]) = 10/3', frac2.p === 10 && frac2.q === 3,
+  'got ' + frac2.p + '/' + frac2.q);
+
+var frac0 = Diag.tangle.fraction([0]);
+assert('fraction([0]) = 0/1', frac0.p === 0 && frac0.q === 1);
+
+// ─── Penrose ───
+section('Penrose Notation');
+
+var mv = Diag.penrose.presets.matrixVector();
+assert('MatrixVector has 2 nodes', mv.nodes.length === 2);
+assert('MatrixVector has 1 contraction', mv.contractions.length === 1);
+assert('MatrixVector result is vector', mv.result.indexOf('Vector') >= 0);
+
+var mp = Diag.penrose.presets.matrixProduct();
+assert('MatrixProduct has 2 nodes', mp.nodes.length === 2);
+
+var tr = Diag.penrose.presets.trace();
+assert('Trace is self-contraction', tr.contractions[0].from === tr.contractions[0].to);
+assert('Trace result is scalar', tr.result.indexOf('Scalar') >= 0);
+
+var ip = Diag.penrose.presets.innerProduct();
+assert('InnerProduct has 3 nodes (u, g, v)', ip.nodes.length === 3);
+assert('InnerProduct u is vector (1,0)', ip.nodes[0].upper === 1 && ip.nodes[0].lower === 0);
+assert('InnerProduct g is metric (0,2)', ip.nodes[1].upper === 0 && ip.nodes[1].lower === 2);
+assert('InnerProduct contractions are upper-to-lower',
+  ip.contractions.every(function (c) { return c.fromPort === 'upper' && c.toPort === 'lower'; }),
+  'contractions must pair upper→lower for valid Penrose notation');
+
+var op = Diag.penrose.presets.outerProduct();
+assert('OuterProduct has 0 contractions', op.contractions.length === 0);
+
+var riem = Diag.penrose.presets.riemann();
+assert('Riemann has rank (1,3)', riem.nodes[0].upper === 1 && riem.nodes[0].lower === 3);
+
+var es = Diag.penrose.presets.einsteinSummation();
+assert('Einstein summation has 1 contraction', es.contractions.length === 1);
+
+var tObj = Diag.penrose.tensor('T', 2, 3);
+assert('tensor("T",2,3) has rank 5', tObj.rank === 5);
+
+// Global check: every contraction in every preset must pair upper↔lower
+var presetNames = ['matrixVector','matrixProduct','trace','innerProduct','outerProduct','riemann','einsteinSummation'];
+var allValid = true;
+var badPreset = '';
+presetNames.forEach(function (name) {
+  var p = Diag.penrose.presets[name]();
+  p.contractions.forEach(function (c) {
+    if (c.from === c.to) return; // self-loop: upper→lower of same tensor, valid
+    if (c.fromPort === c.toPort) { allValid = false; badPreset = name + ': ' + c.fromPort + '→' + c.toPort; }
+  });
+});
+assert('All Penrose presets use upper↔lower contractions', allValid, badPreset);
+
+var traced = Diag.penrose.trace(Diag.penrose.matrix('A'));
+assert('trace of matrix gives scalar', traced.upper === 0 && traced.lower === 0);
+
+// ─── Formatting ───
+section('Formatting');
+
+assert('fmt.group(196884) = "196,884"', Diag.fmt.group(196884) === '196,884');
+assert('fmt.sub(3) = ₃', Diag.fmt.sub(3) === '₃');
+assert('fmt.sup(2) = ²', Diag.fmt.sup(2) === '²');
+
+// ─── Summary ───
+var summaryDiv = document.getElementById('summary');
+summaryDiv.className = 'summary ' + (failed === 0 ? 'all-pass' : 'has-fail');
+summaryDiv.textContent = passed + ' passed, ' + failed + ' failed, ' + (passed + failed) + ' total';
+</script>
+</body>
+</html>

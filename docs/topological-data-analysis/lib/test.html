@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>tda-math.js sanity tests</title>
+<style>
+  body {
+    font-family: system-ui, -apple-system, sans-serif;
+    max-width: 820px;
+    margin: 2rem auto;
+    padding: 0 1rem;
+    color: #1a1a2e;
+    background: #fafafa;
+    line-height: 1.5;
+  }
+  h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
+  .subtitle { color: #4a4a6a; margin-bottom: 2rem; }
+  .result { padding: 0.55rem 0.9rem; border-radius: 4px; margin: 0.3rem 0; font-size: 0.92rem; }
+  .pass { background: #dcfce7; color: #14532d; border-left: 4px solid #16a34a; }
+  .fail { background: #fee2e2; color: #7f1d1d; border-left: 4px solid #dc2626; }
+  .summary { margin-top: 2rem; padding: 1rem; border-radius: 4px; font-weight: 600; font-size: 1.15rem; }
+  .summary.all-pass { background: #dcfce7; color: #14532d; }
+  .summary.any-fail { background: #fee2e2; color: #7f1d1d; }
+  code { font-family: ui-monospace, 'Source Code Pro', monospace; font-size: 0.88em; }
+  .section { margin-top: 2rem; }
+  .section h2 { font-size: 1.05rem; margin-bottom: 0.5rem; color: #4a4a6a; }
+</style>
+</head>
+<body>
+
+<h1>TDA Library Tests</h1>
+<p class="subtitle">In-browser sanity checks for <code>tda-math.js</code>. Every row should be green.</p>
+
+<div id="results"></div>
+<div id="summary" class="summary"></div>
+
+<script src="tda-math.js"></script>
+<script>
+(function () {
+  var results = document.getElementById('results');
+  var summary = document.getElementById('summary');
+  var passed = 0;
+  var failed = 0;
+
+  function section(name) {
+    var div = document.createElement('div');
+    div.className = 'section';
+    var h = document.createElement('h2');
+    h.textContent = name;
+    div.appendChild(h);
+    results.appendChild(div);
+  }
+
+  function assert(name, condition, detail) {
+    var row = document.createElement('div');
+    row.className = 'result ' + (condition ? 'pass' : 'fail');
+    row.innerHTML = (condition ? '✓ ' : '✗ ') + '<strong>' + name + '</strong>' +
+      (detail ? ' — <code>' + detail + '</code>' : '');
+    results.appendChild(row);
+    if (condition) passed++; else failed++;
+  }
+
+  function arrEq(a, b) {
+    if (a.length !== b.length) return false;
+    for (var i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+    return true;
+  }
+
+  // ─── Point cloud generators ─────────────────────────────
+  section('Point cloud generators');
+
+  var circle = TDA.points.circle(20, 1, 0);
+  assert('circle(20) produces 20 points', circle.length === 20, 'n=' + circle.length);
+  assert('circle points are 2D', circle[0].length === 2);
+
+  var annulus = TDA.points.annulus(30, 0.7, 1.0, 0);
+  assert('annulus(30) produces 30 points', annulus.length === 30);
+
+  var clusters = TDA.points.clusters(30, 3);
+  assert('clusters(30, 3) produces 30 points', clusters.length === 30);
+
+  var grid = TDA.points.grid(3, 3);
+  assert('grid(3,3) produces 9 points', grid.length === 9, 'n=' + grid.length);
+
+  var fig8 = TDA.points.figureEight(20, 0.4, 0);
+  assert('figureEight(20) produces 20 points', fig8.length === 20);
+
+  var sphere = TDA.points.sphere3D(30);
+  assert('sphere3D(30) produces 30 3D points', sphere.length === 30 && sphere[0].length === 3);
+
+  // ─── Distance utilities ─────────────────────────────
+  section('Distance utilities');
+
+  assert('euclidean([0,0],[3,4]) = 5', Math.abs(TDA.dist.euclidean([0,0],[3,4]) - 5) < 1e-10, 'd=5');
+
+  var D = TDA.dist.matrix([[0,0],[1,0],[0,1]]);
+  assert('distance matrix is 3x3', D.length === 3 && D[0].length === 3);
+  assert('distance matrix diagonal is zero', D[0][0] === 0 && D[1][1] === 0);
+  assert('distance matrix symmetric', Math.abs(D[0][1] - D[1][0]) < 1e-10);
+
+  var edges = TDA.dist.sortedEdges([[0,0],[1,0],[0,1]]);
+  assert('sortedEdges returns 3 edges for 3 points', edges.length === 3);
+  assert('sortedEdges are sorted ascending', edges[0].d <= edges[1].d);
+
+  // ─── Rips complex ─────────────────────────────
+  section('Rips complex construction');
+
+  var pts3 = [[0,0],[1,0],[0.5, 0.866]]; // equilateral triangle, side ~1
+  var cpx = TDA.rips.build(pts3, 1.1, 2);
+  assert('Rips on equilateral triangle at ε=1.1: 3 vertices', cpx.simplices[0].length === 3);
+  assert('Rips at ε=1.1: 3 edges', cpx.simplices[1].length === 3, 'edges=' + cpx.simplices[1].length);
+  assert('Rips at ε=1.1: 1 triangle', cpx.simplices[2].length === 1, 'triangles=' + cpx.simplices[2].length);
+
+  var cpxSmall = TDA.rips.build(pts3, 0.5, 2);
+  assert('Rips at ε=0.5: 0 edges', cpxSmall.simplices[1].length === 0);
+
+  // ─── f-vector and Euler characteristic ─────────────────────────────
+  section('f-vector and Euler characteristic');
+
+  var fv = TDA.rips.fVector(cpx);
+  assert('f-vector of filled triangle: (3,3,1,0)', arrEq(fv, [3,3,1,0]), TDA.fmt.fVector(fv));
+
+  var chi = TDA.rips.euler(cpx);
+  assert('Euler characteristic of filled triangle: 1', chi === 1, 'χ=' + chi);
+
+  var bt = TDA.complex.presets.boundaryTetrahedron();
+  var btChi = TDA.complex.euler(bt);
+  assert('Euler characteristic of ∂Δ³: 2', btChi === 2, 'χ=' + btChi);
+
+  var btFv = TDA.complex.fVector(bt);
+  assert('f-vector of ∂Δ³: (4,6,4,0)', arrEq(btFv, [4,6,4,0]), TDA.fmt.fVector(btFv));
+
+  // ─── Simplicial complex presets ─────────────────────────────
+  section('Simplicial complex presets');
+
+  var ht = TDA.complex.presets.hollowTriangle();
+  assert('Hollow triangle: 3 vertices, 3 edges, 0 triangles',
+    ht.simplices[0].length === 3 && ht.simplices[1].length === 3 && !ht.simplices[2],
+    'f=(' + ht.simplices[0].length + ',' + ht.simplices[1].length + ')');
+
+  var ft = TDA.complex.presets.filledTriangle();
+  assert('Filled triangle: 1 triangle', ft.simplices[2].length === 1);
+
+  var tor = TDA.complex.presets.torus7();
+  assert('Torus7 has 7 vertices', tor.simplices[0].length === 7, 'v=' + tor.simplices[0].length);
+  assert('Torus7 Euler characteristic: 0', TDA.complex.euler(tor) === 0, 'χ=' + TDA.complex.euler(tor));
+
+  // ─── Boundary operators ─────────────────────────────
+  section('Boundary operators');
+
+  var b1 = TDA.boundary.matrix(ft, 1);
+  assert('∂₁ of filled triangle: 3×3 matrix', b1.matrix.length === 3 && b1.matrix[0].length === 3);
+
+  var b2 = TDA.boundary.matrix(ft, 2);
+  assert('∂₂ of filled triangle: 3×1 matrix', b2.matrix.length === 3 && b2.matrix[0].length === 1);
+
+  // Each column of ∂₂ should have 3 ones (boundary of a triangle)
+  var sum = 0;
+  for (var i = 0; i < 3; i++) sum += b2.matrix[i][0];
+  assert('∂₂ column has 3 ones (boundary of triangle)', sum === 3, 'sum=' + sum);
+
+  // ∂∂ = 0
+  assert('∂₁∂₂ = 0 for filled triangle', TDA.boundary.verifyExact(ft, 1));
+  assert('∂₁∂₂ = 0 for boundary tetrahedron', TDA.boundary.verifyExact(bt, 1));
+  assert('∂₂∂₃ = 0 for boundary tetrahedron', TDA.boundary.verifyExact(bt, 2));
+  assert('∂₁∂₂ = 0 for torus7', TDA.boundary.verifyExact(tor, 1));
+  assert('∂₂∂₃ = 0 for torus7', TDA.boundary.verifyExact(tor, 2));
+
+  // ─── Homology (Z/2) ─────────────────────────────
+  section('Homology over Z/2');
+
+  var bHT = TDA.homology.betti(ht);
+  assert('Hollow triangle: β₀=1, β₁=1', bHT[0] === 1 && bHT[1] === 1, TDA.fmt.betti(bHT));
+
+  var bFT = TDA.homology.betti(ft);
+  assert('Filled triangle: β₀=1, β₁=0', bFT[0] === 1 && bFT[1] === 0, TDA.fmt.betti(bFT));
+
+  var bBT = TDA.homology.betti(bt);
+  assert('∂Δ³: β₀=1, β₁=0, β₂=1', bBT[0] === 1 && bBT[1] === 0 && bBT[2] === 1, TDA.fmt.betti(bBT));
+
+  var bFTet = TDA.homology.betti(TDA.complex.presets.filledTetrahedron());
+  assert('Δ³: β₀=1, β₁=0, β₂=0', bFTet[0] === 1 && bFTet[1] === 0 && bFTet[2] === 0, TDA.fmt.betti(bFTet));
+
+  var bTor = TDA.homology.betti(tor);
+  assert('Torus (Z/2): β₀=1, β₁=2, β₂=1', bTor[0] === 1 && bTor[1] === 2 && bTor[2] === 1, TDA.fmt.betti(bTor));
+
+  // ─── Cycle representatives ─────────────────────────────
+  section('Cycle representatives');
+
+  var cyclesHT = TDA.homology.cycleReps(ht, 1);
+  assert('Hollow triangle has 1 independent H₁ cycle', cyclesHT.length === 1, 'found ' + cyclesHT.length);
+
+  var cyclesBT = TDA.homology.cycleReps(bt, 2);
+  assert('∂Δ³ has 1 independent H₂ cycle', cyclesBT.length === 1, 'found ' + cyclesBT.length);
+
+  var cyclesTor = TDA.homology.cycleReps(tor, 1);
+  assert('Torus has 2 independent H₁ cycles', cyclesTor.length === 2, 'found ' + cyclesTor.length);
+
+  // ─── Filtration ─────────────────────────────
+  section('Filtration');
+
+  var ptsFilt = [[0,0],[1,0],[0,1],[1,1]];
+  var filt = TDA.filtration.rips(ptsFilt, undefined, 2);
+  assert('Filtration of 4 points has events', filt.events.length > 0, 'events=' + filt.events.length);
+  assert('Filtration starts with vertices at birth=0',
+    filt.events[0].dim === 0 && filt.events[0].birth === 0);
+  assert('Filtration events sorted by birth',
+    filt.events.every(function(e, i) {
+      return i === 0 || e.birth >= filt.events[i-1].birth;
+    }));
+
+  // ─── Persistent homology ─────────────────────────────
+  section('Persistent homology');
+
+  var circPts = TDA.points.circle(12, 1, 0);
+  var circFilt = TDA.filtration.rips(circPts, undefined, 1);
+  var circPH = TDA.persistence.compute(circFilt);
+  assert('Circle persistence: has bars', circPH.bars.length > 0, 'bars=' + circPH.bars.length);
+
+  var h0Bars = circPH.bars.filter(function(b) { return b.dim === 0; });
+  var h1Bars = circPH.bars.filter(function(b) { return b.dim === 1; });
+  assert('Circle: exactly 1 infinite H₀ bar',
+    h0Bars.filter(function(b) { return b.death === Infinity; }).length === 1,
+    'inf H₀ bars=' + h0Bars.filter(function(b) { return b.death === Infinity; }).length);
+  assert('Circle: at least 1 H₁ bar', h1Bars.length >= 1, 'H₁ bars=' + h1Bars.length);
+
+  // ─── Mapper ─────────────────────────────
+  section('Mapper algorithm');
+
+  var mapperPts = TDA.points.circle(40, 1, 0.05);
+  var mapResult = TDA.mapper.run(mapperPts, TDA.mapper.lenses.x, 5, 0.3);
+  assert('Mapper produces nodes', mapResult.nodes.length > 0, 'nodes=' + mapResult.nodes.length);
+  assert('Mapper produces edges', mapResult.edges.length > 0, 'edges=' + mapResult.edges.length);
+  assert('Mapper nodes have members', mapResult.nodes[0].members.length > 0);
+
+  // ─── Formatting ─────────────────────────────
+  section('Formatting');
+
+  assert('fmt.simplex([0,1,2]) = "{0,1,2}"', TDA.fmt.simplex([0,1,2]) === '{0,1,2}');
+  assert('fmt.betti works', TDA.fmt.betti([1,2,1]).indexOf('β₀ = 1') >= 0);
+  assert('fmt.fVector works', TDA.fmt.fVector([4,6,4,0]).indexOf('f₀') >= 0);
+
+  // ─── Summary ────────────────────────────────────
+  summary.textContent = passed + ' passed, ' + failed + ' failed';
+  summary.className = 'summary ' + (failed === 0 ? 'all-pass' : 'any-fail');
+})();
+</script>
+
+</body>
+</html>
