@@ -23,10 +23,10 @@
 ## Phase state
 
 - [x] **Phase 0** — write this spine
-- [ ] **Phase 1** — build `lib/modular-math.js` + Act I (5 explainers)
-- [ ] **Phase 2** — Act II (5 explainers)
-- [ ] **Phase 3** — Act III (5 explainers)
-- [ ] **Phase 4** — audit pass, cross-series links, SPH standard sweep
+- [x] **Phase 1** — build `lib/modular-math.js` + Act I (5 explainers)
+- [x] **Phase 2** — Act II (5 explainers)
+- [x] **Phase 3** — Act III (5 explainers)
+- [x] **Phase 4** — audit pass, cross-series links, SPH standard sweep
 
 ## Explainer list
 
