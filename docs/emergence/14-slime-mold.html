@@ -266,13 +266,18 @@ Toggle the MST overlay to compare.
       <span class="stat-label">MST edges:</span>
       <span class="stat-val" id="stat-net-mst">0</span>
     </div>
+    <div class="stat">
+      <span class="stat-label">Slime length / MST:</span>
+      <span class="stat-val" id="stat-net-ratio">&mdash;</span>
+    </div>
   </div>
   <div class="controls">
+    <button class="btn" id="preset-tokyo">Tokyo preset</button>
     <button class="btn" id="toggle-mst">Show MST</button>
     <button class="btn" id="start-network">Start</button>
     <button class="btn" id="reset-network">Reset</button>
   </div>
-  <p class="click-hint">Click to place 5-8 food sources (cities), then press Start.</p>
+  <p class="click-hint">Click to place 5-8 food sources (cities), or load the Tokyo preset to recreate the 2010 experiment. Then press Start.</p>
   <p class="figure-caption"><span class="figure-label">Figure 3.</span> Place cities and let the slime mold connect them. Toggle the MST overlay (blue lines) to compare. The slime's network often includes redundant edges for robustness.</p>
 </div>
 
@@ -851,8 +856,32 @@ of human engineering.
 
   function updateStats() {
     document.getElementById("stat-net-cities").textContent = cities.length;
-    document.getElementById("stat-net-edges").textContent = countSlimeEdges();
+    var slimeEdges = countSlimeEdges();
+    document.getElementById("stat-net-edges").textContent = slimeEdges;
     document.getElementById("stat-net-mst").textContent = cities.length > 1 ? cities.length - 1 : 0;
+
+    /* Length ratio: sum of slime-reinforced edge lengths over MST total length.
+       >1 means the slime spent more wire than an MST — the price of redundancy. */
+    var ratioEl = document.getElementById("stat-net-ratio");
+    if (!running || cities.length < 2 || slimeEdges === 0) {
+      ratioEl.textContent = "\u2014";
+    } else {
+      var mstLen = 0;
+      var mstEdges = computeMST();
+      for (var m = 0; m < mstEdges.length; m++) {
+        var ma = cities[mstEdges[m][0]], mb = cities[mstEdges[m][1]];
+        mstLen += Math.hypot(ma.x - mb.x, ma.y - mb.y);
+      }
+      var slimeLen = 0;
+      for (var i = 0; i < cities.length; i++) {
+        for (var j = i + 1; j < cities.length; j++) {
+          if (hasTrailBetween(cities[i], cities[j], 3)) {
+            slimeLen += Math.hypot(cities[i].x - cities[j].x, cities[i].y - cities[j].y);
+          }
+        }
+      }
+      ratioEl.textContent = mstLen > 0 ? (slimeLen / mstLen).toFixed(2) + "\u00d7" : "\u2014";
+    }
   }
 
   /* Click to place cities */
@@ -1119,6 +1148,33 @@ of human engineering.
     btn.textContent = showMST ? "Hide MST" : "Show MST";
     if (showMST) drawMST();
     else clearSVG();
+  });
+
+  /* Tokyo preset: approximate Kanto rail hub layout normalized to canvas.
+     Coordinates roughly correspond to (central) Tokyo, Shinjuku, Shibuya,
+     Yokohama, Hachioji, Omiya, Chiba, Tsukuba — the kind of spread used
+     in Tero et al. 2010. */
+  var TOKYO_NORM = [
+    { x: 0.55, y: 0.55 }, /* Tokyo (central) */
+    { x: 0.48, y: 0.50 }, /* Shinjuku */
+    { x: 0.46, y: 0.58 }, /* Shibuya */
+    { x: 0.42, y: 0.80 }, /* Yokohama */
+    { x: 0.22, y: 0.55 }, /* Hachioji */
+    { x: 0.58, y: 0.25 }, /* Omiya */
+    { x: 0.82, y: 0.62 }, /* Chiba */
+    { x: 0.72, y: 0.22 }  /* Tsukuba */
+  ];
+
+  document.getElementById("preset-tokyo").addEventListener("click", function() {
+    if (running) return;
+    cities = TOKYO_NORM.map(function(p) {
+      return {
+        x: Math.max(20, Math.min(W - 20, Math.round(p.x * W))),
+        y: Math.max(20, Math.min(H - 20, Math.round(p.y * H)))
+      };
+    });
+    updateStats();
+    renderNetwork();
   });
 
   document.getElementById("reset-network").addEventListener("click", function() {

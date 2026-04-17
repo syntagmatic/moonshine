@@ -146,6 +146,14 @@ length.
       <span class="stat-label">Steps each:</span>
       <span class="stat-val" id="stat-overlay-steps">100</span>
     </div>
+    <div class="stat">
+      <span class="stat-label">Mean distance RW:</span>
+      <span class="stat-val" id="stat-overlay-rw-dist">...</span>
+    </div>
+    <div class="stat">
+      <span class="stat-label">Mean distance SAW:</span>
+      <span class="stat-val" id="stat-overlay-saw-dist">...</span>
+    </div>
   </div>
   <div class="controls">
     <div class="control-group">
@@ -250,6 +258,10 @@ build up the distribution.
       <span class="stat-label">Median trap length:</span>
       <span class="stat-val" id="stat-trap-median">...</span>
     </div>
+    <div class="stat">
+      <span class="stat-label">P(survive to 100):</span>
+      <span class="stat-val" id="stat-trap-survive100">...</span>
+    </div>
   </div>
   <div class="controls">
     <button class="btn" id="btn-trap-step">Step</button>
@@ -343,6 +355,8 @@ function generateSAW(n) {
   var resetBtn = document.getElementById("btn-reset-overlay");
   var statCount = document.getElementById("stat-overlay-count");
   var statSteps = document.getElementById("stat-overlay-steps");
+  var statRwDist = document.getElementById("stat-overlay-rw-dist");
+  var statSawDist = document.getElementById("stat-overlay-saw-dist");
 
   var W, H, dpr;
   var targetSteps = 100;
@@ -351,6 +365,8 @@ function generateSAW(n) {
   var batchIndex = 0;
   var TOTAL_WALKS = 80;
   var WALKS_PER_FRAME = 2;
+  var rwDistSum = 0, rwDistN = 0;
+  var sawDistSum = 0, sawDistN = 0;
 
   function sizeCanvases() {
     var rect = figEl.getBoundingClientRect();
@@ -411,13 +427,21 @@ function generateSAW(n) {
     for (var i = 0; i < count; i++) {
       var rw = generateRW(targetSteps);
       drawPath(ctxRW, rw, "rgba(37, 99, 235, 0.12)");
+      var rwEnd = rw[rw.length - 1];
+      rwDistSum += Math.sqrt(rwEnd.x * rwEnd.x + rwEnd.y * rwEnd.y);
+      rwDistN++;
       var saw = generateSAW(targetSteps);
       drawPath(ctxSAW, saw, "rgba(37, 99, 235, 0.12)");
+      var sawEnd = saw[saw.length - 1];
+      sawDistSum += Math.sqrt(sawEnd.x * sawEnd.x + sawEnd.y * sawEnd.y);
+      sawDistN++;
       batchIndex++;
       walkCount++;
     }
 
     statCount.textContent = walkCount;
+    statRwDist.textContent = rwDistN > 0 ? (rwDistSum / rwDistN).toFixed(1) : "...";
+    statSawDist.textContent = sawDistN > 0 ? (sawDistSum / sawDistN).toFixed(1) : "...";
 
     var cxc = W / 2, cyc = H / 2;
     [ctxRW, ctxSAW].forEach(function(ctx) {
@@ -437,8 +461,12 @@ function generateSAW(n) {
     targetSteps = parseInt(stepsSlider.value, 10);
     walkCount = 0;
     batchIndex = 0;
+    rwDistSum = 0; rwDistN = 0;
+    sawDistSum = 0; sawDistN = 0;
     statCount.textContent = "0";
     statSteps.textContent = targetSteps;
+    statRwDist.textContent = "...";
+    statSawDist.textContent = "...";
     sizeCanvases();
     clearCanvases();
     animId = requestAnimationFrame(runBatch);
@@ -587,6 +615,41 @@ function generateSAW(n) {
     if (sawFit) fitLine(sawFit, "var(--c-agent)", "6,4");
     if (rwFit) fitLine(rwFit, "#94a3b8", "6,4");
 
+    // Reference lines: exact 2D SAW exponent nu = 3/4 and RW exponent nu = 1/2.
+    // Anchor each reference line at the first data point so it is directly
+    // comparable to the fitted line.
+    function refLine(data, nu, color) {
+      if (!data || data.length === 0) return;
+      var anchor = data[0];
+      var c = Math.log(anchor.dist) - nu * Math.log(anchor.n);
+      var n0 = lengths[0] * 0.8;
+      var n1 = lengths[lengths.length - 1] * 1.2;
+      var d0 = Math.exp(c) * Math.pow(n0, nu);
+      var d1 = Math.exp(c) * Math.pow(n1, nu);
+      g.append("line")
+        .attr("x1", xScale(n0)).attr("y1", yScale(d0))
+        .attr("x2", xScale(n1)).attr("y2", yScale(d1))
+        .attr("stroke", color).attr("stroke-width", 1).attr("opacity", 0.55)
+        .attr("stroke-dasharray", "2,3");
+    }
+    refLine(result.saw, 0.75, "var(--c-agent)");
+    refLine(result.rw, 0.5, "#94a3b8");
+
+    // Legend for reference lines (top-left of plot area).
+    var legend = g.append("g").attr("transform", "translate(6,4)");
+    legend.append("line").attr("x1", 0).attr("x2", 18).attr("y1", 6).attr("y2", 6)
+      .attr("stroke", "var(--c-agent)").attr("stroke-width", 1).attr("opacity", 0.55)
+      .attr("stroke-dasharray", "2,3");
+    legend.append("text").attr("x", 22).attr("y", 9)
+      .attr("font-size", "10px").attr("fill", "var(--text-2)")
+      .text("ν = 3/4 (exact 2D SAW)");
+    legend.append("line").attr("x1", 0).attr("x2", 18).attr("y1", 20).attr("y2", 20)
+      .attr("stroke", "#94a3b8").attr("stroke-width", 1).attr("opacity", 0.55)
+      .attr("stroke-dasharray", "2,3");
+    legend.append("text").attr("x", 22).attr("y", 23)
+      .attr("font-size", "10px").attr("fill", "var(--text-2)")
+      .text("ν = 1/2 (RW)");
+
     g.selectAll(".rw-dot").data(result.rw).enter().append("circle")
       .attr("cx", function(d) { return xScale(d.n); })
       .attr("cy", function(d) { return yScale(d.dist); })
@@ -637,6 +700,7 @@ function generateSAW(n) {
   var statStatus = document.getElementById("stat-trap-status");
   var statCollected = document.getElementById("stat-trap-collected");
   var statMedian = document.getElementById("stat-trap-median");
+  var statSurvive100 = document.getElementById("stat-trap-survive100");
 
   var W, H, dpr;
   var cellSize = 6;
@@ -806,6 +870,11 @@ function generateSAW(n) {
     var sorted = trapLengths.slice().sort(d3.ascending);
     var med = d3.median(sorted);
     statMedian.textContent = med;
+    var survived = 0;
+    for (var si = 0; si < trapLengths.length; si++) {
+      if (trapLengths[si] >= 100) survived++;
+    }
+    statSurvive100.textContent = (100 * survived / trapLengths.length).toFixed(0) + "%";
     g.append("line").attr("x1", xScale(med)).attr("x2", xScale(med)).attr("y1", 0).attr("y2", hh).attr("stroke", "var(--c-danger)").attr("stroke-width", 1.5).attr("stroke-dasharray", "4,3");
   }
 
@@ -880,6 +949,7 @@ function generateSAW(n) {
     trapLengths = [];
     statCollected.textContent = "0";
     statMedian.textContent = "...";
+    statSurvive100.textContent = "...";
     resetWalk();
     drawHistogram();
   });

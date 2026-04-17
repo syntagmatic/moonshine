@@ -329,7 +329,15 @@ strip maps the resulting cell fates.
         <span class="val" id="val-degrade">0.08</span>
       </div>
     </div>
+    <div class="control-group">
+      <label>Speed</label>
+      <div class="slider-row">
+        <input type="range" id="slider-speed" min="1" max="24" step="1" value="8">
+        <span class="val" id="val-speed">8&times;</span>
+      </div>
+    </div>
     <div class="control-group" style="justify-content:flex-end;">
+      <button class="btn" id="btn-pause-diff">Pause</button>
       <button class="btn" id="btn-reset-diff">Reset</button>
     </div>
   </div>
@@ -339,7 +347,8 @@ strip maps the resulting cell fates.
     <span class="legend-item"><span class="legend-swatch" style="background:#fbbf24"></span> High</span>
     <span class="readout">L = &radic;(D/k) = <span id="length-scale">5.0</span></span>
   </div>
-  <p class="figure-caption"><span class="figure-label">Figure 2.</span> Morphogen diffusing from a source on the left edge while being degraded everywhere. The heatmap shows concentration across the 2D tissue field. The strip below shows cell fates (blue/white/red). The profile chart plots the average concentration at each column. The dashed curve is the theoretical steady-state: C(x) = e<sup>-x/L</sup>.</p>
+  <p class="click-hint">Click anywhere on the tissue to inject a burst of morphogen &mdash; watch how it spreads and decays</p>
+  <p class="figure-caption"><span class="figure-label">Figure 2.</span> Morphogen diffusing from a source on the left edge while being degraded everywhere. The heatmap shows concentration across the 2D tissue field. The strip below shows cell fates (blue/white/red). The profile chart plots the average concentration at each column. The dashed curve is the theoretical steady-state: C(x) = e<sup>-x/L</sup>. Click the heatmap to inject a transient secondary source.</p>
 </div>
 
 <!-- ====== Section 3: Two Morphogens, Complex Patterns ====== -->
@@ -370,6 +379,13 @@ the fate map rearrange itself.
       <div class="slider-row">
         <input type="range" id="slider-reach" min="0.1" max="1.0" step="0.01" value="0.4">
         <span class="val" id="val-reach">0.40</span>
+      </div>
+    </div>
+    <div class="control-group">
+      <label>Fate threshold</label>
+      <div class="slider-row">
+        <input type="range" id="slider-two-thresh" min="0.15" max="0.85" step="0.01" value="0.5">
+        <span class="val" id="val-two-thresh">0.50</span>
       </div>
     </div>
     <div class="control-group">
@@ -727,10 +743,14 @@ function heatRGB(v) {
 
   const sliderDiff = document.getElementById('slider-diff');
   const sliderDegrade = document.getElementById('slider-degrade');
+  const sliderSpeed = document.getElementById('slider-speed');
   const valDiff = document.getElementById('val-diff');
   const valDegrade = document.getElementById('val-degrade');
+  const valSpeed = document.getElementById('val-speed');
   const btnReset = document.getElementById('btn-reset-diff');
+  const btnPause = document.getElementById('btn-pause-diff');
   const lengthScaleSpan = document.getElementById('length-scale');
+  let paused = false;
 
   // 2D grid for diffusion simulation
   const cols = 120;
@@ -939,8 +959,10 @@ function heatRGB(v) {
 
   let frameCount = 0;
   function tick() {
-    const stepsPerFrame = 8;
-    for (let i = 0; i < stepsPerFrame; i++) step();
+    if (!paused) {
+      const stepsPerFrame = +sliderSpeed.value;
+      for (let i = 0; i < stepsPerFrame; i++) step();
+    }
     drawCanvas();
     frameCount++;
     // Update the profile chart less frequently (every 6 frames) to avoid D3 overhead
@@ -949,12 +971,42 @@ function heatRGB(v) {
     rafId = requestAnimationFrame(tick);
   }
 
+  // Click-to-inject a Gaussian burst of morphogen at the pointer location
+  function injectAt(clientX, clientY) {
+    const rect = canvas.getBoundingClientRect();
+    const gx = Math.floor(((clientX - rect.left) / rect.width) * cols);
+    const gy = Math.floor(((clientY - rect.top) / rect.height) * (rows + fateRowCount));
+    if (gx < 0 || gx >= cols || gy < 0 || gy >= rows) return; // skip fate-strip clicks
+    const radius = 6;
+    for (let dy = -radius; dy <= radius; dy++) {
+      for (let dx = -radius; dx <= radius; dx++) {
+        const x = gx + dx, y = gy + dy;
+        if (x < 1 || x >= cols || y < 0 || y >= rows) continue;
+        const d2 = dx * dx + dy * dy;
+        if (d2 > radius * radius) continue;
+        const bump = Math.exp(-d2 / (radius * radius * 0.5));
+        grid[idx(x, y)] = clamp(grid[idx(x, y)] + bump, 0, 1);
+      }
+    }
+  }
+
+  canvas.style.cursor = 'crosshair';
+  canvas.addEventListener('pointerdown', e => { injectAt(e.clientX, e.clientY); });
+
   layout();
   reset();
   updateReadout();
   tick();
 
   btnReset.addEventListener('click', () => { reset(); frameCount = 0; });
+  btnPause.addEventListener('click', () => {
+    paused = !paused;
+    btnPause.textContent = paused ? 'Play' : 'Pause';
+    btnPause.classList.toggle('active', paused);
+  });
+  sliderSpeed.addEventListener('input', () => {
+    valSpeed.textContent = sliderSpeed.value + '\u00d7';
+  });
   sliderDiff.addEventListener('input', () => { reset(); updateReadout(); });
   sliderDegrade.addEventListener('input', () => { reset(); updateReadout(); });
 
@@ -981,6 +1033,8 @@ function heatRGB(v) {
 
   const sliderReach = document.getElementById('slider-reach');
   const valReach = document.getElementById('val-reach');
+  const sliderThresh = document.getElementById('slider-two-thresh');
+  const valThresh = document.getElementById('val-two-thresh');
   const btnReset = document.getElementById('btn-reset-two');
   const viewBtns = container.querySelectorAll('[data-view]');
   const legendDiv = document.getElementById('two-legend');
@@ -1024,7 +1078,7 @@ function heatRGB(v) {
   function render() {
     const reach = +sliderReach.value;
     const img = ctx.createImageData(gridSize, gridSize);
-    const thresh = 0.5;
+    const thresh = +sliderThresh.value;
 
     for (let y = 0; y < gridSize; y++) {
       for (let x = 0; x < gridSize; x++) {
@@ -1071,6 +1125,8 @@ function heatRGB(v) {
     }
 
     ctx.putImageData(img, 0, 0);
+
+    valThresh.textContent = thresh.toFixed(2);
 
     // Draw grid lines (faint, every 20 cells)
     ctx.save();
@@ -1207,6 +1263,7 @@ function heatRGB(v) {
   });
 
   sliderReach.addEventListener('input', render);
+  sliderThresh.addEventListener('input', render);
 
   layout();
   render();

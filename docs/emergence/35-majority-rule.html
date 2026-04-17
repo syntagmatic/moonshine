@@ -228,12 +228,23 @@ surroundings. Watch long enough and you will see it settle on a single color.
       <span class="stat-label">White:</span>
       <span class="stat-val" id="stat-rule-white">50%</span>
     </div>
+    <div class="stat">
+      <span class="stat-label">Status:</span>
+      <span class="stat-val" id="stat-rule-status">active</span>
+    </div>
   </div>
   <div class="controls">
     <div class="btn-group">
       <button class="btn" id="rule-play">Play</button>
       <button class="btn" id="rule-step">Step</button>
       <button class="btn" id="rule-reset">Reset</button>
+    </div>
+    <div class="control-group">
+      <label>Neighborhood</label>
+      <div class="btn-group">
+        <button class="btn active" id="rule-moore">Moore (9)</button>
+        <button class="btn" id="rule-vn">von Neumann (5)</button>
+      </div>
     </div>
     <div class="control-group">
       <label>Steps per frame</label>
@@ -243,7 +254,7 @@ surroundings. Watch long enough and you will see it settle on a single color.
       </div>
     </div>
   </div>
-  <p class="figure-caption"><span class="figure-label">Figure 1.</span> Majority rule on a 200x200 grid. Each cell copies the majority color of its 3x3 Moore neighborhood every step. Use the Step button to advance one tick at a time and watch domains form in the first few steps.</p>
+  <p class="figure-caption"><span class="figure-label">Figure 1.</span> Majority rule on a 200x200 grid. Switch between the 9-cell Moore neighborhood (self + 8 surrounding) and the 5-cell von Neumann neighborhood (self + 4 orthogonal). Both have odd group sizes so ties never arise. The smaller group produces noisier boundaries and traps the dynamics in frozen stripes more often. Playback pauses automatically once the grid stops changing.</p>
 </div>
 
 <p>
@@ -298,6 +309,10 @@ boundary highlighting to see the interfaces between domains drawn in blue.
       <span class="stat-label">Boundary cells:</span>
       <span class="stat-val" id="stat-coarsen-boundary">--</span>
     </div>
+    <div class="stat">
+      <span class="stat-label">Fitted exponent:</span>
+      <span class="stat-val" id="stat-coarsen-exponent">--</span>
+    </div>
   </div>
   <div class="controls">
     <div class="btn-group">
@@ -314,7 +329,7 @@ boundary highlighting to see the interfaces between domains drawn in blue.
       </div>
     </div>
   </div>
-  <p class="figure-caption"><span class="figure-label">Figure 2.</span> Domain coarsening. The chart tracks domain size over time. The dashed blue line shows the theoretical \( \sqrt{t} \) scaling. Boundary cells are highlighted in blue when toggled on.</p>
+  <p class="figure-caption"><span class="figure-label">Figure 2.</span> Domain coarsening. The chart tracks domain size over time, with the dashed blue line showing the theoretical \( \sqrt{t} \) scaling. The fitted exponent is a least-squares slope of \( \log L \) against \( \log t \) over the recent history; it should hover near 0.5 while coarsening is active and drop once the system locks into frozen stripes or consensus. Boundary cells are highlighted in blue when toggled on.</p>
 </div>
 
 <p>
@@ -400,7 +415,7 @@ fluctuations.
 </p>
 
 <footer style="margin-top: 4rem; padding-top: 2rem; border-top: 1px solid var(--border); font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2);">
-  <p>Next: <a href="36-forest-fire-model.html" style="color: var(--accent);">Forest Fire Model</a> &rarr;</p>
+  <p>Next: <a href="37-brownian-ratchet.html" style="color: var(--accent);">Brownian Ratchet</a> &rarr;</p>
   <p style="margin-top: 1rem; opacity: 0.6;">Built with <a href="https://github.com/enjalot/moonshine" style="color: var(--text-2);">moonshine</a>.</p>
 </footer>
 
@@ -457,6 +472,25 @@ fluctuations.
     }
   }
 
+  // 5-cell von Neumann majority: self + 4 orthogonal neighbors, threshold 3.
+  function majorityStepKernel5(grid, next, cols, rows) {
+    for (var y = 0; y < rows; y++) {
+      var ym = ((y - 1) + rows) % rows;
+      var yp = (y + 1) % rows;
+      for (var x = 0; x < cols; x++) {
+        var xm = ((x - 1) + cols) % cols;
+        var xp = (x + 1) % cols;
+        var count = grid[y * cols + x] + grid[ym * cols + x] + grid[yp * cols + x] + grid[y * cols + xm] + grid[y * cols + xp];
+        next[y * cols + x] = count >= 3 ? 1 : 0;
+      }
+    }
+  }
+
+  function gridsEqual(a, b, len) {
+    for (var i = 0; i < len; i++) if (a[i] !== b[i]) return false;
+    return true;
+  }
+
   function countOnes(grid, len) {
     var c = 0;
     for (var i = 0; i < len; i++) c += grid[i];
@@ -475,9 +509,12 @@ fluctuations.
     var statStep  = document.getElementById("stat-rule-step");
     var statBlack = document.getElementById("stat-rule-black");
     var statWhite = document.getElementById("stat-rule-white");
+    var statStatus = document.getElementById("stat-rule-status");
     var playBtn   = document.getElementById("rule-play");
     var stepBtn   = document.getElementById("rule-step");
     var resetBtn  = document.getElementById("rule-reset");
+    var mooreBtn  = document.getElementById("rule-moore");
+    var vnBtn     = document.getElementById("rule-vn");
     var speedSlider = document.getElementById("rule-speed");
     var speedValEl  = document.getElementById("rule-speed-val");
 
@@ -487,15 +524,20 @@ fluctuations.
     var playing = false;
     var stepsPerFrame = 1;
     var rafId = null;
+    var kernel = majorityStepKernel;
+    var frozen = false;
 
     function randomFill(p) {
       for (var i = 0; i < N; i++) grid[i] = Math.random() < p ? 1 : 0;
     }
 
     function advance() {
-      majorityStepKernel(grid, next, COLS, ROWS);
+      kernel(grid, next, COLS, ROWS);
+      var changed = !gridsEqual(grid, next, N);
       var tmp = grid; grid = next; next = tmp;
       step++;
+      if (!changed) frozen = true;
+      return changed;
     }
 
     function draw() {
@@ -508,17 +550,28 @@ fluctuations.
       statStep.textContent = step;
       statBlack.textContent = pct + "%";
       statWhite.textContent = (100 - parseFloat(pct)).toFixed(1) + "%";
+      if (frozen) {
+        if (bc === N || bc === 0) statStatus.textContent = "consensus";
+        else statStatus.textContent = "frozen (stripes)";
+      } else {
+        statStatus.textContent = "active";
+      }
     }
 
     function tick() {
-      for (var i = 0; i < stepsPerFrame; i++) advance();
+      var anyChange = false;
+      for (var i = 0; i < stepsPerFrame; i++) {
+        if (advance()) anyChange = true;
+        if (frozen) break;
+      }
       draw();
       updateStats();
+      if (frozen) { pause(); return; }
       if (playing) rafId = requestAnimationFrame(tick);
     }
 
     function play() {
-      if (playing) return;
+      if (playing || frozen) return;
       playing = true;
       playBtn.classList.add("active");
       playBtn.textContent = "Pause";
@@ -536,13 +589,27 @@ fluctuations.
       pause();
       randomFill(0.5);
       step = 0;
+      frozen = false;
       draw();
       updateStats();
     }
 
     playBtn.addEventListener("click", function () { playing ? pause() : play(); });
-    stepBtn.addEventListener("click", function () { pause(); advance(); draw(); updateStats(); });
+    stepBtn.addEventListener("click", function () {
+      pause();
+      if (!frozen) { advance(); draw(); updateStats(); }
+    });
     resetBtn.addEventListener("click", init);
+    mooreBtn.addEventListener("click", function () {
+      kernel = majorityStepKernel;
+      mooreBtn.classList.add("active"); vnBtn.classList.remove("active");
+      init();
+    });
+    vnBtn.addEventListener("click", function () {
+      kernel = majorityStepKernel5;
+      vnBtn.classList.add("active"); mooreBtn.classList.remove("active");
+      init();
+    });
     speedSlider.addEventListener("input", function () {
       stepsPerFrame = parseInt(this.value, 10);
       speedValEl.textContent = stepsPerFrame;
@@ -567,6 +634,7 @@ fluctuations.
     var statStep     = document.getElementById("stat-coarsen-step");
     var statDomain   = document.getElementById("stat-coarsen-domain");
     var statBoundary = document.getElementById("stat-coarsen-boundary");
+    var statExponent = document.getElementById("stat-coarsen-exponent");
     var playBtn      = document.getElementById("coarsen-play");
     var stepBtn      = document.getElementById("coarsen-step");
     var resetBtn     = document.getElementById("coarsen-reset");
@@ -661,6 +729,22 @@ fluctuations.
       drawGridToCanvas(ctx, grid, COLS, ROWS, showBoundary ? boundaryMask : null);
     }
 
+    function fitExponent() {
+      // Least-squares slope of log(ds) vs log(step) over recent history (excluding step 0).
+      var pts = history.filter(function (h) { return h.step >= 2 && h.ds > 0; });
+      if (pts.length < 4) return null;
+      // Use a trailing window so late-stage freezing pulls the slope down.
+      var win = pts.slice(Math.max(0, pts.length - 30));
+      var n = win.length, sx = 0, sy = 0, sxx = 0, sxy = 0;
+      for (var i = 0; i < n; i++) {
+        var lx = Math.log(win[i].step), ly = Math.log(win[i].ds);
+        sx += lx; sy += ly; sxx += lx * lx; sxy += lx * ly;
+      }
+      var denom = n * sxx - sx * sx;
+      if (denom === 0) return null;
+      return (n * sxy - sx * sy) / denom;
+    }
+
     function record() {
       var bc = computeBoundaryMask();
       var ds = estimateDomainSize(bc);
@@ -668,6 +752,8 @@ fluctuations.
       statStep.textContent = step;
       statDomain.textContent = ds.toFixed(1);
       statBoundary.textContent = bc;
+      var expn = fitExponent();
+      statExponent.textContent = expn === null ? "--" : expn.toFixed(2);
     }
 
     function tick() {

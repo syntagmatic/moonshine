@@ -123,11 +123,27 @@ The bifurcation ratio \(R_b\) typically stays between 3 and 5 for natural river 
         <span class="val" id="erosion-val">0.05</span>
       </div>
     </div>
+    <div class="control-group">
+      <label>Uplift</label>
+      <div class="slider-row">
+        <input type="range" id="uplift-slider" min="0" max="0.05" step="0.005" value="0.02">
+        <span class="val" id="uplift-val">0.02</span>
+      </div>
+    </div>
+    <div class="control-group">
+      <label>Speed</label>
+      <div class="slider-row">
+        <input type="range" id="speed-slider" min="1" max="8" step="1" value="2">
+        <span class="val" id="speed-val">2x</span>
+      </div>
+    </div>
+    <button class="btn" id="btn-play">Pause</button>
     <button class="btn" id="btn-reset">New Terrain</button>
   </div>
   <div class="stats-row">
-    <span>Max Order: <b id="stat-order">0</b></span>
-    <span>Basins: <b id="stat-basins">0</b></span>
+    <span>Max Strahler Order: <b id="stat-order">0</b></span>
+    <span>Outlets: <b id="stat-basins">0</b></span>
+    <span>Mean Relief: <b id="stat-relief">0.00</b></span>
   </div>
   <p class="figure-caption"><span class="figure-label">Figure 1.</span> A simulated landscape under uniform rainfall. Watch as water (blue) carves channels into the terrain (brown). The hierarchical network that forms obeys the same scaling laws as real-world rivers.</p>
 </div>
@@ -152,7 +168,10 @@ const dispatch = d3.dispatch('update');
 const N = 100;
 let terrain = new Float32Array(N * N);
 let flux = new Float32Array(N * N);
+let downstream = new Int32Array(N * N); // index of steepest-descent neighbour, or -1 for outlets
+let order = new Uint8Array(N * N);      // Strahler order per cell
 let erosionRate = 0.05;
+let upliftRate = 0.02;
 
 function init() {
   for (let i = 0; i < N * N; i++) {
@@ -178,6 +197,7 @@ function computeFlow() {
         }
       }
     }
+    downstream[i] = (lowest === i) ? -1 : lowest;
     if (lowest !== i) flux[lowest] += flux[i];
   });
 }
@@ -185,8 +205,37 @@ function computeFlow() {
 function step() {
   computeFlow();
   for (let i = 0; i < N * N; i++) {
+    const r = Math.floor(i / N);
+    // Uplift everywhere except the downstream boundary (outlet row).
+    if (r < N - 1) terrain[i] += upliftRate * 0.001;
     terrain[i] -= erosionRate * Math.sqrt(flux[i]) * 0.001;
+    if (terrain[i] < 0) terrain[i] = 0;
   }
+}
+
+// Strahler order along the flow tree. Cells below a flux threshold aren't
+// channels, so they don't count. Process cells from low to high elevation
+// (tree leaves first) using the downstream pointers already computed.
+function computeStrahler(threshold) {
+  order.fill(0);
+  const channels = [];
+  for (let i = 0; i < N * N; i++) {
+    if (flux[i] >= threshold) { order[i] = 1; channels.push(i); }
+  }
+  // sort channels from lowest flux (headwaters) to highest (mouths)
+  channels.sort((a, b) => flux[a] - flux[b]);
+  let maxOrder = 0, outlets = 0;
+  for (const i of channels) {
+    const d = downstream[i];
+    if (d === -1 || flux[d] < threshold) { outlets++; continue; }
+    const oi = order[i], od = order[d];
+    if (oi > od) order[d] = oi;
+    else if (oi === od) order[d] = od + 1;
+  }
+  for (let k = 0; k < channels.length; k++) {
+    if (order[channels[k]] > maxOrder) maxOrder = order[channels[k]];
+  }
+  return { maxOrder, outlets };
 }
 
 // --- Visualization ---
@@ -194,10 +243,22 @@ function step() {
   const container = document.getElementById('fig-river');
   const canvas = document.getElementById('canvas-river');
   const ctx = canvas.getContext('2d');
-  const slider = document.getElementById('erosion-slider');
-  const valDisp = document.getElementById('erosion-val');
+  const erosionSlider = document.getElementById('erosion-slider');
+  const erosionVal = document.getElementById('erosion-val');
+  const upliftSlider = document.getElementById('uplift-slider');
+  const upliftVal = document.getElementById('uplift-val');
+  const speedSlider = document.getElementById('speed-slider');
+  const speedVal = document.getElementById('speed-val');
+  const btnPlay = document.getElementById('btn-play');
   const btnReset = document.getElementById('btn-reset');
   const statOrder = document.getElementById('stat-order');
+  const statBasins = document.getElementById('stat-basins');
+  const statRelief = document.getElementById('stat-relief');
+
+  const CHANNEL_THRESHOLD = 20;
+  let stepsPerFrame = 2;
+  let playing = true;
+  let frameCount = 0;
 
   function draw() {
     const cw = canvas.width / N;
@@ -206,8 +267,8 @@ function step() {
       const r = Math.floor(i / N), c = i % N;
       const h = terrain[i];
       const f = flux[i];
-      
-      if (f > 20) {
+
+      if (f > CHANNEL_THRESHOLD) {
         ctx.fillStyle = `rgb(37, 99, ${Math.min(255, 150 + f)})`;
       } else {
         ctx.fillStyle = `rgb(${100 + h * 100}, ${80 + h * 80}, ${50 + h * 50})`;
@@ -216,17 +277,52 @@ function step() {
     }
   }
 
+  function updateStats() {
+    const { maxOrder, outlets } = computeStrahler(CHANNEL_THRESHOLD);
+    let lo = Infinity, hi = -Infinity;
+    for (let i = 0; i < N * N; i++) {
+      if (terrain[i] < lo) lo = terrain[i];
+      if (terrain[i] > hi) hi = terrain[i];
+    }
+    statOrder.textContent = maxOrder;
+    statBasins.textContent = outlets;
+    statRelief.textContent = (hi - lo).toFixed(2);
+  }
+
   function loop() {
-    step();
-    draw();
+    if (playing) {
+      for (let s = 0; s < stepsPerFrame; s++) step();
+      draw();
+      // Stats are O(N^2 log N) via the sort in computeStrahler; run them
+      // a few times a second, not every frame.
+      if ((frameCount++ & 7) === 0) updateStats();
+    }
     requestAnimationFrame(loop);
   }
 
-  slider.addEventListener('input', e => {
+  erosionSlider.addEventListener('input', e => {
     erosionRate = +e.target.value;
-    valDisp.textContent = erosionRate.toFixed(2);
+    erosionVal.textContent = erosionRate.toFixed(2);
   });
-  btnReset.addEventListener('click', init);
+  upliftSlider.addEventListener('input', e => {
+    upliftRate = +e.target.value;
+    upliftVal.textContent = upliftRate.toFixed(3);
+  });
+  speedSlider.addEventListener('input', e => {
+    stepsPerFrame = +e.target.value;
+    speedVal.textContent = stepsPerFrame + 'x';
+  });
+  btnPlay.addEventListener('click', () => {
+    playing = !playing;
+    btnPlay.textContent = playing ? 'Pause' : 'Play';
+    btnPlay.classList.toggle('active', !playing);
+  });
+  btnReset.addEventListener('click', () => {
+    init();
+    computeFlow();
+    updateStats();
+    draw();
+  });
 
   new ResizeObserver(() => {
     canvas.width = canvas.height = container.clientWidth - 48;
@@ -234,6 +330,8 @@ function step() {
   }).observe(container);
 
   init();
+  computeFlow();
+  updateStats();
   loop();
 })();
 </script>

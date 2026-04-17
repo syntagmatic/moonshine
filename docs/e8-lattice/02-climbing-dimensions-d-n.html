@@ -67,6 +67,7 @@ a:hover { color: #1d4ed8; }
   border: 1px solid var(--border);
   border-radius: 6px;
   overflow: hidden;
+  position: relative;
 }
 .figure-caption {
   font-family: var(--heading-font);
@@ -127,6 +128,26 @@ a:hover { color: #1d4ed8; }
 .katex-display { margin: 1.5rem 0; }
 
 svg text { font-family: var(--heading-font); }
+
+.viz-tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: rgba(26, 26, 46, 0.95);
+  color: #fafafa;
+  padding: 0.5rem 0.7rem;
+  border-radius: 4px;
+  font-family: var(--heading-font);
+  font-size: 0.8rem;
+  line-height: 1.4;
+  z-index: 10;
+  opacity: 0;
+  transition: opacity 0.12s;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
+.viz-tooltip.visible { opacity: 1; }
+.viz-tooltip .coords { font-family: var(--mono-font); font-size: 0.78rem; color: #fde68a; margin-top: 0.15rem; }
+.viz-tooltip .muted { color: #9ca3af; }
 
 table.compact {
   width: 100%;
@@ -308,6 +329,23 @@ math('math-dn-weyl', '2^{n-1} \\cdot n!');
 
   var g = svg.append('g').attr('transform', 'translate(' + margin.left + ',' + margin.top + ')');
 
+  var tooltip = d3.select(document.getElementById('fig-dn-explorer'))
+    .append('div').attr('class', 'viz-tooltip');
+
+  function formatCoord(v) {
+    if (v === 0) return ' 0';
+    if (v > 0) return '+' + v;
+    return String(v); // "-1"
+  }
+  function formatRootVec(r, n) {
+    // Pad to 8 slots with "·" for dimensions beyond n.
+    var parts = [];
+    for (var i = 0; i < 8; i++) {
+      parts.push(i < n ? formatCoord(r[i]) : ' ·');
+    }
+    return '(' + parts.join(', ') + ')';
+  }
+
   function render(n) {
     g.selectAll('*').remove();
     var roots = E8.dN.roots(n);
@@ -343,19 +381,47 @@ math('math-dn-weyl', '2^{n-1} \\cdot n!');
     g.append('text').attr('x', -5).attr('y', yScale(-1) + 3)
       .attr('text-anchor', 'end').attr('font-size', 10).attr('fill', 'var(--c-axis)').text('-1');
 
-    // Polylines
-    roots.forEach(function (r) {
-      var pts = [];
-      for (var k = 0; k < n; k++) {
-        pts.push(xScale(k) + ',' + yScale(r[k]));
-      }
-      g.append('polyline')
-        .attr('points', pts.join(' '))
+    // Polylines (data-bound, hover-interactive)
+    var lineGroup = g.append('g').attr('class', 'polylines');
+    var lines = lineGroup.selectAll('polyline')
+      .data(roots)
+      .join('polyline')
+        .attr('points', function (r) {
+          var pts = [];
+          for (var k = 0; k < n; k++) pts.push(xScale(k) + ',' + yScale(r[k]));
+          return pts.join(' ');
+        })
         .attr('fill', 'none')
         .attr('stroke', 'var(--c-dn)')
         .attr('stroke-width', 1.5)
-        .attr('stroke-opacity', 0.55);
-    });
+        .attr('stroke-opacity', 0.55)
+        .style('cursor', 'pointer');
+
+    lines
+      .on('mouseover', function (event, r) {
+        var idx = roots.indexOf(r);
+        lines.transition().duration(80)
+          .attr('stroke-opacity', function (d) { return d === r ? 1 : 0.08; })
+          .attr('stroke-width', function (d) { return d === r ? 3 : 1.5; })
+          .attr('stroke', function (d) { return d === r ? 'var(--c-highlight)' : 'var(--c-dn)'; });
+        tooltip.html(
+          '<div>root #' + (idx + 1) + ' of D<sub>' + n + '</sub> <span class="muted">(' + roots.length + ' total)</span></div>' +
+          '<div class="coords">' + formatRootVec(r, n) + '</div>'
+        ).classed('visible', true);
+      })
+      .on('mousemove', function (event) {
+        var figRect = document.getElementById('fig-dn-explorer').getBoundingClientRect();
+        var x = event.clientX - figRect.left + 12;
+        var y = event.clientY - figRect.top + 12;
+        tooltip.style('left', x + 'px').style('top', y + 'px');
+      })
+      .on('mouseout', function () {
+        lines.transition().duration(120)
+          .attr('stroke-opacity', 0.55)
+          .attr('stroke-width', 1.5)
+          .attr('stroke', 'var(--c-dn)');
+        tooltip.classed('visible', false);
+      });
 
     label.textContent = n;
     var count = 2 * n * (n - 1);
@@ -398,6 +464,9 @@ math('math-dn-weyl', '2^{n-1} \\cdot n!');
 
   var g = svg.append('g').attr('transform', 'translate(' + margin.left + ',' + margin.top + ')');
 
+  var tooltip = d3.select(document.getElementById('fig-climb-chart'))
+    .append('div').attr('class', 'viz-tooltip');
+
   var xScale = d3.scaleLinear().domain([2, 8]).range([0, innerW]);
   var yScale = d3.scaleLinear().domain([0, 260]).range([innerH, 0]);
 
@@ -424,21 +493,57 @@ math('math-dn-weyl', '2^{n-1} \\cdot n!');
   g.append('path').datum(data).attr('d', bestLine)
     .attr('fill', 'none').attr('stroke', 'var(--c-e8)').attr('stroke-width', 2.5).attr('stroke-dasharray', '0');
 
+  function showPointTooltip(event, d) {
+    var gap = d.best - d.dn;
+    tooltip.html(
+      '<div>D<sub>' + d.n + '</sub> = <b>' + d.dn + '</b></div>' +
+      '<div>best known = <b>' + d.best + '</b> <span class="muted">(' + d.bestName + ')</span></div>' +
+      '<div>gap = <b>' + gap + '</b>' + (gap === 0 ? ' <span class="muted">— D<sub>' + d.n + '</sub> is optimal</span>' : '') + '</div>'
+    ).classed('visible', true);
+  }
+  function movePointTooltip(event) {
+    var figRect = document.getElementById('fig-climb-chart').getBoundingClientRect();
+    tooltip
+      .style('left', (event.clientX - figRect.left + 12) + 'px')
+      .style('top', (event.clientY - figRect.top + 12) + 'px');
+  }
+  function hidePointTooltip() { tooltip.classed('visible', false); }
+
   // D_n points
-  g.selectAll('circle.dn-pt').data(data).enter().append('circle')
+  g.selectAll('circle.dn-pt').data(data).join('circle')
     .attr('class', 'dn-pt')
     .attr('cx', function (d) { return xScale(d.n); })
     .attr('cy', function (d) { return yScale(d.dn); })
     .attr('r', 5)
-    .attr('fill', 'var(--c-dn)');
+    .attr('fill', 'var(--c-dn)')
+    .style('cursor', 'pointer')
+    .on('mouseover', function (event, d) {
+      d3.select(this).transition().duration(80).attr('r', 8);
+      showPointTooltip(event, d);
+    })
+    .on('mousemove', movePointTooltip)
+    .on('mouseout', function () {
+      d3.select(this).transition().duration(120).attr('r', 5);
+      hidePointTooltip();
+    });
 
   // Best-known points
-  g.selectAll('circle.best-pt').data(data).enter().append('circle')
+  g.selectAll('circle.best-pt').data(data).join('circle')
     .attr('class', 'best-pt')
     .attr('cx', function (d) { return xScale(d.n); })
     .attr('cy', function (d) { return yScale(d.best); })
     .attr('r', 5)
-    .attr('fill', 'var(--c-e8)');
+    .attr('fill', 'var(--c-e8)')
+    .style('cursor', 'pointer')
+    .on('mouseover', function (event, d) {
+      d3.select(this).transition().duration(80).attr('r', 8);
+      showPointTooltip(event, d);
+    })
+    .on('mousemove', movePointTooltip)
+    .on('mouseout', function () {
+      d3.select(this).transition().duration(120).attr('r', 5);
+      hidePointTooltip();
+    });
 
   // Labels on E_n entries where the gap opens
   [6, 7, 8].forEach(function (n) {

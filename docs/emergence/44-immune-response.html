@@ -73,6 +73,10 @@ header { margin-bottom: 3rem; }
   font-size: 0.8rem; margin-top: 0.5rem; }
 .legend-item { display: flex; align-items: center; gap: 0.35rem; }
 .legend-swatch { width: 12px; height: 12px; border-radius: 50%; border: 1px solid var(--border); }
+.preset-row { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.75rem;
+  font-family: var(--heading-font); font-size: 0.8rem; align-items: center; }
+.preset-row .preset-label { color: var(--text-2); font-weight: 600; margin-right: 0.25rem; }
+.btn.btn-sm { padding: 0.25rem 0.6rem; font-size: 0.78rem; }
 svg text { font-family: var(--heading-font); }
 
 @media (prefers-reduced-motion: reduce) {
@@ -121,6 +125,13 @@ dormant.
 
 <div class="figure" id="fig-patrol">
   <canvas id="patrolCanvas"></canvas>
+  <p class="click-hint">Click anywhere on the canvas to inject a cluster of pathogens at that location.</p>
+  <div class="preset-row">
+    <span class="preset-label">Scenario:</span>
+    <button class="btn btn-sm active" data-preset="normal">Normal immunity</button>
+    <button class="btn btn-sm" data-preset="low">Low diversity</button>
+    <button class="btn btn-sm" data-preset="primed">Pre-primed</button>
+  </div>
   <div class="controls">
     <div class="control-group">
       <label>Pathogen count</label>
@@ -136,6 +147,7 @@ dormant.
         <span class="val" id="diversityVal">5</span>
       </div>
     </div>
+    <button class="btn" id="playPauseBtn1">Pause</button>
     <button class="btn" id="infectBtn">Infect</button>
     <button class="btn" id="resetBtn1">Reset</button>
   </div>
@@ -189,6 +201,7 @@ Compare the speed and magnitude of the two responses.
 
 <div class="figure" id="fig-reinfect">
   <canvas id="reinfectCanvas"></canvas>
+  <p class="click-hint">Click on the canvas to inject additional pathogens at that location.</p>
   <div class="controls">
     <div class="control-group">
       <label>Pathogen count</label>
@@ -197,6 +210,7 @@ Compare the speed and magnitude of the two responses.
         <span class="val" id="reinfectVal">10</span>
       </div>
     </div>
+    <button class="btn" id="playPauseBtn3">Pause</button>
     <button class="btn" id="firstInfectBtn">First infection</button>
     <button class="btn" id="reinfectBtn">Reinfect</button>
     <button class="btn" id="resetBtn3">Reset</button>
@@ -298,6 +312,10 @@ its parts but in its architecture: a massively parallel, self-amplifying search.
     var diversity = 5;
     var running = false, frameId = null;
     var infected = false;
+    var history = []; /* {pathogen, activated} snapshots for mini-trajectory */
+    var frameCount = 0;
+    var currentPreset = "normal";
+    var initialTcellCount = 60;
 
     function resize() {
       var info = setupCanvas(canvas);
@@ -306,7 +324,7 @@ its parts but in its architecture: a massively parallel, self-amplifying search.
 
     function spawnTcells() {
       tcells = [];
-      for (var i = 0; i < 60; i++) {
+      for (var i = 0; i < initialTcellCount; i++) {
         var rtype = Math.floor(Math.random() * diversity);
         tcells.push({
           x: Math.random() * W, y: Math.random() * H,
@@ -314,27 +332,80 @@ its parts but in its architecture: a massively parallel, self-amplifying search.
           type: rtype, activated: false, cloneTimer: 0, age: 0, r: 4
         });
       }
+      /* Preset: "primed" gives a head start to the matching type */
+      if (currentPreset === "primed") {
+        var primedCount = 10;
+        for (var k = 0; k < primedCount; k++) {
+          tcells.push({
+            x: Math.random() * W, y: Math.random() * H,
+            vx: (Math.random() - 0.5) * 2, vy: (Math.random() - 0.5) * 2,
+            type: pathogenType, activated: false, cloneTimer: 0, age: 0, r: 4
+          });
+        }
+      }
     }
 
-    function spawnPathogens() {
+    function spawnPathogens(cx, cy) {
       var count = parseInt(document.getElementById("pathogenSlider").value);
-      pathogenType = Math.floor(Math.random() * diversity);
-      pathogens = [];
-      for (var i = 0; i < count; i++) {
-        pathogens.push({
-          x: W * 0.3 + Math.random() * W * 0.4,
-          y: H * 0.2 + Math.random() * H * 0.6,
-          r: 7, alive: true
-        });
+      /* Reset pathogenType only for fresh infection (not clicks while infected) */
+      if (!infected) pathogenType = Math.floor(Math.random() * diversity);
+      if (cx == null) {
+        cx = W * 0.5; cy = H * 0.5;
+        var spread = 0.4;
+        for (var i = 0; i < count; i++) {
+          pathogens.push({
+            x: W * (0.5 - spread / 2) + Math.random() * W * spread,
+            y: H * 0.2 + Math.random() * H * 0.6,
+            r: 7, alive: true
+          });
+        }
+      } else {
+        /* Cluster around click point */
+        for (var i = 0; i < count; i++) {
+          var angle = Math.random() * Math.PI * 2;
+          var rad = Math.random() * 40;
+          pathogens.push({
+            x: Math.max(10, Math.min(W - 10, cx + Math.cos(angle) * rad)),
+            y: Math.max(10, Math.min(H - 10, cy + Math.sin(angle) * rad)),
+            r: 7, alive: true
+          });
+        }
       }
       infected = true;
     }
 
+    function applyPreset(name) {
+      currentPreset = name;
+      if (name === "normal") {
+        initialTcellCount = 60;
+        document.getElementById("diversitySlider").value = 5;
+        diversity = 5;
+        document.getElementById("diversityVal").textContent = "5";
+      } else if (name === "low") {
+        /* Immunocompromised: fewer T-cells, less diversity */
+        initialTcellCount = 30;
+        document.getElementById("diversitySlider").value = 8;
+        diversity = 8;
+        document.getElementById("diversityVal").textContent = "8";
+      } else if (name === "primed") {
+        initialTcellCount = 60;
+        document.getElementById("diversitySlider").value = 5;
+        diversity = 5;
+        document.getElementById("diversityVal").textContent = "5";
+      }
+    }
+
     function init() {
       resize();
-      diversity = parseInt(document.getElementById("diversitySlider").value);
+      if (currentPreset === "normal" || currentPreset === "primed") {
+        diversity = parseInt(document.getElementById("diversitySlider").value);
+      }
       pathogens = [];
       infected = false;
+      history = [];
+      frameCount = 0;
+      /* For primed preset, pick pathogen type up front so we can seed matching T-cells */
+      pathogenType = Math.floor(Math.random() * diversity);
       spawnTcells();
       draw();
     }
@@ -435,11 +506,68 @@ its parts but in its architecture: a massively parallel, self-amplifying search.
       document.getElementById("statPathogen").textContent = aliveP;
       document.getElementById("statTcell").textContent = tcells.length;
       document.getElementById("statActivated").textContent = activatedCount;
+
+      /* Mini population trajectory, top-right corner */
+      if (history.length > 1) {
+        var mw = Math.min(160, W * 0.3), mh = 50;
+        var mx = W - mw - 10, my = 10;
+        ctx.fillStyle = "rgba(255,255,255,0.85)";
+        ctx.strokeStyle = "var(--border)";
+        ctx.lineWidth = 1;
+        ctx.fillRect(mx, my, mw, mh);
+        ctx.strokeRect(mx, my, mw, mh);
+        var maxP = 1, maxA = 1;
+        for (var i = 0; i < history.length; i++) {
+          if (history[i].pathogen > maxP) maxP = history[i].pathogen;
+          if (history[i].activated > maxA) maxA = history[i].activated;
+        }
+        var scale = Math.max(maxP, maxA, 5);
+        var n = history.length;
+        /* Pathogen line (red) */
+        ctx.beginPath();
+        ctx.strokeStyle = "#ef4444";
+        ctx.lineWidth = 1.5;
+        for (var i = 0; i < n; i++) {
+          var px = mx + (i / Math.max(1, n - 1)) * mw;
+          var py = my + mh - (history[i].pathogen / scale) * (mh - 4) - 2;
+          if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+        }
+        ctx.stroke();
+        /* Activated T-cell line (amber) */
+        ctx.beginPath();
+        ctx.strokeStyle = "#d97706";
+        ctx.lineWidth = 1.5;
+        for (var i = 0; i < n; i++) {
+          var px = mx + (i / Math.max(1, n - 1)) * mw;
+          var py = my + mh - (history[i].activated / scale) * (mh - 4) - 2;
+          if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+        }
+        ctx.stroke();
+        /* Label */
+        ctx.fillStyle = "#4a4a6a";
+        ctx.font = "10px 'Source Sans 3', sans-serif";
+        ctx.textAlign = "left";
+        ctx.fillText("pathogens", mx + 4, my + 12);
+        ctx.fillStyle = "#d97706";
+        ctx.fillText("activated", mx + 4, my + 24);
+        ctx.fillStyle = "#ef4444";
+        ctx.fillRect(mx + 60, my + 8, 8, 2);
+        ctx.fillStyle = "#d97706";
+        ctx.fillRect(mx + 60, my + 20, 8, 2);
+      }
     }
 
     function loop() {
       if (!running) return;
       step();
+      frameCount++;
+      /* Sample ~every 3 frames, keep last 200 samples */
+      if (frameCount % 3 === 0) {
+        var aliveP = pathogens.filter(function(p) { return p.alive; }).length;
+        var activatedCount = tcells.filter(function(t) { return t.activated; }).length;
+        history.push({ pathogen: aliveP, activated: activatedCount });
+        if (history.length > 200) history.shift();
+      }
       draw();
       frameId = requestAnimationFrame(loop);
     }
@@ -457,7 +585,8 @@ its parts but in its architecture: a massively parallel, self-amplifying search.
 
     document.getElementById("infectBtn").addEventListener("click", function() {
       spawnPathogens();
-      if (!running) start();
+      if (!running) { running = true; frameId = requestAnimationFrame(loop);
+        document.getElementById("playPauseBtn1").textContent = "Pause"; }
     });
 
     document.getElementById("pathogenSlider").addEventListener("input", function() {
@@ -472,6 +601,32 @@ its parts but in its architecture: a massively parallel, self-amplifying search.
     document.getElementById("resetBtn1").addEventListener("click", function() {
       stop(); init();
       start();
+      document.getElementById("playPauseBtn1").textContent = "Pause";
+    });
+
+    document.getElementById("playPauseBtn1").addEventListener("click", function() {
+      if (running) { stop(); this.textContent = "Play"; }
+      else { start(); this.textContent = "Pause"; }
+    });
+
+    /* Click-to-inject pathogens */
+    canvas.addEventListener("click", function(evt) {
+      var rect = canvas.getBoundingClientRect();
+      var cx = evt.clientX - rect.left;
+      var cy = evt.clientY - rect.top;
+      spawnPathogens(cx, cy);
+      if (!running) { start(); document.getElementById("playPauseBtn1").textContent = "Pause"; }
+    });
+
+    /* Preset scenario buttons */
+    document.querySelectorAll('#fig-patrol .preset-row .btn').forEach(function(btn) {
+      btn.addEventListener("click", function() {
+        document.querySelectorAll('#fig-patrol .preset-row .btn').forEach(function(b) { b.classList.remove("active"); });
+        btn.classList.add("active");
+        applyPreset(btn.getAttribute("data-preset"));
+        stop(); init(); start();
+        document.getElementById("playPauseBtn1").textContent = "Pause";
+      });
     });
 
     var ro1 = new ResizeObserver(function() { stop(); init(); start(); });
@@ -778,7 +933,7 @@ its parts but in its architecture: a massively parallel, self-amplifying search.
       infectionCount = 1;
       firstContactTick = null;
       addPathogens();
-      if (!running) start();
+      if (!running) { start(); document.getElementById("playPauseBtn3").textContent = "Pause"; }
     });
 
     document.getElementById("reinfectBtn").addEventListener("click", function() {
@@ -786,6 +941,7 @@ its parts but in its architecture: a massively parallel, self-amplifying search.
       infectionCount = 2;
       firstContactTick = null;
       addPathogens();
+      if (!running) { start(); document.getElementById("playPauseBtn3").textContent = "Pause"; }
     });
 
     document.getElementById("reinfectSlider").addEventListener("input", function() {
@@ -795,6 +951,32 @@ its parts but in its architecture: a massively parallel, self-amplifying search.
     document.getElementById("resetBtn3").addEventListener("click", function() {
       stop(); init();
       start();
+      document.getElementById("playPauseBtn3").textContent = "Pause";
+    });
+
+    document.getElementById("playPauseBtn3").addEventListener("click", function() {
+      if (running) { stop(); this.textContent = "Play"; }
+      else { start(); this.textContent = "Pause"; }
+    });
+
+    /* Click-to-inject: adds a cluster of pathogens at the click location */
+    canvas.addEventListener("click", function(evt) {
+      var rect = canvas.getBoundingClientRect();
+      var cx = evt.clientX - rect.left;
+      var cy = evt.clientY - rect.top;
+      var count = Math.max(3, Math.floor(parseInt(document.getElementById("reinfectSlider").value) / 2));
+      for (var i = 0; i < count; i++) {
+        var angle = Math.random() * Math.PI * 2;
+        var rad = Math.random() * 40;
+        pathogens.push({
+          x: Math.max(10, Math.min(W - 10, cx + Math.cos(angle) * rad)),
+          y: Math.max(10, Math.min(H - 10, cy + Math.sin(angle) * rad)),
+          r: 7, alive: true
+        });
+      }
+      /* Treat click as an infection event if one hasn't started */
+      if (infectionCount === 0) { infectionCount = 1; firstContactTick = null; }
+      if (!running) { start(); document.getElementById("playPauseBtn3").textContent = "Pause"; }
     });
 
     var ro = new ResizeObserver(function() { stop(); init(); start(); });

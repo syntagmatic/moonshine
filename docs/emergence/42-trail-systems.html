@@ -139,7 +139,25 @@ destinations. The sweet spot in the middle produces efficient, natural-looking t
         <span class="val" id="rateVal">3</span>
       </div>
     </div>
+    <div class="control-group">
+      <label>Evaporation</label>
+      <div class="slider-row">
+        <input type="range" id="evapSlider" min="0" max="20" step="1" value="2">
+        <span class="val" id="evapVal">2</span>
+      </div>
+    </div>
+    <button class="btn" id="playBtn">Pause</button>
     <button class="btn" id="resetBtn">Reset</button>
+  </div>
+  <div class="controls" style="margin-top: 0.5rem;">
+    <div class="control-group">
+      <label>Preset</label>
+      <div class="slider-row">
+        <button class="btn" data-preset="beeline">Beeline</button>
+        <button class="btn" data-preset="balanced">Balanced</button>
+        <button class="btn" data-preset="follower">Path follower</button>
+      </div>
+    </div>
   </div>
   <div class="stats-row">
     <span>Pedestrians completed: <span class="stat-val" id="statCount">0</span></span>
@@ -182,10 +200,11 @@ The efficiency emerges from the feedback between individual choice and collectiv
 <h2>3. Adding a New Destination</h2>
 
 <p>
-What happens when the landscape changes? Click the button below to drop a new destination
-onto the field. The existing trail network was optimized for the old layout. Watch how new
-branches form to connect the newcomer, while the old network mostly stays intact. The system
-reorganizes incrementally, not from scratch.
+What happens when the landscape changes? Click anywhere on the field below to drop a new
+destination exactly where you want it, or use the button for a random placement. The existing
+trail network was optimized for the old layout. Watch how new branches form to connect the
+newcomer, while the old network mostly stays intact. The system reorganizes incrementally,
+not from scratch.
 </p>
 
 <p>
@@ -198,14 +217,15 @@ become scaffolding for the new ones.
 <div class="figure">
   <canvas id="trailCanvas2"></canvas>
   <div class="controls">
-    <button class="btn" id="addDestBtn">Add destination</button>
+    <button class="btn" id="addDestBtn">Add random destination</button>
+    <button class="btn" id="playBtn2">Pause</button>
     <button class="btn" id="resetBtn2">Reset</button>
   </div>
   <div class="stats-row">
     <span>Destinations: <span class="stat-val" id="statDests2">3</span></span>
     <span>Pedestrians: <span class="stat-val" id="statCount2">0</span></span>
   </div>
-  <p class="click-hint">Click "Add destination" after trails have formed to watch the network adapt</p>
+  <p class="click-hint">Click anywhere on the field to drop a destination where you want, or use the button for a random one</p>
   <p class="figure-caption"><span class="figure-label">Figure 3.</span> A new destination forces new trail branches to grow. The existing network acts as scaffolding: new paths often branch off old ones rather than cutting entirely new routes.</p>
 </div>
 
@@ -256,6 +276,7 @@ transport network. This is emergence in its most literal, ground-level form.
     self.completed = 0;
     self.pathPref = opts.pathPref || 0.6;
     self.spawnRate = opts.spawnRate || 3;
+    self.evapRate = opts.evapRate != null ? opts.evapRate : 2; /* slider units, see step() */
     self.onTick = opts.onTick || null;
     self.distLog = [];
     self.running = false;
@@ -376,9 +397,12 @@ transport network. This is emergence in its most literal, ground-level form.
         alive.push(w);
       }
       self.walkers = alive;
-      /* Gradual trail decay so unused paths fade */
+      /* Gradual trail decay so unused paths fade. Slider 0..20 maps to decay factor;
+         0 = no evaporation, larger = faster fade. 2 is the original 0.9998 behavior. */
+      var decay = 1 - (self.evapRate * 0.0001);
+      if (decay < 0.98) decay = 0.98;
       for (var j = 0; j < trail.length; j++) {
-        trail[j] *= 0.9998;
+        trail[j] *= decay;
       }
     };
 
@@ -457,6 +481,12 @@ transport network. This is emergence in its most literal, ground-level form.
       self.running = false;
       if (self.frameId) cancelAnimationFrame(self.frameId);
     };
+
+    self.toggle = function() {
+      if (self.running) self.stop();
+      else self.start();
+      return self.running;
+    };
   }
 
   /* === Section 1: Main trail sim === */
@@ -494,9 +524,40 @@ transport network. This is emergence in its most literal, ground-level form.
     sim1.spawnRate = parseInt(this.value);
     rateVal.textContent = sim1.spawnRate;
   });
+  var evapSlider = document.getElementById("evapSlider");
+  var evapVal = document.getElementById("evapVal");
+  evapSlider.addEventListener("input", function() {
+    sim1.evapRate = parseInt(this.value);
+    evapVal.textContent = sim1.evapRate;
+  });
+  var playBtn = document.getElementById("playBtn");
+  playBtn.addEventListener("click", function() {
+    var running = sim1.toggle();
+    playBtn.textContent = running ? "Pause" : "Play";
+  });
   document.getElementById("resetBtn").addEventListener("click", function() {
     sim1.stop();
     initSim1();
+    playBtn.textContent = "Pause";
+  });
+
+  /* Presets — jump the slider and relabel. Don't reset trails: watching the
+     existing network adjust to a new preference is the interesting story. */
+  var PRESETS = {
+    beeline:  { pref: 0.10, rate: 3, evap: 2,  label: "Beeline"       },
+    balanced: { pref: 0.55, rate: 3, evap: 2,  label: "Balanced"      },
+    follower: { pref: 0.90, rate: 3, evap: 2,  label: "Path follower" }
+  };
+  document.querySelectorAll("[data-preset]").forEach(function(btn) {
+    btn.addEventListener("click", function() {
+      var p = PRESETS[btn.getAttribute("data-preset")];
+      if (!p) return;
+      sim1.pathPref = p.pref;  prefSlider.value = p.pref;  prefVal.textContent = p.pref.toFixed(2);
+      sim1.spawnRate = p.rate; rateSlider.value = p.rate;  rateVal.textContent = p.rate;
+      sim1.evapRate = p.evap;  evapSlider.value = p.evap;  evapVal.textContent = p.evap;
+      document.querySelectorAll("[data-preset]").forEach(function(b) { b.classList.remove("active"); });
+      btn.classList.add("active");
+    });
   });
 
   /* === Section 2: Efficiency chart === */
@@ -604,9 +665,40 @@ transport network. This is emergence in its most literal, ground-level form.
     var ny = 0.08 + Math.random() * 0.5;
     sim2.addDestination(nx, ny);
   });
+  var playBtn2 = document.getElementById("playBtn2");
+  playBtn2.addEventListener("click", function() {
+    var running = sim2.toggle();
+    playBtn2.textContent = running ? "Pause" : "Play";
+  });
   document.getElementById("resetBtn2").addEventListener("click", function() {
     sim2.stop();
     initSim2();
+    playBtn2.textContent = "Pause";
+  });
+
+  /* Click-to-place destination on the canvas. Normalize event coords to the
+     CSS pixel size, then to [0,1] for addDestination. Reject clicks too close
+     to the spawn marker or existing destinations so things stay legible. */
+  canvas2.style.cursor = "crosshair";
+  canvas2.addEventListener("click", function(evt) {
+    var rect = canvas2.getBoundingClientRect();
+    var px = evt.clientX - rect.left;
+    var py = evt.clientY - rect.top;
+    var nx = px / rect.width;
+    var ny = py / rect.height;
+    if (nx < 0.03 || nx > 0.97 || ny < 0.03 || ny > 0.97) return;
+    /* Avoid dropping on top of spawn or another destination */
+    var minDistSq = (30 / rect.width) * (30 / rect.width);
+    if (sim2.spawn) {
+      var sdx = nx - sim2.spawn.x / sim2.W, sdy = ny - sim2.spawn.y / sim2.H;
+      if (sdx * sdx + sdy * sdy < minDistSq) return;
+    }
+    for (var i = 0; i < sim2.destinations.length; i++) {
+      var d = sim2.destinations[i];
+      var ddx = nx - d.x / sim2.W, ddy = ny - d.y / sim2.H;
+      if (ddx * ddx + ddy * ddy < minDistSq) return;
+    }
+    sim2.addDestination(nx, ny);
   });
 
   /* === Resize handling === */

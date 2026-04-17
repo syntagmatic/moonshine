@@ -113,6 +113,14 @@ This is the same mechanism that creates the intricate patterns of snowflakes or 
   <canvas id="canvas-tumor"></canvas>
   <div class="controls">
     <div class="control-group">
+      <label>Regime</label>
+      <div class="slider-row">
+        <button class="btn" data-preset="compact">Compact</button>
+        <button class="btn active" data-preset="branching">Branching</button>
+        <button class="btn" data-preset="dla">Diffusive</button>
+      </div>
+    </div>
+    <div class="control-group">
       <label>Growth Rate</label>
       <div class="slider-row">
         <input type="range" id="growth-slider" min="0.01" max="0.2" step="0.01" value="0.1">
@@ -126,6 +134,13 @@ This is the same mechanism that creates the intricate patterns of snowflakes or 
         <span class="val" id="cons-val">0.03</span>
       </div>
     </div>
+    <div class="control-group">
+      <label>Speed</label>
+      <div class="slider-row">
+        <input type="range" id="speed-slider" min="0" max="5" step="1" value="1">
+        <span class="val" id="speed-val">1x</span>
+      </div>
+    </div>
     <button class="btn" id="btn-pause">Pause</button>
     <button class="btn" id="btn-reset">Reset</button>
   </div>
@@ -133,7 +148,7 @@ This is the same mechanism that creates the intricate patterns of snowflakes or 
     <span>Living Cells: <b id="stat-living">0</b></span>
     <span>Necrotic Core: <b id="stat-necrotic">0</b></span>
   </div>
-  <p class="figure-caption"><span class="figure-label">Figure 1.</span> A simulated tumor growing in a nutrient field. The background color represents nutrient concentration. Watch how branches form as the tumor surface destabilizes.</p>
+  <p class="figure-caption"><span class="figure-label">Figure 1.</span> A simulated tumor growing in a nutrient field. The background color represents nutrient concentration. Watch how branches form as the tumor surface destabilizes. Click anywhere to seed a new colony; switch regimes to compare compact fronts with diffusion-starved branches.</p>
 </div>
 
 <div class="insight">
@@ -157,7 +172,7 @@ where \(D\) is the diffusion coefficient and \(k\) is the consumption rate by th
 </p>
 
 <footer style="margin-top: 4rem; padding-top: 2rem; border-top: 1px solid var(--border); font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2);">
-  <p>Next: <a href="39-flocking-fish.html" style="color: var(--accent);">Flocking Fish</a> &rarr;</p>
+  <p>Next: <a href="40-phase-transitions.html" style="color: var(--accent);">Phase Transitions</a> &rarr;</p>
   <p style="margin-top: 1rem; opacity: 0.6;">Built with <a href="https://github.com/enjalot/moonshine" style="color: var(--text-2);">moonshine</a>.</p>
 </footer>
 
@@ -220,12 +235,44 @@ function step() {
   const ctx = canvas.getContext('2d');
   const gSlider = document.getElementById('growth-slider');
   const cSlider = document.getElementById('cons-slider');
+  const sSlider = document.getElementById('speed-slider');
   const gVal = document.getElementById('growth-val');
   const cVal = document.getElementById('cons-val');
+  const sVal = document.getElementById('speed-val');
   const btnPause = document.getElementById('btn-pause');
   const btnReset = document.getElementById('btn-reset');
   const statLiving = document.getElementById('stat-living');
   const statNecrotic = document.getElementById('stat-necrotic');
+  const presetBtns = container.querySelectorAll('[data-preset]');
+
+  // Speed: 0 = paused-step, 1 = 1 step/frame, up to 5 = 5 steps/frame.
+  // Also allow slowdowns at values < 1 by stepping every Nth frame.
+  const speedMap = [0, 1, 2, 4, 8, 16]; // steps per frame
+  let stepsPerFrame = 1;
+
+  // Regime presets: pairs that bias toward compact vs branching fronts.
+  const presets = {
+    compact:   { growth: 0.18, cons: 0.01 },  // abundant nutrient, fast fill
+    branching: { growth: 0.10, cons: 0.03 },  // Mullins-Sekerka sweet spot
+    dla:       { growth: 0.04, cons: 0.08 },  // starved, spindly fingers
+  };
+
+  function applyPreset(name) {
+    const p = presets[name];
+    if (!p) return;
+    pGrowth = p.growth;
+    consumption = p.cons;
+    gSlider.value = pGrowth;
+    cSlider.value = consumption;
+    gVal.textContent = pGrowth.toFixed(2);
+    cVal.textContent = consumption.toFixed(2);
+    presetBtns.forEach(b => b.classList.toggle('active', b.dataset.preset === name));
+    init();
+  }
+
+  function clearPresetHighlight() {
+    presetBtns.forEach(b => b.classList.remove('active'));
+  }
 
   function draw() {
     const w = canvas.width, h = canvas.height;
@@ -273,15 +320,40 @@ function step() {
   }
 
   function loop() {
-    step();
+    for (let s = 0; s < stepsPerFrame; s++) step();
     draw();
     requestAnimationFrame(loop);
   }
 
-  gSlider.addEventListener('input', e => { pGrowth = +e.target.value; gVal.textContent = pGrowth.toFixed(2); });
-  cSlider.addEventListener('input', e => { consumption = +e.target.value; cVal.textContent = consumption.toFixed(2); });
+  gSlider.addEventListener('input', e => {
+    pGrowth = +e.target.value;
+    gVal.textContent = pGrowth.toFixed(2);
+    clearPresetHighlight();
+  });
+  cSlider.addEventListener('input', e => {
+    consumption = +e.target.value;
+    cVal.textContent = consumption.toFixed(2);
+    clearPresetHighlight();
+  });
+  sSlider.addEventListener('input', e => {
+    const v = +e.target.value;
+    stepsPerFrame = speedMap[v];
+    sVal.textContent = stepsPerFrame === 0 ? '0x' : stepsPerFrame + 'x';
+  });
   btnPause.addEventListener('click', () => { paused = !paused; btnPause.textContent = paused ? 'Resume' : 'Pause'; });
   btnReset.addEventListener('click', init);
+  presetBtns.forEach(b => b.addEventListener('click', () => applyPreset(b.dataset.preset)));
+
+  // Click to seed a new living cell (additive, not a reset).
+  canvas.addEventListener('click', e => {
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = (e.clientY - rect.top) / rect.height;
+    const i = Math.floor(x * N);
+    const j = Math.floor(y * N);
+    if (i < 1 || i >= N - 1 || j < 1 || j >= N - 1) return;
+    grid[j * N + i] = LIVING;
+  });
 
   new ResizeObserver(() => {
     canvas.width = canvas.height = container.clientWidth - 48;

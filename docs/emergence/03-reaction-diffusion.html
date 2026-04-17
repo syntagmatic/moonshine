@@ -122,9 +122,25 @@ input[type="range"] { width: 140px; accent-color: var(--accent); }
           <span class="control-value" id="val-k">0.062</span>
         </div>
       </div>
+      <div class="control-group">
+        <label>Speed</label>
+        <div class="control-row">
+          <input type="range" id="slider-speed" min="1" max="24" step="1" value="8">
+          <span class="control-value" id="val-speed">8&times;</span>
+        </div>
+      </div>
+      <div class="control-group">
+        <label>Colormap</label>
+        <div class="btn-group" id="cmap-group">
+          <button class="btn active" data-cmap="amber">Amber</button>
+          <button class="btn" data-cmap="gray">Gray</button>
+          <button class="btn" data-cmap="viridis">Viridis</button>
+        </div>
+      </div>
       <div class="control-group" style="justify-content: flex-end;">
         <div class="btn-group">
           <button class="btn" id="btn-pause">Pause</button>
+          <button class="btn" id="btn-perturb">Perturb</button>
           <button class="btn" id="btn-reset">Reset</button>
         </div>
       </div>
@@ -133,7 +149,7 @@ input[type="range"] { width: 140px; accent-color: var(--accent); }
       <span id="sim-step-count">Step 0</span>
       <span id="sim-fps"></span>
     </div>
-    <p class="figure-caption"><span class="figure-label">Figure 1.</span> Gray-Scott reaction-diffusion on a 256&times;256 grid. Blue is high U concentration. Orange-yellow is high V. Drag the sliders to change the chemistry. Click the canvas to drop V seeds by hand.</p>
+    <p class="figure-caption"><span class="figure-label">Figure 1.</span> Gray-Scott reaction-diffusion on a 256&times;256 grid. Drag the f and k sliders to change the chemistry, speed to change how many integration steps run per frame, and try a different colormap to reveal structure your eye might miss. Click the canvas to drop V seeds by hand; Perturb sprinkles fresh seeds without wiping the pattern.</p>
   </div>
 
   <!-- ====== Section 2: The Parameter Landscape ====== -->
@@ -221,6 +237,7 @@ const state = {
   f: 0.055,
   k: 0.062,
   brushSize: 6,
+  speed: 8,
   paused: false,
   paintPaused: false
 };
@@ -237,18 +254,28 @@ const dispatch = d3.dispatch('paramChange', 'reset', 'clear');
   var DV = 0.105;
   var DT = 1.0;
 
-  // Colormap: deep navy (V low) through white to warm amber (V high)
-  function buildColormap() {
-    var stops = [
-      [0.00, 10, 12, 42],
-      [0.15, 20, 45, 120],
-      [0.30, 50, 110, 190],
-      [0.45, 160, 200, 235],
-      [0.55, 250, 240, 220],
-      [0.70, 240, 180, 80],
-      [0.85, 210, 110, 35],
-      [1.00, 130, 35, 18]
-    ];
+  // Colormaps. Each is a list of (t, r, g, b) stops interpolated into a 256-entry LUT.
+  var COLORMAP_STOPS = {
+    amber: [
+      [0.00, 10, 12, 42], [0.15, 20, 45, 120], [0.30, 50, 110, 190],
+      [0.45, 160, 200, 235], [0.55, 250, 240, 220], [0.70, 240, 180, 80],
+      [0.85, 210, 110, 35], [1.00, 130, 35, 18]
+    ],
+    // Classic single-hue black-to-white, nod to early morphogenesis renderings
+    gray: [
+      [0.00, 8, 8, 14], [0.25, 45, 45, 55], [0.55, 130, 130, 140],
+      [0.80, 220, 220, 225], [1.00, 255, 255, 255]
+    ],
+    // Viridis-like perceptually-uniform ramp
+    viridis: [
+      [0.00, 68, 1, 84], [0.20, 72, 40, 120], [0.40, 62, 83, 142],
+      [0.55, 42, 120, 142], [0.70, 33, 158, 131], [0.85, 115, 208, 85],
+      [1.00, 253, 231, 37]
+    ]
+  };
+
+  function buildColormap(name) {
+    var stops = COLORMAP_STOPS[name] || COLORMAP_STOPS.amber;
     var lut = new Uint8Array(256 * 4);
     for (var i = 0; i < 256; i++) {
       var t = i / 255;
@@ -266,7 +293,9 @@ const dispatch = d3.dispatch('paramChange', 'reset', 'clear');
     return lut;
   }
 
-  var CMAP = buildColormap();
+  // Mutable active LUT. Section 1 swaps this via setColormap().
+  var CMAP = buildColormap("amber");
+  function setColormap(name) { CMAP = buildColormap(name); }
 
   function allocGrid() {
     return { u: new Float32Array(GRID * GRID), v: new Float32Array(GRID * GRID) };
@@ -375,11 +404,24 @@ const dispatch = d3.dispatch('paramChange', 'reset', 'clear');
     }
   }
 
+  // Sprinkle a handful of V seeds without resetting the existing pattern.
+  // Lets the user nudge the system out of a metastable state.
+  function perturb(grid, count) {
+    var n = count || 6;
+    for (var s = 0; s < n; s++) {
+      var cx = (Math.random() * GRID) | 0;
+      var cy = (Math.random() * GRID) | 0;
+      var r = 3 + ((Math.random() * 5) | 0);
+      drawBrush(grid, cx, cy, r);
+    }
+  }
+
   window._RD = {
     GRID: GRID, allocGrid: allocGrid,
     fillUniform: fillUniform, seedCenter: seedCenter,
     seedScattered: seedScattered, seedStripe: seedStripe, seedNoise: seedNoise,
-    simStep: simStep, renderToImage: renderToImage, drawBrush: drawBrush
+    simStep: simStep, renderToImage: renderToImage, drawBrush: drawBrush,
+    perturb: perturb, setColormap: setColormap
   };
 })();
 
@@ -391,7 +433,6 @@ const dispatch = d3.dispatch('paramChange', 'reset', 'clear');
 
   var RD = window._RD;
   var GRID = RD.GRID;
-  var STEPS_PER_FRAME = 8;
 
   var container = document.getElementById("sim-container");
   var canvas = document.createElement("canvas");
@@ -411,8 +452,12 @@ const dispatch = d3.dispatch('paramChange', 'reset', 'clear');
   var sliderK = document.getElementById("slider-k");
   var valF = document.getElementById("val-f");
   var valK = document.getElementById("val-k");
+  var sliderSpeed = document.getElementById("slider-speed");
+  var valSpeed = document.getElementById("val-speed");
+  var cmapGroup = document.getElementById("cmap-group");
   var btnPause = document.getElementById("btn-pause");
   var btnReset = document.getElementById("btn-reset");
+  var btnPerturb = document.getElementById("btn-perturb");
   var stepLabel = document.getElementById("sim-step-count");
   var fpsLabel = document.getElementById("sim-fps");
   var prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -431,7 +476,7 @@ const dispatch = d3.dispatch('paramChange', 'reset', 'clear');
 
   function tick(now) {
     if (!state.paused) {
-      var n = prefersReduced.matches ? 1 : STEPS_PER_FRAME;
+      var n = prefersReduced.matches ? 1 : state.speed;
       for (var i = 0; i < n; i++) {
         RD.simStep(gridA, gridB, state.f, state.k);
         var tmp = gridA; gridA = gridB; gridB = tmp;
@@ -463,6 +508,21 @@ const dispatch = d3.dispatch('paramChange', 'reset', 'clear');
   });
 
   btnReset.addEventListener("click", init);
+  btnPerturb.addEventListener("click", function() { RD.perturb(gridA, 6); paint(); });
+
+  sliderSpeed.addEventListener("input", function() {
+    state.speed = parseInt(this.value, 10);
+    valSpeed.textContent = state.speed + "\u00d7";
+  });
+
+  cmapGroup.addEventListener("click", function(e) {
+    var btn = e.target.closest("button[data-cmap]");
+    if (!btn) return;
+    cmapGroup.querySelectorAll("button").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    RD.setColormap(btn.getAttribute("data-cmap"));
+    paint();
+  });
 
   dispatch.on('paramChange.sim', (f, k) => {
     sliderF.value = f; sliderK.value = k;
@@ -610,7 +670,6 @@ const dispatch = d3.dispatch('paramChange', 'reset', 'clear');
 
   var RD = window._RD;
   var GRID = RD.GRID;
-  var STEPS_PER_FRAME = 8;
 
   var container = document.getElementById("paint-container");
   var canvas = document.createElement("canvas");
@@ -644,7 +703,7 @@ const dispatch = d3.dispatch('paramChange', 'reset', 'clear');
 
   function tick() {
     if (!state.paintPaused && hasSeeds) {
-      var n = prefersReduced.matches ? 1 : STEPS_PER_FRAME;
+      var n = prefersReduced.matches ? 1 : state.speed;
       for (var i = 0; i < n; i++) { RD.simStep(gridA, gridB, f, k); var tmp = gridA; gridA = gridB; gridB = tmp; stepCount++; }
       paint();
     }

@@ -127,8 +127,24 @@ If the fraction of similar neighbors falls below a tolerance threshold <span id=
         <span class="val" id="tol-val-1">33%</span>
       </div>
     </div>
+    <div class="control-group">
+      <label>Speed</label>
+      <div class="slider-row">
+        <input type="range" id="speed-slider-1" min="-2" max="2" step="0.25" value="0">
+        <span class="val" id="speed-val-1">1.0&times;</span>
+      </div>
+    </div>
     <button class="btn" id="play-btn-1">Play</button>
     <button class="btn" id="reset-btn-1">Reset</button>
+    <div class="control-group" style="margin-left: auto;">
+      <label>Presets</label>
+      <div class="slider-row" id="presets-1">
+        <button class="btn preset-btn" data-tol="30">30%</button>
+        <button class="btn preset-btn" data-tol="40">40%</button>
+        <button class="btn preset-btn" data-tol="50">50%</button>
+        <button class="btn preset-btn" data-tol="70">70%</button>
+      </div>
+    </div>
   </div>
   <div class="stats-bar" id="stats-1">
     <span>Step: <span class="stat-val" id="step-count-1">0</span></span>
@@ -174,8 +190,24 @@ At 50% or above, the separation becomes nearly total.
         <span class="val" id="tol-val-2">50%</span>
       </div>
     </div>
+    <div class="control-group">
+      <label>Speed</label>
+      <div class="slider-row">
+        <input type="range" id="speed-slider-2" min="-2" max="2" step="0.25" value="0">
+        <span class="val" id="speed-val-2">1.0&times;</span>
+      </div>
+    </div>
     <button class="btn" id="play-btn-2">Play</button>
     <button class="btn" id="reset-btn-2">Reset</button>
+    <div class="control-group" style="margin-left: auto;">
+      <label>Presets</label>
+      <div class="slider-row" id="presets-2">
+        <button class="btn preset-btn" data-tol="30">30%</button>
+        <button class="btn preset-btn" data-tol="40">40%</button>
+        <button class="btn preset-btn" data-tol="50">50%</button>
+        <button class="btn preset-btn" data-tol="70">70%</button>
+      </div>
+    </div>
   </div>
   <p class="figure-caption">
     <span class="figure-label">Figure 2.</span> 
@@ -307,13 +339,18 @@ function simStep(grid, n, tol) {
   const canvas = document.getElementById('canvas-setup');
   const tolSlider = document.getElementById('tol-slider-1');
   const tolVal = document.getElementById('tol-val-1');
+  const speedSlider = document.getElementById('speed-slider-1');
+  const speedVal = document.getElementById('speed-val-1');
   const playBtn = document.getElementById('play-btn-1');
   const resetBtn = document.getElementById('reset-btn-1');
+  const presetBtns = container.querySelectorAll('#presets-1 .preset-btn');
   const stepCountEl = document.getElementById('step-count-1');
   const segIdxEl = document.getElementById('seg-idx-1');
 
+  const BASE_INTERVAL = 100; // ms at 1x
   let n = 50, grid, ctx, size, stepCount = 0, timer = null, running = false;
   let tolerance = parseInt(tolSlider.value) / 100;
+  let speed = Math.pow(2, +speedSlider.value); // exponent -> multiplier
 
   function init() {
     grid = createGrid(n, 0.1); stepCount = 0;
@@ -337,7 +374,12 @@ function simStep(grid, n, tol) {
     stepCount++; render(); updateStats();
   }
 
-  function stop() { running = false; clearInterval(timer); playBtn.textContent = 'Play'; }
+  function stop() { running = false; clearInterval(timer); timer = null; playBtn.textContent = 'Play'; }
+
+  function startLoop() {
+    if (timer) clearInterval(timer);
+    timer = setInterval(step, BASE_INTERVAL / speed);
+  }
 
   tolSlider.addEventListener('input', e => {
     tolerance = +e.target.value / 100;
@@ -345,12 +387,25 @@ function simStep(grid, n, tol) {
     render(); updateStats();
   });
 
+  speedSlider.addEventListener('input', e => {
+    speed = Math.pow(2, +e.target.value);
+    speedVal.innerHTML = speed.toFixed(2).replace(/\.?0+$/, '') + '&times;';
+    if (running) startLoop();
+  });
+
   playBtn.addEventListener('click', function() {
     if (running) stop();
-    else { running = true; this.textContent = 'Pause'; timer = setInterval(step, 100); }
+    else { running = true; this.textContent = 'Pause'; startLoop(); }
   });
 
   resetBtn.addEventListener('click', init);
+
+  presetBtns.forEach(btn => btn.addEventListener('click', () => {
+    const v = btn.dataset.tol;
+    tolSlider.value = v; tolerance = +v / 100; tolVal.textContent = v + '%';
+    init();
+  }));
+
   new ResizeObserver(render).observe(container);
   init();
 })();
@@ -363,17 +418,45 @@ function simStep(grid, n, tol) {
   const svgEl = d3.select('#svg-chart');
   const tolSlider = document.getElementById('tol-slider-2');
   const tolVal = document.getElementById('tol-val-2');
+  const speedSlider = document.getElementById('speed-slider-2');
+  const speedVal = document.getElementById('speed-val-2');
   const playBtn = document.getElementById('play-btn-2');
   const resetBtn = document.getElementById('reset-btn-2');
+  const presetBtns = container.querySelectorAll('#presets-2 .preset-btn');
+
+  const BASE_INTERVAL = 100;
+  const X_DOMAIN = 150; // fixed so the x-axis doesn't twitch as steps accrue
+  const Y_DOMAIN = [0.4, 1.0];
+  const MARGIN = {top: 20, right: 15, bottom: 30, left: 40};
 
   let n = 50, grid, ctx, size, stepCount = 0, timer = null, running = false;
   let history = [];
   let tolerance = parseInt(tolSlider.value) / 100;
+  let speed = Math.pow(2, +speedSlider.value);
+
+  // Chart scaffold (built once, updated in place to avoid full-SVG redraw jank).
+  const xScale = d3.scaleLinear().domain([0, X_DOMAIN]);
+  const yScale = d3.scaleLinear().domain(Y_DOMAIN);
+  const line = d3.line().x(d => xScale(d.step)).y(d => yScale(d.seg));
+
+  const gRoot = svgEl.append('g').attr('transform', `translate(${MARGIN.left},${MARGIN.top})`);
+  const gX = gRoot.append('g').attr('class', 'x-axis')
+    .attr('color', 'var(--text-2)').attr('font-family', 'var(--heading-font)');
+  const gY = gRoot.append('g').attr('class', 'y-axis')
+    .attr('color', 'var(--text-2)').attr('font-family', 'var(--heading-font)');
+  const xLabel = gRoot.append('text').attr('text-anchor', 'middle')
+    .attr('font-family', 'var(--heading-font)').attr('font-size', '0.75rem')
+    .attr('fill', 'var(--text-2)').text('Steps');
+  const yLabel = gRoot.append('text').attr('transform', 'rotate(-90)')
+    .attr('text-anchor', 'middle').attr('font-family', 'var(--heading-font)')
+    .attr('font-size', '0.75rem').attr('fill', 'var(--text-2)').text('Segregation Index');
+  const path = gRoot.append('path')
+    .attr('fill', 'none').attr('stroke', 'var(--accent)').attr('stroke-width', 2);
 
   function init() {
     grid = createGrid(n, 0.1); stepCount = 0; history = [];
-    history.push({ step: stepCount, seg: calcSegregation(grid, n) });
-    render(); renderChart();
+    history.push({ step: 0, seg: calcSegregation(grid, n) });
+    render(); updateChart();
   }
 
   function render() {
@@ -381,70 +464,34 @@ function simStep(grid, n, tol) {
     size = Math.min(parent.clientWidth, 400);
     ctx = setupHiDPI(canvas, size, size);
     drawGrid(ctx, grid, n, size, tolerance);
+    layoutChart();
   }
 
-  function renderChart() {
+  function layoutChart() {
     const parent = svgEl.node().parentElement;
     const width = parent.clientWidth;
     const height = size || 300;
-    
     svgEl.attr('width', width).attr('height', height);
-    svgEl.selectAll('*').remove();
-    
-    const margin = {top: 20, right: 15, bottom: 30, left: 40};
-    const innerWidth = width - margin.left - margin.right;
-    const innerHeight = height - margin.top - margin.bottom;
-    
-    const g = svgEl.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
-    
-    const xScale = d3.scaleLinear()
-      .domain([0, Math.max(100, stepCount)])
-      .range([0, innerWidth]);
-      
-    const yScale = d3.scaleLinear()
-      .domain([0.4, 1.0])
-      .range([innerHeight, 0]);
-      
-    g.append('g')
-      .attr('transform', `translate(0,${innerHeight})`)
-      .call(d3.axisBottom(xScale).ticks(5))
-      .attr('color', 'var(--text-2)')
-      .attr('font-family', 'var(--heading-font)');
-      
-    g.append('g')
-      .call(d3.axisLeft(yScale).ticks(5))
-      .attr('color', 'var(--text-2)')
-      .attr('font-family', 'var(--heading-font)');
-      
-    g.append('text')
-      .attr('x', innerWidth / 2)
-      .attr('y', innerHeight + margin.bottom)
-      .attr('text-anchor', 'middle')
-      .attr('font-family', 'var(--heading-font)')
-      .attr('font-size', '0.75rem')
-      .attr('fill', 'var(--text-2)')
-      .text('Steps');
-      
-    g.append('text')
-      .attr('transform', 'rotate(-90)')
-      .attr('x', -innerHeight / 2)
-      .attr('y', -margin.left + 10)
-      .attr('text-anchor', 'middle')
-      .attr('font-family', 'var(--heading-font)')
-      .attr('font-size', '0.75rem')
-      .attr('fill', 'var(--text-2)')
-      .text('Segregation Index');
-      
-    const line = d3.line()
-      .x(d => xScale(d.step))
-      .y(d => yScale(d.seg));
-      
-    g.append('path')
-      .datum(history)
-      .attr('fill', 'none')
-      .attr('stroke', 'var(--accent)')
-      .attr('stroke-width', 2)
-      .attr('d', line);
+
+    const innerW = width - MARGIN.left - MARGIN.right;
+    const innerH = height - MARGIN.top - MARGIN.bottom;
+    xScale.range([0, innerW]);
+    yScale.range([innerH, 0]);
+
+    gX.attr('transform', `translate(0,${innerH})`).call(d3.axisBottom(xScale).ticks(5));
+    gY.call(d3.axisLeft(yScale).ticks(5));
+    xLabel.attr('x', innerW / 2).attr('y', innerH + MARGIN.bottom);
+    yLabel.attr('x', -innerH / 2).attr('y', -MARGIN.left + 10);
+    updateChart();
+  }
+
+  function updateChart() {
+    // Grow domain only if we overshoot — keeps axis stable through the main transition.
+    if (stepCount > xScale.domain()[1]) {
+      xScale.domain([0, stepCount * 1.25]);
+      gX.call(d3.axisBottom(xScale).ticks(5));
+    }
+    path.attr('d', line(history));
   }
 
   function step() {
@@ -452,30 +499,46 @@ function simStep(grid, n, tol) {
     if (!changed) { stop(); return; }
     stepCount++;
     history.push({ step: stepCount, seg: calcSegregation(grid, n) });
-    render(); renderChart();
+    render(); updateChart();
   }
 
-  function stop() { running = false; clearInterval(timer); playBtn.textContent = 'Play'; }
+  function stop() { running = false; clearInterval(timer); timer = null; playBtn.textContent = 'Play'; }
 
+  function startLoop() {
+    if (timer) clearInterval(timer);
+    timer = setInterval(step, BASE_INTERVAL / speed);
+  }
+
+  // Tolerance change auto-resets grid + chart so we never mix two runs on one line.
   tolSlider.addEventListener('input', e => {
     tolerance = +e.target.value / 100;
     tolVal.textContent = e.target.value + '%';
-    render(); // Update visual state for new tolerance
+    stop();
+    init();
+  });
+
+  speedSlider.addEventListener('input', e => {
+    speed = Math.pow(2, +e.target.value);
+    speedVal.innerHTML = speed.toFixed(2).replace(/\.?0+$/, '') + '&times;';
+    if (running) startLoop();
   });
 
   playBtn.addEventListener('click', function() {
     if (running) stop();
-    else { running = true; this.textContent = 'Pause'; timer = setInterval(step, 100); }
+    else { running = true; this.textContent = 'Pause'; startLoop(); }
   });
 
-  resetBtn.addEventListener('click', init);
-  
-  new ResizeObserver(() => {
-    render();
-    renderChart();
-  }).observe(container);
-  
-  // Need to wait briefly to ensure layout is done for proper sizing
+  resetBtn.addEventListener('click', () => { stop(); init(); });
+
+  presetBtns.forEach(btn => btn.addEventListener('click', () => {
+    const v = btn.dataset.tol;
+    tolSlider.value = v; tolerance = +v / 100; tolVal.textContent = v + '%';
+    stop(); init();
+  }));
+
+  new ResizeObserver(() => { render(); }).observe(container);
+
+  // Wait briefly to ensure layout is done for proper sizing.
   setTimeout(init, 50);
 })();
 </script>

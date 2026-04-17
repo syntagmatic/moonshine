@@ -154,6 +154,93 @@ header { margin-bottom: 3rem; }
   flex-wrap: wrap;
   gap: 0.4rem;
 }
+
+/* Truth-table editor for elementary CA rule */
+.rule-editor {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 1rem;
+  margin-top: 0.25rem;
+}
+.rule-editor .tt-label {
+  font-family: var(--heading-font);
+  font-size: 0.8rem;
+  color: var(--text-2);
+  font-weight: 600;
+  margin-bottom: 0.3rem;
+}
+.tt-cells {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 4px;
+}
+.tt-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  cursor: pointer;
+  user-select: none;
+}
+.tt-pattern {
+  display: grid;
+  grid-template-columns: repeat(3, 10px);
+  gap: 1px;
+  padding: 2px;
+  background: #f1f1f5;
+  border-radius: 2px;
+}
+.tt-pattern span {
+  width: 10px;
+  height: 10px;
+  border-radius: 1px;
+  background: #fff;
+  border: 1px solid var(--border);
+}
+.tt-pattern span.on { background: var(--c-agent); border-color: var(--c-agent); }
+.tt-output {
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: #fff;
+  transition: background 0.12s, border-color 0.12s;
+}
+.tt-output.on { background: var(--c-agent); border-color: var(--c-agent); }
+.tt-cell:hover .tt-output { border-color: var(--accent); }
+.rule-num-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.rule-num-group label {
+  font-family: var(--heading-font);
+  font-size: 0.8rem;
+  color: var(--text-2);
+  font-weight: 600;
+}
+.rule-num-group input[type="number"] {
+  font-family: var(--mono-font);
+  font-size: 0.9rem;
+  width: 5.5em;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.3rem 0.4rem;
+  background: var(--fig-bg);
+  color: var(--text);
+}
+.rule-num-group input[type="number"]:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.rule-num-group .class-tag {
+  font-family: var(--heading-font);
+  font-size: 0.72rem;
+  color: var(--text-2);
+  min-height: 1em;
+}
+.rule-num-group .class-tag strong { color: var(--text); font-weight: 600; }
 .click-hint {
   font-family: var(--heading-font);
   font-size: 0.8rem;
@@ -250,19 +337,30 @@ svg text { font-family: var(--heading-font); }
     <div class="controls">
       <div class="controls-row">
         <div class="control-group">
-          <label>Rule</label>
+          <label>Preset</label>
           <select id="ea-rule-select">
-            <option value="30">Rule 30</option>
-            <option value="110" selected>Rule 110</option>
-            <option value="90">Rule 90</option>
-            <option value="184">Rule 184</option>
-            <option value="73">Rule 73</option>
-            <option value="150">Rule 150</option>
+            <option value="30">Rule 30 (chaotic, III)</option>
+            <option value="110" selected>Rule 110 (complex, IV)</option>
+            <option value="90">Rule 90 (fractal, III)</option>
+            <option value="184">Rule 184 (traffic, II)</option>
+            <option value="73">Rule 73 (periodic, II)</option>
+            <option value="150">Rule 150 (XOR-like, III)</option>
           </select>
         </div>
         <button class="btn" id="ea-run">Run</button>
         <button class="btn" id="ea-step">Step</button>
         <button class="btn" id="ea-reset">Reset</button>
+      </div>
+      <div class="rule-editor">
+        <div>
+          <div class="tt-label">Truth table &mdash; click any output cell to flip a bit</div>
+          <div class="tt-cells" id="ea-tt-cells"></div>
+        </div>
+        <div class="rule-num-group">
+          <label for="ea-rule-number">Rule #</label>
+          <input type="number" id="ea-rule-number" min="0" max="255" step="1" value="110">
+          <div class="class-tag" id="ea-class-tag"></div>
+        </div>
       </div>
     </div>
     <div class="click-hint">Click cells in the top row to toggle them on or off</div>
@@ -352,10 +450,25 @@ const dispatch = d3.dispatch('eaUpdate', 'golUpdate', 'edgeUpdate');
   let svg, cellGroup;
   let ruleBits = [];
 
+  // Known Wolfram classes for the preset rules we ship.
+  const presetClass = { 0: 'I', 30: 'III', 73: 'II', 90: 'III', 110: 'IV', 150: 'III', 184: 'II' };
+  const classBlurb = {
+    I: 'uniform \u2014 all states decay to a fixed point',
+    II: 'periodic \u2014 settles into repeating structures',
+    III: 'chaotic \u2014 produces apparent randomness',
+    IV: 'complex \u2014 localized structures at the edge of chaos'
+  };
+
   function parseRule(n) {
     const bits = [];
     for (let i = 0; i < 8; i++) bits[i] = (n >> i) & 1;
     return bits;
+  }
+
+  function ruleFromBits(bits) {
+    let n = 0;
+    for (let i = 0; i < 8; i++) n |= (bits[i] & 1) << i;
+    return n;
   }
 
   function initGrid() {
@@ -439,10 +552,89 @@ const dispatch = d3.dispatch('eaUpdate', 'golUpdate', 'edgeUpdate');
     requestAnimationFrame(runLoop);
   }
 
-  document.getElementById('ea-rule-select').addEventListener('change', function() {
-    state.ea.rule = +this.value;
-    ruleBits = parseRule(state.ea.rule);
-    reset();
+  // ── Truth-table editor ──
+  // Display 8 cells left-to-right in the canonical Wolfram order: 111, 110, 101, …, 000.
+  // The rightmost cell is bit 0 of the rule number, leftmost is bit 7 — so reading the
+  // output row left-to-right gives the rule number's binary representation.
+  const ttContainer = document.getElementById('ea-tt-cells');
+  const ruleNumberInput = document.getElementById('ea-rule-number');
+  const ruleSelect = document.getElementById('ea-rule-select');
+  const classTag = document.getElementById('ea-class-tag');
+  const ttDisplayOrder = [7, 6, 5, 4, 3, 2, 1, 0];
+
+  function buildTruthTable() {
+    ttContainer.innerHTML = '';
+    ttDisplayOrder.forEach(idx => {
+      const cell = document.createElement('div');
+      cell.className = 'tt-cell';
+      cell.dataset.bit = idx;
+      const pat = document.createElement('div');
+      pat.className = 'tt-pattern';
+      for (let j = 2; j >= 0; j--) {
+        const s = document.createElement('span');
+        if ((idx >> j) & 1) s.classList.add('on');
+        pat.appendChild(s);
+      }
+      const out = document.createElement('div');
+      out.className = 'tt-output';
+      cell.appendChild(pat);
+      cell.appendChild(out);
+      cell.title = 'Pattern ' + idx.toString(2).padStart(3, '0') + ' \u2192 output bit ' + idx;
+      cell.addEventListener('click', () => {
+        ruleBits[idx] = ruleBits[idx] ? 0 : 1;
+        setRule(ruleFromBits(ruleBits), 'tt');
+      });
+      ttContainer.appendChild(cell);
+    });
+  }
+
+  function syncTruthTable() {
+    ttContainer.querySelectorAll('.tt-cell').forEach(cell => {
+      const idx = +cell.dataset.bit;
+      const out = cell.querySelector('.tt-output');
+      out.classList.toggle('on', !!ruleBits[idx]);
+    });
+  }
+
+  function syncClassTag(rule) {
+    const cls = presetClass[rule];
+    if (cls) classTag.innerHTML = '<strong>Class ' + cls + '</strong> \u00b7 ' + classBlurb[cls];
+    else classTag.innerHTML = 'Custom rule \u2014 class unknown';
+  }
+
+  function syncRuleSelect(rule) {
+    // Match preset if this rule is one of them; otherwise clear selection.
+    const opt = Array.from(ruleSelect.options).find(o => +o.value === rule);
+    ruleSelect.value = opt ? String(rule) : '';
+  }
+
+  // `source` tells us who initiated the change, so we only re-sync the other inputs.
+  function setRule(rule, source) {
+    rule = ((rule % 256) + 256) % 256;
+    state.ea.rule = rule;
+    ruleBits = parseRule(rule);
+    if (source !== 'number') ruleNumberInput.value = rule;
+    if (source !== 'select') syncRuleSelect(rule);
+    if (source !== 'tt') syncTruthTable();
+    syncClassTag(rule);
+    // Re-run from the current seed so the new rule's pattern replaces the old one.
+    // `source` is always user-initiated here, so any non-empty seed means "replay now."
+    const seed = state.ea.grid.length ? state.ea.grid[0].slice() : null;
+    reset(seed);
+    if (seed && seed.some(v => v)) {
+      while (step()) { /* fill the canvas with the new rule */ }
+    }
+  }
+
+  ruleSelect.addEventListener('change', function() {
+    if (this.value === '') return;
+    setRule(+this.value, 'select');
+  });
+
+  ruleNumberInput.addEventListener('input', function() {
+    const v = parseInt(this.value, 10);
+    if (!Number.isFinite(v)) return;
+    setRule(v, 'number');
   });
 
   document.getElementById('ea-run').addEventListener('click', function() {
@@ -452,11 +644,24 @@ const dispatch = d3.dispatch('eaUpdate', 'golUpdate', 'edgeUpdate');
   });
 
   document.getElementById('ea-step').addEventListener('click', () => { state.ea.running = false; document.getElementById('ea-run').textContent = 'Run'; step(); });
-  document.getElementById('ea-reset').addEventListener('click', reset);
+  document.getElementById('ea-reset').addEventListener('click', () => reset());
 
-  function reset() { state.ea.running = false; document.getElementById('ea-run').textContent = 'Run'; initGrid(); drawAll(); }
+  function reset(seed) {
+    state.ea.running = false;
+    document.getElementById('ea-run').textContent = 'Run';
+    if (seed) {
+      state.ea.grid = [new Uint8Array(seed)];
+    } else {
+      initGrid();
+    }
+    drawAll();
+  }
 
   ruleBits = parseRule(state.ea.rule);
+  buildTruthTable();
+  syncTruthTable();
+  syncClassTag(state.ea.rule);
+  syncRuleSelect(state.ea.rule);
   buildSVG(); initGrid(); drawAll();
   new ResizeObserver(() => { buildSVG(); drawAll(); }).observe(container);
 })();

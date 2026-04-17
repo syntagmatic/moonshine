@@ -115,17 +115,39 @@ This relationship is captured by the Lotka-Volterra equations, where the rate of
       </div>
     </div>
     <div class="control-group">
+      <label>Predation ($\beta$)</label>
+      <div class="slider-row">
+        <input type="range" id="beta-slider" min="0.1" max="1.5" step="0.05" value="0.5">
+        <span class="val" id="beta-val">0.50</span>
+      </div>
+    </div>
+    <div class="control-group">
       <label>Predator death ($\gamma$)</label>
       <div class="slider-row">
         <input type="range" id="gamma-slider" min="0.3" max="2.0" step="0.05" value="1.0">
         <span class="val" id="gamma-val">1.00</span>
       </div>
     </div>
+    <div class="control-group">
+      <label>Pred efficiency ($\delta$)</label>
+      <div class="slider-row">
+        <input type="range" id="delta-slider" min="0.1" max="1.0" step="0.05" value="0.3">
+        <span class="val" id="delta-val">0.30</span>
+      </div>
+    </div>
+    <div class="control-group">
+      <label>Speed</label>
+      <div class="slider-row">
+        <input type="range" id="lv-speed" min="0" max="3" step="0.1" value="1.0">
+        <span class="val" id="lv-speed-val">1.0&times;</span>
+      </div>
+    </div>
+    <button class="btn" id="lv-play-btn">Pause</button>
     <button class="btn" id="reset-btn">Reset</button>
   </div>
   <p class="figure-caption">
     <span class="figure-label">Figure 1.</span>
-    The Lotka-Volterra phase portrait and time series. Drag the dot in the upper plot to choose a starting state. The system traces a closed loop forever, representing a stable but oscillating ecosystem.
+    The Lotka-Volterra phase portrait and time series. The outer ring is the initial condition (drag it); the filled dot is the current state moving around the loop in real time. The system traces a closed orbit forever, representing a stable but oscillating ecosystem.
   </p>
 </div>
 
@@ -185,6 +207,14 @@ This is known as the Wa-Tor model (originally framed with fish and sharks by A.K
         <span class="val" id="val-pred-starve">2</span>
       </div>
     </div>
+    <div class="control-group">
+      <label>Speed</label>
+      <div class="slider-row">
+        <input type="range" id="wator-speed" min="0" max="4" step="1" value="2">
+        <span class="val" id="wator-speed-val">1&times;</span>
+      </div>
+    </div>
+    <button class="btn" id="wator-play-btn">Pause</button>
     <button class="btn" id="wator-reset-btn">Reset</button>
   </div>
   <p class="figure-caption">
@@ -255,19 +285,29 @@ window.addEventListener('load', () => {
   const tsContainer = document.getElementById('ts-container');
   const alphaSlider = document.getElementById('alpha-slider');
   const alphaVal = document.getElementById('alpha-val');
+  const betaSlider = document.getElementById('beta-slider');
+  const betaVal = document.getElementById('beta-val');
   const gammaSlider = document.getElementById('gamma-slider');
   const gammaVal = document.getElementById('gamma-val');
+  const deltaSlider = document.getElementById('delta-slider');
+  const deltaVal = document.getElementById('delta-val');
+  const speedSlider = document.getElementById('lv-speed');
+  const speedVal = document.getElementById('lv-speed-val');
+  const playBtn = document.getElementById('lv-play-btn');
   const resetBtn = document.getElementById('reset-btn');
 
   let width = container.clientWidth || 700;
   let height = 350;
-  
+  const TS_WINDOW = 40; // time units shown on time-series
+  const TRAJ_STEPS = 2000;
+  const DT = 0.05;
+
   const svg = d3.select(container).append('svg');
   const tsSvg = d3.select(tsContainer).append('svg');
 
   const xSc = d3.scaleLinear().domain([0, 8]);
   const ySc = d3.scaleLinear().domain([0, 6]);
-  const tSc = d3.scaleLinear().domain([0, 100]);
+  const tSc = d3.scaleLinear().domain([0, TS_WINDOW]);
   const tySc = d3.scaleLinear().domain([0, 8]);
 
   const gx = svg.append('g');
@@ -278,15 +318,24 @@ window.addEventListener('load', () => {
   const path = svg.append('path').attr('fill', 'none').attr('stroke', COLORS.text).attr('opacity', 0.2).attr('stroke-width', 1.5);
   const preyPath = tsSvg.append('path').attr('fill', 'none').attr('stroke', COLORS.prey).attr('stroke-width', 2);
   const predPath = tsSvg.append('path').attr('fill', 'none').attr('stroke', COLORS.pred).attr('stroke-width', 2);
-  const dot = svg.append('circle').attr('r', 7).attr('fill', COLORS.accent).attr('stroke', '#fff').attr('stroke-width', 2).attr('cursor', 'grab').call(d3.drag().on('drag', dragged));
+  // current-state marker: draggable initial condition AND animates along the trajectory
+  const livePt = svg.append('circle').attr('r', 5).attr('fill', COLORS.accent).attr('opacity', 0.9).attr('pointer-events', 'none');
+  const dot = svg.append('circle').attr('r', 8).attr('fill', 'none').attr('stroke', COLORS.accent).attr('stroke-width', 2).attr('cursor', 'grab').call(d3.drag().on('start', () => { dot.attr('cursor', 'grabbing'); }).on('drag', dragged).on('end', () => { dot.attr('cursor', 'grab'); }));
+
+  // live simulation state (separate from the initial-condition state that anchors the loop)
+  let liveX = state.x, liveY = state.y;
+  let history = []; // [{t, x, y}]
+  let simT = 0;
+  let playing = true;
 
   function dragged(e) {
     const coords = d3.pointer(e, svg.node());
-    state.x = xSc.invert(coords[0]); 
+    state.x = xSc.invert(coords[0]);
     state.y = ySc.invert(coords[1]);
     state.x = Math.max(0.1, Math.min(7.9, state.x));
     state.y = Math.max(0.1, Math.min(5.9, state.y));
-    update();
+    resetTrajectory();
+    redrawLoop();
   }
 
   function resize() {
@@ -305,47 +354,119 @@ window.addEventListener('load', () => {
     gy.attr('transform', 'translate(50,0)').call(d3.axisLeft(ySc));
     tsx.attr('transform', 'translate(0,130)').call(d3.axisBottom(tSc).ticks(width / 80));
     tsy.attr('transform', 'translate(50,0)').call(d3.axisLeft(tySc).ticks(5));
-    
-    update();
+
+    redrawLoop();
+    redrawTs();
   }
 
-  function update() {
+  function redrawLoop() {
     dot.attr('cx', xSc(state.x)).attr('cy', ySc(state.y));
     let x = state.x, y = state.y;
     const pts = [];
-    for (let i=0; i<2000; i++) {
+    for (let i = 0; i < TRAJ_STEPS; i++) {
       pts.push([x, y]);
-      [x, y] = step(x, y, 0.05, state.alpha, state.beta, state.gamma, state.delta);
+      [x, y] = step(x, y, DT, state.alpha, state.beta, state.gamma, state.delta);
     }
     const line = d3.line();
     path.attr('d', line(pts.map(p => [xSc(p[0]), ySc(p[1])])));
-    preyPath.attr('d', line(pts.slice(0, 500).map((p, i) => [tSc(i/5), tySc(p[0])])));
-    predPath.attr('d', line(pts.slice(0, 500).map((p, i) => [tSc(i/5), tySc(p[1])])));
   }
 
-  dispatch.on('update', update);
+  function redrawTs() {
+    const line = d3.line();
+    // auto-range y-axis on time series so extreme params stay visible
+    let ymax = 8;
+    for (const h of history) ymax = Math.max(ymax, h.x, h.y);
+    tySc.domain([0, ymax * 1.05]);
+    tsy.call(d3.axisLeft(tySc).ticks(5));
+
+    const tMin = Math.max(0, simT - TS_WINDOW);
+    tSc.domain([tMin, tMin + TS_WINDOW]);
+    tsx.call(d3.axisBottom(tSc).ticks(6));
+    const visible = history.filter(h => h.t >= tMin);
+    preyPath.attr('d', line(visible.map(h => [tSc(h.t), tySc(h.x)])));
+    predPath.attr('d', line(visible.map(h => [tSc(h.t), tySc(h.y)])));
+    livePt.attr('cx', xSc(liveX)).attr('cy', ySc(liveY));
+  }
+
+  function resetTrajectory() {
+    liveX = state.x; liveY = state.y;
+    simT = 0;
+    history = [{t: 0, x: liveX, y: liveY}];
+  }
+
+  // fixed-timestep accumulator so speed changes stay smooth
+  let lastMs = performance.now();
+  let acc = 0;
+  function frame(nowMs) {
+    const dtMs = Math.min(100, nowMs - lastMs);
+    lastMs = nowMs;
+    if (playing) {
+      const speed = +speedSlider.value;
+      acc += (dtMs / 1000) * speed;
+      // each sim-second = 10 RK4 steps of DT=0.05 (i.e. 0.5 model-time units per real second at 1x)
+      while (acc >= DT) {
+        [liveX, liveY] = step(liveX, liveY, DT, state.alpha, state.beta, state.gamma, state.delta);
+        simT += DT;
+        history.push({t: simT, x: liveX, y: liveY});
+        // keep history bounded
+        if (history.length > 4000) history.splice(0, history.length - 4000);
+        acc -= DT;
+      }
+      redrawTs();
+    } else {
+      // still draw marker in case slider/drag moved it
+      livePt.attr('cx', xSc(liveX)).attr('cy', ySc(liveY));
+    }
+    requestAnimationFrame(frame);
+  }
+
+  dispatch.on('update', () => { redrawLoop(); redrawTs(); });
 
   alphaSlider.addEventListener('input', e => {
     state.alpha = +e.target.value;
     alphaVal.textContent = state.alpha.toFixed(2);
-    update();
+    redrawLoop();
   });
-
+  betaSlider.addEventListener('input', e => {
+    state.beta = +e.target.value;
+    betaVal.textContent = state.beta.toFixed(2);
+    redrawLoop();
+  });
   gammaSlider.addEventListener('input', e => {
     state.gamma = +e.target.value;
     gammaVal.textContent = state.gamma.toFixed(2);
-    update();
+    redrawLoop();
+  });
+  deltaSlider.addEventListener('input', e => {
+    state.delta = +e.target.value;
+    deltaVal.textContent = state.delta.toFixed(2);
+    redrawLoop();
+  });
+  speedSlider.addEventListener('input', e => {
+    speedVal.textContent = (+e.target.value).toFixed(1) + '\u00d7';
+  });
+  playBtn.addEventListener('click', () => {
+    playing = !playing;
+    playBtn.textContent = playing ? 'Pause' : 'Play';
   });
 
   resetBtn.addEventListener('click', () => {
-    state.x = 2.0; state.y = 2.0; 
+    state.x = 2.0; state.y = 2.0;
     state.alpha = 1.0; alphaSlider.value = 1.0; alphaVal.textContent = '1.00';
+    state.beta = 0.5; betaSlider.value = 0.5; betaVal.textContent = '0.50';
     state.gamma = 1.0; gammaSlider.value = 1.0; gammaVal.textContent = '1.00';
-    update();
+    state.delta = 0.3; deltaSlider.value = 0.3; deltaVal.textContent = '0.30';
+    speedSlider.value = 1.0; speedVal.textContent = '1.0\u00d7';
+    playing = true; playBtn.textContent = 'Pause';
+    resetTrajectory();
+    redrawLoop();
+    redrawTs();
   });
 
   new ResizeObserver(resize).observe(container);
+  resetTrajectory();
   resize();
+  requestAnimationFrame(frame);
 })();
 
 // --- Wa-Tor Simulation ---
@@ -362,7 +483,17 @@ window.addEventListener('load', () => {
   const predBreedVal = document.getElementById('val-pred-breed');
   const predStarveSlider = document.getElementById('wator-pred-starve');
   const predStarveVal = document.getElementById('val-pred-starve');
+  const speedSlider = document.getElementById('wator-speed');
+  const speedVal = document.getElementById('wator-speed-val');
+  const playBtn = document.getElementById('wator-play-btn');
   const resetBtn = document.getElementById('wator-reset-btn');
+  // speed slider maps 0..4 -> {paused, 0.25x, 0.5x, 1x, 2x, 4x} via stepsPerFrame
+  // 0 = paused (we also expose an explicit Pause button)
+  const SPEED_LABELS = ['0', '\u00bd', '1', '2', '4'];
+  let stepsPerFrameTable = [0, 1, 1, 2, 4]; // index 1 = half speed handled via frameSkip
+  let frameSkipTable = [0, 2, 1, 1, 1];
+  let playing = true;
+  let frameCounter = 0;
 
   let W = 100;
   let H = 60;
@@ -552,7 +683,15 @@ window.addEventListener('load', () => {
   }
 
   function loop() {
-    tick();
+    if (playing) {
+      const s = parseInt(speedSlider.value);
+      const stepsPerFrame = stepsPerFrameTable[s];
+      const frameSkip = frameSkipTable[s];
+      if (stepsPerFrame > 0 && (frameCounter % frameSkip) === 0) {
+        for (let k = 0; k < stepsPerFrame; k++) tick();
+      }
+      frameCounter++;
+    }
     draw();
     requestAnimationFrame(loop);
   }
@@ -560,7 +699,14 @@ window.addEventListener('load', () => {
   preyBreedSlider.addEventListener('input', e => { preyBreedVal.textContent = e.target.value; });
   predBreedSlider.addEventListener('input', e => { predBreedVal.textContent = e.target.value; });
   predStarveSlider.addEventListener('input', e => { predStarveVal.textContent = e.target.value; });
-  
+  speedSlider.addEventListener('input', e => {
+    speedVal.textContent = SPEED_LABELS[parseInt(e.target.value)] + '\u00d7';
+  });
+  playBtn.addEventListener('click', () => {
+    playing = !playing;
+    playBtn.textContent = playing ? 'Pause' : 'Play';
+  });
+
   resetBtn.addEventListener('click', init);
 
   resize();

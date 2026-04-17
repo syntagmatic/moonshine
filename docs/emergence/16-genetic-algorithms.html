@@ -88,6 +88,19 @@ svg text { font-family: var(--heading-font); }
 .best-string .match { color: var(--accent); font-weight: 600; }
 .best-string .miss { color: #ccc; }
 
+.pop-inspector { margin-top: 0.75rem; }
+.pop-inspector-label { font-family: var(--heading-font); font-size: 0.75rem; font-weight: 600;
+  color: var(--text-2); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.35rem; }
+.pop-row { font-family: var(--mono-font); font-size: 0.78rem; padding: 0.2rem 0.55rem;
+  background: #f6f6fa; border-radius: 3px; margin-top: 0.18rem; display: flex; gap: 0.6rem;
+  align-items: baseline; line-height: 1.4; letter-spacing: 0.02em; }
+.pop-row .rank { color: var(--text-2); min-width: 1.4em; text-align: right; font-weight: 600; }
+.pop-row .score { color: var(--text-2); min-width: 3.2em; text-align: right;
+  font-variant-numeric: tabular-nums; }
+.pop-row .genome { flex: 1; word-break: break-all; min-width: 0; }
+.pop-row .good { color: #16a34a; }
+.pop-row .bad { color: #dc2626; }
+
 .target-input { font-family: var(--mono-font); font-size: 0.85rem; padding: 0.4rem 0.6rem;
   border: 1px solid var(--border); border-radius: 4px; width: 280px; max-width: 100%;
   text-transform: uppercase; }
@@ -156,6 +169,13 @@ noise.
       <label>Target phrase</label>
       <input type="text" class="target-input" id="weasel-target" value="METHINKS IT IS LIKE A WEASEL" maxlength="40">
     </div>
+    <div class="control-group">
+      <label>Speed</label>
+      <div class="slider-row">
+        <input type="range" id="weasel-speed-slider" min="0.1" max="4" step="0.1" value="1">
+        <span class="val" id="weasel-speed-val">1.0&times;</span>
+      </div>
+    </div>
     <button class="btn" id="weasel-start">Start</button>
     <button class="btn" id="weasel-reset">Reset</button>
   </div>
@@ -164,8 +184,12 @@ noise.
     <div class="stat"><span class="stat-label">Generation</span> <span class="stat-val" id="weasel-gen">0</span></div>
     <div class="stat"><span class="stat-label">Best fitness</span> <span class="stat-val" id="weasel-fit">0</span></div>
   </div>
+  <div class="pop-inspector" id="weasel-pop-inspector" style="display:none;">
+    <div class="pop-inspector-label">Top 8 candidates</div>
+    <div id="weasel-pop-list"></div>
+  </div>
   <svg id="svg-weasel-chart"></svg>
-  <p class="figure-caption"><span class="figure-label">Figure 1.</span> Evolving a string to match a target. Blue characters are correct matches. The chart tracks the best fitness (matching characters) per generation. Most of the convergence happens fast, with the last few characters taking longer as the selection pressure narrows.</p>
+  <p class="figure-caption"><span class="figure-label">Figure 1.</span> Evolving a string to match a target. Blue characters are correct matches. The chart tracks the best fitness (matching characters) per generation. Slow the speed down, or pause mid-run, to watch the top eight candidates jostle for position: green characters are correct, red are wrong. The runner-up is almost always one mutation away from the leader.</p>
 </div>
 
 <p>
@@ -326,19 +350,28 @@ const dispatch = d3.dispatch('update', 'reset');
   var targetInput = document.getElementById("weasel-target");
   var startBtn = document.getElementById("weasel-start");
   var resetBtn = document.getElementById("weasel-reset");
+  var speedSlider = document.getElementById("weasel-speed-slider");
+  var speedVal = document.getElementById("weasel-speed-val");
   var bestEl = document.getElementById("weasel-best");
   var genEl = document.getElementById("weasel-gen");
   var fitEl = document.getElementById("weasel-fit");
   var figEl = document.getElementById("fig-weasel");
+  var popInspector = document.getElementById("weasel-pop-inspector");
+  var popListEl = document.getElementById("weasel-pop-list");
+
+  var TOP_N = 8; /* How many candidates to show in the inspector */
 
   var target = targetInput.value.toUpperCase();
   var population = [];
   var generation = 0;
-  var running = false;
+  var running = false;     /* simulation exists & is progressing */
+  var paused = false;      /* simulation exists but frozen */
+  var started = false;     /* a run has been initialized */
   var converged = false;
   var history = [];
   var animId = null;
-  var stepsPerFrame = 3;
+  var speed = 1;           /* 0.1..4; scales steps per frame */
+  var BASE_STEPS_PER_FRAME = 3;
 
   /* Chart setup */
   var svgEl = document.getElementById("svg-weasel-chart");
@@ -432,6 +465,31 @@ const dispatch = d3.dispatch('update', 'reset');
     fitEl.textContent = best.fit + "/" + target.length;
   }
 
+  function renderPopulationInspector() {
+    /* Render the top TOP_N individuals so readers can watch the runners-up. */
+    if (!started || population.length === 0) {
+      popInspector.style.display = "none";
+      return;
+    }
+    popInspector.style.display = "";
+    var n = Math.min(TOP_N, population.length);
+    var html = "";
+    for (var k = 0; k < n; k++) {
+      var ind = population[k];
+      var row = '<div class="pop-row">';
+      row += '<span class="rank">#' + (k + 1) + '</span>';
+      row += '<span class="score">' + ind.fit + '/' + target.length + '</span>';
+      row += '<span class="genome">';
+      for (var i = 0; i < ind.str.length; i++) {
+        var ch = ind.str[i] === " " ? "&nbsp;" : ind.str[i];
+        row += '<span class="' + (ind.str[i] === target[i] ? "good" : "bad") + '">' + ch + '</span>';
+      }
+      row += '</span></div>';
+      html += row;
+    }
+    popListEl.innerHTML = html;
+  }
+
   function drawChart() {
     if (history.length < 2) return;
     var svg = d3.select(svgEl);
@@ -471,18 +529,46 @@ const dispatch = d3.dispatch('update', 'reset');
      .attr("d", line);
   }
 
+  function currentStepsPerFrame() {
+    /* Speed slider scales steps/frame. At 0.1x we accumulate a fractional budget
+       so very slow speeds still advance, just rarely. */
+    var raw = BASE_STEPS_PER_FRAME * speed;
+    if (raw >= 1) return Math.max(1, Math.round(raw));
+    return raw; /* sub-1 handled via accumulator in tick() */
+  }
+
+  var stepBudget = 0;
+
   function tick() {
-    if (!running || converged) return;
+    if (!running || paused || converged) { animId = null; return; }
     animId = requestAnimationFrame(tick);
-    for (var i = 0; i < stepsPerFrame; i++) {
+    var spf = currentStepsPerFrame();
+    var steps;
+    if (spf >= 1) {
+      steps = spf;
+    } else {
+      stepBudget += spf;
+      steps = Math.floor(stepBudget);
+      stepBudget -= steps;
+    }
+    for (var i = 0; i < steps; i++) {
       step();
       if (population[0].fit === target.length) {
         converged = true;
         break;
       }
     }
-    renderBest();
-    drawChart();
+    if (steps > 0) {
+      renderBest();
+      renderPopulationInspector();
+      drawChart();
+    }
+  }
+
+  function updateStartBtnLabel() {
+    if (!started || converged) { startBtn.textContent = "Start"; startBtn.classList.remove("active"); return; }
+    if (paused) { startBtn.textContent = "Resume"; startBtn.classList.remove("active"); }
+    else { startBtn.textContent = "Pause"; startBtn.classList.add("active"); }
   }
 
   function start() {
@@ -501,29 +587,65 @@ const dispatch = d3.dispatch('update', 'reset');
     history = [];
     converged = false;
     running = true;
+    paused = false;
+    started = true;
+    stepBudget = 0;
     initPopulation();
     renderBest();
+    renderPopulationInspector();
+    updateStartBtnLabel();
+    if (animId) cancelAnimationFrame(animId);
+    animId = null;
     tick();
+  }
+
+  function togglePause() {
+    if (!started || converged) return;
+    paused = !paused;
+    updateStartBtnLabel();
+    if (!paused) {
+      /* Resume: re-render immediately and restart the loop. */
+      if (animId) cancelAnimationFrame(animId);
+      animId = null;
+      tick();
+    } else {
+      /* Pause: freeze current frame; inspector already reflects it. */
+      renderPopulationInspector();
+    }
   }
 
   function reset() {
     running = false;
+    paused = false;
+    started = false;
     converged = false;
     if (animId) cancelAnimationFrame(animId);
     animId = null;
     generation = 0;
     history = [];
     population = [];
+    stepBudget = 0;
     bestEl.innerHTML = "";
     genEl.textContent = "0";
     fitEl.textContent = "0";
+    popInspector.style.display = "none";
+    popListEl.innerHTML = "";
     d3.select(svgEl).selectAll("*").remove();
+    updateStartBtnLabel();
   }
 
-  startBtn.addEventListener("click", start);
+  startBtn.addEventListener("click", function() {
+    /* Start button doubles as Pause/Resume once a run is underway. */
+    if (!started || converged) start();
+    else togglePause();
+  });
   resetBtn.addEventListener("click", reset);
   targetInput.addEventListener("keydown", function(e) {
     if (e.key === "Enter") start();
+  });
+  speedSlider.addEventListener("input", function() {
+    speed = parseFloat(this.value);
+    speedVal.textContent = speed.toFixed(1) + "\u00d7";
   });
 
   /* Intersection observer to pause when off screen */
@@ -532,7 +654,7 @@ const dispatch = d3.dispatch('update', 'reset');
       if (!entry.isIntersecting && running) {
         if (animId) cancelAnimationFrame(animId);
         animId = null;
-      } else if (entry.isIntersecting && running && !converged && !animId) {
+      } else if (entry.isIntersecting && running && !paused && !converged && !animId) {
         tick();
       }
     });

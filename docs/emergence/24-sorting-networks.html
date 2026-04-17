@@ -67,6 +67,8 @@ header { margin-bottom: 3rem; }
   transition: background 0.15s, border-color 0.15s; user-select: none; }
 .btn:hover { border-color: var(--accent); background: var(--accent-light); }
 .btn.active { border-color: var(--accent); background: var(--accent); color: white; }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; background: var(--fig-bg); border-color: var(--border); }
+.btn:disabled:hover { border-color: var(--border); background: var(--fig-bg); }
 .btn-group { display: flex; gap: 0.4rem; flex-wrap: wrap; }
 .stat-row { display: flex; gap: 1.5rem; margin-top: 0.75rem; font-family: var(--heading-font); font-size: 0.85rem; flex-wrap: wrap; }
 .stat-row .stat { display: flex; gap: 0.35rem; align-items: baseline; }
@@ -171,9 +173,11 @@ what makes sorting networks fast in hardware.
 </p>
 
 <p>
-Select a network size, then click "Run" to feed a random permutation through it.
-Values flow from left to right, and comparators swap them as they pass. Adjust the
-speed to watch the process in detail or let it run fast.
+Select a network size and an input arrangement, then click "Run" to feed it through.
+Values flow from left to right, and comparators swap them as they pass. Pause at any
+time, or advance one layer at a time with "Step" to see exactly which comparators
+fire together. The same wiring handles every arrangement; flip the input between
+random, sorted, reversed, and worst-case to confirm it.
 </p>
 
 <div class="figure" id="fig-classic">
@@ -189,6 +193,15 @@ speed to watch the process in detail or let it run fast.
       </select>
     </div>
     <div class="control-group">
+      <label>Input</label>
+      <select id="select-classic-input">
+        <option value="random" selected>Random</option>
+        <option value="sorted">Already sorted</option>
+        <option value="reversed">Reversed</option>
+        <option value="worst">Worst case</option>
+      </select>
+    </div>
+    <div class="control-group">
       <label>Speed</label>
       <div class="slider-row">
         <input type="range" id="slider-speed" min="1" max="10" step="1" value="5">
@@ -196,6 +209,9 @@ speed to watch the process in detail or let it run fast.
       </div>
     </div>
     <button class="btn" id="btn-classic-run">Run</button>
+    <button class="btn" id="btn-classic-pause" disabled>Pause</button>
+    <button class="btn" id="btn-classic-step">Step</button>
+    <button class="btn" id="btn-classic-reset">Reset</button>
     <button class="btn" id="btn-classic-randomize">New input</button>
   </div>
   <div class="stat-row">
@@ -725,9 +741,13 @@ function textColorForBg(hex) {
 
   var svgEl = document.getElementById("svg-classic");
   var selSize = document.getElementById("select-classic-size");
+  var selInput = document.getElementById("select-classic-input");
   var sliderSpeed = document.getElementById("slider-speed");
   var valSpeed = document.getElementById("val-speed");
   var btnRun = document.getElementById("btn-classic-run");
+  var btnPause = document.getElementById("btn-classic-pause");
+  var btnStep = document.getElementById("btn-classic-step");
+  var btnReset = document.getElementById("btn-classic-reset");
   var btnRand = document.getElementById("btn-classic-randomize");
   var statComps = document.getElementById("stat-comps");
   var statLayers = document.getElementById("stat-layers");
@@ -764,12 +784,27 @@ function textColorForBg(hex) {
   var currentSize = 8;
   var inputValues = [];
   var animating = false;
+  var paused = false;
+  var pendingStep = false; /* true while a single step is being played from paused state */
   var animationId = null;
+  var runState = null; /* carries posMap, circData, layer index, phase between transitions */
 
-  function makeInput(n) {
+  /* Worst case for a bitonic/merge-style network is a rotation:
+     e.g. [n/2+1 ... n, 1 ... n/2] which forces most layers to perform swaps. */
+  function makeInput(n, kind) {
     var arr = [];
     for (var i = 0; i < n; i++) arr.push(i + 1);
+    if (kind === "sorted") return arr;
+    if (kind === "reversed") return arr.slice().reverse();
+    if (kind === "worst") {
+      var half = Math.floor(n / 2);
+      return arr.slice(half).concat(arr.slice(0, half));
+    }
     return shuffle(arr);
+  }
+
+  function currentInputKind() {
+    return selInput ? selInput.value : "random";
   }
 
   function getWidth() {
@@ -778,6 +813,10 @@ function textColorForBg(hex) {
 
   function cancelAnim() {
     if (animationId) { cancelAnimationFrame(animationId); animationId = null; }
+    /* Stop any in-flight d3 transitions on existing value circles */
+    if (svgEl) {
+      d3.select(svgEl).selectAll(".val-g").interrupt();
+    }
     animating = false;
   }
 
@@ -864,9 +903,11 @@ function textColorForBg(hex) {
     return { svg: svg, W: W, H: H, wireY: wireY, layers: layers, padL: padL, padR: padR, layerSpacing: layerSpacing, wireGap: wireGap };
   }
 
-  function animateRun() {
-    if (animating) { cancelAnim(); return; }
-    animating = true;
+  /* Set up a run: prime circles at input positions and build the runState.
+     If autostart is true, the scheduler starts playing; otherwise the run is
+     primed but paused, waiting for Run/Step. */
+  function primeRun(autostart) {
+    cancelAnim();
 
     var n = currentSize;
     var net = NETWORKS[n];
@@ -880,16 +921,11 @@ function textColorForBg(hex) {
     var W = info.W;
     var layerSpacing = info.layerSpacing;
 
-    /* Remove static output labels */
     svg.selectAll(".label-out").remove();
-
-    var speed = parseInt(sliderSpeed.value);
-    var baseDur = Math.max(60, 500 - speed * 40);
 
     var r = n <= 8 ? 12 : 8;
     var startX = padL + 15;
 
-    /* posMap[origIdx] = current wire */
     var posMap = [];
     var circData = [];
     for (var i = 0; i < n; i++) {
@@ -900,6 +936,7 @@ function textColorForBg(hex) {
     var gCirc = svg.selectAll(".val-g")
       .data(circData)
       .enter().append("g")
+      .attr("class", "val-g")
       .attr("transform", function(d, i) { return "translate(" + startX + "," + wireY[i] + ")"; });
 
     gCirc.append("circle")
@@ -916,86 +953,179 @@ function textColorForBg(hex) {
         .text(function(d) { return d.val; });
     }
 
-    function doLayer(li) {
-      if (li >= layers.length) {
-        statCurLayer.textContent = "done";
-        var endX = W - padR - 15;
-        gCirc.transition().duration(baseDur).ease(d3.easeLinear)
-          .attr("transform", function(d, i) {
-            return "translate(" + endX + "," + wireY[posMap[i]] + ")";
-          })
-          .on("end", function(d, i) {
-            if (i !== 0) return;
-            /* Show output labels */
-            var output = applyNetwork(net, inputValues);
-            svg.selectAll(".label-out-anim")
-              .data(output)
-              .enter().append("text")
-              .attr("class", "wire-label")
-              .attr("x", W - padR + 8)
-              .attr("y", function(dd, ii) { return wireY[ii]; })
-              .attr("text-anchor", "start")
-              .attr("dominant-baseline", "central")
-              .attr("font-size", n <= 8 ? 13 : 10)
-              .text(function(dd) { return dd; })
-              .attr("fill-opacity", 0)
-              .transition().duration(200)
-              .attr("fill-opacity", 1);
-            animating = false;
-          });
-        return;
-      }
+    runState = {
+      n: n, net: net, layers: layers, svg: svg, wireY: wireY,
+      padL: padL, padR: padR, W: W, layerSpacing: layerSpacing,
+      gCirc: gCirc, posMap: posMap, circData: circData,
+      layerIdx: 0, phase: "move", /* "move" -> "swap" -> next layer */
+      done: false
+    };
 
-      statCurLayer.textContent = (li + 1) + " / " + layers.length;
-      var layer = layers[li];
-      var cx = padL + (li + 1) * layerSpacing;
+    statCurLayer.textContent = "0 / " + layers.length;
+    animating = true;
+    paused = !autostart;
+    pendingStep = false;
+    updateControls();
+    if (autostart) playStep();
+  }
 
-      /* Move circles to this layer */
-      gCirc.transition().duration(baseDur).ease(d3.easeLinear)
+  /* Advance one half-step of the animation. After the transition ends,
+     if not paused, recursively schedule the next half-step. */
+  function playStep() {
+    if (!runState || runState.done) return;
+    var s = runState;
+
+    /* Dynamically respect current speed slider on every step */
+    var speed = parseInt(sliderSpeed.value);
+    var baseDur = Math.max(60, 500 - speed * 40);
+
+    /* End of network: flush to right edge, show output labels */
+    if (s.layerIdx >= s.layers.length) {
+      s.done = true;
+      statCurLayer.textContent = "done";
+      var endX = s.W - s.padR - 15;
+      s.gCirc.transition().duration(baseDur).ease(d3.easeLinear)
         .attr("transform", function(d, i) {
-          return "translate(" + cx + "," + wireY[posMap[i]] + ")";
+          return "translate(" + endX + "," + s.wireY[s.posMap[i]] + ")";
         })
         .on("end", function(d, i) {
           if (i !== 0) return;
-
-          /* Compute swaps */
-          var wireToOrig = new Array(n);
-          for (var q = 0; q < n; q++) wireToOrig[posMap[q]] = q;
-
-          var anySwap = false;
-          layer.forEach(function(comp) {
-            var origA = wireToOrig[comp[0]];
-            var origB = wireToOrig[comp[1]];
-            var valA = circData[origA].val;
-            var valB = circData[origB].val;
-            if (valA > valB) {
-              anySwap = true;
-              posMap[origA] = comp[1];
-              posMap[origB] = comp[0];
-              wireToOrig[comp[0]] = origB;
-              wireToOrig[comp[1]] = origA;
-            }
-          });
-
-          gCirc.transition().duration(anySwap ? Math.max(100, baseDur * 0.6) : 0)
-            .ease(d3.easeCubicInOut)
-            .attr("transform", function(d2, i2) {
-              return "translate(" + cx + "," + wireY[posMap[i2]] + ")";
-            })
-            .on("end", function(d2, i2) {
-              if (i2 !== 0) return;
-              doLayer(li + 1);
-            });
+          var output = applyNetwork(s.net, inputValues);
+          s.svg.selectAll(".label-out-anim")
+            .data(output)
+            .enter().append("text")
+            .attr("class", "wire-label")
+            .attr("x", s.W - s.padR + 8)
+            .attr("y", function(dd, ii) { return s.wireY[ii]; })
+            .attr("text-anchor", "start")
+            .attr("dominant-baseline", "central")
+            .attr("font-size", s.n <= 8 ? 13 : 10)
+            .text(function(dd) { return dd; })
+            .attr("fill-opacity", 0)
+            .transition().duration(200)
+            .attr("fill-opacity", 1);
+          animating = false;
+          paused = false;
+          updateControls();
         });
+      return;
     }
 
-    doLayer(0);
+    if (s.phase === "move") {
+      statCurLayer.textContent = (s.layerIdx + 1) + " / " + s.layers.length;
+      var cx = s.padL + (s.layerIdx + 1) * s.layerSpacing;
+      s.gCirc.transition().duration(baseDur).ease(d3.easeLinear)
+        .attr("transform", function(d, i) {
+          return "translate(" + cx + "," + s.wireY[s.posMap[i]] + ")";
+        })
+        .on("end", function(d, i) {
+          if (i !== 0) return;
+          s.phase = "swap";
+          afterHalfStep();
+        });
+    } else {
+      /* swap phase */
+      var layer = s.layers[s.layerIdx];
+      var cx2 = s.padL + (s.layerIdx + 1) * s.layerSpacing;
+      var wireToOrig = new Array(s.n);
+      for (var q = 0; q < s.n; q++) wireToOrig[s.posMap[q]] = q;
+
+      var anySwap = false;
+      layer.forEach(function(comp) {
+        var origA = wireToOrig[comp[0]];
+        var origB = wireToOrig[comp[1]];
+        var valA = s.circData[origA].val;
+        var valB = s.circData[origB].val;
+        if (valA > valB) {
+          anySwap = true;
+          s.posMap[origA] = comp[1];
+          s.posMap[origB] = comp[0];
+          wireToOrig[comp[0]] = origB;
+          wireToOrig[comp[1]] = origA;
+        }
+      });
+
+      s.gCirc.transition().duration(anySwap ? Math.max(100, baseDur * 0.6) : 0)
+        .ease(d3.easeCubicInOut)
+        .attr("transform", function(d, i) {
+          return "translate(" + cx2 + "," + s.wireY[s.posMap[i]] + ")";
+        })
+        .on("end", function(d, i) {
+          if (i !== 0) return;
+          s.layerIdx += 1;
+          s.phase = "move";
+          afterHalfStep();
+        });
+    }
+  }
+
+  /* After each half-step transition ends, decide whether to keep going.
+     If a single-step was requested from a paused state, honour it and stop. */
+  function afterHalfStep() {
+    if (!runState || runState.done) return;
+    if (pendingStep) {
+      pendingStep = false;
+      paused = true;
+      updateControls();
+      return;
+    }
+    if (paused) { updateControls(); return; }
+    playStep();
+  }
+
+  function updateControls() {
+    var inFlight = animating && runState && !runState.done;
+    btnRun.textContent = (inFlight && !paused) ? "Pause" : (runState && !runState.done && paused ? "Resume" : "Run");
+    /* Keep dedicated pause button in sync as a secondary affordance */
+    btnPause.textContent = paused ? "Resume" : "Pause";
+    btnPause.disabled = !inFlight;
+    btnStep.disabled = runState && runState.done;
+    btnReset.disabled = !runState;
+  }
+
+  function toggleRun() {
+    if (!runState || runState.done) {
+      /* Fresh start */
+      primeRun(true);
+      return;
+    }
+    if (paused) {
+      paused = false;
+      updateControls();
+      playStep();
+    } else {
+      paused = true;
+      updateControls();
+    }
+  }
+
+  function stepOnce() {
+    /* If no run primed, set one up in paused state */
+    if (!runState || runState.done) {
+      primeRun(false);
+    }
+    if (!runState || runState.done) return;
+    pendingStep = true;
+    paused = false;
+    updateControls();
+    playStep();
+  }
+
+  function resetRun() {
+    cancelAnim();
+    runState = null;
+    paused = false;
+    pendingStep = false;
+    drawStatic();
+    updateControls();
   }
 
   function init() {
     currentSize = parseInt(selSize.value);
-    inputValues = makeInput(currentSize);
+    inputValues = makeInput(currentSize, currentInputKind());
+    runState = null;
     drawStatic();
+    updateControls();
   }
 
   selSize.addEventListener("change", function() {
@@ -1003,18 +1133,31 @@ function textColorForBg(hex) {
     init();
   });
 
+  selInput.addEventListener("change", function() {
+    cancelAnim();
+    inputValues = makeInput(currentSize, currentInputKind());
+    runState = null;
+    drawStatic();
+    updateControls();
+  });
+
   sliderSpeed.addEventListener("input", function() {
     valSpeed.textContent = this.value;
   });
 
-  btnRun.addEventListener("click", function() {
-    animateRun();
-  });
+  btnRun.addEventListener("click", toggleRun);
+  btnPause.addEventListener("click", toggleRun);
+  btnStep.addEventListener("click", stepOnce);
+  btnReset.addEventListener("click", resetRun);
 
   btnRand.addEventListener("click", function() {
     cancelAnim();
-    inputValues = makeInput(currentSize);
+    /* New input always reshuffles even if the selector is on "random"; for
+       fixed kinds it simply regenerates the same canonical arrangement. */
+    inputValues = makeInput(currentSize, currentInputKind());
+    runState = null;
     drawStatic();
+    updateControls();
   });
 
   init();

@@ -78,6 +78,11 @@ svg text { font-family: var(--heading-font); }
 .stat-val { font-family: var(--mono-font); font-size: 1.1rem; font-weight: 600; }
 .stat-label { font-size: 0.75rem; color: var(--text-2); }
 
+.sir-layout { display: grid; grid-template-columns: 2fr 1fr; gap: 0.75rem; align-items: stretch; }
+.sir-layout > div { min-width: 0; }
+#sir-trace-container { background: #fcfcfd; border: 1px solid var(--border); border-radius: 3px; padding: 0.25rem; }
+#sir-trace-container svg { height: 100%; }
+@media (max-width: 640px) { .sir-layout { grid-template-columns: 1fr; } }
 .topo-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.75rem; }
 .topo-cell { text-align: center; }
 .topo-cell .cell-title { font-family: var(--heading-font); font-size: 0.85rem;
@@ -135,17 +140,21 @@ Click any node below to infect it, then press Play to observe the spread.
 </p>
 
 <div class="figure" id="fig-sir">
-  <div id="sir-svg-container"></div>
+  <div class="sir-layout">
+    <div id="sir-svg-container"></div>
+    <div id="sir-trace-container"></div>
+  </div>
   <div class="legend">
     <div class="legend-item"><div class="legend-dot" style="background:var(--c-agent)"></div> Susceptible</div>
     <div class="legend-item"><div class="legend-dot" style="background:var(--c-danger)"></div> Infected</div>
-    <div class="legend-item"><div class="legend-dot" style="background:var(--c-env)"></div> Recovered</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--c-env)"></div> Recovered / Immune</div>
   </div>
   <div class="stats-row" id="sir-stats">
     <div class="stat"><span class="stat-val" id="sir-s-count">80</span><span class="stat-label">Susceptible</span></div>
     <div class="stat"><span class="stat-val" id="sir-i-count">0</span><span class="stat-label">Infected</span></div>
     <div class="stat"><span class="stat-val" id="sir-r-count">0</span><span class="stat-label">Recovered</span></div>
     <div class="stat"><span class="stat-val" id="sir-step">0</span><span class="stat-label">Step</span></div>
+    <div class="stat"><span class="stat-val" id="sir-r0">1.20</span><span class="stat-label"><span id="math-r0-sir"></span> = &beta;&thinsp;&langle;k&rangle;/&gamma;</span></div>
   </div>
   <div class="controls">
     <div class="control-group">
@@ -158,8 +167,22 @@ Click any node below to infect it, then press Play to observe the spread.
     <div class="control-group">
       <label>Recovery (<span id="math-gamma-label"></span>)</label>
       <div class="slider-row">
-        <input type="range" id="sir-gamma" min="0" max="1" step="0.01" value="0.1">
+        <input type="range" id="sir-gamma" min="0.02" max="1" step="0.01" value="0.1">
         <span class="val" id="sir-gamma-val">0.10</span>
+      </div>
+    </div>
+    <div class="control-group">
+      <label>Immune fraction</label>
+      <div class="slider-row">
+        <input type="range" id="sir-vacc" min="0" max="0.95" step="0.01" value="0">
+        <span class="val" id="sir-vacc-val">0%</span>
+      </div>
+    </div>
+    <div class="control-group">
+      <label>Speed</label>
+      <div class="slider-row">
+        <input type="range" id="sir-speed" min="60" max="900" step="20" value="500">
+        <span class="val" id="sir-speed-val">1&times;</span>
       </div>
     </div>
     <div class="control-group" style="justify-content:flex-end">
@@ -169,11 +192,31 @@ Click any node below to infect it, then press Play to observe the spread.
       </div>
     </div>
   </div>
-  <p class="click-hint">Click a node to infect it. Then press Play.</p>
+  <div class="controls" style="margin-top:-0.5rem">
+    <div class="control-group">
+      <label>Presets</label>
+      <div class="slider-row" id="sir-presets">
+        <button class="btn" data-preset="mild">Mild (R<sub>0</sub>&#8239;1.3)</button>
+        <button class="btn" data-preset="flu">Flu (1.8)</button>
+        <button class="btn" data-preset="covid">COVID-Alpha (2.5)</button>
+        <button class="btn" data-preset="measles">Measles (15)</button>
+      </div>
+    </div>
+    <div class="control-group">
+      <label>Seed</label>
+      <div class="slider-row" id="sir-seeds">
+        <button class="btn" data-seed="random">Seed random</button>
+        <button class="btn" data-seed="hub">Seed hub</button>
+        <button class="btn" data-seed="cluster">Seed cluster</button>
+      </div>
+    </div>
+  </div>
+  <p class="click-hint">Click a node to infect it, or use the seed buttons. Then press Play.</p>
   <p class="figure-caption">
-    <span class="figure-label">Figure 1.</span> 
-    The geography of contagion. 
+    <span class="figure-label">Figure 1.</span>
+    The geography of contagion.
     The SIR model demonstrates how an outbreak depends on both local transmission rules and the global connectivity of the network.
+    Raise the immune fraction to see the herd-immunity threshold: when roughly 1&thinsp;&minus;&thinsp;1/R<sub>0</sub> of the population is immune, most outbreaks fizzle.
   </p>
 </div>
 
@@ -295,6 +338,7 @@ document.addEventListener("DOMContentLoaded", () => {
     k("R_0", "math-r0-stat");
     k("R_0", "math-r0-slider-label");
     k("R_0 = 1", "math-r0-fig2");
+    k("R_0", "math-r0-sir");
   }
 });
 
@@ -334,11 +378,16 @@ function buildAdjList(graph) {
 // ===================================================================
 (function() {
   const container = document.getElementById('sir-svg-container');
+  const traceContainer = document.getElementById('sir-trace-container');
   const N = 80;
-  let graph = randomGraph(N, 4);
+  const AVG_DEG = 4;
+  let graph = randomGraph(N, AVG_DEG);
   buildAdjList(graph);
   let stepCount = 0;
   let timer = null;
+  let vaccFrac = 0;
+  let stepMs = 500;
+  let history = []; // {s,i,r}
 
   const width = 690, height = 400;
   const svg = d3.select(container).append('svg')
@@ -350,12 +399,14 @@ function buildAdjList(graph) {
     .force('charge', d3.forceManyBody().strength(-60))
     .force('center', d3.forceCenter(width / 2, height / 2));
 
-  let linkSel = svg.append('g').selectAll('line').data(graph.links).join('line')
+  const linkG = svg.append('g');
+  const nodeG = svg.append('g');
+  let linkSel = linkG.selectAll('line').data(graph.links).join('line')
     .attr('stroke', COLOR.edge).attr('opacity', 0.6);
-  let nodeSel = svg.append('g').selectAll('circle').data(graph.nodes).join('circle')
+  let nodeSel = nodeG.selectAll('circle').data(graph.nodes).join('circle')
     .attr('r', 5).attr('fill', d => COLOR[d.state]).attr('stroke', '#fff').attr('stroke-width', 1.2);
 
-  nodeSel.on('click', (e, d) => { if (d.state === 'S') { d.state = 'I'; update(); } });
+  nodeSel.on('click', (e, d) => { if (d.state === 'S') { d.state = 'I'; recordHistory(); update(); } });
 
   sim.on('tick', () => {
     linkSel.attr('x1', d => d.source.x).attr('y1', d => d.source.y)
@@ -363,14 +414,83 @@ function buildAdjList(graph) {
     nodeSel.attr('cx', d => d.x).attr('cy', d => d.y);
   });
 
-  function update() {
-    nodeSel.attr('fill', d => COLOR[d.state]);
+  // --- Trace plot (S/I/R vs time) ---
+  const tW = 260, tH = 400, tM = { top: 14, right: 10, bottom: 28, left: 32 };
+  const traceSvg = d3.select(traceContainer).append('svg')
+    .attr('viewBox', `0 0 ${tW} ${tH}`).attr('preserveAspectRatio', 'xMidYMid meet');
+  const tg = traceSvg.append('g').attr('transform', `translate(${tM.left},${tM.top})`);
+  const tInnerW = tW - tM.left - tM.right, tInnerH = tH - tM.top - tM.bottom;
+  const xScale = d3.scaleLinear().range([0, tInnerW]);
+  const yScale = d3.scaleLinear().domain([0, N]).range([tInnerH, 0]);
+  tg.append('g').attr('class', 'tx-axis').attr('transform', `translate(0,${tInnerH})`);
+  tg.append('g').attr('class', 'ty-axis').call(d3.axisLeft(yScale).ticks(4).tickSize(-tInnerW))
+    .selectAll('line').attr('stroke', '#eee');
+  tg.select('.ty-axis .domain').remove();
+  tg.append('text').attr('x', tInnerW/2).attr('y', tH - tM.top - 6).attr('text-anchor', 'middle')
+    .attr('font-size', '9px').attr('fill', 'var(--text-2)').text('step');
+  tg.append('text').attr('transform', `rotate(-90)`).attr('x', -tInnerH/2).attr('y', -22)
+    .attr('text-anchor', 'middle').attr('font-size', '9px').attr('fill', 'var(--text-2)').text('nodes');
+  const sPath = tg.append('path').attr('fill','none').attr('stroke', COLOR.S).attr('stroke-width', 1.5);
+  const iPath = tg.append('path').attr('fill','none').attr('stroke', COLOR.I).attr('stroke-width', 1.8);
+  const rPath = tg.append('path').attr('fill','none').attr('stroke', COLOR.R).attr('stroke-width', 1.5);
+  const hThreshLine = tg.append('line').attr('stroke', 'var(--text-2)')
+    .attr('stroke-dasharray', '3,3').attr('opacity', 0.5);
+  const hThreshLbl = tg.append('text').attr('font-size', '8px').attr('fill', 'var(--text-2)');
+
+  function drawTrace() {
+    const xmax = Math.max(20, history.length - 1);
+    xScale.domain([0, xmax]);
+    tg.select('.tx-axis').call(d3.axisBottom(xScale).ticks(5).tickSize(-tInnerH))
+      .selectAll('line').attr('stroke', '#eee');
+    tg.select('.tx-axis .domain').remove();
+    const line = key => d3.line().x((_, i) => xScale(i)).y(d => yScale(d[key]));
+    sPath.datum(history).attr('d', line('s'));
+    iPath.datum(history).attr('d', line('i'));
+    rPath.datum(history).attr('d', line('r'));
+    // herd immunity threshold: 1 - 1/R0 of N, drawn as R line target
+    const r0 = currentR0();
+    if (r0 > 1) {
+      const hi = N * (1 - 1 / r0);
+      hThreshLine.attr('x1', 0).attr('x2', tInnerW)
+        .attr('y1', yScale(hi)).attr('y2', yScale(hi)).style('display', null);
+      hThreshLbl.attr('x', 4).attr('y', yScale(hi) - 3)
+        .text(`herd thresh ${(100*(1-1/r0)).toFixed(0)}%`).style('display', null);
+    } else {
+      hThreshLine.style('display', 'none');
+      hThreshLbl.style('display', 'none');
+    }
+  }
+
+  function currentR0() {
+    // R0 ≈ beta/gamma * <k>, where <k> = average degree (excluding vaccinated pool effect)
+    if (state.gamma <= 0) return Infinity;
+    return (state.beta / state.gamma) * AVG_DEG;
+  }
+
+  function updateR0Readout() {
+    const r0 = currentR0();
+    document.getElementById('sir-r0').textContent = isFinite(r0) ? r0.toFixed(2) : '∞';
+  }
+
+  function counts() {
     let s = 0, i = 0, r = 0;
     graph.nodes.forEach(n => { if (n.state === 'S') s++; else if (n.state === 'I') i++; else r++; });
-    document.getElementById('sir-s-count').textContent = s;
-    document.getElementById('sir-i-count').textContent = i;
-    document.getElementById('sir-r-count').textContent = r;
+    return { s, i, r };
+  }
+
+  function recordHistory() {
+    history.push(counts());
+    drawTrace();
+  }
+
+  function update() {
+    nodeSel.attr('fill', d => COLOR[d.state]);
+    const c = counts();
+    document.getElementById('sir-s-count').textContent = c.s;
+    document.getElementById('sir-i-count').textContent = c.i;
+    document.getElementById('sir-r-count').textContent = c.r;
     document.getElementById('sir-step').textContent = stepCount;
+    updateR0Readout();
   }
 
   function step() {
@@ -385,6 +505,7 @@ function buildAdjList(graph) {
     });
     newI.forEach(id => graph.nodes[id].state = 'I');
     stepCount++;
+    recordHistory();
     update();
     if (!graph.nodes.some(n => n.state === 'I')) stop();
   }
@@ -395,33 +516,156 @@ function buildAdjList(graph) {
     document.getElementById('sir-play').textContent = 'Play';
   }
 
+  function startTimer() {
+    clearInterval(timer);
+    timer = setInterval(step, stepMs);
+  }
+
+  function applyVaccination() {
+    graph.nodes.forEach(n => { n.state = 'S'; });
+    const k = Math.round(vaccFrac * graph.nodes.length);
+    const ids = d3.shuffle(graph.nodes.map(n => n.id).slice());
+    for (let i = 0; i < k; i++) graph.nodes[ids[i]].state = 'R';
+  }
+
+  function doReset() {
+    stop(); stepCount = 0;
+    graph = randomGraph(N, AVG_DEG); buildAdjList(graph);
+    sim.nodes(graph.nodes); sim.force('link').links(graph.links); sim.alpha(1).restart();
+    linkSel = linkG.selectAll('line').data(graph.links).join('line')
+      .attr('stroke', COLOR.edge).attr('opacity', 0.6);
+    nodeSel = nodeG.selectAll('circle').data(graph.nodes).join('circle')
+      .attr('r', 5).attr('fill', d => COLOR[d.state]).attr('stroke', '#fff').attr('stroke-width', 1.2);
+    nodeSel.on('click', (e, d) => { if (d.state === 'S') { d.state = 'I'; recordHistory(); update(); } });
+    applyVaccination();
+    history = [];
+    recordHistory();
+    update();
+  }
+
   document.getElementById('sir-play').addEventListener('click', function() {
     if (state.running) stop();
     else {
+      if (!graph.nodes.some(n => n.state === 'I')) {
+        // seed a random susceptible so Play always does something
+        const susc = graph.nodes.filter(n => n.state === 'S');
+        if (susc.length) susc[Math.floor(Math.random() * susc.length)].state = 'I';
+        recordHistory();
+      }
       state.running = true;
       this.textContent = 'Pause';
-      timer = setInterval(step, 500);
+      startTimer();
     }
   });
 
-  document.getElementById('sir-reset').addEventListener('click', () => {
-    stop(); stepCount = 0;
-    graph = randomGraph(N, 4); buildAdjList(graph);
-    sim.nodes(graph.nodes); sim.force('link').links(graph.links); sim.alpha(1).restart();
-    linkSel = svg.select('g').selectAll('line').data(graph.links).join('line').attr('stroke', COLOR.edge);
-    nodeSel = svg.selectAll('circle').data(graph.nodes).join('circle').attr('r', 5).attr('stroke', '#fff');
-    update();
-  });
+  document.getElementById('sir-reset').addEventListener('click', doReset);
 
   document.getElementById('sir-beta').addEventListener('input', e => {
     state.beta = +e.target.value;
     document.getElementById('sir-beta-val').textContent = state.beta.toFixed(2);
+    updateR0Readout(); drawTrace();
   });
   document.getElementById('sir-gamma').addEventListener('input', e => {
     state.gamma = +e.target.value;
     document.getElementById('sir-gamma-val').textContent = state.gamma.toFixed(2);
+    updateR0Readout(); drawTrace();
+  });
+  document.getElementById('sir-vacc').addEventListener('input', e => {
+    vaccFrac = +e.target.value;
+    document.getElementById('sir-vacc-val').textContent = Math.round(vaccFrac * 100) + '%';
+    // Re-apply vaccination to current graph without regenerating
+    stop(); stepCount = 0;
+    applyVaccination();
+    history = []; recordHistory(); update();
+  });
+  document.getElementById('sir-speed').addEventListener('input', e => {
+    // map slider 60..900 (ms) inverted to 0.3x..5x roughly; display speed multiplier
+    const ms = 960 - (+e.target.value);
+    stepMs = ms;
+    const mult = (500 / ms);
+    document.getElementById('sir-speed-val').textContent = mult.toFixed(1) + '×';
+    if (state.running) startTimer();
   });
 
+  // Preset scenarios: choose (beta, gamma) so R0 = beta*<k>/gamma matches target
+  const presets = {
+    mild:    { r0: 1.3,  gamma: 0.15 },
+    flu:     { r0: 1.8,  gamma: 0.12 },
+    covid:   { r0: 2.5,  gamma: 0.10 },
+    measles: { r0: 15.0, gamma: 0.08 }
+  };
+  document.querySelectorAll('#sir-presets .btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const p = presets[btn.dataset.preset];
+      if (!p) return;
+      const beta = Math.min(1, p.r0 * p.gamma / AVG_DEG);
+      state.beta = beta; state.gamma = p.gamma;
+      document.getElementById('sir-beta').value = beta;
+      document.getElementById('sir-beta-val').textContent = beta.toFixed(2);
+      document.getElementById('sir-gamma').value = p.gamma;
+      document.getElementById('sir-gamma-val').textContent = p.gamma.toFixed(2);
+      document.querySelectorAll('#sir-presets .btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      updateR0Readout(); drawTrace();
+    });
+  });
+
+  // Seed buttons: infect nodes via explicit strategies rather than click-aiming
+  function seedRandom() {
+    const susc = graph.nodes.filter(n => n.state === 'S');
+    if (!susc.length) return;
+    susc[Math.floor(Math.random() * susc.length)].state = 'I';
+  }
+  function seedHub() {
+    const susc = graph.nodes.filter(n => n.state === 'S');
+    if (!susc.length) return;
+    let bestDeg = -1, best = susc[0];
+    for (const n of susc) {
+      const d = graph.adjList[n.id].length;
+      if (d > bestDeg) { bestDeg = d; best = n; }
+    }
+    best.state = 'I';
+  }
+  function seedCluster() {
+    const susc = graph.nodes.filter(n => n.state === 'S');
+    if (!susc.length) return;
+    const seed = susc[Math.floor(Math.random() * susc.length)];
+    seed.state = 'I';
+    // Infect up to 4 susceptible neighbors of the seed
+    const neighIds = graph.adjList[seed.id].filter(id => graph.nodes[id].state === 'S');
+    d3.shuffle(neighIds);
+    let count = 0;
+    for (const id of neighIds) {
+      if (count >= 4) break;
+      graph.nodes[id].state = 'I';
+      count++;
+    }
+    // Fallback: if seed lacks enough susceptible neighbors, infect nearest susceptibles by euclidean distance
+    if (count < 4) {
+      const remaining = graph.nodes
+        .filter(n => n.state === 'S' && n.id !== seed.id)
+        .map(n => ({ n, d2: (n.x - seed.x) ** 2 + (n.y - seed.y) ** 2 }))
+        .sort((a, b) => a.d2 - b.d2);
+      for (const { n } of remaining) {
+        if (count >= 4) break;
+        n.state = 'I';
+        count++;
+      }
+    }
+  }
+  document.querySelectorAll('#sir-seeds .btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const kind = btn.dataset.seed;
+      if (kind === 'random') seedRandom();
+      else if (kind === 'hub') seedHub();
+      else if (kind === 'cluster') seedCluster();
+      recordHistory();
+      update();
+    });
+  });
+
+  recordHistory();
+  update();
   new ResizeObserver(() => svg.attr('width', container.clientWidth)).observe(container);
 })();
 
@@ -474,19 +718,172 @@ function buildAdjList(graph) {
 })();
 
 // ===================================================================
-// Figure 3: Topology
+// Figure 3: Topology — three contact networks, same disease
 // ===================================================================
 (function() {
+  const N = 60, AVG_DEG = 4;
+  const BETA = 0.18, GAMMA = 0.08;
+
+  // --- topology generators ---
+  function smallWorld(n, k, p) {
+    // Watts–Strogatz: ring of k nearest neighbors, rewire each edge with prob p
+    const nodes = d3.range(n).map(i => ({ id: i, state: 'S' }));
+    const edgeSet = new Set();
+    const addEdge = (a, b) => {
+      if (a === b) return;
+      const key = a < b ? a + '-' + b : b + '-' + a;
+      if (!edgeSet.has(key)) edgeSet.add(key);
+    };
+    for (let i = 0; i < n; i++) for (let j = 1; j <= k / 2; j++) addEdge(i, (i + j) % n);
+    const rewired = new Set();
+    [...edgeSet].forEach(key => {
+      if (Math.random() < p) {
+        const [a] = key.split('-').map(Number);
+        rewired.add(key);
+        let t; do { t = Math.floor(Math.random() * n); } while (t === a);
+        addEdge(a, t);
+      }
+    });
+    rewired.forEach(k0 => edgeSet.delete(k0));
+    const links = [...edgeSet].map(k0 => {
+      const [s, t] = k0.split('-').map(Number); return { source: s, target: t };
+    });
+    return { nodes, links };
+  }
+
+  function scaleFree(n, m) {
+    // Barabási–Albert: start with m+1 clique, attach with preferential attachment
+    const nodes = d3.range(n).map(i => ({ id: i, state: 'S' }));
+    const links = [];
+    const deg = new Array(n).fill(0);
+    for (let i = 0; i <= m; i++) for (let j = i + 1; j <= m; j++) {
+      links.push({ source: i, target: j }); deg[i]++; deg[j]++;
+    }
+    for (let i = m + 1; i < n; i++) {
+      const picked = new Set();
+      let totalDeg = 0; for (let j = 0; j < i; j++) totalDeg += deg[j];
+      while (picked.size < m) {
+        let r = Math.random() * totalDeg, chosen = 0;
+        for (let j = 0; j < i; j++) { r -= deg[j]; if (r <= 0) { chosen = j; break; } }
+        picked.add(chosen);
+      }
+      picked.forEach(p => { links.push({ source: i, target: p }); deg[i]++; deg[p]++; });
+    }
+    return { nodes, links };
+  }
+
+  const generators = {
+    random: () => randomGraph(N, AVG_DEG),
+    sw:     () => smallWorld(N, AVG_DEG, 0.12),
+    sf:     () => scaleFree(N, 2)
+  };
+
   const cells = [
     { id: 'topo-random-svg', statId: 'topo-random-stat', type: 'random' },
-    { id: 'topo-sw-svg', statId: 'topo-sw-stat', type: 'sw' },
-    { id: 'topo-sf-svg', statId: 'topo-sf-stat', type: 'sf' }
+    { id: 'topo-sw-svg',     statId: 'topo-sw-stat',     type: 'sw' },
+    { id: 'topo-sf-svg',     statId: 'topo-sf-stat',     type: 'sf' }
   ];
-  cells.forEach(c => {
-    const svg = d3.select('#' + c.id).append('svg').attr('viewBox', '0 0 200 200');
-    svg.append('circle').attr('cx', 100).attr('cy', 100).attr('r', 80).attr('fill', '#f0f0f4');
-    svg.append('text').attr('x', 100).attr('y', 105).attr('text-anchor', 'middle').attr('font-size', '10px').text(c.type);
+
+  const W = 200, H = 200;
+  const cellData = cells.map(c => {
+    const svg = d3.select('#' + c.id).append('svg').attr('viewBox', `0 0 ${W} ${H}`);
+    const linkG = svg.append('g'), nodeG = svg.append('g');
+    return { ...c, svg, linkG, nodeG, graph: null, sim: null, linkSel: null, nodeSel: null, peakI: 0 };
   });
+
+  function initCell(cd) {
+    const graph = generators[cd.type]();
+    buildAdjList(graph);
+    // seed one hub-ish node (max degree) as initial infected for a fair comparison
+    const deg = graph.nodes.map(n => graph.adjList[n.id].length);
+    const seedId = deg.indexOf(d3.max(deg));
+    graph.nodes[seedId].state = 'I';
+    cd.graph = graph;
+    cd.peakI = 1;
+
+    if (cd.sim) cd.sim.stop();
+    cd.sim = d3.forceSimulation(graph.nodes)
+      .force('link', d3.forceLink(graph.links).id(d => d.id).distance(14).strength(0.6))
+      .force('charge', d3.forceManyBody().strength(-22))
+      .force('center', d3.forceCenter(W / 2, H / 2))
+      .force('collide', d3.forceCollide(4))
+      .alpha(1);
+
+    cd.linkSel = cd.linkG.selectAll('line').data(graph.links).join('line')
+      .attr('stroke', COLOR.edge).attr('stroke-width', 0.5).attr('opacity', 0.5);
+    cd.nodeSel = cd.nodeG.selectAll('circle').data(graph.nodes).join('circle')
+      .attr('r', d => 2 + Math.min(4, Math.sqrt(graph.adjList[d.id].length)))
+      .attr('fill', d => COLOR[d.state])
+      .attr('stroke', '#fff').attr('stroke-width', 0.6);
+
+    cd.sim.on('tick', () => {
+      cd.linkSel.attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+                .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+      cd.nodeSel.attr('cx', d => Math.max(3, Math.min(W - 3, d.x)))
+                .attr('cy', d => Math.max(3, Math.min(H - 3, d.y)));
+    });
+
+    updateCellStat(cd);
+  }
+
+  function stepCell(cd) {
+    const g = cd.graph;
+    const newI = [];
+    g.nodes.forEach(n => {
+      if (n.state === 'I') {
+        g.adjList[n.id].forEach(nid => {
+          if (g.nodes[nid].state === 'S' && Math.random() < BETA) newI.push(nid);
+        });
+        if (Math.random() < GAMMA) n.state = 'R';
+      }
+    });
+    newI.forEach(id => g.nodes[id].state = 'I');
+    cd.nodeSel.attr('fill', d => COLOR[d.state]);
+    const i = g.nodes.filter(n => n.state === 'I').length;
+    if (i > cd.peakI) cd.peakI = i;
+    updateCellStat(cd);
+    return g.nodes.some(n => n.state === 'I');
+  }
+
+  function updateCellStat(cd) {
+    const g = cd.graph;
+    const r = g.nodes.filter(n => n.state === 'R').length;
+    const i = g.nodes.filter(n => n.state === 'I').length;
+    const pct = Math.round(100 * (r + i) / g.nodes.length);
+    const peakPct = Math.round(100 * cd.peakI / g.nodes.length);
+    document.getElementById(cd.statId).innerHTML =
+      `Infected: ${pct}% &middot; peak ${peakPct}%`;
+  }
+
+  let topoTimer = null, topoRunning = false;
+  function resetAll() {
+    if (topoTimer) { clearInterval(topoTimer); topoTimer = null; }
+    topoRunning = false;
+    document.getElementById('topo-play').textContent = 'Play';
+    cellData.forEach(initCell);
+  }
+  function playAll() {
+    if (topoRunning) {
+      clearInterval(topoTimer); topoTimer = null; topoRunning = false;
+      document.getElementById('topo-play').textContent = 'Play';
+      return;
+    }
+    topoRunning = true;
+    document.getElementById('topo-play').textContent = 'Pause';
+    topoTimer = setInterval(() => {
+      let anyActive = false;
+      cellData.forEach(cd => { if (stepCell(cd)) anyActive = true; });
+      if (!anyActive) {
+        clearInterval(topoTimer); topoTimer = null; topoRunning = false;
+        document.getElementById('topo-play').textContent = 'Play';
+      }
+    }, 350);
+  }
+
+  document.getElementById('topo-play').addEventListener('click', playAll);
+  document.getElementById('topo-reset').addEventListener('click', resetAll);
+
+  resetAll();
 })();
 </script>
 </body>

@@ -128,6 +128,8 @@ and has open space.
         <span class="val" id="speedVal">1.0</span>
       </div>
     </div>
+    <button class="btn" id="playGrowth">Pause</button>
+    <button class="btn" id="stepGrowth">Step</button>
     <button class="btn" id="resetGrowth">Reset</button>
   </div>
   <div class="legend">
@@ -171,7 +173,19 @@ what maintains diversity.
       </div>
     </div>
     <button class="btn" id="stormBtn">Storm</button>
+    <button class="btn" id="bleachBtn">Bleaching</button>
+    <button class="btn" id="playStorm">Pause</button>
     <button class="btn" id="resetStorm">Reset</button>
+  </div>
+  <div class="controls" style="margin-top: 0.5rem;">
+    <div class="control-group">
+      <label>Scenario</label>
+      <div class="slider-row">
+        <button class="btn" data-preset="healthy">Healthy reef</button>
+        <button class="btn" data-preset="branch-dominant">Branching-dominant</button>
+        <button class="btn" data-preset="warming">Warming ocean</button>
+      </div>
+    </div>
   </div>
   <div class="stats-row">
     <span>Storms: <span class="stat-val" id="statStorms">0</span></span>
@@ -203,6 +217,7 @@ zonation seen on real reefs.
   <canvas id="lightCanvas"></canvas>
   <div class="controls">
     <button class="btn" id="lightToggle">Show light field</button>
+    <button class="btn" id="playLight">Pause</button>
     <button class="btn" id="resetLight">Reset</button>
   </div>
   <p class="figure-caption"><span class="figure-label">Figure 3.</span> The light field reveals shadow zones cast by the canopy. Yellow is full light while dark blue is deep shade.</p>
@@ -226,7 +241,7 @@ local rules in a shared environment.
 </p>
 
 <footer style="margin-top: 4rem; padding-top: 2rem; border-top: 1px solid var(--border); font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2);">
-  <p>Next: <a href="46-lightning-paths.html" style="color: var(--accent);">Lightning Paths</a> &rarr;</p>
+  <p><a href="index.html" style="color: var(--accent);">&larr; Back to the series</a></p>
   <p style="margin-top: 1rem; opacity: 0.6;">Built with <a href="https://github.com/enjalot/moonshine" style="color: var(--text-2);">moonshine</a>.</p>
 </footer>
 
@@ -287,6 +302,8 @@ local rules in a shared environment.
       self.rows = Math.floor(self.H / self.cellSize);
     };
 
+    self.speciesMix = null; // [p0,p1,p2] cumulative probabilities; null = uniform
+
     self.init = function() {
       self.year = 0;
       self.stormCount = 0;
@@ -299,7 +316,13 @@ local rules in a shared environment.
       var numSeeds = Math.floor(self.cols / 8);
       for (var s = 0; s < numSeeds; s++) {
         var cx = Math.floor(Math.random() * (self.cols - 4)) + 2;
-        var species = Math.floor(Math.random() * 3);
+        var species;
+        if (self.speciesMix) {
+          var r = Math.random();
+          species = r < self.speciesMix[0] ? 0 : (r < self.speciesMix[1] ? 1 : 2);
+        } else {
+          species = Math.floor(Math.random() * 3);
+        }
         var width = species === ENCRUSTING ? 6 : (species === MASSIVE ? 4 : 2);
         for (var dx = -Math.floor(width / 2); dx <= Math.floor(width / 2); dx++) {
           var x = cx + dx;
@@ -416,6 +439,31 @@ local rules in a shared environment.
           var sp = SPECIES[self.grid[idx]];
           var heightFrac = 1 - (y / maxHeight);
           var damage = heightFrac * sp.fragility * intensity * 0.25;
+          if (Math.random() < damage) {
+            self.grid[idx] = -1;
+            self.age[idx] = 0;
+          }
+        }
+      }
+      self.stormCount++;
+      self.computeLight();
+    };
+
+    // Bleaching: height-independent die-off that hits shallow tissue hardest
+    // because light-starved upper canopy is heat-stressed first. Massive
+    // corals are more resilient (lower fragility); branching and encrusting
+    // above a depth threshold take heavy losses.
+    self.applyBleaching = function(intensity) {
+      for (var y = 0; y < self.rows; y++) {
+        var depthFrac = y / self.rows; // 0 = surface, 1 = floor
+        // Warm water pools at the surface
+        var thermalStress = Math.max(0, 1 - depthFrac * 1.6);
+        for (var x = 0; x < self.cols; x++) {
+          var idx = y * self.cols + x;
+          if (self.grid[idx] < 0) continue;
+          var sp = SPECIES[self.grid[idx]];
+          var resistance = 1 - sp.fragility * 0.6;
+          var damage = thermalStress * intensity * 0.2 * (1 - resistance);
           if (Math.random() < damage) {
             self.grid[idx] = -1;
             self.age[idx] = 0;
@@ -574,6 +622,32 @@ local rules in a shared environment.
 
   document.getElementById("resetGrowth").addEventListener("click", function() {
     sim1.stop(); initSim1();
+    var pb = document.getElementById("playGrowth");
+    pb.textContent = "Pause"; pb.classList.remove("active");
+  });
+
+  document.getElementById("playGrowth").addEventListener("click", function() {
+    if (sim1.running) {
+      sim1.stop();
+      this.textContent = "Play";
+      this.classList.add("active");
+    } else {
+      sim1.start();
+      this.textContent = "Pause";
+      this.classList.remove("active");
+    }
+  });
+
+  document.getElementById("stepGrowth").addEventListener("click", function() {
+    if (sim1.running) {
+      sim1.stop();
+      var pb = document.getElementById("playGrowth");
+      pb.textContent = "Play"; pb.classList.add("active");
+    }
+    sim1.growStep();
+    sim1.draw();
+    document.getElementById("statYear").textContent = sim1.year;
+    document.getElementById("statColonies").textContent = sim1.getColonyCount();
   });
 
   /* ---- Section 2: Storm sim ---- */
@@ -608,8 +682,64 @@ local rules in a shared environment.
     sim2.draw();
   });
 
+  document.getElementById("bleachBtn").addEventListener("click", function() {
+    var intensity = parseInt(stormSlider.value);
+    sim2.applyBleaching(intensity);
+    sim2.draw();
+  });
+
+  document.getElementById("playStorm").addEventListener("click", function() {
+    if (sim2.running) {
+      sim2.stop();
+      this.textContent = "Play";
+      this.classList.add("active");
+    } else {
+      sim2.start();
+      this.textContent = "Pause";
+      this.classList.remove("active");
+    }
+  });
+
+  // Scenario presets adjust species mix + ambient disturbance regime
+  var stormAutoTimer = null;
+  function clearStormAuto() {
+    if (stormAutoTimer) { clearInterval(stormAutoTimer); stormAutoTimer = null; }
+  }
+  document.querySelectorAll('[data-preset]').forEach(function(btn) {
+    btn.addEventListener("click", function() {
+      var preset = this.getAttribute("data-preset");
+      document.querySelectorAll('[data-preset]').forEach(function(b) { b.classList.remove("active"); });
+      this.classList.add("active");
+      clearStormAuto();
+      sim2.stop();
+      if (preset === "healthy") {
+        sim2.speciesMix = [0.33, 0.66, 1.0];
+      } else if (preset === "branch-dominant") {
+        sim2.speciesMix = [0.7, 0.9, 1.0];
+      } else if (preset === "warming") {
+        sim2.speciesMix = [0.25, 0.5, 1.0];
+        // Periodic bleaching pulses at intensity 2-3
+        stormAutoTimer = setInterval(function() {
+          sim2.applyBleaching(2 + Math.floor(Math.random() * 2));
+        }, 3500);
+      }
+      sim2.resize();
+      sim2.speedMul = 1.5;
+      sim2.init();
+      sim2.draw();
+      sim2.start();
+      var pb = document.getElementById("playStorm");
+      pb.textContent = "Pause"; pb.classList.remove("active");
+    });
+  });
+
   document.getElementById("resetStorm").addEventListener("click", function() {
+    clearStormAuto();
+    document.querySelectorAll('[data-preset]').forEach(function(b) { b.classList.remove("active"); });
+    sim2.speciesMix = null;
     sim2.stop(); initSim2();
+    var pb = document.getElementById("playStorm");
+    pb.textContent = "Pause"; pb.classList.remove("active");
   });
 
   /* ---- Section 3: Light field sim ---- */
@@ -634,8 +764,22 @@ local rules in a shared environment.
     sim3.draw();
   });
 
+  document.getElementById("playLight").addEventListener("click", function() {
+    if (sim3.running) {
+      sim3.stop();
+      this.textContent = "Play";
+      this.classList.add("active");
+    } else {
+      sim3.start();
+      this.textContent = "Pause";
+      this.classList.remove("active");
+    }
+  });
+
   document.getElementById("resetLight").addEventListener("click", function() {
     sim3.stop(); initSim3();
+    var pb = document.getElementById("playLight");
+    pb.textContent = "Pause"; pb.classList.remove("active");
   });
 
   /* ---- Resize observer ---- */

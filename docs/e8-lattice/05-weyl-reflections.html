@@ -99,6 +99,35 @@ svg text { font-family: var(--heading-font); }
   color: var(--accent);
 }
 
+.pc-tooltip {
+  position: fixed;
+  pointer-events: none;
+  background: var(--text);
+  color: #fafafa;
+  font-family: var(--mono-font);
+  font-size: 0.75rem;
+  line-height: 1.45;
+  padding: 0.55rem 0.7rem;
+  border-radius: 4px;
+  white-space: pre;
+  z-index: 100;
+  opacity: 0;
+  transition: opacity 0.1s;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+}
+.pc-tooltip.visible { opacity: 1; }
+.pc-tooltip .tt-head { font-family: var(--heading-font); font-weight: 600; color: #fcd34d; margin-bottom: 0.25rem; }
+.pc-tooltip .tt-ip { color: #a7f3d0; margin-top: 0.25rem; }
+
+.count-badge {
+  font-family: var(--heading-font);
+  font-size: 0.85rem;
+  color: var(--text-2);
+  margin-top: 0.35rem;
+}
+.count-badge .fixed-n { color: #475569; font-weight: 600; }
+.count-badge .moved-n { color: #b45309; font-weight: 600; }
+
 .big-number {
   font-family: var(--mono-font);
   font-size: 2rem;
@@ -186,6 +215,7 @@ svg text { font-family: var(--heading-font); }
     <button class="btn" data-s="7">α₈</button>
   </div>
   <p class="status-bar" id="reflect240-status">Reflection across α₁ fixes 126 roots (gray) and moves 114 (amber).</p>
+  <p class="count-badge" id="reflect240-badge"><span class="fixed-n">126 fixed</span> • <span class="moved-n">114 moved</span> <span style="color: var(--text-2); font-weight: 400;">(axis α₁)</span></p>
   <p class="figure-caption"><span class="figure-label">Figure 2.</span> A single simple reflection partitions the 240 roots into those it fixes and those it moves. A root is fixed iff it is perpendicular to the chosen α<sub>i</sub>. For every simple root α<sub>i</sub>, exactly 126 roots are perpendicular to it (and therefore fixed), and the remaining 114 get reflected somewhere else in the root system. Click different α<sub>i</sub> buttons to see different partitions.</p>
 </div>
 
@@ -421,14 +451,40 @@ function makeParallelCoords(container, rootsData, color, width, height) {
 (function () {
   var container = document.getElementById('reflect240-svg');
   var status = document.getElementById('reflect240-status');
+  var badge = document.getElementById('reflect240-badge');
   var wrapper = d3.select(container);
 
-  function makeColoredParallelCoords(root, rows, colorFn) {
+  // Shared tooltip (one per page; reused by Figure 3 as well).
+  var tooltip = d3.select('body').selectAll('.pc-tooltip').data([0])
+    .join('div').attr('class', 'pc-tooltip');
+
+  function fmt(v) {
+    var s = (v >= 0 ? ' ' : '−') + Math.abs(v).toFixed(3);
+    return s.padStart(7);
+  }
+  function subscript(n) { return '₁₂₃₄₅₆₇₈'.charAt(n - 1); }
+  function showTooltip(event, html) {
+    tooltip.html(html)
+      .style('left', (event.clientX + 14) + 'px')
+      .style('top', (event.clientY + 14) + 'px')
+      .classed('visible', true);
+  }
+  function moveTooltip(event) {
+    tooltip.style('left', (event.clientX + 14) + 'px')
+      .style('top', (event.clientY + 14) + 'px');
+  }
+  function hideTooltip() { tooltip.classed('visible', false); }
+
+  function render(genIdx) {
+    wrapper.selectAll('*').remove();
+    var alpha = E8.simpleRoots[genIdx];
+    var allRoots = E8.roots.all();
+
     var width = 880, height = 260;
     var margin = { top: 15, right: 25, bottom: 30, left: 45 };
     var innerW = width - margin.left - margin.right;
     var innerH = height - margin.top - margin.bottom;
-    var svg = d3.select(root).append('svg')
+    var svg = wrapper.append('svg')
       .attr('viewBox', '0 0 ' + width + ' ' + height)
       .attr('width', '100%')
       .style('max-width', width + 'px');
@@ -449,43 +505,57 @@ function makeParallelCoords(container, rootsData, color, width, height) {
         .attr('text-anchor', 'end').attr('font-size', 10).attr('fill', 'var(--c-axis)')
         .text(v === 0 ? '0' : (v > 0 ? '+1' : '−1'));
     });
-    // Draw in two passes: gray (fixed) first, amber (moved) on top so moved lines are visible.
-    var fixedRows = [], movedRows = [];
-    rows.forEach(function (r, i) {
-      if (colorFn(r, i) === 'fixed') fixedRows.push(r);
-      else movedRows.push(r);
+
+    // Build row records and sort so fixed (gray) go first, moved (amber) on top.
+    var rows = allRoots.map(function (r, i) {
+      var ip = E8.dot(r, alpha);
+      var fixed = Math.abs(ip) < 1e-10;
+      return { r: r, i: i, ip: ip, fixed: fixed };
     });
-    function drawRows(list, stroke, opacity) {
-      list.forEach(function (r) {
+    rows.sort(function (a, b) { return (a.fixed === b.fixed) ? 0 : (a.fixed ? -1 : 1); });
+
+    var axisLabel = 'α' + subscript(genIdx + 1);
+
+    var paths = g.selectAll('polyline').data(rows).enter().append('polyline')
+      .attr('fill', 'none')
+      .attr('stroke', function (d) { return d.fixed ? 'var(--c-edge)' : 'var(--c-after)'; })
+      .attr('stroke-width', 1.2)
+      .attr('stroke-opacity', function (d) { return d.fixed ? 0.3 : 0.6; })
+      .attr('points', function (d) {
         var pts = [];
-        for (var k = 0; k < 8; k++) pts.push(xScale(k) + ',' + yScale(r[k]));
-        g.append('polyline')
-          .attr('points', pts.join(' '))
-          .attr('fill', 'none')
-          .attr('stroke', stroke)
+        for (var k = 0; k < 8; k++) pts.push(xScale(k) + ',' + yScale(d.r[k]));
+        return pts.join(' ');
+      })
+      .style('cursor', 'pointer')
+      .on('mouseover', function (event, d) {
+        paths.attr('stroke-opacity', function (o) { return o === d ? 1 : 0.08; })
+          .attr('stroke-width', function (o) { return o === d ? 2.4 : 1.2; });
+        d3.select(this).raise().attr('stroke',
+          d.fixed ? '#334155' : '#b45309');
+        var coords = d.r.map(fmt).join(' ');
+        var ipLabel = (d.ip >= 0 ? '+' : '−') + Math.abs(d.ip).toFixed(3);
+        var html = '<div class="tt-head">root #' + d.i +
+          (d.fixed ? ' (fixed)' : ' (moved)') + '</div>' +
+          coords +
+          '<div class="tt-ip">⟨root, ' + axisLabel + '⟩ = ' + ipLabel + '</div>';
+        showTooltip(event, html);
+      })
+      .on('mousemove', moveTooltip)
+      .on('mouseout', function () {
+        paths.attr('stroke-opacity', function (o) { return o.fixed ? 0.3 : 0.6; })
           .attr('stroke-width', 1.2)
-          .attr('stroke-opacity', opacity);
+          .attr('stroke', function (o) { return o.fixed ? 'var(--c-edge)' : 'var(--c-after)'; });
+        hideTooltip();
       });
-    }
-    drawRows(fixedRows, 'var(--c-edge)', 0.3);
-    drawRows(movedRows, 'var(--c-after)', 0.6);
-    return { fixed: fixedRows.length, moved: movedRows.length };
-  }
 
-  function render(genIdx) {
-    wrapper.selectAll('*').remove();
-    var alpha = E8.simpleRoots[genIdx];
-    var roots = E8.roots.all();
-    var counts = makeColoredParallelCoords(wrapper.node(), roots, function (r) {
-      return Math.abs(E8.dot(r, alpha)) < 1e-10 ? 'fixed' : 'moved';
-    });
-    status.textContent = 'Reflection across α' + subscript(genIdx + 1) +
-      ' fixes ' + counts.fixed + ' roots (perpendicular to α' + subscript(genIdx + 1) + ', drawn in gray)' +
-      ' and moves ' + counts.moved + ' (drawn in amber).';
-  }
-
-  function subscript(n) {
-    return '₁₂₃₄₅₆₇₈'.charAt(n - 1);
+    var fixedN = rows.filter(function (d) { return d.fixed; }).length;
+    var movedN = rows.length - fixedN;
+    status.textContent = 'Reflection across ' + axisLabel +
+      ' fixes ' + fixedN + ' roots (perpendicular to ' + axisLabel + ', drawn in gray)' +
+      ' and moves ' + movedN + ' (drawn in amber).';
+    badge.innerHTML = '<span class="fixed-n">' + fixedN + ' fixed</span> • ' +
+      '<span class="moved-n">' + movedN + ' moved</span>' +
+      ' <span style="color: var(--text-2); font-weight: 400;">(axis ' + axisLabel + ')</span>';
   }
 
   d3.selectAll('[data-s]').on('click', function () {
@@ -540,10 +610,49 @@ function makeParallelCoords(container, rootsData, color, width, height) {
     return added;
   }
 
+  // Shared tooltip (also used by Fig 2).
+  var tooltip = d3.select('body').selectAll('.pc-tooltip').data([0])
+    .join('div').attr('class', 'pc-tooltip');
+  function fmt(v) {
+    var s = (v >= 0 ? ' ' : '−') + Math.abs(v).toFixed(3);
+    return s.padStart(7);
+  }
+  function showTooltip(event, html) {
+    tooltip.html(html)
+      .style('left', (event.clientX + 14) + 'px')
+      .style('top', (event.clientY + 14) + 'px')
+      .classed('visible', true);
+  }
+  function moveTooltip(event) {
+    tooltip.style('left', (event.clientX + 14) + 'px')
+      .style('top', (event.clientY + 14) + 'px');
+  }
+  function hideTooltip() { tooltip.classed('visible', false); }
+
   function render() {
     d3.select(container).selectAll('*').remove();
-    var inOrbit = Array.from(state.orbit).map(function (i) { return allRoots[i]; });
-    makeParallelCoords(container, inOrbit, 'var(--c-orbit)', 880, 200);
+    var indices = Array.from(state.orbit);
+    var inOrbit = indices.map(function (i) { return allRoots[i]; });
+    var pc = makeParallelCoords(container, inOrbit, 'var(--c-orbit)', 880, 200);
+    // Rebind data with indices so we can label on hover.
+    var rows = inOrbit.map(function (r, k) { return { r: r, i: indices[k] }; });
+    var paths = pc.paths.data(rows)
+      .style('cursor', 'pointer')
+      .on('mouseover', function (event, d) {
+        paths.attr('stroke-opacity', function (o) { return o === d ? 1 : 0.08; })
+          .attr('stroke-width', function (o) { return o === d ? 2.4 : 1; });
+        d3.select(this).raise().attr('stroke', '#047857');
+        var coords = d.r.map(fmt).join(' ');
+        var html = '<div class="tt-head">root #' + d.i + '</div>' + coords;
+        showTooltip(event, html);
+      })
+      .on('mousemove', moveTooltip)
+      .on('mouseout', function () {
+        paths.attr('stroke-opacity', 0.45)
+          .attr('stroke-width', 1)
+          .attr('stroke', 'var(--c-orbit)');
+        hideTooltip();
+      });
     countEl.textContent = 'orbit size: ' + state.orbit.size;
     wordEl.innerHTML = 'word applied: ' + (state.word.length === 0 ? '<span class="empty">(start: α₁)</span>' : state.word.join(' ∘ '));
   }

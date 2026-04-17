@@ -141,6 +141,15 @@ controls how strong the attraction is. Higher gravity makes collapse faster and 
         <span class="val" id="gravVal">2.0</span>
       </div>
     </div>
+    <div class="control-group">
+      <label>Speed</label>
+      <div class="slider-row">
+        <input type="range" id="speedSlider1" min="0.25" max="2.0" step="0.25" value="1.0">
+        <span class="val" id="speedVal1">1.0x</span>
+      </div>
+    </div>
+    <button class="btn active" id="playGalaxy">Pause</button>
+    <button class="btn" id="stepGalaxy">Step</button>
     <button class="btn" id="resetGalaxy">Reset</button>
   </div>
   <div class="stats-row">
@@ -179,7 +188,16 @@ low-density gaps. The arms are patterns, not objects.
 <div class="figure" id="fig-density">
   <canvas id="densityCanvas"></canvas>
   <div class="controls">
+    <div class="control-group">
+      <label>Speed</label>
+      <div class="slider-row">
+        <input type="range" id="speedSlider2" min="0.25" max="2.0" step="0.25" value="1.0">
+        <span class="val" id="speedVal2">1.0x</span>
+      </div>
+    </div>
     <button class="btn" id="tracerBtn">Show tracer</button>
+    <button class="btn active" id="playDensity">Pause</button>
+    <button class="btn" id="stepDensity">Step</button>
     <button class="btn" id="resetDensity">Reset</button>
   </div>
   <div class="legend">
@@ -207,13 +225,34 @@ in the first place.
 Click "Collide" to send the two pre-formed disk galaxies toward each other. Watch for
 tidal tails, long streams of stars pulled outward, bridges, streams connecting the two
 galaxies, and eventual merger into a single, larger, more chaotic system. The resulting
-structure often looks nothing like either parent galaxy.
+structure often looks nothing like either parent galaxy. Try a grazing flyby instead of a
+head-on strike; the longest, most graceful tails come from glancing encounters, not
+collisions.
 </p>
 
 <div class="figure" id="fig-merger">
   <canvas id="mergerCanvas"></canvas>
   <div class="controls">
+    <div class="control-group">
+      <label>Encounter</label>
+      <div class="slider-row">
+        <select id="mergerPreset" style="font-family: var(--heading-font); font-size: 0.85rem; padding: 0.25rem 0.4rem; border: 1px solid var(--border); border-radius: 4px; background: var(--fig-bg); color: var(--text);">
+          <option value="headon">Head-on merger</option>
+          <option value="flyby">Grazing flyby</option>
+          <option value="slow">Slow approach</option>
+        </select>
+      </div>
+    </div>
+    <div class="control-group">
+      <label>Speed</label>
+      <div class="slider-row">
+        <input type="range" id="speedSlider3" min="0.25" max="2.0" step="0.25" value="1.0">
+        <span class="val" id="speedVal3">1.0x</span>
+      </div>
+    </div>
     <button class="btn" id="collideBtn">Collide</button>
+    <button class="btn active" id="playMerger">Pause</button>
+    <button class="btn" id="stepMerger">Step</button>
     <button class="btn" id="resetMerger">Reset</button>
   </div>
   <div class="stats-row">
@@ -274,6 +313,7 @@ satellite galaxies. In about 4.5 billion years it will collide with the Andromed
     self.G = opts.G || 2.0;
     self.softening = 4.0;
     self.dt = 0.15;
+    self.speedMul = 1.0;
     self.step = 0;
     self.running = false;
     self.frameId = null;
@@ -432,6 +472,23 @@ satellite galaxies. In about 4.5 billion years it will collide with the Andromed
       self.computeForces();
       self.integrate();
       self.step++;
+    };
+
+    /* One animation frame: run N physics sub-steps according to speedMul,
+       then draw once. speedMul < 1 means skip frames so motion slows. */
+    self._frameAccum = 0;
+    self.frame = function() {
+      self._frameAccum += self.speedMul;
+      var steps = Math.floor(self._frameAccum);
+      self._frameAccum -= steps;
+      if (steps > 4) steps = 4; /* cap CPU per frame */
+      for (var k = 0; k < steps; k++) self.tick();
+      self.draw();
+      if (self.onTick) self.onTick();
+    };
+
+    self.stepOnce = function() {
+      self.tick();
       self.draw();
       if (self.onTick) self.onTick();
     };
@@ -439,9 +496,10 @@ satellite galaxies. In about 4.5 billion years it will collide with the Andromed
     self.start = function() {
       if (self.running) return;
       self.running = true;
+      self._frameAccum = 0;
       function loop() {
         if (!self.running) return;
-        self.tick();
+        self.frame();
         self.frameId = requestAnimationFrame(loop);
       }
       self.frameId = requestAnimationFrame(loop);
@@ -451,6 +509,31 @@ satellite galaxies. In about 4.5 billion years it will collide with the Andromed
       self.running = false;
       if (self.frameId) cancelAnimationFrame(self.frameId);
     };
+  }
+
+  /* Wire a play/pause/step trio against a sim. Keeps button state in sync. */
+  function bindPlayPause(sim, playBtn, stepBtn) {
+    function refresh() {
+      playBtn.textContent = sim.running ? "Pause" : "Play";
+      playBtn.classList.toggle("active", sim.running);
+    }
+    playBtn.addEventListener("click", function() {
+      if (sim.running) sim.stop(); else sim.start();
+      refresh();
+    });
+    stepBtn.addEventListener("click", function() {
+      if (sim.running) { sim.stop(); refresh(); }
+      sim.stepOnce();
+    });
+    return refresh;
+  }
+
+  function bindSpeed(sim, slider, label) {
+    slider.addEventListener("input", function() {
+      var v = parseFloat(this.value);
+      sim.speedMul = v;
+      label.textContent = v.toFixed(2).replace(/0$/, "") + "x";
+    });
   }
 
   /* === Section 1: Gravitational collapse === */
@@ -484,8 +567,13 @@ satellite galaxies. In about 4.5 billion years it will collide with the Andromed
     sim1.start();
   }
 
+  const playGalaxyBtn = document.getElementById("playGalaxy");
+  const stepGalaxyBtn = document.getElementById("stepGalaxy");
+  const refreshPlay1 = bindPlayPause(sim1, playGalaxyBtn, stepGalaxyBtn);
+  bindSpeed(sim1, document.getElementById("speedSlider1"), document.getElementById("speedVal1"));
+
   document.getElementById("resetGalaxy").addEventListener("click", function() {
-    sim1.stop(); initSim1();
+    sim1.stop(); initSim1(); refreshPlay1();
   });
 
   /* === Section 2: Density waves === */
@@ -532,8 +620,13 @@ satellite galaxies. In about 4.5 billion years it will collide with the Andromed
     }
   });
 
+  const refreshPlay2 = bindPlayPause(sim2,
+    document.getElementById("playDensity"),
+    document.getElementById("stepDensity"));
+  bindSpeed(sim2, document.getElementById("speedSlider2"), document.getElementById("speedVal2"));
+
   document.getElementById("resetDensity").addEventListener("click", function() {
-    sim2.stop(); initSim2();
+    sim2.stop(); initSim2(); refreshPlay2();
   });
 
   /* === Section 3: Galaxy merger === */
@@ -546,14 +639,28 @@ satellite galaxies. In about 4.5 billion years it will collide with the Andromed
   });
   let mergerStarted = false;
 
+  const mergerPresetSel = document.getElementById("mergerPreset");
+
+  function mergerConfig() {
+    /* Each preset tweaks vertical offset and kick velocity. The Toomre
+       classic result requires a grazing pass, not a head-on strike. */
+    switch (mergerPresetSel.value) {
+      case "flyby":  return { dy1: -0.18, dy2:  0.18, vx: 1.4, spin2: -1.0 };
+      case "slow":   return { dy1:  0.0,  dy2:  0.0,  vx: 0.7, spin2: -0.8 };
+      case "headon":
+      default:       return { dy1:  0.0,  dy2:  0.0,  vx: 1.3, spin2: -0.8 };
+    }
+  }
+
   function initMerger() {
     sim3.resize();
     sim3.step = 0;
     mergerStarted = false;
+    var cfg = mergerConfig();
     var W = sim3.W, H = sim3.H;
     var r = Math.min(W, H) * 0.14;
-    var disk1 = sim3.initDisk(250, W * 0.28, H * 0.5, r, 1.0);
-    var disk2 = sim3.initDisk(250, W * 0.72, H * 0.5, r, -0.8);
+    var disk1 = sim3.initDisk(250, W * 0.28, H * (0.5 + cfg.dy1), r, 1.0);
+    var disk2 = sim3.initDisk(250, W * 0.72, H * (0.5 + cfg.dy2), r, cfg.spin2);
     sim3.particles = disk1.concat(disk2);
     document.getElementById("statParticles3").textContent = sim3.particles.length;
     sim3.start();
@@ -562,18 +669,28 @@ satellite galaxies. In about 4.5 billion years it will collide with the Andromed
   document.getElementById("collideBtn").addEventListener("click", function() {
     if (mergerStarted) return;
     mergerStarted = true;
+    var cfg = mergerConfig();
     for (var i = 0; i < 250; i++) {
-      sim3.particles[i].vx += 1.3;
+      sim3.particles[i].vx += cfg.vx;
       sim3.particles[i].vy += (Math.random() - 0.5) * 0.3;
     }
     for (var i = 250; i < 500; i++) {
-      sim3.particles[i].vx -= 1.3;
+      sim3.particles[i].vx -= cfg.vx;
       sim3.particles[i].vy += (Math.random() - 0.5) * 0.3;
     }
   });
 
+  const refreshPlay3 = bindPlayPause(sim3,
+    document.getElementById("playMerger"),
+    document.getElementById("stepMerger"));
+  bindSpeed(sim3, document.getElementById("speedSlider3"), document.getElementById("speedVal3"));
+
+  mergerPresetSel.addEventListener("change", function() {
+    sim3.stop(); initMerger(); refreshPlay3();
+  });
+
   document.getElementById("resetMerger").addEventListener("click", function() {
-    sim3.stop(); initMerger();
+    sim3.stop(); initMerger(); refreshPlay3();
   });
 
   /* === Resize === */

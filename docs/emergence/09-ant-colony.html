@@ -257,7 +257,7 @@ opened shortcut.
     <button class="btn" id="clear-obstacles">Clear obstacles</button>
     <button class="btn" id="reset-obstacles">Reset</button>
   </div>
-  <p class="click-hint">Click and drag to draw obstacles</p>
+  <p class="click-hint">Click and drag to draw obstacles. Single-click an existing obstacle to remove it.</p>
   <p class="figure-caption"><span class="figure-label">Figure 3.</span> Dynamic rerouting. Draw obstacles to force detour exploration. The colony does not compute alternate routes; it discovers them through local exploration and pheromone feedback.</p>
 </div>
 
@@ -282,16 +282,32 @@ sending more ants to closer, easier sources. This is a consequence of the physic
 
 <div class="figure" id="fig-multi">
   <canvas id="canvas-multi"></canvas>
-  <div class="stat-row" style="margin-top: 1rem;">
+  <div class="stat-row" style="margin-top: 1rem; flex-wrap: wrap;">
     <div class="stat">
-      <span class="stat-label">Total deliveries:</span>
+      <span class="stat-label">Total:</span>
       <span class="stat-val" id="stat-multi-deliveries">0</span>
+    </div>
+    <div class="stat">
+      <span class="stat-label">A:</span>
+      <span class="stat-val" id="stat-multi-A">0</span>
+    </div>
+    <div class="stat">
+      <span class="stat-label">B:</span>
+      <span class="stat-val" id="stat-multi-B">0</span>
+    </div>
+    <div class="stat">
+      <span class="stat-label">C:</span>
+      <span class="stat-val" id="stat-multi-C">0</span>
+    </div>
+    <div class="stat">
+      <span class="stat-label">D:</span>
+      <span class="stat-val" id="stat-multi-D">0</span>
     </div>
   </div>
   <div class="controls">
     <button class="btn" id="reset-multi">Reset</button>
   </div>
-  <p class="figure-caption"><span class="figure-label">Figure 4.</span> One nest and four food sources. Trail thickness reflects ant traffic. The allocation of ants to sources emerges from the feedback dynamics, approximating an optimal foraging strategy.</p>
+  <p class="figure-caption"><span class="figure-label">Figure 4.</span> One nest and four food sources. Trail thickness reflects ant traffic. Per-source counters expose the allocation: closer sources accumulate deliveries faster. The distribution of ants across sources emerges from the feedback dynamics, approximating an optimal foraging strategy.</p>
 </div>
 
 <div class="insight">
@@ -670,7 +686,11 @@ window.addEventListener('load', () => {
     window.addEventListener("mouseup", e => {
       if (!drawing) return; drawing = false; const end = getPos(e);
       const x = Math.min(drawStart.x, end.x), y = Math.min(drawStart.y, end.y), w = Math.abs(end.x - drawStart.x), h = Math.abs(end.y - drawStart.y);
-      if (w > 8 && h > 8) obstacles.push({ x, y, w, h });
+      if (w > 8 && h > 8) { obstacles.push({ x, y, w, h }); return; }
+      // Short drag: treat as click-to-remove if the point hits an existing obstacle
+      for (let i = obstacles.length - 1; i >= 0; i--) {
+        if (inObstacle(end.x, end.y, [obstacles[i]])) { obstacles.splice(i, 1); break; }
+      }
     });
     document.getElementById("add-obstacle").addEventListener("click", () => {
       const x = sim.W * 0.25 + Math.random() * sim.W * 0.5, y = sim.H * 0.1 + Math.random() * sim.H * 0.6, w = 30 + Math.random() * 60, h = 30 + Math.random() * 80;
@@ -685,7 +705,7 @@ window.addEventListener('load', () => {
   (function() {
     const sim = setupCanvas("canvas-multi", 0.6);
     const pheroScratch = {};
-    let ants = [], grid = null, totalDeliveries = 0, tick = 0;
+    let ants = [], grid = null, totalDeliveries = 0, perSource = {A:0,B:0,C:0,D:0}, tick = 0;
     const ANT_COUNT = 80, NEST_R = 24, FOOD_R = 16;
     const nestPos = () => ({ x: sim.W * 0.1, y: sim.H * 0.5 });
     const foodSources = () => [
@@ -696,7 +716,7 @@ window.addEventListener('load', () => {
       if (sim.cols <= 0) return;
       grid = createGrid(sim.cols, sim.rows); ants = []; const np = nestPos();
       for (let i = 0; i < ANT_COUNT; i++) { const a = createAnt(np.x, np.y); a.tripStart = 0; ants.push(a); }
-      totalDeliveries = 0; tick = 0;
+      totalDeliveries = 0; perSource = {A:0,B:0,C:0,D:0}; tick = 0;
     }
     function loop() {
       if (sim.W <= 0) { requestAnimationFrame(loop); return; }
@@ -706,8 +726,12 @@ window.addEventListener('load', () => {
         ants.forEach(a => {
           if (a.hasFood) { steerToward(a, np.x, np.y, 0.15); randomWalkStep(a, sim.W, sim.H, null); deposit(a, grid, sim.cols, 2.5); }
           else { pheromoneWalkStep(a, grid, sim.cols, sim.rows, sim.W, sim.H, null); deposit(a, grid, sim.cols, 0.2); }
-          if (!a.hasFood) { foods.forEach(f => { if (dist(a.x, a.y, f.x, f.y) < FOOD_R) { a.hasFood = true; a.vx *= -1; a.vy *= -1; } }); }
-          if (a.hasFood && dist(a.x, a.y, np.x, np.y) < NEST_R) { totalDeliveries++; a.hasFood = false; a.x = np.x; a.y = np.y; }
+          if (!a.hasFood) { foods.forEach(f => { if (dist(a.x, a.y, f.x, f.y) < FOOD_R) { a.hasFood = true; a.source = f.label; a.vx *= -1; a.vy *= -1; } }); }
+          if (a.hasFood && dist(a.x, a.y, np.x, np.y) < NEST_R) {
+            totalDeliveries++;
+            if (a.source && perSource[a.source] !== undefined) perSource[a.source]++;
+            a.hasFood = false; a.source = null; a.x = np.x; a.y = np.y;
+          }
         });
         evaporate(grid, 0.01);
       }
@@ -717,6 +741,10 @@ window.addEventListener('load', () => {
       drawAnts(sim.ctx, ants); drawNest(sim.ctx, np.x, np.y, NEST_R);
       foods.forEach(f => drawFood(sim.ctx, f.x, f.y, FOOD_R, f.label));
       document.getElementById("stat-multi-deliveries").textContent = totalDeliveries;
+      document.getElementById("stat-multi-A").textContent = perSource.A;
+      document.getElementById("stat-multi-B").textContent = perSource.B;
+      document.getElementById("stat-multi-C").textContent = perSource.C;
+      document.getElementById("stat-multi-D").textContent = perSource.D;
       requestAnimationFrame(loop);
     }
     document.getElementById("reset-multi").addEventListener("click", init);

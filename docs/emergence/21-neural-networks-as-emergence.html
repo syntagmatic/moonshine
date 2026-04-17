@@ -58,10 +58,12 @@ header { margin-bottom: 3rem; }
 .btn { font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600; padding: 0.45rem 1.1rem; border-radius: 5px; border: 1px solid var(--border); background: var(--fig-bg); color: var(--text); cursor: pointer; transition: all 0.15s; user-select: none; }
 .btn:hover { border-color: var(--accent); background: var(--accent-light); }
 .btn.active { border-color: var(--accent); background: var(--accent); color: white; }
-.stat-row { display: flex; gap: 1.5rem; margin-top: 0.75rem; font-family: var(--heading-font); font-size: 0.85rem; }
+.stat-row { display: flex; gap: 1.5rem; margin-top: 0.75rem; font-family: var(--heading-font); font-size: 0.85rem; align-items: center; flex-wrap: wrap; }
 .stat-row .stat { display: flex; gap: 0.35rem; align-items: baseline; }
 .stat-row .stat-label { color: var(--text-2); font-weight: 600; }
 .stat-row .stat-val { font-family: var(--mono-font); font-variant-numeric: tabular-nums; color: var(--text); }
+.figure svg.loss-spark { height: 28px; width: auto; flex: 1; min-width: 100px; max-width: 220px; }
+.hint { font-family: var(--heading-font); font-size: 0.75rem; color: var(--text-2); margin-top: 0.5rem; font-style: italic; }
 
 .fig-split { display: flex; gap: 1rem; align-items: flex-start; }
 .fig-split > * { flex: 1; min-width: 0; }
@@ -123,12 +125,15 @@ Stack neurons into layers and they can solve non-linear problems. Below, a small
   <div class="stat-row">
     <div class="stat"><span class="stat-label">Epoch:</span> <span class="stat-val" id="net-epoch">0</span></div>
     <div class="stat"><span class="stat-label">Loss:</span> <span class="stat-val" id="net-loss">-</span></div>
+    <svg class="loss-spark" id="svg-loss-spark"></svg>
   </div>
   <div class="controls">
     <button class="btn" id="net-train">Train</button>
     <button class="btn" id="net-reset">Reset</button>
+    <div class="control-group"><label>speed</label><div class="slider-row"><input type="range" id="slider-speed" min="1" max="40" step="1" value="5"><span class="val" id="val-speed">5</span></div></div>
   </div>
-  <p class="figure-caption"><span class="figure-label">Figure 2.</span> Training a 2-4-1 network. Edge thickness shows weight magnitude. Notice how the boundary warps as the weights adjust to minimize error.</p>
+  <p class="hint">Click the boundary map to add a training point. Shift-click to place the opposite class.</p>
+  <p class="figure-caption"><span class="figure-label">Figure 2.</span> Training a 2-4-1 network. The sparkline traces loss as error falls. Notice how the boundary warps as the weights adjust to minimize it.</p>
 </div>
 
 <h2>3. The Hidden View</h2>
@@ -164,7 +169,7 @@ Each hidden neuron learns a different linear slice of the space. The final outpu
 <script>
 const state = {
   neuron: { w1: 2.0, w2: -1.5, b: 0.0 },
-  network: { W1: [], b1: [], W2: [], b2: 0, epoch: 0, loss: 0, running: false },
+  network: { W1: [], b1: [], W2: [], b2: 0, epoch: 0, loss: 0, running: false, speed: 5, lossHistory: [] },
   data: []
 };
 const dispatch = d3.dispatch('update');
@@ -203,7 +208,8 @@ function sigmoid(x) { return 1 / (1 + Math.exp(-Math.max(-30, Math.min(30, x))))
     state.network.W2 = Array.from({length:HIDDEN}, () => Math.random()*2-1);
     state.network.b2 = Math.random()*2-1;
     state.network.epoch = 0;
-    if(!state.data.length) for(let i=0; i<48; i++) { 
+    state.network.lossHistory = [];
+    if(!state.data.length) for(let i=0; i<48; i++) {
       const cx = i<12?-0.6:i<24?0.6:i<36?-0.6:0.6, cy = i<12?-0.6:i<24?0.6:i<36?0.6:-0.6;
       state.data.push({x1:cx+(Math.random()-0.5)*0.3, x2:cy+(Math.random()-0.5)*0.3, y:i<24?0:1});
     }
@@ -215,9 +221,11 @@ function sigmoid(x) { return 1 / (1 + Math.exp(-Math.max(-30, Math.min(30, x))))
   }
   function train() {
     const lr = 0.5;
+    let lossSum = 0;
     state.data.forEach(d => {
       const {h, o} = forward(d.x1, d.x2);
       const grad = o - d.y;
+      lossSum += 0.5 * grad * grad;
       state.network.b2 -= lr * grad / state.data.length;
       h.forEach((hv, i) => {
         state.network.W2[i] -= lr * grad * hv / state.data.length;
@@ -227,6 +235,9 @@ function sigmoid(x) { return 1 / (1 + Math.exp(-Math.max(-30, Math.min(30, x))))
         state.network.b1[i] -= lr * hgrad / state.data.length;
       });
     });
+    state.network.loss = lossSum / Math.max(state.data.length, 1);
+    state.network.lossHistory.push(state.network.loss);
+    if(state.network.lossHistory.length > 200) state.network.lossHistory.shift();
     state.network.epoch++;
   }
   function render() {
@@ -243,11 +254,36 @@ function sigmoid(x) { return 1 / (1 + Math.exp(-Math.max(-30, Math.min(30, x))))
       ctx.beginPath(); ctx.arc((d.x1+1)/2*79, (d.x2+1)/2*79, 2, 0, 7); ctx.fillStyle = d.y?'#1d4ed8':'#c2410c'; ctx.fill();
     });
     document.getElementById('net-epoch').textContent = state.network.epoch;
+    document.getElementById('net-loss').textContent = state.network.lossHistory.length ? state.network.loss.toFixed(4) : '-';
+    renderSpark();
     if(window._updateHidden) window._onTrained();
   }
-  function tick() { if(!state.network.running) return; for(let i=0; i<5; i++) train(); render(); requestAnimationFrame(tick); }
+  const sparkSvg = d3.select('#svg-loss-spark');
+  function renderSpark() {
+    const hist = state.network.lossHistory;
+    const node = sparkSvg.node(); if(!node) return;
+    const W = node.clientWidth || 180, H = 28;
+    sparkSvg.attr('viewBox', `0 0 ${W} ${H}`).selectAll('*').remove();
+    if(hist.length < 2) return;
+    const maxL = Math.max(...hist, 0.001);
+    const xs = d3.scaleLinear().domain([0, hist.length-1]).range([1, W-1]);
+    const ys = d3.scaleLinear().domain([0, maxL]).range([H-2, 2]);
+    const line = d3.line().x((_,i)=>xs(i)).y(v=>ys(v)).curve(d3.curveMonotoneX);
+    sparkSvg.append('path').attr('d', line(hist)).attr('fill', 'none').attr('stroke', 'var(--accent)').attr('stroke-width', 1.5);
+    sparkSvg.append('circle').attr('cx', xs(hist.length-1)).attr('cy', ys(hist[hist.length-1])).attr('r', 2).attr('fill', 'var(--accent)');
+  }
+  function tick() { if(!state.network.running) return; for(let i=0; i<state.network.speed; i++) train(); render(); requestAnimationFrame(tick); }
   document.getElementById('net-train').onclick = function() { state.network.running = !state.network.running; this.textContent = state.network.running ? 'Pause' : 'Train'; tick(); };
-  document.getElementById('net-reset').onclick = () => { state.network.running = false; document.getElementById('net-train').textContent = 'Train'; init(); render(); };
+  document.getElementById('net-reset').onclick = () => { state.network.running = false; document.getElementById('net-train').textContent = 'Train'; state.data = []; init(); render(); };
+  document.getElementById('slider-speed').oninput = e => { state.network.speed = +e.target.value; document.getElementById('val-speed').textContent = state.network.speed; };
+  canvas.addEventListener('click', e => {
+    const rect = canvas.getBoundingClientRect();
+    const x1 = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    const x2 = ((e.clientY - rect.top) / rect.height) * 2 - 1;
+    state.data.push({x1, x2, y: e.shiftKey ? 1 : 0});
+    render();
+  });
+  canvas.style.cursor = 'crosshair';
   init(); render();
   window._onTrained = render;
 })();

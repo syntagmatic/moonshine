@@ -203,6 +203,29 @@ svg text { font-family: var(--heading-font); }
   cursor: pointer;
 }
 
+/* Ring of drummers */
+.ring-canvas {
+  display: block;
+  width: 100%;
+  border-radius: 3px;
+  cursor: pointer;
+}
+.stats-row {
+  display: flex;
+  gap: 2rem;
+  flex-wrap: wrap;
+  margin-top: 0.75rem;
+  font-family: var(--heading-font);
+  font-size: 0.85rem;
+  color: var(--text-2);
+}
+.stats-row .stat-val {
+  font-family: var(--mono-font);
+  font-weight: 500;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .btn { transition: none; }
 }
@@ -361,10 +384,65 @@ how the system recovers.
         <span class="val" id="val-firefly-K">0.02</span>
       </div>
     </div>
+    <div class="control-group">
+      <label>Speed</label>
+      <div class="slider-row">
+        <input type="range" id="slider-firefly-speed" min="0.25" max="4" step="0.05" value="1">
+        <span class="val" id="val-firefly-speed">1.00&times;</span>
+      </div>
+    </div>
     <button class="btn" id="btn-reset-fireflies">Reset</button>
   </div>
   <p class="click-hint">Click on the grid to perturb a region</p>
   <p class="figure-caption"><span class="figure-label">Figure 4.</span> Pulse-coupled firefly oscillators on a grid. Each dot flashes when its phase crosses the threshold, nudging neighbors forward. Raise coupling to see random twinkling organize into synchronized waves.</p>
+</div>
+
+<h2>5. A Ring of Drummers</h2>
+
+<p>
+The mean-field coupling in Section 1 assumes every oscillator feels the average of all the
+others. But most real coupling is local. Imagine a circle of drummers, each only close
+enough to hear their two immediate neighbors. This is a ring-coupled Kuramoto model, and
+it is how rhythms lock in a drum circle, how neurons in a CPG entrain, and how a starling
+in a murmuration adjusts to the birds flanking it. Local coupling is slower to synchronize
+and can sustain richer patterns: traveling phase waves, polyrhythmic clusters at stable
+offsets, or full unison depending on coupling strength.
+</p>
+
+<p>
+Click any drummer to knock their phase out of place and watch the ring pull them back. The
+recovery time shrinks as coupling rises. Turn sound on to hear each flash as a click,
+pitched by position around the ring. Audio is gated behind the toggle so nothing plays
+until you ask for it.
+</p>
+
+<div class="figure" id="fig-ring">
+  <canvas id="canvas-ring" class="ring-canvas"></canvas>
+  <div class="controls">
+    <div class="control-group">
+      <label>Coupling</label>
+      <div class="slider-row">
+        <input type="range" id="slider-ring-K" min="0" max="2" step="0.05" value="1.0">
+        <span class="val" id="val-ring-K">1.00</span>
+      </div>
+    </div>
+    <div class="control-group">
+      <label>Tempo spread</label>
+      <div class="slider-row">
+        <input type="range" id="slider-ring-spread" min="0.1" max="1.5" step="0.1" value="0.5">
+        <span class="val" id="val-ring-spread">0.5</span>
+      </div>
+    </div>
+    <button class="btn" id="btn-ring-perturb">Perturb 3</button>
+    <button class="btn" id="btn-ring-sound">Sound: off</button>
+    <button class="btn" id="btn-ring-reset">Reset</button>
+  </div>
+  <div class="stats-row">
+    <span>Order: <span class="stat-val" id="stat-ring-order">0.00</span></span>
+    <span>Recovery: <span class="stat-val" id="stat-ring-recovery">&mdash;</span></span>
+  </div>
+  <p class="click-hint">Click an oscillator to knock it out of phase</p>
+  <p class="figure-caption"><span class="figure-label">Figure 5.</span> Ring-coupled oscillators with nearest-neighbor influence. The mean-phase arrow shows global coherence. Click to perturb; the recovery timer reports when order returns above 0.8.</p>
 </div>
 
 <div class="insight">
@@ -881,6 +959,8 @@ function freqToColor(freq, minF, maxF) {
   const ctx = canvas.getContext('2d');
   const sliderK = document.getElementById('slider-firefly-K');
   const valK = document.getElementById('val-firefly-K');
+  const sliderSpeed = document.getElementById('slider-firefly-speed');
+  const valSpeed = document.getElementById('val-firefly-speed');
   const btnReset = document.getElementById('btn-reset-fireflies');
 
   const cols = 40, rows = 30;
@@ -889,6 +969,7 @@ function freqToColor(freq, minF, maxF) {
   let freqs = new Float64Array(N);
   let brightness = new Float64Array(N); // visual glow decay
   let coupling = parseFloat(sliderK.value);
+  let speed = parseFloat(sliderSpeed.value);
   let dpr = window.devicePixelRatio || 1;
   const baseFreq = 1.8; // base oscillation frequency
   const freqSpread = 0.3;
@@ -1016,9 +1097,9 @@ function freqToColor(freq, minF, maxF) {
   let lastT = 0;
   function tick(t) {
     if (!lastT) lastT = t;
-    const dt = Math.min((t - lastT) / 1000, 0.05);
+    const rawDt = Math.min((t - lastT) / 1000, 0.05);
     lastT = t;
-    stepFireflies(dt);
+    stepFireflies(rawDt * speed);
     drawFireflies();
     requestAnimationFrame(tick);
   }
@@ -1028,9 +1109,279 @@ function freqToColor(freq, minF, maxF) {
     valK.textContent = coupling.toFixed(2);
   });
 
+  sliderSpeed.addEventListener('input', () => {
+    speed = parseFloat(sliderSpeed.value);
+    valSpeed.innerHTML = speed.toFixed(2) + '&times;';
+  });
+
   btnReset.addEventListener('click', () => {
     initFireflies();
   });
+
+  const ro = new ResizeObserver(() => resize());
+  ro.observe(canvas.parentElement);
+  resize();
+  requestAnimationFrame(tick);
+})();
+
+// ──────────────────────────────────────────────────────────────
+//  Section 5: Ring of drummers (nearest-neighbor coupling + audio)
+// ──────────────────────────────────────────────────────────────
+(function() {
+  const canvas = document.getElementById('canvas-ring');
+  const ctx = canvas.getContext('2d');
+  const sliderK = document.getElementById('slider-ring-K');
+  const valK = document.getElementById('val-ring-K');
+  const sliderSpread = document.getElementById('slider-ring-spread');
+  const valSpread = document.getElementById('val-ring-spread');
+  const btnPerturb = document.getElementById('btn-ring-perturb');
+  const btnSound = document.getElementById('btn-ring-sound');
+  const btnReset = document.getElementById('btn-ring-reset');
+  const statOrder = document.getElementById('stat-ring-order');
+  const statRecovery = document.getElementById('stat-ring-recovery');
+
+  const N = 12;
+  const COLORS = d3.schemeTableau10;
+  let dpr = window.devicePixelRatio || 1;
+  let oscs = [];
+  let perturbTime = null;
+  const recoveryThreshold = 0.8;
+
+  // Audio is user-gated. Nothing plays until the user toggles sound on.
+  let audioCtx = null;
+  let audioEnabled = false;
+  function initAudio() {
+    if (audioCtx) return;
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  function playClick(freq) {
+    if (!audioEnabled || !audioCtx) return;
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.08);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start(audioCtx.currentTime);
+    osc.stop(audioCtx.currentTime + 0.1);
+  }
+
+  function makeOscs() {
+    const spread = parseFloat(sliderSpread.value);
+    const base = 2.0;
+    oscs = [];
+    for (let i = 0; i < N; i++) {
+      const nf = Math.max(0.5, base + (Math.random() - 0.5) * 2 * spread);
+      oscs.push({
+        phase: Math.random() * TWO_PI,
+        naturalFreq: nf,
+        flashing: 0,
+        color: COLORS[i % COLORS.length],
+        lastPhase: 0
+      });
+    }
+    perturbTime = null;
+    statRecovery.textContent = '\u2014';
+  }
+  makeOscs();
+
+  function resize() {
+    dpr = window.devicePixelRatio || 1;
+    const rect = canvas.parentElement.getBoundingClientRect();
+    const w = Math.floor(rect.width - 48);
+    const h = Math.min(w * 0.65, 340);
+    canvas.style.width = w + 'px';
+    canvas.style.height = h + 'px';
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
+  }
+
+  function step(dt) {
+    const K = parseFloat(sliderK.value);
+    const dPhase = new Float64Array(N);
+    for (let i = 0; i < N; i++) {
+      oscs[i].lastPhase = oscs[i].phase;
+      dPhase[i] = oscs[i].naturalFreq;
+      if (K > 0) {
+        const left = (i - 1 + N) % N;
+        const right = (i + 1) % N;
+        dPhase[i] += K * Math.sin(oscs[left].phase - oscs[i].phase);
+        dPhase[i] += K * Math.sin(oscs[right].phase - oscs[i].phase);
+      }
+    }
+    for (let i = 0; i < N; i++) {
+      oscs[i].phase += dPhase[i] * dt;
+      oscs[i].phase = ((oscs[i].phase % TWO_PI) + TWO_PI) % TWO_PI;
+      // Detect zero-crossing for flash
+      if (oscs[i].lastPhase > 5 && oscs[i].phase < 1) {
+        oscs[i].flashing = 1.0;
+        playClick(400 + i * 70);
+      }
+      if (oscs[i].flashing > 0) {
+        oscs[i].flashing = Math.max(0, oscs[i].flashing - dt * 3);
+      }
+    }
+  }
+
+  function order() {
+    let sx = 0, sy = 0;
+    for (let i = 0; i < N; i++) {
+      sx += Math.cos(oscs[i].phase);
+      sy += Math.sin(oscs[i].phase);
+    }
+    sx /= N; sy /= N;
+    return { r: Math.sqrt(sx * sx + sy * sy), angle: Math.atan2(sy, sx) };
+  }
+
+  function draw() {
+    const W = canvas.width, H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+    const cx = W / 2, cy = H / 2;
+    const ringR = Math.min(W, H) * 0.35;
+    const dotR = Math.min(W, H) * 0.045;
+
+    // Ring backbone + nearest-neighbor links
+    ctx.strokeStyle = '#e2e2e8';
+    ctx.lineWidth = 1 * dpr;
+    ctx.beginPath();
+    ctx.arc(cx, cy, ringR, 0, TWO_PI);
+    ctx.stroke();
+
+    ctx.strokeStyle = 'rgba(37,99,235,0.15)';
+    for (let i = 0; i < N; i++) {
+      const j = (i + 1) % N;
+      const ai = (i / N) * TWO_PI - Math.PI / 2;
+      const aj = (j / N) * TWO_PI - Math.PI / 2;
+      ctx.beginPath();
+      ctx.moveTo(cx + ringR * Math.cos(ai), cy + ringR * Math.sin(ai));
+      ctx.lineTo(cx + ringR * Math.cos(aj), cy + ringR * Math.sin(aj));
+      ctx.stroke();
+    }
+
+    for (let i = 0; i < N; i++) {
+      const angle = (i / N) * TWO_PI - Math.PI / 2;
+      const x = cx + ringR * Math.cos(angle);
+      const y = cy + ringR * Math.sin(angle);
+      const o = oscs[i];
+
+      if (o.flashing > 0) {
+        ctx.save();
+        ctx.globalAlpha = o.flashing * 0.55;
+        ctx.fillStyle = o.color;
+        ctx.beginPath();
+        ctx.arc(x, y, dotR * 2.4, 0, TWO_PI);
+        ctx.fill();
+        ctx.restore();
+      }
+
+      const phaseFrac = o.phase / TWO_PI;
+      ctx.fillStyle = '#eee';
+      ctx.beginPath();
+      ctx.arc(x, y, dotR, 0, TWO_PI);
+      ctx.fill();
+      ctx.strokeStyle = '#ccc';
+      ctx.lineWidth = 1.5 * dpr;
+      ctx.stroke();
+
+      ctx.fillStyle = o.color;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.arc(x, y, dotR, -Math.PI / 2, -Math.PI / 2 + phaseFrac * TWO_PI);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // Mean phase arrow
+    const od = order();
+    const arrowLen = ringR * 0.5 * od.r;
+    ctx.strokeStyle = 'rgba(37,99,235,0.7)';
+    ctx.lineWidth = 2.5 * dpr;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + arrowLen * Math.cos(od.angle), cy + arrowLen * Math.sin(od.angle));
+    ctx.stroke();
+    if (od.r > 0.05) {
+      const ax = cx + arrowLen * Math.cos(od.angle);
+      const ay = cy + arrowLen * Math.sin(od.angle);
+      ctx.fillStyle = 'rgba(37,99,235,0.7)';
+      ctx.beginPath();
+      ctx.moveTo(ax, ay);
+      ctx.lineTo(ax - 8 * dpr * Math.cos(od.angle - 0.4), ay - 8 * dpr * Math.sin(od.angle - 0.4));
+      ctx.lineTo(ax - 8 * dpr * Math.cos(od.angle + 0.4), ay - 8 * dpr * Math.sin(od.angle + 0.4));
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    statOrder.textContent = od.r.toFixed(2);
+    if (perturbTime !== null && od.r > recoveryThreshold) {
+      const elapsed = ((performance.now() - perturbTime) / 1000).toFixed(1);
+      statRecovery.textContent = elapsed + 's';
+      perturbTime = null;
+    }
+  }
+
+  // Click to perturb
+  canvas.addEventListener('click', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    const cx = rect.width / 2, cy = rect.height / 2;
+    const ringR = Math.min(rect.width, rect.height) * 0.35;
+    const dotR = Math.min(rect.width, rect.height) * 0.045;
+    for (let i = 0; i < N; i++) {
+      const angle = (i / N) * TWO_PI - Math.PI / 2;
+      const x = cx + ringR * Math.cos(angle);
+      const y = cy + ringR * Math.sin(angle);
+      if (Math.hypot(mx - x, my - y) < dotR * 2) {
+        oscs[i].phase = Math.random() * TWO_PI;
+        oscs[i].flashing = 1.0;
+        perturbTime = performance.now();
+        statRecovery.textContent = '...';
+        break;
+      }
+    }
+  });
+
+  btnPerturb.addEventListener('click', () => {
+    const indices = d3.shuffle(d3.range(N)).slice(0, 3);
+    for (const k of indices) {
+      oscs[k].phase = Math.random() * TWO_PI;
+      oscs[k].flashing = 1.0;
+    }
+    perturbTime = performance.now();
+    statRecovery.textContent = '...';
+  });
+
+  btnSound.addEventListener('click', () => {
+    initAudio();
+    audioEnabled = !audioEnabled;
+    btnSound.textContent = audioEnabled ? 'Sound: on' : 'Sound: off';
+    btnSound.classList.toggle('active', audioEnabled);
+    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+  });
+
+  btnReset.addEventListener('click', makeOscs);
+
+  sliderK.addEventListener('input', () => {
+    valK.textContent = parseFloat(sliderK.value).toFixed(2);
+  });
+  sliderSpread.addEventListener('input', () => {
+    valSpread.textContent = parseFloat(sliderSpread.value).toFixed(1);
+    makeOscs();
+  });
+
+  let lastT = 0;
+  function tick(t) {
+    if (!lastT) lastT = t;
+    const dt = Math.min((t - lastT) / 1000, 0.05);
+    lastT = t;
+    step(dt);
+    draw();
+    requestAnimationFrame(tick);
+  }
 
   const ro = new ResizeObserver(() => resize());
   ro.observe(canvas.parentElement);

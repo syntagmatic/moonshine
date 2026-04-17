@@ -93,6 +93,55 @@ a:hover { color: #1d4ed8; }
 
 .status-bar { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); padding: 0.5rem 0; min-height: 1.5em; }
 
+.quasi-controls {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 0.4rem 0.9rem;
+  align-items: center;
+  margin: 0.75rem 0 0.5rem;
+  font-family: var(--heading-font);
+  font-size: 0.82rem;
+  color: var(--text-2);
+}
+.quasi-controls .ctl-label { white-space: nowrap; }
+.quasi-controls input[type="range"] { width: 100%; }
+.quasi-controls .ctl-value {
+  font-family: var(--mono-font);
+  font-size: 0.78rem;
+  color: var(--text);
+  min-width: 3.5em;
+  text-align: right;
+}
+.quasi-buttons {
+  display: flex;
+  gap: 0.4rem;
+  margin: 0.35rem 0 0.2rem;
+  flex-wrap: wrap;
+}
+.quasi-buttons button {
+  font-family: var(--heading-font);
+  font-size: 0.8rem;
+  padding: 0.3rem 0.75rem;
+  background: var(--fig-bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--text);
+}
+.quasi-buttons button:hover { background: var(--accent-light); border-color: var(--accent); }
+.quasi-buttons button:disabled { color: #aaa; cursor: not-allowed; background: #f5f5f5; }
+.quasi-stage { display: flex; gap: 1rem; align-items: flex-start; flex-wrap: wrap; }
+.quasi-main { flex: 1 1 420px; min-width: 280px; }
+.quasi-inset { flex: 0 0 170px; }
+.quasi-inset .inset-cap {
+  font-family: var(--heading-font);
+  font-size: 0.72rem;
+  color: var(--text-2);
+  text-align: center;
+  margin-top: 0.2rem;
+  line-height: 1.25;
+}
+
 .timeline-full {
   width: 100%;
   height: auto;
@@ -200,9 +249,29 @@ a:hover { color: #1d4ed8; }
 <p>The quasicrystal application is smaller than the string theory one but more empirically grounded. If you want a specific place where E<sub>8</sub> touches the physical world in a verified way, quasicrystals are it.</p>
 
 <div class="figure" id="fig-quasicrystal">
-  <div id="quasi-svg"></div>
-  <p class="status-bar" id="quasi-status">Cut-and-project pattern from ~26,000 E8 lattice points through a golden-ratio 2-plane with a bounded 6D window.</p>
-  <p class="figure-caption"><span class="figure-label">Figure 1.</span> A cut-and-project quasicrystal sample derived from the E8 lattice. We generate all E8 lattice points up to squared length 8 (~26,000 vectors), split each one into a "visible" 2D part (projection onto a 2-plane containing golden-ratio entries) and a "hidden" 6D part (projection onto the orthogonal complement), and keep only the points whose hidden part has norm ≤ 1.5. The surviving points form an aperiodic pattern — not a perfectly symmetric quasicrystal (for that you'd need the specific Elser–Sloane construction), but a genuine example of what cut-and-project produces when you project E8 through a golden-ratio window.</p>
+  <div class="quasi-stage">
+    <div class="quasi-main" id="quasi-svg"></div>
+    <div class="quasi-inset">
+      <div id="quasi-inset-svg"></div>
+      <p class="inset-cap">E<sub>⊥</sub> slice: a 2D view of the 6D "hidden" space, with the acceptance window drawn as a circle. Blue dots lie inside (kept); grey dots lie outside (rejected).</p>
+    </div>
+  </div>
+  <div class="quasi-buttons">
+    <button id="quasi-play" type="button">Play</button>
+    <button id="quasi-step" type="button">Step shell</button>
+    <button id="quasi-reset" type="button">Reset</button>
+  </div>
+  <div class="quasi-controls">
+    <label class="ctl-label" for="quasi-window">Window radius <span id="quasi-window-math"></span></label>
+    <input id="quasi-window" type="range" min="0.4" max="2.4" step="0.02" value="1.5">
+    <span class="ctl-value" id="quasi-window-val">1.50</span>
+
+    <label class="ctl-label" for="quasi-plane">Plane family <span id="quasi-plane-math"></span></label>
+    <input id="quasi-plane" type="range" min="0" max="1" step="0.005" value="0">
+    <span class="ctl-value" id="quasi-plane-val">0.00</span>
+  </div>
+  <p class="status-bar" id="quasi-status"></p>
+  <p class="figure-caption"><span class="figure-label">Figure 1.</span> Cut-and-project construction, live. We enumerate every E8 lattice point with squared length ≤ 8 (N<sub>total</sub> ≈ 26k), split each into a <strong>physical</strong> piece in a 2-plane E<sub>∥</sub> ⊂ ℝ<sup>8</sup> and a <strong>hidden</strong> piece in the 6D complement E<sub>⊥</sub>, and keep only the points whose hidden piece lies inside the acceptance window W = {ξ ∈ E<sub>⊥</sub> : ‖ξ‖ ≤ r}. The kept points, drawn at their E<sub>∥</sub> coordinates, form an aperiodic tiling with "forbidden" (non-crystallographic) rotational symmetries. The window slider changes r. The plane slider interpolates E<sub>∥</sub> between a golden-ratio 2-plane (t = 0) and the Coxeter plane (t = 1) — two natural choices that each give a different symmetry in the pattern. Play reveals the points one lattice shell at a time, showing how each shell of the 8D lattice contributes to the pattern.</p>
 </div>
 
 <h2>What we did not cover</h2>
@@ -311,67 +380,266 @@ a:hover { color: #1d4ed8; }
 <script>
 // ────────────────────────────────────────── Figure 1: quasicrystal cut-and-project ──
 (function () {
-  var container = document.getElementById('quasi-svg');
-  var status = document.getElementById('quasi-status');
-  var width = 680, height = 680;
-  var svg = d3.select(container).append('svg')
+  var mainContainer = document.getElementById('quasi-svg');
+  var insetContainer = document.getElementById('quasi-inset-svg');
+  var statusEl = document.getElementById('quasi-status');
+  var windowInput = document.getElementById('quasi-window');
+  var windowVal = document.getElementById('quasi-window-val');
+  var planeInput = document.getElementById('quasi-plane');
+  var planeVal = document.getElementById('quasi-plane-val');
+  var playBtn = document.getElementById('quasi-play');
+  var stepBtn = document.getElementById('quasi-step');
+  var resetBtn = document.getElementById('quasi-reset');
+
+  // Render the math labels via KaTeX.
+  katex.render('r', document.getElementById('quasi-window-math'));
+  katex.render('t', document.getElementById('quasi-plane-math'));
+
+  // ───── main svg ─────
+  var width = 500, height = 500;
+  var svg = d3.select(mainContainer).append('svg')
     .attr('viewBox', '0 0 ' + width + ' ' + height)
     .attr('width', '100%')
-    .style('max-width', width + 'px');
-  var g = svg.append('g').attr('transform', 'translate(' + (width/2) + ',' + (height/2) + ')');
+    .style('max-width', width + 'px')
+    .style('display', 'block');
+  var gMain = svg.append('g').attr('transform', 'translate(' + (width/2) + ',' + (height/2) + ')');
 
+  // ───── inset svg ─────
+  var insetW = 170, insetH = 170;
+  var insetSvg = d3.select(insetContainer).append('svg')
+    .attr('viewBox', '0 0 ' + insetW + ' ' + insetH)
+    .attr('width', '100%')
+    .style('max-width', insetW + 'px')
+    .style('display', 'block')
+    .style('background', '#fafafa')
+    .style('border-radius', '4px');
+  var gInset = insetSvg.append('g').attr('transform', 'translate(' + (insetW/2) + ',' + (insetH/2) + ')');
+
+  // ───── plane families ─────
+  // Family 0: a golden-ratio 2-plane. The entries involving φ give an
+  // irrational slope, which is the standard way to pull out a Penrose-like
+  // aperiodic pattern from a higher-dimensional periodic lattice.
   var phi = (1 + Math.sqrt(5)) / 2;
+  function normalize(v) { var n = Math.sqrt(E8.dot(v, v)); return v.map(function (x) { return x / n; }); }
+  function orth(v, u) { var c = E8.dot(v, u); return v.map(function (x, i) { return x - c * u[i]; }); }
+  function lerp(a, b, t) { return a.map(function (x, i) { return (1 - t) * x + t * b[i]; }); }
 
-  function normalize(v) {
-    var n = Math.sqrt(E8.dot(v, v));
-    return v.map(function (x) { return x / n; });
+  var uGoldenPre = [1, phi, 0, 0, -1, -phi, 0, 0];
+  var vGoldenPre = [0, 0, 1, phi, 0, 0, -1, -phi];
+  var uGolden = normalize(uGoldenPre);
+  var vGolden = normalize(orth(vGoldenPre, uGolden));
+
+  // Family 1: the Coxeter plane, as computed by the lib (the eigenspace of
+  // the Coxeter element with eigenvalue e^{±2πi/30}). Pre-orthonormalized.
+  var uCox = E8.coxeterPlane.u;
+  var vCox = E8.coxeterPlane.v;
+
+  // Given t ∈ [0, 1], produce an orthonormal pair (u(t), v(t)) smoothly
+  // interpolating between the two families. Gram-Schmidt on the blend.
+  function planeAt(t) {
+    var uBlend = lerp(uGolden, uCox, t);
+    uBlend = normalize(uBlend);
+    var vBlend = lerp(vGolden, vCox, t);
+    vBlend = normalize(orth(vBlend, uBlend));
+    return { u: uBlend, v: vBlend };
   }
-  function subProj(v, u) {
-    var c = E8.dot(v, u);
-    return v.map(function (x, i) { return x - c * u[i]; });
-  }
 
-  // Two "golden" vectors in R^8, chosen to contain φ and to have no special
-  // relationship to the root basis (so the projection is irrational).
-  var uPre = [1, phi, 0, 0, -1, -phi, 0, 0];
-  var vPre = [0, 0, 1, phi, 0, 0, -1, -phi];
-  var u = normalize(uPre);
-  var vOrthog = normalize(subProj(vPre, u));
+  // A fixed 2D "internal" frame for the inset: two directions in ℝ⁸ that
+  // are orthogonal to the golden-plane basis (and stay approximately
+  // orthogonal to the interpolated plane for small t). We use them just
+  // to show a consistent 2D picture of the 6D complement. We fix them
+  // from t = 0 so the inset has a stable geometry.
+  var wPre = [1, -1/phi, 0, 0, 0, 0, 0, 0];
+  var w1 = normalize(orth(orth(wPre, uGolden), vGolden));
+  var w2Pre = [0, 0, 1, -1/phi, 0, 0, 0, 0];
+  var w2 = normalize(orth(orth(orth(w2Pre, uGolden), vGolden), w1));
 
-  // Generate lattice points up to squared length 8 (~26k), cut-and-project
+  // ───── enumerate lattice once, cache squared length and dotted
+  // projections in typed arrays for fast recompute on slider drag. ─────
+  // Max squared length 8 ≈ 26k vectors. Re-filtering that is ~200k
+  // multiplications and stays under 10 ms on a laptop.
   var lattice = E8.lattice.generate(8);
-  var windowRadiusSq = 2.25; // window radius 1.5, squared
-  var visible = [];
-  for (var i = 0; i < lattice.length; i++) {
+  var N = lattice.length;
+
+  // Pack coordinates into a Float32Array row-major for fast loops.
+  var coords = new Float32Array(N * 8);
+  var sqLen = new Float32Array(N);
+  var shellIdx = new Int16Array(N); // integer shell label (squared length, since E8 lengths² are even integers)
+  for (var i = 0; i < N; i++) {
     var p = lattice[i];
-    var pu = E8.dot(p, u);
-    var pv = E8.dot(p, vOrthog);
-    var perpSq = 0;
+    var s = 0;
     for (var k = 0; k < 8; k++) {
-      var perpK = p[k] - pu * u[k] - pv * vOrthog[k];
-      perpSq += perpK * perpK;
+      coords[i * 8 + k] = p[k];
+      s += p[k] * p[k];
     }
-    if (perpSq <= windowRadiusSq) {
-      visible.push([pu, pv]);
+    sqLen[i] = s;
+    shellIdx[i] = Math.round(s);
+  }
+  var maxShell = 8;
+
+  // Fixed rendering scale: derived once from a generous projection so the
+  // pattern does not rescale as the user drags the plane slider (which
+  // would be visually confusing).
+  var fixedScale = (Math.min(width, height) / 2 - 20) / 5.2;
+  var insetScale = (Math.min(insetW, insetH) / 2 - 10) / 2.6;
+
+  // Tight arrays we reuse across redraws.
+  var projX = new Float32Array(N);
+  var projY = new Float32Array(N);
+  var perpA = new Float32Array(N); // inset x
+  var perpB = new Float32Array(N); // inset y
+  var perpSq = new Float32Array(N);
+
+  function recomputeProjections(plane) {
+    var u = plane.u, v = plane.v;
+    for (var i = 0; i < N; i++) {
+      var base = i * 8;
+      var pu = 0, pv = 0, pw1 = 0, pw2 = 0;
+      for (var k = 0; k < 8; k++) {
+        var x = coords[base + k];
+        pu += x * u[k];
+        pv += x * v[k];
+        pw1 += x * w1[k];
+        pw2 += x * w2[k];
+      }
+      projX[i] = pu;
+      projY[i] = pv;
+      perpA[i] = pw1;
+      perpB[i] = pw2;
+      // ‖perp‖² = ‖p‖² − pu² − pv²
+      perpSq[i] = sqLen[i] - pu * pu - pv * pv;
     }
   }
 
-  var maxR = 0;
-  visible.forEach(function (p) {
-    var r = Math.sqrt(p[0]*p[0] + p[1]*p[1]);
-    if (r > maxR) maxR = r;
+  // ───── animation state ─────
+  var state = {
+    window: 1.5,
+    plane: 0,
+    revealedShell: maxShell, // how many shells are "released" onto the 2D pattern; start with all
+    playing: false,
+    timer: null
+  };
+
+  function currentPlane() { return planeAt(state.plane); }
+
+  // Redraw the 2D pattern given current state. Only points that (a) pass
+  // the window test and (b) belong to an already-revealed shell are shown.
+  function render() {
+    var rSq = state.window * state.window;
+    var kept = [];
+    var totalKept = 0;
+    for (var i = 0; i < N; i++) {
+      if (perpSq[i] > rSq + 1e-9) continue;
+      totalKept++;
+      if (shellIdx[i] <= state.revealedShell) {
+        kept.push(i);
+      }
+    }
+
+    // Main pattern: circle per kept point, keyed by index.
+    var sel = gMain.selectAll('circle.pt').data(kept, function (d) { return d; });
+    sel.exit().remove();
+    var entering = sel.enter().append('circle').attr('class', 'pt').attr('r', 1.6)
+      .attr('fill', '#2563eb').attr('fill-opacity', 0.85);
+    entering.merge(sel)
+      .attr('cx', function (i) { return projX[i] * fixedScale; })
+      .attr('cy', function (i) { return -projY[i] * fixedScale; });
+
+    // Inset: show a subsample of lattice points projected into a 2D slice
+    // of the 6D complement. Blue if inside window, grey if outside. We
+    // subsample for DOM throughput (keeping every one is fine on a fast
+    // machine but wastes frames on a phone).
+    var insetStride = 3;
+    var insetData = [];
+    for (var i = 0; i < N; i += insetStride) insetData.push(i);
+    var inSel = gInset.selectAll('circle.pt').data(insetData, function (d) { return d; });
+    inSel.enter().append('circle').attr('class', 'pt').attr('r', 0.8)
+      .merge(inSel)
+      .attr('cx', function (i) { return perpA[i] * insetScale; })
+      .attr('cy', function (i) { return -perpB[i] * insetScale; })
+      .attr('fill', function (i) { return perpSq[i] <= rSq ? '#2563eb' : '#cbd5e1'; })
+      .attr('fill-opacity', function (i) { return perpSq[i] <= rSq ? 0.8 : 0.35; });
+
+    // Window circle on inset.
+    gInset.selectAll('circle.window').data([state.window]).join('circle')
+      .attr('class', 'window')
+      .attr('cx', 0).attr('cy', 0)
+      .attr('r', function (d) { return d * insetScale; })
+      .attr('fill', 'none').attr('stroke', '#dc2626').attr('stroke-width', 1.25)
+      .attr('stroke-dasharray', '3,2');
+    // Axes on inset.
+    gInset.selectAll('line.axis').data([0, 1]).join('line')
+      .attr('class', 'axis')
+      .attr('x1', function (d) { return d === 0 ? -insetW/2 + 6 : 0; })
+      .attr('x2', function (d) { return d === 0 ? insetW/2 - 6 : 0; })
+      .attr('y1', function (d) { return d === 0 ? 0 : -insetH/2 + 6; })
+      .attr('y2', function (d) { return d === 0 ? 0 : insetH/2 - 6; })
+      .attr('stroke', '#e2e2e8').attr('stroke-width', 1);
+    gInset.selectAll('line.axis').lower();
+
+    // Status readout.
+    var shellTxt = state.revealedShell >= maxShell
+      ? 'all shells released'
+      : 'shells released up to ‖x‖² ≤ ' + state.revealedShell;
+    statusEl.innerHTML =
+      '<strong>N<sub>total</sub></strong> = ' + N.toLocaleString() + ' E8 lattice points probed · ' +
+      '<strong>N<sub>kept</sub></strong> = ' + totalKept.toLocaleString() + ' pass the window · ' +
+      '<strong>shown</strong> = ' + kept.length.toLocaleString() + ' (' + shellTxt + ').';
+  }
+
+  // Reproject when the plane slider changes, then render.
+  function onPlaneChange() {
+    recomputeProjections(currentPlane());
+    render();
+  }
+
+  // ───── wire up controls ─────
+  windowInput.addEventListener('input', function () {
+    state.window = parseFloat(windowInput.value);
+    windowVal.textContent = state.window.toFixed(2);
+    render();
   });
-  var scale = (Math.min(width, height) / 2 - 30) / Math.max(maxR, 1);
+  planeInput.addEventListener('input', function () {
+    state.plane = parseFloat(planeInput.value);
+    planeVal.textContent = state.plane.toFixed(2);
+    onPlaneChange();
+  });
+  resetBtn.addEventListener('click', function () {
+    stopPlay();
+    state.revealedShell = 0;
+    render();
+  });
+  stepBtn.addEventListener('click', function () {
+    stopPlay();
+    state.revealedShell = Math.min(maxShell, state.revealedShell + 1);
+    render();
+  });
+  function stopPlay() {
+    if (state.timer) { clearInterval(state.timer); state.timer = null; }
+    state.playing = false;
+    playBtn.textContent = 'Play';
+  }
+  playBtn.addEventListener('click', function () {
+    if (state.playing) { stopPlay(); return; }
+    // If all shells already revealed, restart from 0.
+    if (state.revealedShell >= maxShell) state.revealedShell = 0;
+    state.playing = true;
+    playBtn.textContent = 'Pause';
+    render();
+    state.timer = setInterval(function () {
+      state.revealedShell++;
+      if (state.revealedShell >= maxShell) {
+        state.revealedShell = maxShell;
+        render();
+        stopPlay();
+        return;
+      }
+      render();
+    }, 550);
+  });
 
-  g.selectAll('circle').data(visible).enter().append('circle')
-    .attr('cx', function (p) { return p[0] * scale; })
-    .attr('cy', function (p) { return -p[1] * scale; })
-    .attr('r', 1.6)
-    .attr('fill', '#2563eb')
-    .attr('fill-opacity', 0.85);
-
-  status.textContent = 'Cut-and-project pattern: ' + visible.length + ' points kept out of ' +
-    lattice.length.toLocaleString() + ' candidate E8 lattice points (window radius 2.5 in the 6D complement).';
+  // ───── initial paint ─────
+  onPlaneChange();
 })();
 
 // ────────────────────────────────────────── Figure 2: historical timeline ──

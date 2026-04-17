@@ -71,6 +71,8 @@ header { margin-bottom: 3rem; }
   transition: background 0.15s, border-color 0.15s; user-select: none; }
 .btn:hover { border-color: var(--accent); background: var(--accent-light); }
 .btn.active { border-color: var(--accent); background: var(--accent); color: white; }
+.btn.wind-btn { padding: 0.35rem 0.6rem; min-width: 2rem; font-family: var(--mono-font); font-size: 1rem; line-height: 1; }
+.btn.preset-btn { padding: 0.4rem 0.75rem; font-size: 0.8rem; }
 .click-hint { font-family: var(--heading-font); font-size: 0.8rem; color: var(--text-2);
   text-align: center; margin-top: 0.5rem; font-style: italic; }
 .stats-row { display: flex; gap: 2rem; flex-wrap: wrap; margin-top: 0.75rem;
@@ -126,6 +128,13 @@ Fire (orange) spreads to adjacent trees each step, leaving behind ash (dark). Hi
 play to run the simulation continuously, or step through one frame at a time.
 </p>
 
+<p>
+Ignition probability is the chance that a burning cell lights each adjacent tree on a
+given step. At 100% the fire is deterministic; lower values simulate damp wood.
+Wind biases that probability in one direction: downwind neighbors catch easily, upwind
+neighbors are spared. The presets bundle all three knobs into named regimes.
+</p>
+
 <div class="figure" id="fig-forest">
   <canvas id="forest-canvas"></canvas>
   <div class="controls">
@@ -134,6 +143,13 @@ play to run the simulation continuously, or step through one frame at a time.
       <div class="slider-row">
         <input type="range" id="density-slider" min="0" max="100" value="59">
         <span class="val" id="density-val">59%</span>
+      </div>
+    </div>
+    <div class="control-group">
+      <label>Ignition probability</label>
+      <div class="slider-row">
+        <input type="range" id="ignite-slider" min="0" max="100" value="100">
+        <span class="val" id="ignite-val">100%</span>
       </div>
     </div>
     <div class="control-group">
@@ -149,10 +165,46 @@ play to run the simulation continuously, or step through one frame at a time.
       <button class="btn" id="btn-reset">Reset</button>
     </div>
   </div>
+  <div class="controls" style="margin-top:0.5rem;">
+    <div class="control-group">
+      <label>Wind</label>
+      <div style="display:flex; gap:0.25rem; align-items:center;">
+        <button class="btn wind-btn active" data-wind="none" title="No wind">&middot;</button>
+        <button class="btn wind-btn" data-wind="N" title="North (up)">&uarr;</button>
+        <button class="btn wind-btn" data-wind="E" title="East (right)">&rarr;</button>
+        <button class="btn wind-btn" data-wind="S" title="South (down)">&darr;</button>
+        <button class="btn wind-btn" data-wind="W" title="West (left)">&larr;</button>
+      </div>
+    </div>
+    <div class="control-group">
+      <label>Wind strength</label>
+      <div class="slider-row">
+        <input type="range" id="wind-slider" min="0" max="100" value="60">
+        <span class="val" id="wind-val">60%</span>
+      </div>
+    </div>
+    <div class="control-group">
+      <label>Preset</label>
+      <div style="display:flex; gap:0.25rem; align-items:center; flex-wrap:wrap;">
+        <button class="btn preset-btn" data-preset="dry">Dry &amp; calm</button>
+        <button class="btn preset-btn" data-preset="damp">Damp forest</button>
+        <button class="btn preset-btn" data-preset="windy">Windy drought</button>
+      </div>
+    </div>
+    <div class="control-group">
+      <label>Ignite</label>
+      <div style="display:flex; gap:0.25rem; align-items:center; flex-wrap:wrap;">
+        <button class="btn preset-btn" data-ignite="center">Ignite center</button>
+        <button class="btn preset-btn" data-ignite="random">Ignite random</button>
+        <button class="btn preset-btn" data-ignite="left">Ignite left edge</button>
+      </div>
+    </div>
+  </div>
   <div class="stats-row">
     <div>Trees: <span class="stat-val" id="stat-trees">0</span></div>
     <div>Burned: <span class="stat-val" id="stat-burned">0</span></div>
     <div>Fraction burned: <span class="stat-val" id="stat-fraction">0%</span></div>
+    <div>Steps: <span class="stat-val" id="stat-steps">0</span></div>
   </div>
   <div class="legend">
     <div class="legend-item"><div class="legend-swatch" style="background:#2d6a1e"></div> Tree</div>
@@ -286,6 +338,135 @@ is a hallmark of phase transitions.
   </p>
 </div>
 
+<h2>Self-organized fires: trees regrow</h2>
+
+<p>
+So far the forest has been frozen. We plant it once, ignite it, watch it burn.
+The question has been a question about a snapshot: is the initial density above or
+below <span id="soc-pc-inline"></span>? To get a fire at all we have to tune the
+density by hand. Nature does not usually hand us a knob.
+</p>
+
+<p>
+Let the forest regenerate. In the Drossel-Schwabl model, two things happen every
+time step. Empty cells sprout a tree with probability <span id="soc-p-inline"></span>.
+Existing trees get hit by lightning with probability <span id="soc-f-inline"></span>.
+A struck tree burns its entire connected cluster to ash in a single flash, and the
+ash becomes empty ground ready for new growth. Fires are no longer one-shot events;
+they are a permanent feature of the landscape.
+</p>
+
+<p>
+When <span id="soc-sep"></span>, growth is slow compared with the pause between
+lightning strikes. The forest thickens between fires, approaches the connectivity
+threshold, and then a single spark clears out a big cluster. Density relaxes, and
+the cycle begins again. The system hovers near criticality on its own — no slider
+required. That is self-organized criticality.
+</p>
+
+<div class="figure" id="fig-soc">
+  <canvas id="soc-canvas"></canvas>
+  <div class="controls">
+    <div class="control-group">
+      <label>Growth (p)</label>
+      <div class="slider-row">
+        <input type="range" id="soc-p-slider" min="0.001" max="0.1" step="0.001" value="0.01">
+        <span class="val" id="soc-p-val">0.010</span>
+      </div>
+    </div>
+    <div class="control-group">
+      <label>Lightning (f)</label>
+      <div class="slider-row">
+        <input type="range" id="soc-f-slider" min="0.00001" max="0.001" step="0.00001" value="0.0001">
+        <span class="val" id="soc-f-val">0.00010</span>
+      </div>
+    </div>
+    <div class="control-group">
+      <label>Speed</label>
+      <div class="slider-row">
+        <input type="range" id="soc-speed-slider" min="1" max="16" step="1" value="1">
+        <span class="val" id="soc-speed-val">1x</span>
+      </div>
+    </div>
+    <div class="control-group" style="flex-direction:row; gap:0.5rem; align-items:flex-end;">
+      <button class="btn" id="soc-btn-pause">Pause</button>
+      <button class="btn" id="soc-btn-reset-stats" title="Clear fire history and start a fresh distribution">Reset stats</button>
+    </div>
+  </div>
+  <div class="controls" style="margin-top:0.5rem;">
+    <div class="control-group">
+      <label>Regime</label>
+      <div style="display:flex; gap:0.25rem; align-items:center; flex-wrap:wrap;">
+        <button class="btn preset-btn" id="soc-preset-small" title="High ignition rate: fires are frequent but small">Small-fire</button>
+        <button class="btn preset-btn active" id="soc-preset-critical" title="Balanced: classic SOC regime">Critical</button>
+        <button class="btn preset-btn" id="soc-preset-large" title="Very low ignition: rare, landscape-scale fires">Large-fire</button>
+      </div>
+    </div>
+  </div>
+  <div class="stats-row">
+    <div>Density: <span class="stat-val" id="soc-stat-dens">0.00</span></div>
+    <div>Total fires: <span class="stat-val" id="soc-stat-fires">0</span></div>
+    <div>Last fire size: <span class="stat-val" id="soc-stat-last">0</span></div>
+    <div>f/p ratio: <span class="stat-val" id="soc-stat-ratio">1.00e-2</span></div>
+  </div>
+  <div class="legend">
+    <div class="legend-item"><div class="legend-swatch" style="background:#2d6a1e"></div> Tree</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:#ef4444"></div> Burning</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:#fafafa"></div> Empty</div>
+  </div>
+  <p class="figure-caption">
+    <span class="figure-label">Figure 4.</span>
+    The Drossel-Schwabl model. Trees grow at rate <span id="soc-cap-p"></span>;
+    lightning strikes trees at rate <span id="soc-cap-f"></span>. Watch the density
+    climb between fires and crash down when a big cluster ignites.
+  </p>
+</div>
+
+<p>
+The small-fire preset pushes lightning high enough that fires keep the forest thin
+and patchy. The large-fire preset makes lightning rare, so the forest grows dense
+and the occasional strike clears a continent. The critical preset sits in between,
+and it is there that the fire-size distribution stretches across every scale the
+grid can hold.
+</p>
+
+<h3>Fire sizes follow a power law</h3>
+
+<p>
+Record the size of every fire. On log-log axes the histogram becomes a straight
+line with slope roughly <span id="soc-alpha"></span>. That is <em>not</em> the
+percolation power law from earlier — the earlier plot counted static clusters at a
+single hand-tuned density. This one counts dynamic events, each born from a
+different density the system visited on its way to and from the threshold. Same
+algebraic signature, different physics.
+</p>
+
+<div class="figure" id="fig-soc-hist">
+  <svg id="soc-svg-hist"></svg>
+  <p class="figure-caption">
+    <span class="figure-label">Figure 5.</span>
+    Fire-size distribution on log-log axes. Small fires dominate, but landscape-scale
+    fires are a predictable tail of the same rule. The dashed red line is a linear
+    fit to the binned log-log points.
+  </p>
+</div>
+
+<div class="insight">
+  <p>
+  Percolation needs a tuner. Someone (or something) has to set density right on
+  the knife edge <span id="soc-insight-pc"></span>, or the dramatic fires do not
+  happen. The Drossel-Schwabl model needs no tuner. Slow accumulation plus fast
+  release drives the system to the edge and holds it there.
+  </p>
+  <p>
+  The same template — slow drive, threshold instability, cascading release —
+  shows up in sandpile avalanches, earthquake magnitudes, neural avalanches, and
+  the distribution of real wildfire sizes. Catastrophes of every size are not
+  exceptions. They are what the rule looks like when you plot it on the right
+  axes.
+  </p>
+</div>
+
 <footer style="margin-top: 4rem; padding-top: 2rem; border-top: 1px solid var(--border); font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2);">
   <p>Next: <a href="14-slime-mold.html" style="color: var(--accent);">Slime Mold</a> &rarr;</p>
   <p style="margin-top: 1rem; opacity: 0.6;">Built with <a href="https://github.com/enjalot/moonshine" style="color: var(--text-2);">moonshine</a>.</p>
@@ -299,6 +480,14 @@ window.addEventListener('DOMContentLoaded', () => {
     katex.render("p_c \\approx 0.5927", document.getElementById('formula-pc'));
     katex.render("p_c \\approx 0.5927", document.getElementById('caption-pc'));
     katex.render("p_c \\approx 0.5927", document.getElementById('insight-pc'));
+    katex.render("p_c \\approx 0.5927", document.getElementById('soc-pc-inline'));
+    katex.render("p_c \\approx 0.5927", document.getElementById('soc-insight-pc'));
+    katex.render("p", document.getElementById('soc-p-inline'));
+    katex.render("f", document.getElementById('soc-f-inline'));
+    katex.render("p", document.getElementById('soc-cap-p'));
+    katex.render("f", document.getElementById('soc-cap-f'));
+    katex.render("f \\ll p", document.getElementById('soc-sep'));
+    katex.render("\\alpha \\approx 2", document.getElementById('soc-alpha'));
   }
 });
 const dispatch = d3.dispatch('updateDensity');
@@ -334,6 +523,9 @@ const state = { density: 0.59 };
   // State
   var density = 0.59;
   var speed = 8;
+  var ignitionProb = 1.0;    // probability a burning cell ignites each tree neighbor per step
+  var windDir = 'none';      // 'none' | 'N' | 'E' | 'S' | 'W'
+  var windStrength = 0.6;    // 0..1, multiplies directional bias
   var playing = false;
   var fireActive = false;
   var animRAF = null;
@@ -351,12 +543,19 @@ const state = { density: 0.59 };
   var densityVal = document.getElementById('density-val');
   var speedSlider = document.getElementById('speed-slider');
   var speedVal = document.getElementById('speed-val');
+  var igniteSlider = document.getElementById('ignite-slider');
+  var igniteVal = document.getElementById('ignite-val');
+  var windSlider = document.getElementById('wind-slider');
+  var windVal = document.getElementById('wind-val');
+  var windBtns = document.querySelectorAll('.wind-btn');
+  var presetBtns = document.querySelectorAll('.preset-btn');
   var btnPlay = document.getElementById('btn-play');
   var btnStep = document.getElementById('btn-step');
   var btnReset = document.getElementById('btn-reset');
   var statTrees = document.getElementById('stat-trees');
   var statBurned = document.getElementById('stat-burned');
   var statFraction = document.getElementById('stat-fraction');
+  var statSteps = document.getElementById('stat-steps');
 
   // Canvas sizing
   var cellSize = 1;
@@ -421,6 +620,27 @@ const state = { density: 0.59 };
   }
 
   // ── Fire step ─────────────────────────────────────────────────────
+  // Wind bonus/penalty per direction. Downwind prob = p*(1+s), upwind = p*(1-s),
+  // perpendicular stays at p. s is windStrength; clamped into [0,1].
+  function windFactor(dir) {
+    if (windDir === 'none') return 1;
+    var s = windStrength;
+    if (dir === windDir) return 1 + s;   // downwind
+    if (opposite(dir) === windDir) return Math.max(0, 1 - s); // upwind
+    return 1; // crosswind
+  }
+  function opposite(d) {
+    return d === 'N' ? 'S' : d === 'S' ? 'N' : d === 'E' ? 'W' : d === 'W' ? 'E' : 'none';
+  }
+
+  // Given a neighbor direction (the direction of the neighbor from the burning cell),
+  // compute probability of ignition. Downwind direction: e.g. if wind blows N, the
+  // fire propagates preferentially to the N neighbor.
+  function ignitionChance(neighborDir) {
+    var p = ignitionProb * windFactor(neighborDir);
+    return p > 1 ? 1 : (p < 0 ? 0 : p);
+  }
+
   function fireStep() {
     var burning = [];
     for (var i = 0; i < N * N; i++) {
@@ -431,26 +651,49 @@ const state = { density: 0.59 };
       fireActive = false;
       return false;
     }
-    // Spread to neighbors, then turn current burning to ash
-    var newBurning = [];
+    // Spread to neighbors probabilistically; burning cells that successfully
+    // ignite all still-ignitable neighbors (or any neighbor) become ash. Cells
+    // that fail to ignite a tree stay burning for another step so the fire
+    // has a chance to cross moist patches.
+    var newlyIgnited = [];
+    var toAsh = [];
     for (var b = 0; b < burning.length; b++) {
       var idx = burning[b];
       var rr = (idx / N) | 0;
       var cc = idx % N;
-      // up
-      if (rr > 0 && grid[idx - N] === TREE) { grid[idx - N] = BURNING; newBurning.push(idx - N); }
-      // down
-      if (rr < N - 1 && grid[idx + N] === TREE) { grid[idx + N] = BURNING; newBurning.push(idx + N); }
-      // left
-      if (cc > 0 && grid[idx - 1] === TREE) { grid[idx - 1] = BURNING; newBurning.push(idx - 1); }
-      // right
-      if (cc < N - 1 && grid[idx + 1] === TREE) { grid[idx + 1] = BURNING; newBurning.push(idx + 1); }
-      grid[idx] = ASH;
+      var anyTreeNeighbor = false;
+      var anyIgnited = false;
+      // N = up
+      if (rr > 0 && grid[idx - N] === TREE) {
+        anyTreeNeighbor = true;
+        if (Math.random() < ignitionChance('N')) { grid[idx - N] = BURNING; newlyIgnited.push(idx - N); anyIgnited = true; }
+      }
+      // S = down
+      if (rr < N - 1 && grid[idx + N] === TREE) {
+        anyTreeNeighbor = true;
+        if (Math.random() < ignitionChance('S')) { grid[idx + N] = BURNING; newlyIgnited.push(idx + N); anyIgnited = true; }
+      }
+      // W = left
+      if (cc > 0 && grid[idx - 1] === TREE) {
+        anyTreeNeighbor = true;
+        if (Math.random() < ignitionChance('W')) { grid[idx - 1] = BURNING; newlyIgnited.push(idx - 1); anyIgnited = true; }
+      }
+      // E = right
+      if (cc < N - 1 && grid[idx + 1] === TREE) {
+        anyTreeNeighbor = true;
+        if (Math.random() < ignitionChance('E')) { grid[idx + 1] = BURNING; newlyIgnited.push(idx + 1); anyIgnited = true; }
+      }
+      // A cell turns to ash once it has burned at least one full step and
+      // either ignited a neighbor or has no tree neighbors left to ignite.
+      if (!anyTreeNeighbor || anyIgnited || ignitionProb >= 1) {
+        toAsh.push(idx);
+      }
     }
-    totalBurned += burning.length;
+    for (var a = 0; a < toAsh.length; a++) grid[toAsh[a]] = ASH;
+    totalBurned += toAsh.length;
     stepCount++;
     updateStats();
-    return newBurning.length > 0;
+    return (newlyIgnited.length > 0) || (burning.length - toAsh.length > 0);
   }
 
   function igniteCell(r, c) {
@@ -502,6 +745,7 @@ const state = { density: 0.59 };
     statBurned.textContent = totalBurned.toLocaleString();
     var pct = totalTrees > 0 ? (totalBurned / totalTrees * 100).toFixed(1) + '%' : '0%';
     statFraction.textContent = pct;
+    if (statSteps) statSteps.textContent = stepCount.toLocaleString();
   }
 
   // ── Event listeners ───────────────────────────────────────────────
@@ -539,6 +783,97 @@ const state = { density: 0.59 };
     col = Math.max(0, Math.min(N - 1, col));
     row = Math.max(0, Math.min(N - 1, row));
     igniteCell(row, col);
+  });
+
+  igniteSlider.addEventListener('input', function () {
+    ignitionProb = +this.value / 100;
+    igniteVal.textContent = this.value + '%';
+  });
+
+  windSlider.addEventListener('input', function () {
+    windStrength = +this.value / 100;
+    windVal.textContent = this.value + '%';
+  });
+
+  windBtns.forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      windDir = btn.getAttribute('data-wind');
+      windBtns.forEach(function (b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+    });
+  });
+
+  // Presets: dry&calm, damp forest, windy drought.
+  var PRESETS = {
+    dry:   { density: 0.55, ignite: 1.00, wind: 'none', windStr: 0.0 },
+    damp:  { density: 0.70, ignite: 0.35, wind: 'none', windStr: 0.0 },
+    windy: { density: 0.45, ignite: 0.85, wind: 'E',    windStr: 0.8 }
+  };
+
+  function applyPreset(name) {
+    var cfg = PRESETS[name]; if (!cfg) return;
+    density = cfg.density;
+    densitySlider.value = Math.round(cfg.density * 100);
+    densityVal.textContent = densitySlider.value + '%';
+    ignitionProb = cfg.ignite;
+    igniteSlider.value = Math.round(cfg.ignite * 100);
+    igniteVal.textContent = igniteSlider.value + '%';
+    windDir = cfg.wind;
+    windStrength = cfg.windStr;
+    windSlider.value = Math.round(cfg.windStr * 100);
+    windVal.textContent = windSlider.value + '%';
+    windBtns.forEach(function (b) {
+      if (b.getAttribute('data-wind') === windDir) b.classList.add('active');
+      else b.classList.remove('active');
+    });
+    generateForest();
+  }
+
+  presetBtns.forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      applyPreset(btn.getAttribute('data-preset'));
+    });
+  });
+
+  // Ignition buttons: bigger targets than clicking a 2–4px cell
+  function igniteCenter() {
+    // Try the exact center first, then spiral outward to find a tree
+    var cr = (N / 2) | 0;
+    var cc = (N / 2) | 0;
+    if (grid[cr * N + cc] === TREE) { igniteCell(cr, cc); return; }
+    for (var radius = 1; radius < N; radius++) {
+      for (var dr = -radius; dr <= radius; dr++) {
+        for (var dc = -radius; dc <= radius; dc++) {
+          if (Math.abs(dr) !== radius && Math.abs(dc) !== radius) continue;
+          var r = cr + dr, c = cc + dc;
+          if (r < 0 || r >= N || c < 0 || c >= N) continue;
+          if (grid[r * N + c] === TREE) { igniteCell(r, c); return; }
+        }
+      }
+    }
+  }
+  function igniteRandomTree() {
+    var trees = [];
+    for (var i = 0; i < N * N; i++) if (grid[i] === TREE) trees.push(i);
+    if (!trees.length) return;
+    var idx = trees[(Math.random() * trees.length) | 0];
+    igniteCell((idx / N) | 0, idx % N);
+  }
+  function igniteLeftEdge() {
+    for (var r = 0; r < N; r++) {
+      if (grid[r * N] === TREE) grid[r * N] = BURNING;
+    }
+    fireActive = true;
+    drawGrid();
+  }
+  var igniteBtns = document.querySelectorAll('[data-ignite]');
+  igniteBtns.forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var kind = btn.getAttribute('data-ignite');
+      if (kind === 'center') igniteCenter();
+      else if (kind === 'random') igniteRandomTree();
+      else if (kind === 'left') igniteLeftEdge();
+    });
   });
 
   // Listen for density updates
@@ -1110,6 +1445,278 @@ const state = { density: 0.59 };
   var chartRO = new ResizeObserver(function () { setupChart(); });
   chartRO.observe(figEl);
   setupChart();
+})();
+</script>
+
+<!-- ================================================================== -->
+<!-- Section 5: Self-organized fires (Drossel-Schwabl)                  -->
+<!-- ================================================================== -->
+<script>
+(function () {
+  'use strict';
+
+  var REDUCED_MOTION = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // Cell states (local to this IIFE)
+  var S_EMPTY = 0, S_TREE = 1, S_BURNING = 2;
+
+  // Colors
+  var COL_TREE    = [45, 106, 30];
+  var COL_BURNING = [239, 68, 68];
+  var COL_EMPTY   = [250, 250, 250];
+
+  var N = 100;
+  var grid = new Int8Array(N * N);
+  var p = 0.01, f = 0.0001;
+  var speed = 1;
+  var paused = false;
+  var totalFires = 0;
+  var fireHistory = [];
+
+  // DOM
+  var figEl = document.getElementById('fig-soc');
+  var canvas = document.getElementById('soc-canvas');
+  var ctx = canvas.getContext('2d');
+  var pSlider = document.getElementById('soc-p-slider');
+  var fSlider = document.getElementById('soc-f-slider');
+  var speedSlider = document.getElementById('soc-speed-slider');
+  var pVal = document.getElementById('soc-p-val');
+  var fVal = document.getElementById('soc-f-val');
+  var speedVal = document.getElementById('soc-speed-val');
+  var btnPause = document.getElementById('soc-btn-pause');
+  var btnSmall = document.getElementById('soc-preset-small');
+  var btnCritical = document.getElementById('soc-preset-critical');
+  var btnLarge = document.getElementById('soc-preset-large');
+  var btnResetStats = document.getElementById('soc-btn-reset-stats');
+  var statDens = document.getElementById('soc-stat-dens');
+  var statFires = document.getElementById('soc-stat-fires');
+  var statLast = document.getElementById('soc-stat-last');
+  var statRatio = document.getElementById('soc-stat-ratio');
+
+  var cellSize = 1;
+  var imageData;
+
+  function sizeCanvas() {
+    var w = figEl.clientWidth - 48;
+    cellSize = Math.max(2, Math.floor(w / N));
+    var px = cellSize * N;
+    canvas.width = px;
+    canvas.height = px;
+    canvas.style.width = px + 'px';
+    canvas.style.height = px + 'px';
+    imageData = ctx.createImageData(px, px);
+    draw();
+  }
+  var ro = new ResizeObserver(function () { sizeCanvas(); });
+  ro.observe(figEl);
+
+  // Burn a connected cluster starting at startIdx. Returns its size.
+  function burn(startIdx) {
+    if (grid[startIdx] !== S_TREE) return 0;
+    var count = 0;
+    var stack = [startIdx];
+    grid[startIdx] = S_BURNING;
+    while (stack.length) {
+      var idx = stack.pop();
+      count++;
+      var r = (idx / N) | 0, c = idx % N;
+      if (r > 0         && grid[idx - N] === S_TREE) { grid[idx - N] = S_BURNING; stack.push(idx - N); }
+      if (r < N - 1     && grid[idx + N] === S_TREE) { grid[idx + N] = S_BURNING; stack.push(idx + N); }
+      if (c > 0         && grid[idx - 1] === S_TREE) { grid[idx - 1] = S_BURNING; stack.push(idx - 1); }
+      if (c < N - 1     && grid[idx + 1] === S_TREE) { grid[idx + 1] = S_BURNING; stack.push(idx + 1); }
+    }
+    return count;
+  }
+
+  function updateRatio() {
+    statRatio.textContent = (f / p).toExponential(2);
+  }
+  updateRatio();
+
+  function step() {
+    if (paused) return;
+    var trees = 0;
+    for (var i = 0; i < N * N; i++) {
+      var v = grid[i];
+      if (v === S_BURNING) {
+        grid[i] = S_EMPTY;
+      } else if (v === S_EMPTY) {
+        if (Math.random() < p) grid[i] = S_TREE;
+      } else {
+        trees++;
+        if (Math.random() < f) {
+          var size = burn(i);
+          if (size > 0) {
+            totalFires++;
+            statFires.textContent = totalFires;
+            statLast.textContent = size;
+            fireHistory.push(size);
+            histDispatch(fireHistory);
+          }
+        }
+      }
+    }
+    statDens.textContent = (trees / (N * N)).toFixed(2);
+  }
+
+  function draw() {
+    if (!imageData) return;
+    var px = cellSize * N;
+    var data = imageData.data;
+    for (var r = 0; r < N; r++) {
+      for (var c = 0; c < N; c++) {
+        var v = grid[r * N + c];
+        var color = v === S_TREE ? COL_TREE : v === S_BURNING ? COL_BURNING : COL_EMPTY;
+        for (var dy = 0; dy < cellSize; dy++) {
+          var py = r * cellSize + dy;
+          for (var dx = 0; dx < cellSize; dx++) {
+            var pxc = c * cellSize + dx;
+            var idx = (py * px + pxc) * 4;
+            data[idx]     = color[0];
+            data[idx + 1] = color[1];
+            data[idx + 2] = color[2];
+            data[idx + 3] = 255;
+          }
+        }
+      }
+    }
+    ctx.putImageData(imageData, 0, 0);
+  }
+
+  function loop() {
+    var effSpeed = REDUCED_MOTION ? 1 : speed;
+    for (var s = 0; s < effSpeed; s++) step();
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  function clearActivePreset() {
+    [btnSmall, btnCritical, btnLarge].forEach(function (b) { b.classList.remove('active'); });
+  }
+  function applyPreset(pv, fv, btnEl) {
+    p = pv; f = fv;
+    pSlider.value = p; fSlider.value = f;
+    pVal.textContent = p.toFixed(3); fVal.textContent = f.toFixed(5);
+    updateRatio();
+    clearActivePreset();
+    btnEl.classList.add('active');
+  }
+
+  pSlider.addEventListener('input', function (e) {
+    p = +e.target.value; pVal.textContent = p.toFixed(3);
+    updateRatio(); clearActivePreset();
+  });
+  fSlider.addEventListener('input', function (e) {
+    f = +e.target.value; fVal.textContent = f.toFixed(5);
+    updateRatio(); clearActivePreset();
+  });
+  speedSlider.addEventListener('input', function (e) {
+    speed = +e.target.value; speedVal.textContent = speed + 'x';
+  });
+  btnPause.addEventListener('click', function () {
+    paused = !paused; btnPause.textContent = paused ? 'Resume' : 'Pause';
+  });
+  // Presets explore the f/p ratio that governs the large-fire tail.
+  btnSmall.addEventListener('click', function () { applyPreset(0.05, 0.001, btnSmall); });
+  btnCritical.addEventListener('click', function () { applyPreset(0.01, 0.0001, btnCritical); });
+  btnLarge.addEventListener('click', function () { applyPreset(0.02, 0.00002, btnLarge); });
+  btnResetStats.addEventListener('click', function () {
+    totalFires = 0; fireHistory = [];
+    statFires.textContent = '0'; statLast.textContent = '0';
+    histDispatch(fireHistory);
+  });
+
+  // ── Histogram ─────────────────────────────────────────────────────
+  var histContainer = document.getElementById('fig-soc-hist');
+  var histSvg = d3.select('#soc-svg-hist');
+  var histMargin = { top: 20, right: 20, bottom: 40, left: 50 };
+  var lastHistory = [];
+
+  function histDispatch(h) {
+    lastHistory = h;
+    updateHist(h);
+  }
+
+  function updateHist(history) {
+    var width = histContainer.clientWidth - 48 - histMargin.left - histMargin.right;
+    var height = 300 - histMargin.top - histMargin.bottom;
+    histSvg
+      .attr('width', width + histMargin.left + histMargin.right)
+      .attr('height', height + histMargin.top + histMargin.bottom);
+    histSvg.selectAll('*').remove();
+    if (history.length < 5) {
+      histSvg.append('text')
+        .attr('x', (width + histMargin.left + histMargin.right) / 2)
+        .attr('y', (height + histMargin.top + histMargin.bottom) / 2)
+        .attr('text-anchor', 'middle')
+        .attr('fill', 'var(--text-2)')
+        .attr('font-size', '0.85rem')
+        .text('Accumulating fires... (' + history.length + ' so far, need \u2265 5)');
+      return;
+    }
+    var g = histSvg.append('g')
+      .attr('transform', 'translate(' + histMargin.left + ',' + histMargin.top + ')');
+
+    var maxVal = d3.max(history);
+    var numBins = 15;
+    var bins = Array.from({ length: numBins }, function (_, i) {
+      var lo = Math.pow(10, i * Math.log10(maxVal) / numBins);
+      var hi = Math.pow(10, (i + 1) * Math.log10(maxVal) / numBins);
+      return { x: Math.sqrt(lo * hi), y: history.filter(function (d) { return d >= lo && d < hi; }).length };
+    }).filter(function (d) { return d.y > 0; });
+
+    var x = d3.scaleLog().domain([1, maxVal]).range([0, width]);
+    var y = d3.scaleLog().domain([1, history.length]).range([height, 0]);
+
+    g.append('g')
+      .attr('transform', 'translate(0,' + height + ')')
+      .call(d3.axisBottom(x).ticks(5, '~s'));
+    g.append('g').call(d3.axisLeft(y).ticks(5, '~s'));
+
+    g.append('text')
+      .attr('x', width / 2).attr('y', height + 34)
+      .attr('text-anchor', 'middle').attr('font-size', '0.8rem')
+      .attr('fill', 'var(--text-2)')
+      .text('Fire size');
+    g.append('text')
+      .attr('transform', 'rotate(-90)')
+      .attr('x', -height / 2).attr('y', -36)
+      .attr('text-anchor', 'middle').attr('font-size', '0.8rem')
+      .attr('fill', 'var(--text-2)')
+      .text('Count');
+
+    g.selectAll('circle').data(bins).enter().append('circle')
+      .attr('cx', function (d) { return x(d.x); })
+      .attr('cy', function (d) { return y(d.y); })
+      .attr('r', 4)
+      .attr('fill', 'var(--accent)');
+
+    if (bins.length > 3) {
+      var logData = bins.map(function (d) { return { x: Math.log10(d.x), y: Math.log10(d.y) }; });
+      var nL = logData.length;
+      var sumX = d3.sum(logData, function (d) { return d.x; });
+      var sumY = d3.sum(logData, function (d) { return d.y; });
+      var sumXY = d3.sum(logData, function (d) { return d.x * d.y; });
+      var sumXX = d3.sum(logData, function (d) { return d.x * d.x; });
+      var slope = (nL * sumXY - sumX * sumY) / (nL * sumXX - sumX * sumX);
+      var intercept = (sumY - slope * sumX) / nL;
+      var x1 = bins[0].x, x2 = bins[bins.length - 1].x;
+      var y1 = Math.pow(10, slope * Math.log10(x1) + intercept);
+      var y2 = Math.pow(10, slope * Math.log10(x2) + intercept);
+      g.append('line')
+        .attr('x1', x(x1)).attr('y1', y(y1))
+        .attr('x2', x(x2)).attr('y2', y(y2))
+        .attr('stroke', 'var(--c-danger)')
+        .attr('stroke-dasharray', '4,2');
+    }
+  }
+
+  new ResizeObserver(function () { updateHist(lastHistory); }).observe(histContainer);
+
+  // Init
+  sizeCanvas();
+  updateHist(lastHistory);
+  loop();
 })();
 </script>
 

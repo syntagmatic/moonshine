@@ -59,10 +59,12 @@ header { margin-bottom: 3rem; }
 .btn.active { border-color: var(--accent); background: var(--accent); color: white; }
 
 .rule-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 0.75rem; margin-top: 1rem; }
-.rule-card { background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; padding: 0.75rem; cursor: pointer; transition: border-color 0.15s; text-align: center; }
+.rule-card { background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; padding: 0.75rem; cursor: pointer; transition: border-color 0.15s, background-color 0.3s, box-shadow 0.3s; text-align: center; position: relative; }
 .rule-card.active { border-color: var(--accent); background: var(--accent-light); }
+.rule-card.fired { background: #fde68a; box-shadow: 0 0 0 2px #f59e0b; transition: background-color 0s, box-shadow 0s; }
 .rule-card canvas { display: block; margin: 0 auto 0.4rem; }
 .rule-name { font-family: var(--heading-font); font-size: 0.75rem; font-weight: 600; }
+.rule-count { font-family: var(--mono-font); font-size: 0.7rem; color: var(--text-2); margin-top: 0.15rem; font-variant-numeric: tabular-nums; }
 
 @media (max-width: 600px) {
   h1 { font-size: 1.75rem; }
@@ -92,8 +94,9 @@ In the simulation below, builders walk randomly. When they encounter a pattern t
 <div class="figure" id="fig-build">
   <canvas id="canvas-build"></canvas>
   <div class="controls">
-    <div class="control-group"><label>Speed</label><input type="range" id="speed-slider" min="1" max="30" value="8"></div>
-    <div class="control-group"><label>Builders</label><input type="range" id="agent-slider" min="1" max="40" value="15"></div>
+    <button class="btn active" id="play-build">Pause</button>
+    <div class="control-group"><label>Speed (steps/frame)</label><div class="slider-row"><input type="range" id="speed-slider" min="1" max="30" value="8"><span class="val" id="speed-val">8</span></div></div>
+    <div class="control-group"><label>Builders</label><div class="slider-row"><input type="range" id="agent-slider" min="1" max="40" value="15"><span class="val" id="agent-val">15</span></div></div>
     <button class="btn" id="reset-build">Reset</button>
   </div>
   <p class="figure-caption"><span class="figure-label">Figure 1.</span> Stigmergic construction in action. Builders read local neighborhood patterns to decide where to place blocks.</p>
@@ -124,7 +127,16 @@ Collective construction is self-healing. If a section of the nest is destroyed, 
 </div>
 
 <script>
-const state = { speed: 8, agents: 15, ruleActive: [true, true, true, true, true, true, true, true] };
+const state = { speed: 8, agents: 15, playing: true, ruleActive: [true, true, true, true, true, true, true, true], ruleCount: [0,0,0,0,0,0,0,0] };
+const ruleCards = [], ruleCountEls = [], rulePulseTimers = [];
+function pulseRule(i) {
+  state.ruleCount[i]++;
+  if (ruleCountEls[i]) ruleCountEls[i].textContent = state.ruleCount[i];
+  const card = ruleCards[i]; if (!card) return;
+  card.classList.add('fired');
+  clearTimeout(rulePulseTimers[i]);
+  rulePulseTimers[i] = setTimeout(() => card.classList.remove('fired'), 280);
+}
 const RULES = [
   { name: "Cap", pattern: [[-1,-1,-1],[1,0,1],[1,1,1]] },
   { name: "Arch", pattern: [[-1,-1,-1],[1,0,1],[-1,1,-1]] },
@@ -144,9 +156,10 @@ const RULES = [
     for(let x=10; x<cols-10; x++) { grid[(rows-1)*cols+x]=1; order[(rows-1)*cols+x]=1; }
     agents = Array.from({length:state.agents}, () => ({x:Math.floor(Math.random()*cols), y:rows-5}));
     maxO = 1;
+    for(let i=0; i<state.ruleCount.length; i++) { state.ruleCount[i]=0; if(ruleCountEls[i]) ruleCountEls[i].textContent=0; }
   }
   function tick() {
-    for(let s=0; s<state.speed; s++) {
+    if(state.playing) for(let s=0; s<state.speed; s++) {
       agents.forEach(a => {
         let placed = false;
         for(let i=0; i<RULES.length; i++) {
@@ -158,7 +171,7 @@ const RULES = [
             let val = (nx<0||nx>=cols||ny<0||ny>=rows) ? 1 : grid[ny*cols+nx];
             if(val !== req) match = false;
           }
-          if(match) { grid[a.y*cols+a.x]=1; order[a.y*cols+a.x]=++maxO; placed=true; break; }
+          if(match) { grid[a.y*cols+a.x]=1; order[a.y*cols+a.x]=++maxO; placed=true; pulseRule(i); break; }
         }
         if(!placed) { a.x += Math.floor(Math.random()*3)-1; a.y += Math.floor(Math.random()*3)-1; if(Math.random()<0.1) a.y--; }
         a.x = Math.max(0, Math.min(cols-1, a.x)); a.y = Math.max(0, Math.min(rows-1, a.y));
@@ -175,8 +188,11 @@ const RULES = [
     requestAnimationFrame(tick);
   }
   document.getElementById('reset-build').onclick = init;
-  document.getElementById('speed-slider').oninput = e => state.speed = +e.target.value;
-  document.getElementById('agent-slider').oninput = e => { state.agents = +e.target.value; init(); };
+  const playBtn = document.getElementById('play-build');
+  playBtn.onclick = () => { state.playing = !state.playing; playBtn.textContent = state.playing ? 'Pause' : 'Play'; playBtn.classList.toggle('active', state.playing); };
+  const speedVal = document.getElementById('speed-val'), agentVal = document.getElementById('agent-val');
+  document.getElementById('speed-slider').oninput = e => { state.speed = +e.target.value; speedVal.textContent = state.speed; };
+  document.getElementById('agent-slider').oninput = e => { state.agents = +e.target.value; agentVal.textContent = state.agents; init(); };
   new ResizeObserver(() => { canvas.width = container.clientWidth*window.devicePixelRatio; canvas.height = 300*window.devicePixelRatio; }).observe(container);
   init(); tick();
 })();
@@ -192,6 +208,8 @@ const RULES = [
       ctx.strokeStyle='#ccc'; ctx.lineWidth=0.05; ctx.strokeRect(x,y,1,1);
     }));
     const name = document.createElement('div'); name.className='rule-name'; name.textContent=r.name; card.appendChild(name);
+    const count = document.createElement('div'); count.className='rule-count'; count.textContent='0'; card.appendChild(count);
+    ruleCards[i] = card; ruleCountEls[i] = count;
     card.onclick = () => { state.ruleActive[i]=!state.ruleActive[i]; card.classList.toggle('active'); };
     grid.appendChild(card);
   });

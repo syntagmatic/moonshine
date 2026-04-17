@@ -434,17 +434,23 @@ var LBM = (function() {
 
   const NX = 250, NY = 100;
   let sim, imgData;
+  let obsCx = Math.floor(NX * 0.22), obsCy = Math.floor(NY / 2);
+  const OBS_R = Math.floor(NY * 0.1);
   const ctx = canvas.getContext('2d');
   canvas.width = NX; canvas.height = NY;
 
-  function init() {
-    sim = LBM.create(NX, NY, state.flowSpeed, 0.02);
-    const cx = Math.floor(NX * 0.22), cy = Math.floor(NY / 2), r = Math.floor(NY * 0.1);
+  function stampObstacle() {
+    for (let i = 0; i < NX * NY; i++) sim.obstacle[i] = 0;
     for (let y = 0; y < NY; y++) {
       for (let x = 0; x < NX; x++) {
-        if ((x - cx)**2 + (y - cy)**2 <= r**2) sim.obstacle[y * NX + x] = 1;
+        if ((x - obsCx)**2 + (y - obsCy)**2 <= OBS_R**2) sim.obstacle[y * NX + x] = 1;
       }
     }
+  }
+
+  function init() {
+    sim = LBM.create(NX, NY, state.flowSpeed, 0.02);
+    stampObstacle();
     imgData = ctx.createImageData(NX, NY);
   }
 
@@ -504,7 +510,28 @@ var LBM = (function() {
     this.textContent = state.paused ? 'Play' : 'Pause';
   });
 
-  document.getElementById('reset-flow').addEventListener('click', init);
+  document.getElementById('reset-flow').addEventListener('click', () => {
+    obsCx = Math.floor(NX * 0.22); obsCy = Math.floor(NY / 2);
+    init();
+  });
+
+  // Click (or drag) to re-place the obstacle. Resetting the LBM state avoids
+  // stamping a hole through a settled flow field.
+  canvas.style.cursor = 'crosshair';
+  function placeFromEvent(e) {
+    const rect = canvas.getBoundingClientRect();
+    const nx = Math.round((e.clientX - rect.left) / rect.width * NX);
+    const ny = Math.round((e.clientY - rect.top) / rect.height * NY);
+    obsCx = Math.max(OBS_R + 2, Math.min(NX - OBS_R - 2, nx));
+    obsCy = Math.max(OBS_R + 2, Math.min(NY - OBS_R - 2, ny));
+    init();
+  }
+  let dragging = false;
+  canvas.addEventListener('pointerdown', e => { dragging = true; placeFromEvent(e); });
+  canvas.addEventListener('pointermove', e => { if (dragging) placeFromEvent(e); });
+  canvas.addEventListener('pointerup',   () => { dragging = false; });
+  canvas.addEventListener('pointerleave',() => { dragging = false; });
+  canvas.title = 'Click or drag to move the cylinder';
 
   new ResizeObserver(entries => {
     const w = entries[0].contentRect.width - 48;
@@ -568,6 +595,25 @@ var LBM = (function() {
     drawSnapshot("snap-laminar", 5); drawSnapshot("snap-steady", 25);
     drawSnapshot("snap-street", 150); drawSnapshot("snap-turbulent", 500);
   }, 200);
+
+  // Click a snapshot to jump the sliders to a canonical Re for that regime.
+  // Chosen so Re = 1000 * v * (L/100) / 0.001 = v * L * 1000 lands near the label.
+  const snapTargets = {
+    "snap-laminar":   { v: 0.5, L: 1.0 },   // Re ~ 5
+    "snap-steady":    { v: 1.2, L: 2.0 },   // Re ~ 24
+    "snap-street":    { v: 3.0, L: 5.0 },   // Re ~ 150
+    "snap-turbulent": { v: 8.0, L: 6.0 }    // Re ~ 480
+  };
+  Object.keys(snapTargets).forEach(id => {
+    const cv = document.getElementById(id);
+    if (!cv) return;
+    cv.style.cursor = 'pointer';
+    cv.title = 'Click to jump the sliders to this regime';
+    cv.addEventListener('click', () => {
+      const t = snapTargets[id];
+      velSlider.value = t.v; sizeSlider.value = t.L; update();
+    });
+  });
 })();
 
 // ===================================================================
@@ -611,10 +657,14 @@ var LBM = (function() {
       const v = (sim.uy[idx+1]-sim.uy[idx-1]-sim.ux[idx+NX]+sim.ux[idx-NX])*0.5;
       history.push(v); if (history.length > 600) history.shift();
       if (history.length > 100) {
+        // 4 LBM steps per tick, 1 history sample per tick
         let cross = 0; for (let i=1; i<history.length; i++) if (history[i-1]*history[i] < 0) cross++;
-        const st = (cross/2/history.length/8) * (NY*0.2) / state.shapeParams.speed;
+        const cycles = cross / 2;
+        const totalSteps = history.length * 4;
+        const freq = cycles / totalSteps; // cycles per LBM step
+        const st = freq * (NY*0.2) / state.shapeParams.speed;
         stDisplay.textContent = cross > 1 ? st.toFixed(3) : "--";
-        periodDisplay.textContent = cross > 1 ? (history.length*8/(cross/2)).toFixed(0) + " steps" : "no shedding";
+        periodDisplay.textContent = cross > 1 ? (totalSteps / cycles).toFixed(0) + " steps" : "no shedding";
       }
       const data = imgData.data;
       for (let i = 0; i < NX * NY; i++) {

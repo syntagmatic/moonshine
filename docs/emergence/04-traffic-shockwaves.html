@@ -119,9 +119,9 @@ This simple behavior, even without lane changes or distracted drivers, is enough
 </p>
 
 <p>
-Below is a ring of 30 cars, initially evenly spaced. 
-The "Nudge" button briefly slows one car. 
-As the car behind it brakes to maintain safety, its follower must brake slightly harder, and so on. 
+Below is a ring of 30 cars, initially evenly spaced.
+The "Nudge" button briefly slows one car, and clicking any car on the ring brakes it directly.
+As the car behind brakes to maintain safety, its follower must brake slightly harder, and so on.
 This small ripple propagates backward, amplifying until it becomes a stable stop-and-go wave.
 </p>
 
@@ -250,9 +250,10 @@ Beyond it, the system is unstable; small perturbations grow into jams and flow c
 
 <p>
 Play with the density slider. Below roughly 20 cars, the ring flows freely. The blue
-dot sits on the rising side of the curve. Above 30 or so, even without a nudge, the
-natural jitter of the simulation triggers spontaneous jams. The dot falls to the
-congested side.
+dot sits on the rising side of the curve, close to the dashed theoretical envelope.
+Above 30 or so, even without a nudge, the natural jitter of the simulation triggers
+spontaneous jams. The dot falls to the congested side, and the red line marks the
+critical density where the peak of the curve sits.
 </p>
 
 <p>
@@ -395,6 +396,27 @@ const colorScale = d3.scaleSequential(d3.interpolateRdYlBu).domain([0, 60]);
     init();
     dispatch.call('reset');
   });
+
+  // Click any car to brake it. The wave forms from wherever we poke.
+  canvas.addEventListener('click', (event) => {
+    const rect = canvas.getBoundingClientRect();
+    const mx = event.clientX - rect.left;
+    const my = event.clientY - rect.top;
+    const cx = w/2, cy = h/2;
+    const R = Math.min(w, h) * 0.38;
+    let best = -1, bestD = Infinity;
+    for (let i = 0; i < cars.length; i++) {
+      const angle = (cars[i].pos / RING_CIRC) * Math.PI * 2 - Math.PI/2;
+      const x = cx + R * Math.cos(angle);
+      const y = cy + R * Math.sin(angle);
+      const d = (x - mx) * (x - mx) + (y - my) * (y - my);
+      if (d < bestD) { bestD = d; best = i; }
+    }
+    if (best >= 0 && bestD < 400) {
+      cars[best].speed = Math.max(0, cars[best].speed - state.desiredSpeed * 0.6);
+    }
+  });
+  canvas.style.cursor = 'pointer';
 
   new ResizeObserver(resize).observe(container);
   resize();
@@ -547,9 +569,33 @@ const colorScale = d3.scaleSequential(d3.interpolateRdYlBu).domain([0, 60]);
   const densityReadout = document.getElementById('fund-density');
   const flowReadout = document.getElementById('fund-flow');
 
+  const fundNudgeBtn = document.getElementById('btn-nudge-fund');
+  const fundResetBtn = document.getElementById('btn-reset-fund');
+
   let ctx, w, h, chartW, chartH = 220;
   let cars = [], chartData = [], flowSamples = [];
   let xSc, ySc, chartDot, chartPath;
+
+  // Theoretical fundamental diagram under the IDM-like rule at v=50, gapTime=1.0.
+  // Equilibrium speed for a given density rho (cars/km) comes from solving
+  //   desGap(v) = avgGap(rho)    with desGap = MIN_GAP + v * gapTime
+  // giving  v = max(0, (1000/rho - MIN_GAP - MIN_GAP) / gapTime).
+  function equilibriumFlow(rho) {
+    const spacing = 1000 / rho;                // metres per car
+    const freeGap = spacing - MIN_GAP;         // bumper-to-bumper gap
+    if (freeGap <= 0) return 0;
+    const v = Math.max(0, Math.min(50, (freeGap - MIN_GAP) / 1.0));
+    return (rho * v) / 100;                     // matches readout scaling
+  }
+
+  function criticalDensity() {
+    let bestRho = 0, bestQ = 0;
+    for (let rho = 1; rho <= 55; rho += 0.2) {
+      const q = equilibriumFlow(rho);
+      if (q > bestQ) { bestQ = q; bestRho = rho; }
+    }
+    return bestRho;
+  }
 
   function init() {
     cars = [];
@@ -573,6 +619,33 @@ const colorScale = d3.scaleSequential(d3.interpolateRdYlBu).domain([0, 60]);
     g.append('g').attr('transform', `translate(0,${ih})`).call(d3.axisBottom(xSc).ticks(6));
     g.append('g').call(d3.axisLeft(ySc).ticks(5));
 
+    // Axis titles
+    svg.append('text').attr('x', m.left + iw/2).attr('y', chartH - 4)
+      .attr('text-anchor', 'middle')
+      .attr('font-family', 'var(--heading-font)').attr('font-size', 11).attr('fill', 'var(--text-2)')
+      .text('Density \u03c1 (cars / km)');
+    svg.append('text').attr('transform', `translate(12,${m.top + ih/2}) rotate(-90)`)
+      .attr('text-anchor', 'middle')
+      .attr('font-family', 'var(--heading-font)').attr('font-size', 11).attr('fill', 'var(--text-2)')
+      .text('Flow q');
+
+    // Theoretical equilibrium curve
+    const curvePts = [];
+    for (let rho = 1; rho <= 55; rho += 0.5) curvePts.push([rho, equilibriumFlow(rho)]);
+    const line = d3.line().x(d => xSc(d[0])).y(d => ySc(d[1]));
+    g.append('path').attr('d', line(curvePts))
+      .attr('fill', 'none').attr('stroke', 'var(--text-2)')
+      .attr('stroke-width', 1.5).attr('stroke-dasharray', '3 3').attr('opacity', 0.55);
+
+    // Critical density marker
+    const rhoC = criticalDensity();
+    g.append('line').attr('x1', xSc(rhoC)).attr('x2', xSc(rhoC))
+      .attr('y1', 0).attr('y2', ih)
+      .attr('stroke', 'var(--c-danger)').attr('stroke-width', 1).attr('stroke-dasharray', '4 3').attr('opacity', 0.7);
+    g.append('text').attr('x', xSc(rhoC) + 4).attr('y', 12)
+      .attr('font-family', 'var(--heading-font)').attr('font-size', 10).attr('fill', 'var(--c-danger)')
+      .text('critical \u03c1');
+
     chartPath = g.append('g');
     chartDot = g.append('circle').attr('r', 6).attr('fill', 'var(--c-agent)').attr('stroke', '#fff').attr('stroke-width', 2);
   }
@@ -589,6 +662,14 @@ const colorScale = d3.scaleSequential(d3.interpolateRdYlBu).domain([0, 60]);
     state.numCars = +this.value;
     densityVal.textContent = state.numCars;
     carCountEl.textContent = state.numCars;
+    init();
+  });
+
+  fundNudgeBtn.addEventListener('click', () => {
+    if (cars.length > 0) cars[0].speed = Math.max(0, cars[0].speed - 25);
+  });
+
+  fundResetBtn.addEventListener('click', () => {
     init();
   });
 

@@ -120,6 +120,13 @@ The asymmetry is the key. Because the peak is closer to the minimum on one side 
         <span class="val" id="asym-val">0.80</span>
       </div>
     </div>
+    <div class="control-group">
+      <label>Speed</label>
+      <div class="slider-row">
+        <input type="range" id="speed-slider" min="0.25" max="3" step="0.05" value="1">
+        <span class="val" id="speed-val">1.0x</span>
+      </div>
+    </div>
     <button class="btn" id="btn-reset">Reset</button>
   </div>
   <p class="figure-caption"><span class="figure-label">Figure 1.</span> A single particle on a sawtooth potential. Toggle the potential to see how asymmetry biases the diffusion. The particle tends to drift rightward over many cycles.</p>
@@ -145,10 +152,25 @@ In a flashing ratchet, the potential toggles automatically. The efficiency of th
         <span class="val" id="freq-val">1.0</span>
       </div>
     </div>
+    <div class="control-group">
+      <label>Asymmetry</label>
+      <div class="slider-row">
+        <input type="range" id="asym2-slider" min="0.5" max="0.95" step="0.01" value="0.85">
+        <span class="val" id="asym2-val">0.85</span>
+      </div>
+    </div>
+    <div class="control-group">
+      <label>Speed</label>
+      <div class="slider-row">
+        <input type="range" id="speed2-slider" min="0.25" max="3" step="0.05" value="1">
+        <span class="val" id="speed2-val">1.0x</span>
+      </div>
+    </div>
+    <button class="btn" id="btn-symmetric">Symmetric</button>
     <button class="btn" id="btn-pause">Pause</button>
   </div>
   <div class="stats-row">
-    <span>Mean Position: <b id="stat-mean">0.00</b></span>
+    <span>Mean Displacement: <b id="stat-mean">0.00</b></span>
     <span>Drift Velocity: <b id="stat-vel">0.00</b></span>
   </div>
   <p class="figure-caption"><span class="figure-label">Figure 2.</span> A population of particles in a flashing ratchet. The blue line tracks the average position, showing a steady drift despite the random motion of individual particles.</p>
@@ -193,9 +215,11 @@ function getForce(x, asym, L=100) {
   const btnToggle = document.getElementById('btn-toggle');
   const asymSlider = document.getElementById('asym-slider');
   const asymVal = document.getElementById('asym-val');
+  const speedSlider = document.getElementById('speed-slider');
+  const speedVal = document.getElementById('speed-val');
   const btnReset = document.getElementById('btn-reset');
 
-  let x = 150, asym = 0.8, on = true;
+  let x = 150, asym = 0.8, on = true, speed = 1.0;
   const L = 60;
 
   function draw() {
@@ -220,12 +244,19 @@ function getForce(x, asym, L=100) {
     ctx.fill();
   }
 
-  function loop() {
+  function step() {
     if (on) {
       x += getForce(x, asym, L);
     }
     x += (Math.random() - 0.5) * 4;
     x = (x + canvas.width) % canvas.width;
+  }
+
+  function loop() {
+    // Sub-stepping: at speed<1 we skip some steps; at speed>1 we run extra.
+    let budget = speed;
+    while (budget >= 1) { step(); budget -= 1; }
+    if (Math.random() < budget) step();
     draw();
     requestAnimationFrame(loop);
   }
@@ -238,6 +269,10 @@ function getForce(x, asym, L=100) {
   asymSlider.addEventListener('input', e => {
     asym = +e.target.value;
     asymVal.textContent = asym.toFixed(2);
+  });
+  speedSlider.addEventListener('input', e => {
+    speed = +e.target.value;
+    speedVal.textContent = speed.toFixed(2) + 'x';
   });
   btnReset.addEventListener('click', () => { x = 150; });
 
@@ -255,32 +290,54 @@ function getForce(x, asym, L=100) {
   const canvas = document.getElementById('canvas-multi');
   const freqSlider = document.getElementById('freq-slider');
   const freqVal = document.getElementById('freq-val');
+  const asym2Slider = document.getElementById('asym2-slider');
+  const asym2Val = document.getElementById('asym2-val');
+  const speed2Slider = document.getElementById('speed2-slider');
+  const speed2Val = document.getElementById('speed2-val');
+  const btnSymmetric = document.getElementById('btn-symmetric');
   const btnPause = document.getElementById('btn-pause');
   const statMean = document.getElementById('stat-mean');
   const statVel = document.getElementById('stat-vel');
 
-  const N = 50, L = 60, asym = 0.85;
+  const N = 50, L = 60;
+  let asym = 0.85;
   let particles = Array.from({length: N}, () => 150 + (Math.random()-0.5)*20);
-  let on = true, paused = false, frame = 0, freq = 1.0;
+  // Cumulative unwrapped displacement per particle, so the mean stays sensible
+  // after any particle wraps around the canvas.
+  let disp = new Float64Array(N);
+  let on = true, paused = false, frame = 0, freq = 1.0, speed = 1.0;
   let startMean = 150, startTime = Date.now();
+  // Trace of mean displacement vs time, plotted in the bottom band of the canvas.
+  const trace = []; // { t: seconds-since-reset, d: mean unwrapped displacement }
+  const TRACE_MAX_SECONDS = 30;
+
+  function resetTrace() {
+    disp = new Float64Array(N);
+    startMean = particles.reduce((s, p) => s + p, 0) / N;
+    startTime = Date.now();
+    trace.length = 0;
+  }
 
   function draw() {
     const ctx = canvas.getContext('2d');
     const w = canvas.width, h = canvas.height;
     ctx.clearRect(0, 0, w, h);
 
+    // Potential + particles live in the top band (y < potentialBottom).
+    const potentialBottom = h * 0.55;
+
     ctx.beginPath();
     ctx.strokeStyle = on ? 'rgba(37, 99, 235, 0.2)' : '#eee';
     for(let i=0; i<w; i++) {
       const v = on ? getSawtooth(i, asym, L) : 0;
-      ctx.lineTo(i, h/2 + 50 - v * 80);
+      ctx.lineTo(i, potentialBottom - 10 - v * 60);
     }
     ctx.stroke();
 
     let sum = 0;
     particles.forEach(p => {
       ctx.beginPath();
-      ctx.arc(p, h/2 + 50 - (on ? getSawtooth(p, asym, L) : 0) * 80 - 5, 3, 0, Math.PI*2);
+      ctx.arc(p, potentialBottom - 15 - (on ? getSawtooth(p, asym, L) : 0) * 60, 3, 0, Math.PI*2);
       ctx.fillStyle = '#2563eb';
       ctx.fill();
       sum += p;
@@ -288,26 +345,85 @@ function getForce(x, asym, L=100) {
 
     const mean = sum / N;
     ctx.beginPath();
-    ctx.moveTo(mean, 0); ctx.lineTo(mean, h);
+    ctx.moveTo(mean, 0); ctx.lineTo(mean, potentialBottom);
     ctx.strokeStyle = '#ef4444';
     ctx.setLineDash([5, 5]);
     ctx.stroke();
     ctx.setLineDash([]);
 
-    statMean.textContent = mean.toFixed(1);
-    const elapsed = (Date.now() - startTime) / 1000;
-    statVel.textContent = ((mean - startMean) / elapsed).toFixed(2);
+    // Trace band: mean displacement over time.
+    const traceTop = potentialBottom + 10;
+    const traceBottom = h - 4;
+    const traceMid = (traceTop + traceBottom) / 2;
+    ctx.strokeStyle = '#e2e2e8';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, traceMid); ctx.lineTo(w, traceMid);
+    ctx.stroke();
+
+    ctx.fillStyle = '#4a4a6a';
+    ctx.font = '10px "Source Sans 3", sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('mean displacement', 4, traceTop + 10);
+    ctx.textAlign = 'right';
+    ctx.fillText(`window: ${TRACE_MAX_SECONDS}s`, w - 4, traceTop + 10);
+
+    if (trace.length > 1) {
+      // Scale so the largest |d| in the trace fills ~80% of the band.
+      let maxAbs = 1;
+      for (const pt of trace) if (Math.abs(pt.d) > maxAbs) maxAbs = Math.abs(pt.d);
+      const amp = (traceBottom - traceTop) / 2 * 0.8;
+      const tNow = (Date.now() - startTime) / 1000;
+      const tMin = Math.max(0, tNow - TRACE_MAX_SECONDS);
+      const xFor = t => (t - tMin) / (tNow - tMin + 1e-6) * w;
+
+      ctx.strokeStyle = '#2563eb';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      trace.forEach((pt, i) => {
+        const px = xFor(pt.t);
+        const py = traceMid - (pt.d / maxAbs) * amp;
+        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      });
+      ctx.stroke();
+    }
+
+    let sumD = 0;
+    for (let i = 0; i < N; i++) sumD += disp[i];
+    const meanDisp = sumD / N;
+    statMean.textContent = meanDisp.toFixed(1);
+    const elapsed = Math.max(0.01, (Date.now() - startTime) / 1000);
+    statVel.textContent = (meanDisp / elapsed).toFixed(2);
+  }
+
+  function step() {
+    frame++;
+    if (frame % Math.max(1, Math.floor(60 / freq)) === 0) on = !on;
+    const w = canvas.width || 1;
+    for (let i = 0; i < N; i++) {
+      const p = particles[i];
+      const d = (on ? getForce(p, asym, L) : 0) + (Math.random() - 0.5) * 5;
+      disp[i] += d;
+      let np = p + d;
+      np = (np % w + w) % w;
+      particles[i] = np;
+    }
   }
 
   function loop() {
     if (!paused) {
-      frame++;
-      if (frame % Math.floor(60 / freq) === 0) on = !on;
-      
-      particles = particles.map(p => {
-        let np = p + (on ? getForce(p, asym, L) : 0) + (Math.random() - 0.5) * 5;
-        return (np + canvas.width) % canvas.width;
-      });
+      let budget = speed;
+      while (budget >= 1) { step(); budget -= 1; }
+      if (Math.random() < budget) step();
+
+      // Sample the mean unwrapped displacement at ~render rate.
+      let sumD = 0;
+      for (let i = 0; i < N; i++) sumD += disp[i];
+      const meanD = sumD / N;
+      const t = (Date.now() - startTime) / 1000;
+      trace.push({ t, d: meanD });
+      const tCut = t - TRACE_MAX_SECONDS;
+      while (trace.length && trace[0].t < tCut) trace.shift();
     }
     draw();
     requestAnimationFrame(loop);
@@ -317,6 +433,22 @@ function getForce(x, asym, L=100) {
     freq = +e.target.value;
     freqVal.textContent = freq.toFixed(1);
   });
+  asym2Slider.addEventListener('input', e => {
+    asym = +e.target.value;
+    asym2Val.textContent = asym.toFixed(2);
+    resetTrace();
+  });
+  speed2Slider.addEventListener('input', e => {
+    speed = +e.target.value;
+    speed2Val.textContent = speed.toFixed(2) + 'x';
+  });
+  btnSymmetric.addEventListener('click', () => {
+    // Symmetric sawtooth: peak centered -> asym = 0.5 -> no net drift.
+    asym = 0.5;
+    asym2Slider.value = 0.5;
+    asym2Val.textContent = '0.50';
+    resetTrace();
+  });
   btnPause.addEventListener('click', () => {
     paused = !paused;
     btnPause.textContent = paused ? 'Resume' : 'Pause';
@@ -324,7 +456,7 @@ function getForce(x, asym, L=100) {
 
   new ResizeObserver(() => {
     canvas.width = container.clientWidth - 48;
-    canvas.height = 200;
+    canvas.height = 260;
   }).observe(container);
 
   loop();

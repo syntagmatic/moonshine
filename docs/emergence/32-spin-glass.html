@@ -310,15 +310,27 @@ random path you took while cooling.
         <span class="val" id="val-cooling">1.5</span>
       </div>
     </div>
+    <div class="control-group">
+      <label>Speed</label>
+      <div class="slider-row">
+        <input type="range" id="slider-speed" min="1" max="32" step="1" value="8">
+        <span class="val" id="val-speed">8&times;</span>
+      </div>
+    </div>
     <button class="btn" id="btn-anneal">Run annealing</button>
+    <button class="btn" id="btn-pause" disabled>Pause</button>
+    <button class="btn" id="btn-reset">Reset</button>
     <button class="btn" id="btn-clear-runs">Clear runs</button>
   </div>
   <div class="run-strip" id="run-strip"></div>
+  <p class="click-hint">While paused, click a spin to flip it by hand.</p>
   <p class="figure-caption">
-    <span class="figure-label">Figure 2.</span> Each colored line is one cooling run.
-    The final energies differ because the system gets trapped in different valleys of
-    the energy landscape. Click a run chip to highlight that trajectory and show its
-    final spin configuration.
+    <span class="figure-label">Figure 2.</span> Each colored line is one cooling run;
+    the dashed grey curve is the temperature schedule \( T(t) \) on its own axis.
+    Final energies differ because the system gets trapped in different valleys of
+    the energy landscape. Pause any time to inspect the configuration, or flip spins
+    manually to probe the local barrier. Click a run chip to recall that trajectory's
+    final state.
   </p>
 </div>
 
@@ -773,6 +785,14 @@ spin glasses computationally hard.
       .attr("r", Math.max(spacing * 0.22, 8))
       .attr("stroke", "#fff")
       .attr("stroke-width", 1.5)
+      .attr("cursor", "pointer")
+      .on("click", function (ev, d) {
+        // Manual flip only allowed when paused or idle (not running)
+        if (running && !paused) return;
+        d.spin *= -1;
+        renderLattice();
+        updateAnnealStats(lastT, totalEnergy(), lastStep);
+      })
       .merge(nodeSel)
       .attr("cx", function (d) { return nodeX(d); })
       .attr("cy", function (d) { return nodeY(d); })
@@ -781,8 +801,8 @@ spin glasses computationally hard.
 
   // --- Energy chart ---
   var chartW, chartH;
-  var chartMargin = { top: 15, right: 15, bottom: 30, left: 45 };
-  var svgChart, xScale, yScale, gXAxis, gYAxis, gLines;
+  var chartMargin = { top: 15, right: 45, bottom: 30, left: 45 };
+  var svgChart, xScale, yScale, yTempScale, gXAxis, gYAxis, gYTempAxis, gLines, gTempLine, gProgress;
   var runs = [];
   var runColors = d3.schemeTableau10;
 
@@ -800,11 +820,14 @@ spin glasses computationally hard.
 
     xScale = d3.scaleLinear().domain([0, 100]).range([0, innerW]);
     yScale = d3.scaleLinear().domain([-30, 30]).range([innerH, 0]);
+    yTempScale = d3.scaleLinear().domain([0, 5]).range([innerH, 0]);
 
     var g = svgChart.append("g")
       .attr("transform", "translate(" + chartMargin.left + "," + chartMargin.top + ")");
 
+    gTempLine = g.append("g");
     gLines = g.append("g");
+    gProgress = g.append("g");
 
     gXAxis = g.append("g")
       .attr("transform", "translate(0," + innerH + ")")
@@ -812,6 +835,12 @@ spin glasses computationally hard.
 
     gYAxis = g.append("g")
       .call(d3.axisLeft(yScale).ticks(5));
+
+    gYTempAxis = g.append("g")
+      .attr("transform", "translate(" + innerW + ",0)")
+      .call(d3.axisRight(yTempScale).ticks(4));
+    gYTempAxis.selectAll("text").attr("fill", "#6b7280").attr("font-size", 10);
+    gYTempAxis.selectAll("line,path").attr("stroke", "#9ca3af");
 
     g.append("text")
       .attr("x", innerW / 2)
@@ -829,6 +858,59 @@ spin glasses computationally hard.
       .attr("font-size", 11)
       .attr("fill", "var(--text-2)")
       .text("Energy");
+
+    g.append("text")
+      .attr("transform", "rotate(-90)")
+      .attr("x", -innerH / 2)
+      .attr("y", innerW + 36)
+      .attr("text-anchor", "middle")
+      .attr("font-size", 11)
+      .attr("fill", "#6b7280")
+      .text("Temperature");
+
+    renderTempSchedule();
+  }
+
+  function renderTempSchedule() {
+    if (!gTempLine) return;
+    var coolingRate = parseFloat(document.getElementById("slider-cooling").value);
+    var T0 = 5.0;
+    var pts = [];
+    for (var i = 0; i <= 100; i++) {
+      var progress = i / 100;
+      var T = T0 * Math.exp(-coolingRate * progress * 5);
+      pts.push({ progress: i, T: T });
+    }
+    yTempScale.domain([0, T0]);
+    if (gYTempAxis) {
+      gYTempAxis.call(d3.axisRight(yTempScale).ticks(4));
+      gYTempAxis.selectAll("text").attr("fill", "#6b7280").attr("font-size", 10);
+      gYTempAxis.selectAll("line,path").attr("stroke", "#9ca3af");
+    }
+    var line = d3.line()
+      .x(function (d) { return xScale(d.progress); })
+      .y(function (d) { return yTempScale(d.T); });
+    gTempLine.selectAll("path").remove();
+    gTempLine.append("path")
+      .attr("d", line(pts))
+      .attr("fill", "none")
+      .attr("stroke", "#9ca3af")
+      .attr("stroke-width", 1.2)
+      .attr("stroke-dasharray", "3,3")
+      .attr("stroke-opacity", 0.8);
+  }
+
+  function renderProgressMarker(progressPct) {
+    if (!gProgress) return;
+    gProgress.selectAll("*").remove();
+    if (progressPct == null) return;
+    var innerH = chartH - chartMargin.top - chartMargin.bottom;
+    gProgress.append("line")
+      .attr("x1", xScale(progressPct)).attr("x2", xScale(progressPct))
+      .attr("y1", 0).attr("y2", innerH)
+      .attr("stroke", "var(--accent)")
+      .attr("stroke-width", 1)
+      .attr("stroke-opacity", 0.4);
   }
 
   function renderChart() {
@@ -890,85 +972,169 @@ spin glasses computationally hard.
 
   // --- Annealing logic ---
   var running = false;
+  var paused = false;
+  var currentRun = null;
+  var currentStep = 0;
+  var currentTotalSteps = 400;
+  var currentT0 = 5.0;
+  var currentCoolingRate = 1.5;
+  var lastT = null;
+  var lastStep = 0;
+  var rafId = null;
 
-  function runAnnealing() {
-    if (running) return;
-    running = true;
+  function setButtonStates() {
+    var btnRun = document.getElementById("btn-anneal");
+    var btnPause = document.getElementById("btn-pause");
+    if (running && !paused) {
+      btnRun.textContent = "Running\u2026";
+      btnRun.disabled = true;
+      btnPause.disabled = false;
+      btnPause.textContent = "Pause";
+    } else if (running && paused) {
+      btnRun.textContent = "Resume";
+      btnRun.disabled = false;
+      btnPause.disabled = true;
+      btnPause.textContent = "Paused";
+    } else {
+      btnRun.textContent = "Run annealing";
+      btnRun.disabled = false;
+      btnPause.disabled = true;
+      btnPause.textContent = "Pause";
+    }
+  }
 
-    var coolingRate = parseFloat(document.getElementById("slider-cooling").value);
-    var T0 = 5.0;
-    var Tmin = 0.01;
-    var stepsPerFrame = 8;
-    var totalSteps = 400;
-    var N = nodes.length;
-    var step = 0;
+  function startNewRun() {
+    currentCoolingRate = parseFloat(document.getElementById("slider-cooling").value);
+    currentT0 = 5.0;
+    currentTotalSteps = 400;
+    currentStep = 0;
+
     var runId = runs.length + 1;
     var color = runColors[(runId - 1) % runColors.length];
 
     // Random initial spins
     nodes.forEach(function (n) { n.spin = Math.random() < 0.5 ? 1 : -1; });
 
-    var trace = [];
-    var run = { id: runId, color: color, trace: trace, finalSpins: null, finalEnergy: 0, highlighted: true };
     runs.forEach(function (r) { r.highlighted = false; });
-    runs.push(run);
+    currentRun = {
+      id: runId, color: color, trace: [],
+      finalSpins: null, finalEnergy: 0, highlighted: true
+    };
+    runs.push(currentRun);
+    renderLattice();
+    renderChart();
+    renderRunChips();
+  }
 
-    function frame() {
-      for (var s = 0; s < stepsPerFrame && step < totalSteps; s++, step++) {
-        var progress = step / totalSteps;
-        var T = T0 * Math.exp(-coolingRate * progress * 5);
-        if (T < Tmin) T = Tmin;
+  function frame() {
+    if (!running || paused) { rafId = null; return; }
+    var Tmin = 0.01;
+    var speed = parseInt(document.getElementById("slider-speed").value, 10);
+    var stepsThisFrame = speed; // macro-steps per frame (was fixed at 8)
+    var N = nodes.length;
 
-        // One full sweep: attempt to flip every spin once
-        for (var k = 0; k < N; k++) {
-          var idx = Math.floor(Math.random() * N);
-          var dE = deltaE(idx);
-          if (dE <= 0 || Math.random() < Math.exp(-dE / T)) {
-            nodes[idx].spin *= -1;
-          }
-        }
+    for (var s = 0; s < stepsThisFrame && currentStep < currentTotalSteps; s++, currentStep++) {
+      var progress = currentStep / currentTotalSteps;
+      var T = currentT0 * Math.exp(-currentCoolingRate * progress * 5);
+      if (T < Tmin) T = Tmin;
 
-        if (step % 2 === 0) {
-          trace.push({ progress: progress * 100, energy: totalEnergy(), temp: T });
+      // One full sweep: attempt to flip every spin once
+      for (var k = 0; k < N; k++) {
+        var idx = Math.floor(Math.random() * N);
+        var dE = deltaE(idx);
+        if (dE <= 0 || Math.random() < Math.exp(-dE / T)) {
+          nodes[idx].spin *= -1;
         }
       }
 
-      renderLattice();
-      renderChart();
-      updateAnnealStats(
-        trace.length > 0 ? trace[trace.length - 1].temp : T0,
-        totalEnergy(),
-        step
-      );
-
-      if (step < totalSteps) {
-        requestAnimationFrame(frame);
-      } else {
-        finish();
+      if (currentStep % 2 === 0) {
+        currentRun.trace.push({ progress: progress * 100, energy: totalEnergy(), temp: T });
       }
+      lastT = T;
+      lastStep = currentStep;
     }
 
-    function finish() {
-      run.finalSpins = nodes.map(function (n) { return n.spin; });
-      run.finalEnergy = totalEnergy();
-      renderLattice();
-      renderChart();
-      renderRunChips();
-      updateAnnealStats(trace[trace.length - 1].temp, run.finalEnergy, step);
-      running = false;
-    }
+    renderLattice();
+    renderChart();
+    renderProgressMarker(100 * currentStep / currentTotalSteps);
+    updateAnnealStats(lastT != null ? lastT : currentT0, totalEnergy(), currentStep);
 
+    if (currentStep < currentTotalSteps) {
+      rafId = requestAnimationFrame(frame);
+    } else {
+      finish();
+    }
+  }
+
+  function finish() {
+    currentRun.finalSpins = nodes.map(function (n) { return n.spin; });
+    currentRun.finalEnergy = totalEnergy();
+    renderLattice();
+    renderChart();
+    renderRunChips();
+    renderProgressMarker(null);
+    updateAnnealStats(lastT, currentRun.finalEnergy, currentStep);
+    running = false;
+    paused = false;
+    currentRun = null;
+    setButtonStates();
+  }
+
+  function startOrResume() {
+    if (running && paused) {
+      paused = false;
+      setButtonStates();
+      frame();
+      return;
+    }
+    if (running) return;
+    running = true;
+    paused = false;
+    startNewRun();
+    setButtonStates();
     frame();
+  }
+
+  function pauseAnnealing() {
+    if (!running || paused) return;
+    paused = true;
+    if (rafId != null) { cancelAnimationFrame(rafId); rafId = null; }
+    setButtonStates();
+  }
+
+  function resetAnnealing() {
+    if (rafId != null) { cancelAnimationFrame(rafId); rafId = null; }
+    // Discard incomplete run if mid-flight
+    if (currentRun && currentRun.finalSpins == null) {
+      runs = runs.filter(function (r) { return r !== currentRun; });
+    }
+    running = false;
+    paused = false;
+    currentRun = null;
+    currentStep = 0;
+    lastT = null;
+    lastStep = 0;
+    nodes.forEach(function (n) { n.spin = Math.random() < 0.5 ? 1 : -1; });
+    renderLattice();
+    renderChart();
+    renderRunChips();
+    renderProgressMarker(null);
+    updateAnnealStats("--", totalEnergy(), 0);
+    setButtonStates();
   }
 
   buildAnnealing();
   initLatticeSVG();
   renderLattice();
   initChart();
+  setButtonStates();
 
-  document.getElementById("btn-anneal").addEventListener("click", runAnnealing);
+  document.getElementById("btn-anneal").addEventListener("click", startOrResume);
+  document.getElementById("btn-pause").addEventListener("click", pauseAnnealing);
+  document.getElementById("btn-reset").addEventListener("click", resetAnnealing);
 
   document.getElementById("btn-clear-runs").addEventListener("click", function () {
+    if (running) resetAnnealing();
     runs = [];
     renderChart();
     renderRunChips();
@@ -980,6 +1146,12 @@ spin glasses computationally hard.
   var sliderCooling = document.getElementById("slider-cooling");
   sliderCooling.addEventListener("input", function () {
     document.getElementById("val-cooling").textContent = parseFloat(this.value).toFixed(1);
+    renderTempSchedule();
+  });
+
+  var sliderSpeed = document.getElementById("slider-speed");
+  sliderSpeed.addEventListener("input", function () {
+    document.getElementById("val-speed").textContent = this.value + "\u00d7";
   });
 
   var ro = new ResizeObserver(function () {

@@ -118,8 +118,9 @@ Below, each dot is an agent. At each step, two agents are chosen at random. If t
   <div class="stat-row">
     <div class="stat"><span class="stat-label">Interactions:</span> <span class="stat-val" id="step-count-1">0</span></div>
     <div class="stat"><span class="stat-label">Clusters:</span> <span class="stat-val" id="cluster-count-1">--</span></div>
+    <div class="stat"><span class="stat-label">Spread (&sigma;):</span> <span class="stat-val" id="spread-1">--</span></div>
   </div>
-  <p class="figure-caption"><span class="figure-label">Figure 1.</span> Agents on a number line average their opinions when close enough. A high threshold leads to consensus; a low one leads to polarization.</p>
+  <p class="figure-caption"><span class="figure-label">Figure 1.</span> Agents on a number line average their opinions when close enough. A high threshold leads to consensus; a low one leads to polarization. Hover any agent to see its confidence window.</p>
 </div>
 
 <div class="insight">
@@ -172,6 +173,7 @@ Real societies have structure. Restricting interactions to a network of neighbor
   <div class="stat-row">
     <div class="stat"><span class="stat-label">Interactions:</span> <span class="stat-val" id="step-count-3">0</span></div>
     <div class="stat"><span class="stat-label">Clusters:</span> <span class="stat-val" id="cluster-count-3">--</span></div>
+    <div class="stat"><span class="stat-label">Active edges:</span> <span class="stat-val" id="active-edges-3">--</span></div>
   </div>
   <p class="figure-caption"><span class="figure-label">Figure 3.</span> Opinion dynamics on a small-world network. Rewiring shortcuts break down local echo chambers and encourage global consensus.</p>
 </div>
@@ -186,11 +188,10 @@ Real societies have structure. Restricting interactions to a network of neighbor
 
 <script>
 const state = {
-  deffuant: { threshold: 0.30, speed: 10, playing: false, steps: 0, agents: [] },
+  deffuant: { threshold: 0.30, speed: 10, playing: false, steps: 0, agents: [], hoverId: null },
   phase: { data: [], running: false },
   network: { threshold: 0.25, rewire: 0.05, playing: false, steps: 0, nodes: [], edges: [] }
 };
-const dispatch = d3.dispatch('update', 'reset');
 
 const opinionColor = d3.scaleLinear().domain([0, 0.5, 1]).range(['#2563eb', '#94a3b8', '#dc2626']).clamp(true);
 
@@ -209,16 +210,27 @@ const opinionColor = d3.scaleLinear().domain([0, 0.5, 1]).range(['#2563eb', '#94
   }
   function render() {
     let g = svg.selectAll('g.main').data([0]).join('g').attr('class', 'main').attr('transform', 'translate(20,30)');
-    const bandW = xScale(state.deffuant.threshold);
-    g.selectAll('rect.band').data([0]).join('rect').attr('class', 'band').attr('fill', 'var(--accent-light)').attr('opacity', 0.2)
-     .attr('x', xScale(0.5)-bandW).attr('y', 0).attr('width', bandW*2).attr('height', height);
     const sorted = state.deffuant.agents.slice().sort((a,b) => a.opinion - b.opinion);
     const yBand = d3.scaleBand().domain(d3.range(N)).range([10, height-10]);
-    g.selectAll('circle').data(sorted, d => d.id).join('circle').attr('r', 3.5).attr('opacity', 0.8)
-     .attr('cx', d => xScale(d.opinion)).attr('cy', (_,i) => yBand(i)).attr('fill', d => opinionColor(d.opinion));
+    const hovered = state.deffuant.hoverId != null ? state.deffuant.agents.find(d => d.id === state.deffuant.hoverId) : null;
+    g.selectAll('rect.window').data(hovered ? [hovered] : []).join('rect').attr('class','window')
+     .attr('fill', 'var(--accent-light)').attr('opacity', 0.5)
+     .attr('x', d => xScale(Math.max(0, d.opinion - state.deffuant.threshold)))
+     .attr('y', 0)
+     .attr('width', d => xScale(Math.min(1, d.opinion + state.deffuant.threshold)) - xScale(Math.max(0, d.opinion - state.deffuant.threshold)))
+     .attr('height', height);
+    g.selectAll('circle').data(sorted, d => d.id).join('circle').attr('r', d => d.id === state.deffuant.hoverId ? 5 : 3.5).attr('opacity', 0.85)
+     .attr('cx', d => xScale(d.opinion)).attr('cy', (_,i) => yBand(i)).attr('fill', d => opinionColor(d.opinion))
+     .attr('stroke', d => d.id === state.deffuant.hoverId ? 'var(--text)' : 'none').attr('stroke-width', 1.5)
+     .style('cursor', 'pointer')
+     .on('mouseover', (e,d) => { state.deffuant.hoverId = d.id; render(); })
+     .on('mouseout', () => { state.deffuant.hoverId = null; render(); });
     document.getElementById('step-count-1').textContent = state.deffuant.steps;
     let clusters = 1; sorted.forEach((d,i) => { if(i>0 && sorted[i].opinion-sorted[i-1].opinion > 0.04) clusters++; });
     document.getElementById('cluster-count-1').textContent = clusters;
+    const mean = d3.mean(state.deffuant.agents, d => d.opinion);
+    const sigma = Math.sqrt(d3.mean(state.deffuant.agents, d => (d.opinion-mean)*(d.opinion-mean)));
+    document.getElementById('spread-1').textContent = sigma.toFixed(3);
   }
   function tick() {
     if(!state.deffuant.playing) return;
@@ -305,7 +317,17 @@ const opinionColor = d3.scaleLinear().domain([0, 0.5, 1]).range(['#2563eb', '#94
   function layout() { width = container.clientWidth - 48; svg.attr('viewBox', `0 0 ${width} ${height}`); }
   function render() {
     let g = svg.selectAll('g.main').data([0]).join('g').attr('class', 'main');
-    g.selectAll('line').data(state.network.edges).join('line').attr('stroke', '#ccc').attr('stroke-opacity', 0.4)
+    const thr = state.network.threshold;
+    let active = 0;
+    g.selectAll('line').data(state.network.edges).join('line')
+     .attr('stroke', d => {
+       const gap = Math.abs((d.source.opinion ?? 0) - (d.target.opinion ?? 0));
+       const isActive = gap < thr;
+       if(isActive) active++;
+       return isActive ? 'var(--c-env)' : '#ccc';
+     })
+     .attr('stroke-opacity', d => Math.abs((d.source.opinion ?? 0) - (d.target.opinion ?? 0)) < thr ? 0.7 : 0.25)
+     .attr('stroke-width', d => Math.abs((d.source.opinion ?? 0) - (d.target.opinion ?? 0)) < thr ? 1.5 : 1)
      .attr('x1', d => d.source.x).attr('y1', d => d.source.y).attr('x2', d => d.target.x).attr('y2', d => d.target.y);
     g.selectAll('circle').data(state.network.nodes).join('circle').attr('r', 5).attr('fill', d => opinionColor(d.opinion)).attr('stroke', '#fff')
      .attr('cx', d => d.x).attr('cy', d => d.y);
@@ -313,6 +335,7 @@ const opinionColor = d3.scaleLinear().domain([0, 0.5, 1]).range(['#2563eb', '#94
     let s = state.network.nodes.map(d => d.opinion).sort();
     let c = 1; s.forEach((v,i) => { if(i>0 && s[i]-s[i-1]>0.04) c++; });
     document.getElementById('cluster-count-3').textContent = c;
+    document.getElementById('active-edges-3').textContent = active + ' / ' + state.network.edges.length;
   }
   function tick() {
     if(!state.network.playing) return;
@@ -325,7 +348,7 @@ const opinionColor = d3.scaleLinear().domain([0, 0.5, 1]).range(['#2563eb', '#94
     }
     render(); requestAnimationFrame(tick);
   }
-  document.getElementById('thresh-slider-3').oninput = e => { state.network.threshold = +e.target.value/100; document.getElementById('thresh-val-3').textContent = state.network.threshold.toFixed(2); };
+  document.getElementById('thresh-slider-3').oninput = e => { state.network.threshold = +e.target.value/100; document.getElementById('thresh-val-3').textContent = state.network.threshold.toFixed(2); render(); };
   document.getElementById('rewire-slider').oninput = e => { state.network.rewire = +e.target.value/100; document.getElementById('rewire-val').textContent = state.network.rewire.toFixed(2); init(); };
   document.getElementById('play-btn-3').onclick = function() { state.network.playing = !state.network.playing; this.textContent = state.network.playing ? 'Pause' : 'Play'; tick(); };
   document.getElementById('reset-btn-3').onclick = init;

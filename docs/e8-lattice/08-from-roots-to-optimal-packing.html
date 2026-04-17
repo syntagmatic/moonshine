@@ -191,11 +191,10 @@ table.compact tr.proven td { background: #dcfce7; }
 
 <div class="figure" id="fig-shell-explorer">
   <div id="shell-svg"></div>
-  <div class="controls">
-    <span>Squared length:</span>
-    <button class="btn" data-shell="2">k = 2</button>
-    <button class="btn" data-shell="4">k = 4</button>
-    <button class="btn" data-shell="6">k = 6</button>
+  <div class="dim-slider-wrap">
+    <span>Squared length k:</span>
+    <input type="range" id="shell-slider" min="0" max="7" value="0" step="1">
+    <span class="dim-label" id="shell-k-label">2</span>
   </div>
   <div class="controls" style="margin-top: 0.35rem;">
     <span>View:</span>
@@ -203,7 +202,7 @@ table.compact tr.proven td { background: #dcfce7; }
     <button class="btn view-btn" data-view="coxeter">Coxeter projection</button>
   </div>
   <p class="status-bar" id="shell-status">Showing the k = 2 shell (240 vectors).</p>
-  <p class="figure-caption"><span class="figure-label">Figure 2.</span> E8 lattice shells viewed two ways. In parallel-coordinates mode, blue lines are integer-coordinate vectors and indigo lines are half-integer vectors. In Coxeter mode, gray dots show the 240 roots for reference; colored dots show the selected shell projected onto the Coxeter plane.</p>
+  <p class="figure-caption"><span class="figure-label">Figure 2.</span> E8 lattice shells viewed two ways. Slide k through 2, 4, 6, 8, 10, 12, 14, 16 to step outward through successive shells. In parallel-coordinates mode, blue lines are integer-coordinate vectors and indigo lines are half-integer vectors. In Coxeter mode, gray dots show the 240 roots for reference; colored dots show the selected shell projected onto the Coxeter plane. For shells beyond k&nbsp;=&nbsp;2 a uniform stride sample (at most ~1.5k primitives) is drawn to keep the view responsive; the full shell count is always reported above.</p>
 </div>
 
 <h2>The theta series</h2>
@@ -279,7 +278,7 @@ table.compact tr.proven td { background: #dcfce7; }
     <span class="dim-label" id="dim-label">8</span>
   </div>
   <div class="tooltip-box" id="bound-tooltip"></div>
-  <p class="status-bar" id="bound-status">Dimension 8: lower = 240, upper = 240, tight.</p>
+  <p class="status-bar" id="bound-status">dim 8: best known = 240, LP bound = 240, gap = 0 (tight).</p>
   <p class="figure-caption"><span class="figure-label">Figure 4.</span> Kissing-number bounds across dimensions 2&ndash;24 (log scale). Blue: best known kissing configuration. Red: Delsarte LP upper bound. Use the slider to highlight a dimension; the corresponding table row above highlights in sync.</p>
 </div>
 
@@ -435,15 +434,36 @@ math('math-magic-sketch',
 (function () {
   var container = document.getElementById('shell-svg');
   var status = document.getElementById('shell-status');
+  var slider = document.getElementById('shell-slider');
+  var kLabel = document.getElementById('shell-k-label');
+  var kValues = [2, 4, 6, 8, 10, 12, 14, 16];
   var state = { k: 2, view: 'parallel' };
   var allRoots240 = E8.roots.all();
 
   // Precompute Coxeter projections of all 240 roots
   var rootsCox = allRoots240.map(function (r) { return E8.project.toCoxeterPlane(r); });
 
+  // Cache shell enumerations. Even k=16 (140,400 vectors) is a one-shot cost;
+  // caching keeps slider dragging responsive after the first visit to each k.
+  var shellCache = {};
+  function getShell(k) {
+    if (!shellCache[k]) shellCache[k] = E8.lattice.shell(k);
+    return shellCache[k];
+  }
+
+  // Uniform-stride subsample for rendering. We always report the true count.
+  // Thresholds are chosen so each view stays under ~1500 primitives.
+  function subsample(arr, maxDraw) {
+    if (arr.length <= maxDraw) return { data: arr, sampled: false };
+    var step = arr.length / maxDraw;
+    var out = [];
+    for (var i = 0; i < maxDraw; i++) out.push(arr[Math.floor(i * step)]);
+    return { data: out, sampled: true };
+  }
+
   function renderParallel() {
     d3.select(container).selectAll('*').remove();
-    var shell = E8.lattice.shell(state.k);
+    var shell = getShell(state.k);
     var count = shell.length;
 
     var width = 880, height = 260;
@@ -478,14 +498,9 @@ math('math-magic-sketch',
         .attr('stroke', '#e2e8f0').attr('stroke-width', 0.5).attr('stroke-dasharray', '3,3');
     });
 
-    var displayShell = shell;
-    var sampled = false;
-    if (shell.length > 1000) {
-      displayShell = [];
-      var step = Math.max(1, Math.floor(shell.length / 800));
-      for (var i = 0; i < shell.length; i += step) displayShell.push(shell[i]);
-      sampled = true;
-    }
+    var sub = subsample(shell, 800);
+    var displayShell = sub.data;
+    var sampled = sub.sampled;
 
     displayShell.forEach(function (r) {
       var hasHalf = r.some(function (x) { return Math.abs(x - Math.round(x)) > 0.01; });
@@ -499,13 +514,14 @@ math('math-magic-sketch',
         .attr('stroke-opacity', shell.length > 500 ? 0.15 : 0.4);
     });
 
-    status.textContent = 'Shell k = ' + state.k + ': ' + count.toLocaleString() + ' vectors (parallel coordinates).' +
-      (sampled ? ' Showing a sample of ' + displayShell.length + '.' : '');
+    status.textContent = count.toLocaleString() + ' vectors at squared length k = ' + state.k +
+      ' (parallel coordinates).' +
+      (sampled ? ' Uniform sample of ' + displayShell.length.toLocaleString() + ' drawn.' : '');
   }
 
   function renderCoxeter() {
     d3.select(container).selectAll('*').remove();
-    var shell = E8.lattice.shell(state.k);
+    var shell = getShell(state.k);
     var count = shell.length;
 
     var size = 500;
@@ -538,16 +554,16 @@ math('math-magic-sketch',
     });
 
     // Draw the current shell in color
-    var sampled = false;
-    var displayCox = shellCox;
-    if (shellCox.length > 2000) {
-      displayCox = [];
-      var step = Math.max(1, Math.floor(shellCox.length / 1500));
-      for (var i = 0; i < shellCox.length; i += step) displayCox.push(shellCox[i]);
-      sampled = true;
-    }
+    var sub = subsample(shellCox, 1500);
+    var displayCox = sub.data;
+    var sampled = sub.sampled;
 
-    var shellColor = state.k === 2 ? 'var(--c-int)' : (state.k === 4 ? '#059669' : '#dc2626');
+    // Color ramp across the 8 shell levels (k = 2, 4, ..., 16)
+    var shellPalette = {
+      2: 'var(--c-int)', 4: '#059669', 6: '#0891b2', 8: '#7c3aed',
+      10: '#c026d3', 12: '#dc2626', 14: '#ea580c', 16: '#f59e0b'
+    };
+    var shellColor = shellPalette[state.k] || 'var(--c-shell)';
     var dotR = shellCox.length > 1000 ? 1.5 : (shellCox.length > 300 ? 2 : 2.5);
     var dotOpacity = shellCox.length > 1000 ? 0.35 : (shellCox.length > 300 ? 0.5 : 0.7);
 
@@ -577,8 +593,9 @@ math('math-magic-sketch',
         .attr('stroke-dasharray', '3,5');
     });
 
-    status.textContent = 'Shell k = ' + state.k + ': ' + count.toLocaleString() + ' vectors (Coxeter projection).' +
-      (sampled ? ' Showing a sample of ' + displayCox.length + '.' : '');
+    status.textContent = count.toLocaleString() + ' vectors at squared length k = ' + state.k +
+      ' (Coxeter projection).' +
+      (sampled ? ' Uniform sample of ' + displayCox.length.toLocaleString() + ' drawn.' : '');
   }
 
   function render() {
@@ -589,11 +606,17 @@ math('math-magic-sketch',
     }
   }
 
-  d3.selectAll('[data-shell]').on('click', function () {
-    d3.selectAll('[data-shell]').classed('active', false);
-    d3.select(this).classed('active', true);
-    state.k = +this.getAttribute('data-shell');
-    render();
+  // Slider update: label flips immediately; render is deferred one frame so
+  // the label paints before we start enumeration (matters on the first visit
+  // to k=12/14/16, where `generateLattice` is the dominant cost). Subsequent
+  // visits hit the cache and are instant.
+  var pending = null;
+  slider.addEventListener('input', function () {
+    var k = kValues[+this.value];
+    kLabel.textContent = k;
+    state.k = k;
+    if (pending) cancelAnimationFrame(pending);
+    pending = requestAnimationFrame(function () { pending = null; render(); });
   });
 
   d3.selectAll('.view-btn').on('click', function () {
@@ -603,7 +626,6 @@ math('math-magic-sketch',
     render();
   });
 
-  d3.select('[data-shell="2"]').classed('active', true);
   d3.select('[data-view="parallel"]').classed('active', true);
   render();
 })();
@@ -709,37 +731,60 @@ math('math-magic-sketch',
   legend.append('text').attr('x', 32).attr('y', 22).attr('font-size', 11).attr('fill', 'var(--text)')
     .text('Delsarte LP upper bound');
 
-  // Tooltip on hover over data points
-  var allDots = g.selectAll('circle.lower, circle.upper');
-  svg.on('mousemove', function (event) {
-    var coords = d3.pointer(event, g.node());
-    var mx = coords[0];
-    // Find closest data point by x
-    var closestDist = Infinity, closest = null;
-    data.forEach(function (d) {
-      var dist = Math.abs(xScale(d.n) - mx);
-      if (dist < closestDist) { closestDist = dist; closest = d; }
-    });
-    if (closest && closestDist < 30) {
-      var tight = closest.lower === closest.upper;
-      tooltip.textContent = 'n=' + closest.n + ': lower=' + closest.lower.toLocaleString() +
-        ', upper=' + closest.upper.toLocaleString() + (tight ? ' (tight)' : '');
-      var figRect = figEl.getBoundingClientRect();
-      var svgRect = svg.node().getBoundingClientRect();
-      var px = svgRect.left - figRect.left + margin.left + xScale(closest.n);
-      var py = margin.top + yScale(closest.lower) - 30;
-      // Adjust for viewBox scaling
-      var svgWidth = svgRect.width;
-      var scaleFactor = svgWidth / width;
-      px = (margin.left + xScale(closest.n)) * scaleFactor + (svgRect.left - figRect.left);
-      py = (margin.top + yScale(closest.lower)) * scaleFactor - 30 + (svgRect.top - figRect.top);
-      tooltip.style.left = px + 'px';
-      tooltip.style.top = py + 'px';
-      tooltip.style.opacity = '1';
-    } else {
-      tooltip.style.opacity = '0';
-    }
-  });
+  // Static value labels at each lower-bound point (placed to avoid crowding)
+  g.selectAll('text.lower-label').data(data).enter().append('text')
+    .attr('class', 'lower-label')
+    .attr('x', function (d) { return xScale(d.n); })
+    .attr('y', function (d) { return yScale(d.lower) + (d.lower === d.upper ? -10 : 14); })
+    .attr('text-anchor', 'middle')
+    .attr('font-size', 9)
+    .attr('font-family', 'var(--heading-font)')
+    .attr('fill', 'var(--c-lower)')
+    .attr('pointer-events', 'none')
+    .text(function (d) { return d.lower.toLocaleString(); });
+  // Static upper-bound labels only where the bound diverges from the lower
+  g.selectAll('text.upper-label').data(data.filter(function (d) { return d.lower !== d.upper; })).enter().append('text')
+    .attr('class', 'upper-label')
+    .attr('x', function (d) { return xScale(d.n); })
+    .attr('y', function (d) { return yScale(d.upper) - 8; })
+    .attr('text-anchor', 'middle')
+    .attr('font-size', 9)
+    .attr('font-family', 'var(--heading-font)')
+    .attr('fill', 'var(--c-upper)')
+    .attr('pointer-events', 'none')
+    .text(function (d) { return d.upper.toLocaleString(); });
+
+  // Invisible hover targets — one per dimension, full plot height — for precise tooltip positioning
+  function tooltipFor(d) {
+    var tight = d.lower === d.upper;
+    var gap = d.upper - d.lower;
+    return 'dim ' + d.n + ': best known = ' + d.lower.toLocaleString() +
+      ', LP bound = ' + d.upper.toLocaleString() +
+      (tight ? ', gap = 0 (tight)' : ', gap = ' + gap.toLocaleString());
+  }
+
+  function showTooltip(d, event) {
+    tooltip.textContent = tooltipFor(d);
+    var figRect = figEl.getBoundingClientRect();
+    // Anchor tooltip at the mouse pointer, within the figure's coordinate frame.
+    var px = event.clientX - figRect.left + 12;
+    var py = event.clientY - figRect.top - 28;
+    tooltip.style.left = px + 'px';
+    tooltip.style.top = py + 'px';
+    tooltip.style.opacity = '1';
+  }
+
+  // Hit targets on the dots themselves (generous radius so they're easy to hover)
+  g.selectAll('circle.hit').data(data).enter().append('circle').attr('class', 'hit')
+    .attr('cx', function (d) { return xScale(d.n); })
+    .attr('cy', function (d) { return (yScale(d.lower) + yScale(d.upper)) / 2; })
+    .attr('r', function (d) { return Math.max(10, Math.abs(yScale(d.upper) - yScale(d.lower)) / 2 + 8); })
+    .attr('fill', 'transparent')
+    .style('cursor', 'pointer')
+    .on('mouseenter', function (event, d) { showTooltip(d, event); })
+    .on('mousemove', function (event, d) { showTooltip(d, event); })
+    .on('mouseleave', function () { tooltip.style.opacity = '0'; });
+
   svg.on('mouseleave', function () { tooltip.style.opacity = '0'; });
 
   function updateMarker(dim) {
@@ -749,8 +794,9 @@ math('math-magic-sketch',
       markerLabel.attr('x', xScale(dim)).attr('y', -6)
         .text('n=' + dim + ': ' + d.lower.toLocaleString());
       var tight = d.lower === d.upper;
-      statusEl.textContent = 'Dimension ' + dim + ': lower = ' + d.lower.toLocaleString() +
-        ', upper = ' + d.upper.toLocaleString() + (tight ? ', tight.' : ', gap = ' + (d.upper - d.lower).toLocaleString() + '.');
+      statusEl.textContent = 'dim ' + dim + ': best known = ' + d.lower.toLocaleString() +
+        ', LP bound = ' + d.upper.toLocaleString() +
+        (tight ? ', gap = 0 (tight).' : ', gap = ' + (d.upper - d.lower).toLocaleString() + '.');
     } else {
       markerLabel.attr('x', xScale(dim)).attr('y', -6).text('n=' + dim);
       statusEl.textContent = 'Dimension ' + dim + ': no tabulated data for this dimension.';

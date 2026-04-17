@@ -69,8 +69,12 @@ header { margin-bottom: 3rem; }
   text-align: center; margin-top: 0.5rem; font-style: italic; }
 svg text { font-family: var(--heading-font); }
 
-.stats-row { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 1rem; font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); }
+.stats-row { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 1rem; font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); align-items: center; }
 .stats-row b { color: var(--text); font-family: var(--mono-font); }
+.stats-row .spark { display: inline-block; vertical-align: middle; }
+.temp-wrap { position: relative; display: flex; flex-direction: column; gap: 2px; }
+.temp-wrap .tc-mark { font-family: var(--mono-font); font-size: 0.7rem; color: var(--c-danger); position: absolute; top: -14px; transform: translateX(-50%); pointer-events: none; white-space: nowrap; }
+.preset-row { display: flex; gap: 0.35rem; }
 
 @media (prefers-reduced-motion: reduce) {
   .figure canvas { outline: 2px dashed var(--border); outline-offset: -2px; }
@@ -110,16 +114,34 @@ At the critical temperature \(T_c\), the system exists in a state of beautiful i
   <div class="controls">
     <div class="control-group">
       <label>Temperature (T)</label>
-      <div class="slider-row">
+      <div class="slider-row temp-wrap">
+        <span class="tc-mark" id="tc-mark">T<sub>c</sub></span>
         <input type="range" id="temp-slider" min="0.1" max="5.0" step="0.01" value="2.27">
         <span class="val" id="temp-val">2.27</span>
       </div>
     </div>
+    <div class="control-group">
+      <label>Speed</label>
+      <div class="slider-row">
+        <input type="range" id="speed-slider" min="0" max="5" step="1" value="1">
+        <span class="val" id="speed-val">1x</span>
+      </div>
+    </div>
+    <div class="control-group">
+      <label>Regime</label>
+      <div class="preset-row">
+        <button class="btn" data-preset="1.5">Cold</button>
+        <button class="btn active" data-preset="2.27">Critical</button>
+        <button class="btn" data-preset="3.5">Hot</button>
+      </div>
+    </div>
+    <button class="btn" id="btn-play">Pause</button>
     <button class="btn" id="btn-reset">Reset Random</button>
   </div>
   <div class="stats-row">
     <span>Magnetization (M): <b id="stat-mag">0.00</b></span>
     <span>Energy (E): <b id="stat-energy">0.00</b></span>
+    <span>|M| history <svg class="spark" id="spark" width="140" height="28"></svg></span>
   </div>
   <p class="figure-caption"><span class="figure-label">Figure 1.</span> A 2D Ising model simulation. At the critical temperature \(T_c \approx 2.269\), notice how the patterns of blue and orange become fractal-like, with clusters of all sizes.</p>
 </div>
@@ -179,14 +201,48 @@ function step() {
 
 // --- Visualization ---
 (function() {
+  const T_C = 2.269;
   const container = document.getElementById('fig-ising');
   const canvas = document.getElementById('canvas-ising');
   const ctx = canvas.getContext('2d');
   const slider = document.getElementById('temp-slider');
   const valDisp = document.getElementById('temp-val');
+  const speedSlider = document.getElementById('speed-slider');
+  const speedVal = document.getElementById('speed-val');
   const btnReset = document.getElementById('btn-reset');
+  const btnPlay = document.getElementById('btn-play');
+  const tcMark = document.getElementById('tc-mark');
+  const presetBtns = document.querySelectorAll('[data-preset]');
   const statMag = document.getElementById('stat-mag');
   const statEnergy = document.getElementById('stat-energy');
+  const spark = d3.select('#spark');
+
+  // Steps-per-frame multipliers. 0 == paused-equivalent single step.
+  const speedMap = [0.25, 1, 2, 4, 8, 16];
+  let stepsPerFrame = 1;
+  let playing = true;
+  let accumulator = 0;
+
+  // Magnetization history for the sparkline
+  const magHist = [];
+  const HIST_LEN = 120;
+  const sparkW = 140, sparkH = 28;
+  spark.attr('viewBox', `0 0 ${sparkW} ${sparkH}`);
+  const sparkPath = spark.append('path')
+    .attr('fill', 'none')
+    .attr('stroke', 'var(--accent)')
+    .attr('stroke-width', 1.5);
+  spark.append('line')
+    .attr('x1', 0).attr('x2', sparkW)
+    .attr('y1', sparkH - 1).attr('y2', sparkH - 1)
+    .attr('stroke', 'var(--border)');
+
+  function positionTcMark() {
+    const min = +slider.min, max = +slider.max;
+    const frac = (T_C - min) / (max - min);
+    const w = slider.getBoundingClientRect().width || 120;
+    tcMark.style.left = (frac * w) + 'px';
+  }
 
   function draw() {
     const w = canvas.width, h = canvas.height;
@@ -226,28 +282,77 @@ function step() {
       }
     }
     ctx.putImageData(imgData, 0, 0);
-    statMag.textContent = (mag / (N * N)).toFixed(2);
+    const M = mag / (N * N);
+    statMag.textContent = M.toFixed(2);
     statEnergy.textContent = (energy / (N * N)).toFixed(2);
+
+    magHist.push(Math.abs(M));
+    if (magHist.length > HIST_LEN) magHist.shift();
+    const xs = d3.scaleLinear().domain([0, HIST_LEN - 1]).range([0, sparkW]);
+    const ys = d3.scaleLinear().domain([0, 1]).range([sparkH - 1, 1]);
+    const line = d3.line().x((d, i) => xs(i)).y(d => ys(d));
+    sparkPath.attr('d', line(magHist));
   }
 
   function loop() {
-    step();
+    if (playing) {
+      accumulator += stepsPerFrame;
+      while (accumulator >= 1) {
+        step();
+        accumulator -= 1;
+      }
+      // Sub-1 speeds: probabilistically step so 0.25x stutters nicely.
+      if (stepsPerFrame < 1 && Math.random() < stepsPerFrame) step();
+    }
     draw();
     requestAnimationFrame(loop);
+  }
+
+  function syncPresetActive() {
+    presetBtns.forEach(b => {
+      b.classList.toggle('active', Math.abs(+b.dataset.preset - T) < 0.02);
+    });
   }
 
   slider.addEventListener('input', e => {
     T = +e.target.value;
     valDisp.textContent = T.toFixed(2);
+    syncPresetActive();
   });
-  btnReset.addEventListener('click', init);
+  speedSlider.addEventListener('input', e => {
+    const idx = +e.target.value;
+    stepsPerFrame = speedMap[idx];
+    speedVal.textContent = stepsPerFrame < 1
+      ? stepsPerFrame.toFixed(2) + 'x'
+      : stepsPerFrame + 'x';
+  });
+  btnReset.addEventListener('click', () => { init(); magHist.length = 0; });
+  btnPlay.addEventListener('click', () => {
+    playing = !playing;
+    btnPlay.textContent = playing ? 'Pause' : 'Play';
+    btnPlay.classList.toggle('active', !playing);
+  });
+  presetBtns.forEach(b => {
+    b.addEventListener('click', () => {
+      T = +b.dataset.preset;
+      slider.value = T;
+      valDisp.textContent = T.toFixed(2);
+      syncPresetActive();
+    });
+  });
 
   new ResizeObserver(() => {
     canvas.width = canvas.height = container.clientWidth - 48;
+    positionTcMark();
     draw();
   }).observe(container);
 
+  // Re-seed speed label from initial slider value
+  stepsPerFrame = speedMap[+speedSlider.value];
+  speedVal.textContent = stepsPerFrame + 'x';
+
   init();
+  positionTcMark();
   loop();
 })();
 </script>

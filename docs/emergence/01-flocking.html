@@ -257,6 +257,36 @@ and the split emerges from hundreds of individual escape responses.
 </p>
 </div>
 
+<h2>Underwater: Fish and the Lateral Line</h2>
+
+<p>
+The same three rules govern fish schools, but the medium changes the signal.
+Fish have a lateral line, a row of pressure sensors running along the flank
+that detects the minute water displacements of neighbors. Alarm propagates
+through a school faster than vision alone could carry it, radiating outward
+from the first fish to twitch as a ripple of disturbed water.
+</p>
+
+<p>
+The result is a "flash expansion": a predator dart triggers an explosive
+outward burst, the school opens around the threat like a vacuole, and then
+cohesion pulls the survivors back together on the other side. The figure below
+demonstrates both modes. Click to drop a stationary predator, or press
+<em>Flash Expansion</em> to send a dart across the school. The red ring is the
+lateral-line pressure wave propagating outward.
+</p>
+
+<div class="figure" id="fig-school">
+  <canvas id="canvas-school"></canvas>
+  <div class="controls">
+    <button class="btn" id="btn-flash">Flash Expansion</button>
+    <button class="btn" id="btn-clear">Clear predators</button>
+    <button class="btn" id="btn-reset">Reset school</button>
+  </div>
+  <p class="click-hint">Click to place a predator &mdash; watch the alarm ripple through the school</p>
+  <p class="figure-caption"><span class="figure-label">Figure 5.</span> A school of fish reacting to predators. The red ripple represents the lateral-line pressure wave that spreads faster than any single fish could turn. Splitting and reforming emerge from the same separation/alignment/cohesion rules plus local flee responses.</p>
+</div>
+
 <p>
 This is the central lesson of emergence. You do not need a leader or a plan. You
 need a population of agents following local rules. The large-scale order is a
@@ -780,6 +810,117 @@ function setupCanvas(canvas, w, h) {
         ctx.strokeStyle = '#ef4444';
         ctx.lineWidth = 1.5; ctx.globalAlpha = 0.3;
         ctx.beginPath(); ctx.arc(predators[p].x, predators[p].y, 80, 0, Math.PI * 2); ctx.stroke();
+        ctx.restore();
+      }
+
+      for (let i = 0; i < boids.length; i++) {
+        drawBoid(ctx, boids[i], 5, '#2563eb');
+      }
+    }
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+})();
+
+// ===================================================================
+// Figure 5: Schooling Fish (flash expansion + lateral-line ripples)
+// ===================================================================
+(function() {
+  const container = document.getElementById('fig-school');
+  const canvas = document.getElementById('canvas-school');
+  const flashBtn = document.getElementById('btn-flash');
+  const clearBtn = document.getElementById('btn-clear');
+  const resetBtn = document.getElementById('btn-reset');
+
+  let dims = getCanvasDims(container);
+  let ctx = setupCanvas(canvas, dims.w, dims.h);
+  let boids = createBoids(180, dims.w, dims.h);
+  let predators = []; // each: {x, y, vx, vy, ttl?}
+  let ripples = [];   // each: {x, y, r, max, alpha}
+  let isVisible = true;
+
+  new IntersectionObserver(entries => {
+    entries.forEach(entry => { isVisible = entry.isIntersecting; });
+  }).observe(container);
+
+  function spawnPredator(x, y, opts = {}) {
+    predators.push({ x, y, vx: opts.vx || 0, vy: opts.vy || 0, ttl: opts.ttl });
+    ripples.push({ x, y, r: 0, max: 200, alpha: 0.6 });
+  }
+
+  canvas.style.cursor = 'crosshair';
+  canvas.addEventListener('click', function(e) {
+    const rect = canvas.getBoundingClientRect();
+    const mx = (e.clientX - rect.left) * (dims.w / rect.width);
+    const my = (e.clientY - rect.top) * (dims.h / rect.height);
+    spawnPredator(mx, my);
+  });
+
+  flashBtn.addEventListener('click', function() {
+    // Dart-through predator: enters fast from one side, crosses, vanishes.
+    const fromLeft = Math.random() < 0.5;
+    const y = dims.h * (0.3 + Math.random() * 0.4);
+    const vx = fromLeft ? 6 : -6;
+    const startX = fromLeft ? -20 : dims.w + 20;
+    spawnPredator(startX, y, { vx, vy: 0, ttl: Math.ceil((dims.w + 40) / Math.abs(vx)) });
+  });
+
+  clearBtn.addEventListener('click', function() {
+    // Keep in-flight darts so their animation completes; only clear stationary predators.
+    predators = predators.filter(p => p.ttl !== undefined);
+  });
+
+  resetBtn.addEventListener('click', function() {
+    boids = createBoids(180, dims.w, dims.h);
+    predators = [];
+    ripples = [];
+  });
+
+  new ResizeObserver(() => {
+    dims = getCanvasDims(container);
+    ctx = setupCanvas(canvas, dims.w, dims.h);
+  }).observe(container);
+
+  function tick() {
+    if (isVisible) {
+      updateBoids(boids, dims.w, dims.h, { ...state.rules, predators: predators });
+
+      // Advance darting predators and expire them.
+      for (let i = 0; i < predators.length; i++) {
+        const p = predators[i];
+        p.x += p.vx; p.y += p.vy;
+        if (p.ttl !== undefined) p.ttl--;
+      }
+      predators = predators.filter(p => p.ttl === undefined || p.ttl > 0);
+
+      // Expand and fade lateral-line ripples.
+      for (let i = 0; i < ripples.length; i++) {
+        ripples[i].r += 4;
+        ripples[i].alpha *= 0.97;
+      }
+      ripples = ripples.filter(rp => rp.r < rp.max && rp.alpha > 0.02);
+
+      ctx.clearRect(0, 0, dims.w, dims.h);
+      ctx.fillStyle = '#eef2ff'; // cool water-tone backdrop
+      ctx.fillRect(0, 0, dims.w, dims.h);
+
+      // Lateral-line pressure waves.
+      for (let i = 0; i < ripples.length; i++) {
+        const rp = ripples[i];
+        ctx.beginPath();
+        ctx.arc(rp.x, rp.y, rp.r, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(239, 68, 68, ${rp.alpha})`;
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
+
+      // Predators.
+      for (let p = 0; p < predators.length; p++) {
+        ctx.save();
+        ctx.fillStyle = '#ef4444';
+        ctx.beginPath();
+        ctx.arc(predators[p].x, predators[p].y, 6, 0, Math.PI * 2);
+        ctx.fill();
         ctx.restore();
       }
 
