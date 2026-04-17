@@ -2,7 +2,7 @@
 // Hecke operators, and dimension formulas for the Modular Forms series.
 //
 // Attaches a single `Mod` object to the global scope (no modules, no build
-// step). Companion to `../../monstrous-moonshine/lib/moonshine-math.js`
+// step). Companion to `./moonshine-math.js` in this same lib directory,
 // which remains authoritative for Monster-specific data (irrep dimensions,
 // McKay–Thompson heads). Pages that need both load both files.
 //

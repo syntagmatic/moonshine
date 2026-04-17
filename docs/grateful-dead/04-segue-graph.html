@@ -343,11 +343,11 @@ svg .axis line, svg .axis path { stroke: var(--border); }
   <!-- ═══════ Figure 5: Segue Timeline ═══════ -->
   <h2>The Timeline</h2>
 
-  <p>Some segue pairs are permanent fixtures. Others burn bright for a few years and vanish. The timeline below shows the top five segue pairs (excluding Drums > Space) plotted across the band's active years. Each dot marks a show where that segue occurred. Dense clusters mean the pairing was in heavy rotation. Gaps mean it fell out of favor or the songs themselves left the repertoire.</p>
+  <p>Some segue pairs are permanent fixtures. Others burn bright for a few years and vanish. The timeline below shows the top five segue pairs (excluding Drums > Space) with their active-year ranges. Solid bars cover the years the pair was in the rotation; short ticks mark occasional revival years. The number at the right of each row is the pair's total count across the career.</p>
 
   <div class="figure figure-wide" id="fig-timeline">
     <div id="timeline-svg"></div>
-    <p class="figure-caption"><span class="figure-label">Figure 5.</span> Segue timeline for the top 5 non-structural segue pairs. Each dot is one occurrence plotted by year. Dense bands indicate heavy rotation. "China Cat > Rider" spans nearly the entire career. "Dark Star > St. Stephen" is concentrated in 1968-1971.</p>
+    <p class="figure-caption"><span class="figure-label">Figure 5.</span> Active-year ranges for the top 5 non-structural segue pairs. Bars span years the pair was in the rotation; ticks mark revival-only years. "China Cat > Rider" spans nearly the entire career (with a gap for the 1975 hiatus). "Dark Star > St. Stephen" is concentrated in 1968–1971 with a handful of late revivals. Numbers at right are total occurrences.</p>
   </div>
 
   <p>"China Cat Sunflower > I Know You Rider" is the most striking. It appears almost every year from 1969 to 1995, a near-continuous ribbon across the full career. The pairing survived every lineup change, every stylistic shift, every hiatus. It was bedrock.</p>
@@ -452,11 +452,26 @@ function abbrev(name, maxLen) {
   const simLinks = links.map(d => ({ ...d }));
   const simNodes = nodes.map(d => ({ ...d }));
 
+  // Clamp nodes inside the viewport each tick — the label extends ~sizeScale+13px below the
+  // node, so the bottom pad is larger than top/sides.
+  const edgePad = 4;
+  function clampBounds() {
+    for (const d of simNodes) {
+      const r = sizeScale(d.totalSegues);
+      d.x = Math.max(r + edgePad, Math.min(W - r - edgePad, d.x));
+      d.y = Math.max(r + edgePad, Math.min(H - r - 14 - edgePad, d.y));
+    }
+  }
+  // Weaker charge + distance-proportional pull toward centre keeps the graph compact
+  // instead of piling leaves against the boundary clamp.
   const simulation = d3.forceSimulation(simNodes)
-    .force("link", d3.forceLink(simLinks).id(d => d.id).distance(80))
-    .force("charge", d3.forceManyBody().strength(-120))
-    .force("center", d3.forceCenter(W / 2, H / 2))
-    .force("collision", d3.forceCollide().radius(d => sizeScale(d.totalSegues) + 2));
+    .force("link", d3.forceLink(simLinks).id(d => d.id)
+      .distance(d => 40 + 30 * (1 - d.count / d3.max(simLinks, l => l.count))))
+    .force("charge", d3.forceManyBody().strength(-60).distanceMax(260))
+    .force("x", d3.forceX(W / 2).strength(0.06))
+    .force("y", d3.forceY(H / 2).strength(0.08))
+    .force("collision", d3.forceCollide().radius(d => sizeScale(d.totalSegues) + 2))
+    .force("bounds", clampBounds);
 
   // Arrows
   svg.append("defs").selectAll("marker")
@@ -565,7 +580,8 @@ function abbrev(name, maxLen) {
 (function() {
   const container = d3.select("#chord-svg");
   const size = Math.min(700, container.node().getBoundingClientRect().width);
-  const outerRadius = size / 2 - 40;
+  // Reserve ~95px outside the arc for rotated song labels (abbreviated to 20 chars)
+  const outerRadius = size / 2 - 95;
   const innerRadius = outerRadius - 20;
 
   // Top N songs by total segue involvement
@@ -687,11 +703,21 @@ function abbrev(name, maxLen) {
   const simNodes = nodes.map(d => ({ ...d }));
   const simLinks = links.map(d => ({ ...d }));
 
+  const mkEdgePad = 4;
+  function mkClamp() {
+    for (const d of simNodes) {
+      const r = sizeScale(d.totalSegues) * 0.6;
+      d.x = Math.max(r + mkEdgePad, Math.min(W - r - mkEdgePad, d.x));
+      d.y = Math.max(r + mkEdgePad, Math.min(H - r - 12 - mkEdgePad, d.y));
+    }
+  }
   const simulation = d3.forceSimulation(simNodes)
-    .force("link", d3.forceLink(simLinks).id(d => d.id).distance(70).strength(0.3))
-    .force("charge", d3.forceManyBody().strength(-80))
-    .force("center", d3.forceCenter(W / 2, H / 2))
-    .force("collision", d3.forceCollide().radius(d => sizeScale(d.totalSegues) * 0.6 + 2));
+    .force("link", d3.forceLink(simLinks).id(d => d.id).distance(55).strength(0.3))
+    .force("charge", d3.forceManyBody().strength(-50).distanceMax(220))
+    .force("x", d3.forceX(W / 2).strength(0.07))
+    .force("y", d3.forceY(H / 2).strength(0.09))
+    .force("collision", d3.forceCollide().radius(d => sizeScale(d.totalSegues) * 0.6 + 2))
+    .force("bounds", mkClamp);
 
   const linkG = svg.append("g")
     .selectAll("line")
@@ -927,85 +953,26 @@ function abbrev(name, maxLen) {
 
 
 // ════════════════════════════════════════════
-// Figure 5: Segue Timeline
+// Figure 5: Segue Active Ranges
 // ════════════════════════════════════════════
 (function() {
   const container = d3.select("#timeline-svg");
 
-  // Top 5 non-structural segue pairs with synthetic yearly occurrence data
-  // based on known historical patterns of when these pairings were active.
+  // Top 5 non-structural segue pairs. Total counts from gd-segues.json; active year
+  // ranges are historically known (the band's catalog is well documented). Per-year
+  // densities aren't in the shipped data, so we show active ranges as bars rather
+  // than fake per-year dot counts.
   const timelinePairs = [
-    {
-      label: "China Cat Sunflower > I Know You Rider",
-      count: 544,
-      // Near-continuous 1969-1995
-      years: (function() {
-        const yrs = [];
-        for (let y = 1969; y <= 1995; y++) {
-          // Approximate distribution: ~15-25 per year, dip during hiatus 1975
-          if (y === 1975) { for (let i = 0; i < 3; i++) yrs.push(y + Math.random()); }
-          else if (y <= 1974) { for (let i = 0; i < Math.floor(12 + Math.random() * 8); i++) yrs.push(y + Math.random()); }
-          else { for (let i = 0; i < Math.floor(18 + Math.random() * 10); i++) yrs.push(y + Math.random()); }
-        }
-        return yrs;
-      })()
-    },
-    {
-      label: "Scarlet Begonias > Fire On The Mountain",
-      count: 238,
-      // 1977-1995
-      years: (function() {
-        const yrs = [];
-        for (let y = 1977; y <= 1995; y++) {
-          const n = Math.floor(10 + Math.random() * 8);
-          for (let i = 0; i < n; i++) yrs.push(y + Math.random());
-        }
-        return yrs;
-      })()
-    },
-    {
-      label: "Estimated Prophet > Eyes Of The World",
-      count: 177,
-      // 1977-1995
-      years: (function() {
-        const yrs = [];
-        for (let y = 1977; y <= 1995; y++) {
-          const n = Math.floor(7 + Math.random() * 7);
-          for (let i = 0; i < n; i++) yrs.push(y + Math.random());
-        }
-        return yrs;
-      })()
-    },
-    {
-      label: "Dark Star > Saint Stephen",
-      count: 90,
-      // Concentrated 1968-1971, sparse after
-      years: (function() {
-        const yrs = [];
-        for (let y = 1968; y <= 1971; y++) {
-          const n = Math.floor(16 + Math.random() * 10);
-          for (let i = 0; i < n; i++) yrs.push(y + Math.random());
-        }
-        // A handful of late revivals
-        [1978, 1981, 1989, 1991, 1994].forEach(y => {
-          yrs.push(y + Math.random());
-        });
-        return yrs;
-      })()
-    },
-    {
-      label: "Me And My Uncle > Big River",
-      count: 174,
-      // Steady 1972-1995
-      years: (function() {
-        const yrs = [];
-        for (let y = 1972; y <= 1995; y++) {
-          const n = Math.floor(5 + Math.random() * 6);
-          for (let i = 0; i < n; i++) yrs.push(y + Math.random());
-        }
-        return yrs;
-      })()
-    }
+    { label: "China Cat Sunflower > I Know You Rider", count: 544,
+      spans: [[1969, 1974], [1976, 1995]], revivals: [] },
+    { label: "Scarlet Begonias > Fire On The Mountain", count: 238,
+      spans: [[1977, 1995]], revivals: [] },
+    { label: "Estimated Prophet > Eyes Of The World", count: 177,
+      spans: [[1977, 1995]], revivals: [] },
+    { label: "Dark Star > Saint Stephen", count: 90,
+      spans: [[1968, 1971]], revivals: [1978, 1981, 1989, 1991, 1994] },
+    { label: "Me And My Uncle > Big River", count: 174,
+      spans: [[1972, 1995]], revivals: [] }
   ];
 
   const margin = { top: 20, right: 30, bottom: 30, left: 260 };
@@ -1059,33 +1026,45 @@ function abbrev(name, maxLen) {
       .attr("fill", "#333")
       .text(abbrev(pair.label, 36));
 
-    // Thin background line for the row
+    // Thin background line for the row (full 1966–1996 axis)
     svg.append("line")
       .attr("x1", x(1966)).attr("x2", x(1996))
       .attr("y1", cy).attr("y2", cy)
       .attr("stroke", "#f0f0f0").attr("stroke-width", y.bandwidth());
 
-    // Dots for each occurrence
-    svg.selectAll(null)
-      .data(pair.years)
-      .join("circle")
-      .attr("cx", d => x(d))
-      .attr("cy", () => cy + (Math.random() - 0.5) * y.bandwidth() * 0.6)
-      .attr("r", 2.5)
-      .attr("fill", pairColors[i])
-      .attr("opacity", 0.6)
-      .on("mouseover", (evt) => showTip(evt, `<strong>${pair.label}</strong><br>${Math.floor(evt.target.__data__)} occurrence<br>${pair.count} total across career`))
-      .on("mousemove", (evt) => tip.style("left", (evt.clientX + 12) + "px").style("top", (evt.clientY - 10) + "px"))
-      .on("mouseout", hideTip);
+    // Active range bars
+    const barH = y.bandwidth() * 0.55;
+    pair.spans.forEach(([s, e]) => {
+      svg.append("rect")
+        .attr("x", x(s)).attr("y", cy - barH / 2)
+        .attr("width", x(e + 1) - x(s)).attr("height", barH)
+        .attr("fill", pairColors[i]).attr("opacity", 0.7)
+        .attr("rx", 2)
+        .on("mouseover", (evt) => showTip(evt, `<strong>${pair.label}</strong><br>Active ${s}–${e}<br>${pair.count} total across career`))
+        .on("mousemove", (evt) => tip.style("left", (evt.clientX + 12) + "px").style("top", (evt.clientY - 10) + "px"))
+        .on("mouseout", hideTip);
+    });
+
+    // Revival tick marks (single-occurrence years outside main spans)
+    pair.revivals.forEach(r => {
+      svg.append("line")
+        .attr("x1", x(r)).attr("x2", x(r))
+        .attr("y1", cy - barH / 2).attr("y2", cy + barH / 2)
+        .attr("stroke", pairColors[i]).attr("stroke-width", 2)
+        .on("mouseover", (evt) => showTip(evt, `<strong>${pair.label}</strong><br>Revival in ${r}`))
+        .on("mousemove", (evt) => tip.style("left", (evt.clientX + 12) + "px").style("top", (evt.clientY - 10) + "px"))
+        .on("mouseout", hideTip);
+    });
 
     // Count annotation at right
     svg.append("text")
       .attr("x", W - margin.right + 4)
       .attr("y", cy)
       .attr("dy", "0.35em")
-      .attr("font-size", "9px")
+      .attr("font-size", "10px")
       .attr("font-family", "var(--mono-font)")
       .attr("fill", pairColors[i])
+      .attr("font-weight", 600)
       .text(pair.count);
   });
 })();
