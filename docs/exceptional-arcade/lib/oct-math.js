@@ -1,10 +1,10 @@
 // oct-math.js — octonion math for the Exceptional Arcade (Track B).
 //
-// Supersets docs/octonions/lib/oct-math.js with primitives the three
+// Supersets docs/exceptional-atlas/lib/oct-math.js with primitives the three
 // Track B games need:
 //   - Fano-plane basis multiplication as the source of truth.
-//     (The cyclic Fano lines used in the octonion series explainer #04
-//     are the authoritative convention for this arcade.)
+//     (The cyclic Fano lines used in Exceptional Atlas Part 9 are the
+//     authoritative convention for this arcade.)
 //   - Cayley-Dickson doubling with a step-by-step expansion so B2 can
 //     show the reader exactly which sub-product produced each coordinate.
 //   - The 240 octavian integer units (realized as E8 roots) with a

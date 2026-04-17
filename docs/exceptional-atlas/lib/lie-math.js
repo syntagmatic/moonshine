@@ -2,8 +2,8 @@
 // groups for every finite-dimensional simple Lie algebra over ℂ.
 //
 // Attaches a single `Lie` object to the global scope (no modules, no build
-// step). Companion to `../e8-lattice/lib/e8-math.js`, which remains the
-// authoritative source for E₈-specific helpers (Coxeter plane projection,
+// step). Companion to `e8-math.js` in this same lib directory, which remains
+// the authoritative source for E₈-specific helpers (Coxeter plane projection,
 // full lattice shells, Viazovska packing density, etc.). Pages that need
 // those helpers load both files — this one is authoritative for everything
 // except the E₈-specific extras.

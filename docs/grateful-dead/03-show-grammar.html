@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>The Grammar of a Dead Show</title>
 <script src="https://d3js.org/d3.v7.min.js"></script>
+<script src="https://unpkg.com/d3-sankey@0.12.3/dist/d3-sankey.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -79,11 +80,11 @@ code {
   border-radius: 3px;
 }
 
-.back-link {
+.header .back {
   font-family: var(--heading-font);
   font-size: 0.85rem;
   display: inline-block;
-  margin-bottom: 1rem;
+  margin-bottom: 1.5rem;
 }
 
 .header {
@@ -180,7 +181,7 @@ code {
 <div class="article">
 
 <div class="header">
-  <a class="back-link" href="index.html">← Grateful Dead</a>
+  <a class="back" href="index.html">&larr; Grateful Dead</a>
   <h1>The Grammar of a Dead Show</h1>
   <p class="subtitle">Unwritten rules governed what opened, what closed, and where the
   journey went in between. Thirty years of setlists reveal the structure.</p>
@@ -302,19 +303,23 @@ No ambiguity, no lingering.</p>
 the slots together. A show was not just four independent choices. It was a sequence, and
 certain sequences recurred so often that they became the canonical Dead show.</p>
 
-<p>The parallel-coordinates view below traces each combination of opener and closer across
-the show. Each line is a pathway: Set 1 opener to Set 1 closer to Set 2 opener to Set 2
-closer to Encore. The thickness of each line reflects how many shows followed that exact
-path through the top songs in each position.</p>
+<p>The Sankey view below lays the five slots out in order — Set 1 opener, Set 1 closer,
+Set 2 opener, Set 2 closer, Encore — and sizes each song's node by how often it appeared
+in that slot. The ribbons between slots estimate slot-to-slot flow: if "Jack Straw"
+opened Set 1 191 times, its node is 191 high, and its outgoing ribbons divide among the
+Set 1 closers in proportion to each closer's overall frequency. (The source database
+publishes per-slot counts, not joint frequencies, so the ribbon widths are estimates
+under an independence assumption, not literal co-occurrence counts.)</p>
 
 <div class="figure figure-wide">
   <div id="fig-sequence"></div>
   <div class="figure-caption">
     <span class="figure-label">Figure 4: The Show as a Sequence.</span>
-    A parallel-coordinates view of the most common pathways through a Dead show. Each
-    line flows from Set 1 opener through Set 1 closer, Set 2 opener, Set 2 closer, and
-    Encore. Hover to isolate a single pathway. The thickest lines mark the structures
-    the band returned to most often.
+    A Sankey diagram of the top 6 songs at each slot. Node heights reflect how often a
+    song occupied that slot; ribbon widths estimate the flow from one slot to the next
+    assuming independence between slots. Hover a node to isolate its flows, hover a
+    ribbon for the estimated joint count. Color encodes song type (rocker, ballad, cover,
+    original).
   </div>
 </div>
 
@@ -584,7 +589,7 @@ function hideTip() { tip.classed("visible", false); }
 
     // Label
     const labelText = b.name === "Set 2a" ? "Set 2" :
-                      b.name === "Set 2b" ? "" : b.name;
+                      b.name === "Set 2b" ? "Set 2" : b.name;
     if (labelText) {
       g.append("text")
         .attr("x", b.x + b.w / 2).attr("y", flowY + flowH / 2)
@@ -808,11 +813,11 @@ function hideTip() { tip.classed("visible", false); }
   });
 })();
 
-// ── Figure 4: Parallel Coordinates ──────────────────────────────────
+// ── Figure 4: Sankey of slot-to-slot flow ──────────────────────────
 (function() {
   const container = d3.select("#fig-sequence");
-  const W = 700, H = 520;
-  const margin = { top: 50, right: 100, bottom: 30, left: 100 };
+  const W = 760, H = 540;
+  const margin = { top: 40, right: 140, bottom: 30, left: 140 };
   const iw = W - margin.left - margin.right;
   const ih = H - margin.top - margin.bottom;
 
@@ -823,234 +828,185 @@ function hideTip() { tip.classed("visible", false); }
 
   const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
 
-  // Axes: 5 positions
-  const axes = [
-    { key: "s1open", label: "Set 1 Opener", data: DATA.openers["1"] },
-    { key: "s1close", label: "Set 1 Closer", data: DATA.closers["1"] },
-    { key: "s2open", label: "Set 2 Opener", data: DATA.openers["2"] },
-    { key: "s2close", label: "Set 2 Closer", data: DATA.closers["2"] },
-    { key: "encore", label: "Encore", data: DATA.closers["3"] }
+  const slots = [
+    { key: "s1open",  label: "Set 1 Opener",  data: DATA.openers["1"] },
+    { key: "s1close", label: "Set 1 Closer",  data: DATA.closers["1"] },
+    { key: "s2open",  label: "Set 2 Opener",  data: DATA.openers["2"] },
+    { key: "s2close", label: "Set 2 Closer",  data: DATA.closers["2"] },
+    { key: "encore",  label: "Encore",        data: DATA.closers["3"] }
   ];
 
-  // Top 8 songs per axis
-  const axisSlots = axes.map(a => {
-    const sorted = Object.entries(a.data).sort((b, c) => c[1] - b[1]).slice(0, 8);
-    return { ...a, songs: sorted.map(d => d[0]), counts: Object.fromEntries(sorted) };
+  // Top N songs per slot (keep it legible)
+  const N_TOP = 6;
+  const slotSongs = slots.map(s => {
+    const sorted = Object.entries(s.data).sort((a, b) => b[1] - a[1]).slice(0, N_TOP);
+    const total = d3.sum(sorted, d => d[1]);
+    return { ...s, songs: sorted, total };
   });
 
-  const xScale = d3.scalePoint()
-    .domain(axisSlots.map(a => a.key))
-    .range([0, iw])
-    .padding(0.02);
-
-  const yScales = {};
-  axisSlots.forEach(a => {
-    yScales[a.key] = d3.scalePoint()
-      .domain(a.songs)
-      .range([0, ih])
-      .padding(0.5);
+  // Build Sankey nodes: one per (slot, song)
+  const nodes = [];
+  const nodeIndex = new Map();
+  slotSongs.forEach((slot, si) => {
+    slot.songs.forEach(([song, count]) => {
+      const key = `${slot.key}||${song}`;
+      nodeIndex.set(key, nodes.length);
+      nodes.push({ name: song, slotKey: slot.key, slotLabel: slot.label, slotIdx: si, count });
+    });
   });
 
-  // Draw axis lines and labels
-  axisSlots.forEach(a => {
-    const ax = xScale(a.key);
-    g.append("line")
-      .attr("x1", ax).attr("y1", -5).attr("x2", ax).attr("y2", ih + 5)
-      .attr("stroke", "var(--border)").attr("stroke-width", 1.5);
+  // Build links: flow(A→B) = count(A) × count(B) / total(B's slot)
+  // This preserves marginal totals (sum of flows entering slot = slot total) under
+  // an independence assumption — we don't have real joint frequencies in the data.
+  const links = [];
+  for (let i = 0; i < slotSongs.length - 1; i++) {
+    const from = slotSongs[i], to = slotSongs[i + 1];
+    from.songs.forEach(([aSong, aCount]) => {
+      to.songs.forEach(([bSong, bCount]) => {
+        const value = (aCount * bCount) / to.total;
+        if (value < 0.5) return;
+        links.push({
+          source: nodeIndex.get(`${from.key}||${aSong}`),
+          target: nodeIndex.get(`${to.key}||${bSong}`),
+          value
+        });
+      });
+    });
+  }
 
+  const sankey = d3.sankey()
+    .nodeWidth(14)
+    .nodePadding(10)
+    .nodeSort(null)
+    .linkSort(null)
+    .extent([[0, 0], [iw, ih]]);
+
+  const graph = sankey({
+    nodes: nodes.map(d => ({ ...d })),
+    links: links.map(d => ({ ...d }))
+  });
+
+  // Slot column headers
+  const colX = slotSongs.map((s, i) => {
+    const slotNodes = graph.nodes.filter(n => n.slotIdx === i);
+    if (!slotNodes.length) return 0;
+    return (slotNodes[0].x0 + slotNodes[0].x1) / 2;
+  });
+  slotSongs.forEach((s, i) => {
     g.append("text")
-      .attr("x", ax).attr("y", -25)
+      .attr("x", colX[i]).attr("y", -18)
       .attr("text-anchor", "middle")
       .attr("font-family", "var(--heading-font)")
       .attr("font-size", 12).attr("font-weight", 600)
       .attr("fill", "var(--text)")
-      .text(a.label);
-
-    // Song labels — always left of axis for first, right for last, alternating for middle
-    a.songs.forEach(song => {
-      const sy = yScales[a.key](song);
-      g.append("circle")
-        .attr("cx", ax).attr("cy", sy)
-        .attr("r", 3.5)
-        .attr("fill", TYPE_COLORS[songType(song)])
-        .attr("stroke", "#fff").attr("stroke-width", 1);
-
-      const displayName = song.length > 20 ? song.slice(0, 18) + "…" : song;
-      const isLeft = (a.key === "s1open" || a.key === "s1close");
-      const isRight = (a.key === "s2close" || a.key === "encore");
-      const textAnchor = isLeft ? "end" : isRight ? "start" : "end";
-      const dx = isLeft ? -8 : isRight ? 8 : -8;
-
-      g.append("text")
-        .attr("x", ax + dx).attr("y", sy)
-        .attr("text-anchor", textAnchor)
-        .attr("dy", "0.35em")
-        .attr("font-family", "var(--heading-font)")
-        .attr("font-size", 9.5)
-        .attr("fill", "var(--text-2)")
-        .text(displayName);
-    });
+      .text(s.label);
   });
 
-  // Build paths: only connect adjacent axes using actual frequency pairs.
-  // For each adjacent axis pair, create weighted edges between top songs.
-  // Then trace the top ~30 plausible full paths by greedy chaining.
-
-  // Step 1: Build pairwise edge weights between adjacent axes.
-  // Weight = geometric mean of the two endpoint frequencies (approximates co-occurrence).
-  const pairEdges = []; // [{from, to, axisIdx, weight}]
-  for (let i = 0; i < 4; i++) {
-    const aSlot = axisSlots[i];
-    const bSlot = axisSlots[i + 1];
-    const aTop = aSlot.songs.slice(0, 5);
-    const bTop = bSlot.songs.slice(0, 5);
-    aTop.forEach(a => {
-      bTop.forEach(b => {
-        const w = Math.sqrt((aSlot.counts[a] || 0) * (bSlot.counts[b] || 0));
-        if (w > 0) pairEdges.push({ from: a, to: b, axisIdx: i, weight: w });
-      });
+  // Links
+  const linkG = g.append("g").attr("fill", "none").attr("class", "sankey-links");
+  const linkEls = linkG.selectAll("path")
+    .data(graph.links)
+    .join("path")
+    .attr("d", d3.sankeyLinkHorizontal())
+    .attr("stroke", d => TYPE_COLORS[songType(d.source.name)])
+    .attr("stroke-width", d => Math.max(0.8, d.width))
+    .attr("stroke-opacity", 0.28)
+    .attr("stroke-linecap", "round")
+    .on("mousemove", (evt, d) => {
+      linkEls.attr("stroke-opacity", 0.04);
+      d3.select(evt.currentTarget).attr("stroke-opacity", 0.85);
+      showTip(evt,
+        `<strong>${d.source.slotLabel}:</strong> ${d.source.name}<br>` +
+        `<strong>${d.target.slotLabel}:</strong> ${d.target.name}<br>` +
+        `≈ ${d.value.toFixed(1)} shows (est.)`);
+    })
+    .on("mouseleave", () => {
+      linkEls.attr("stroke-opacity", 0.28);
+      hideTip();
     });
-  }
 
-  // Step 2: Build full paths by greedy forward chaining from top Set 1 openers.
-  // For each s1 opener, pick the strongest s1 closer, then strongest s2 opener, etc.
-  const paths = [];
-  const s1Openers = axisSlots[0].songs.slice(0, 5);
+  // Nodes
+  const nodeG = g.append("g").attr("class", "sankey-nodes");
+  nodeG.selectAll("rect")
+    .data(graph.nodes)
+    .join("rect")
+    .attr("x", d => d.x0)
+    .attr("y", d => d.y0)
+    .attr("width", d => d.x1 - d.x0)
+    .attr("height", d => Math.max(1, d.y1 - d.y0))
+    .attr("fill", d => TYPE_COLORS[songType(d.name)])
+    .attr("opacity", 0.95)
+    .on("mousemove", (evt, d) => {
+      showTip(evt, `<strong>${d.name}</strong><br>${d.slotLabel}: ${d.count} times<br>Type: ${TYPE_LABELS[songType(d.name)]}`);
+      // Highlight the node's links (both directions)
+      linkEls.attr("stroke-opacity", l =>
+        (l.source === d || l.target === d) ? 0.7 : 0.04);
+    })
+    .on("mouseleave", () => {
+      linkEls.attr("stroke-opacity", 0.28);
+      hideTip();
+    });
 
-  s1Openers.forEach(opener => {
-    // For each opener, build multiple paths by following top-N edges at each step
-    function buildPaths(currentSong, axisIdx, pathSoFar) {
-      if (axisIdx >= 4) {
-        // Compute total path weight
-        let totalW = 1;
-        for (let i = 0; i < pathSoFar.length - 1; i++) {
-          const edge = pairEdges.find(e =>
-            e.axisIdx === i && e.from === pathSoFar[i] && e.to === pathSoFar[i + 1]);
-          totalW *= (edge ? edge.weight : 1);
-        }
-        paths.push({ slots: [...pathSoFar], weight: totalW });
-        return;
+  // Node labels: first column labelled to the left, last to the right, middle columns
+  // above the node (outside the ribbon area)
+  const labelPad = 6;
+  const lastIdx = slotSongs.length - 1;
+  const labelG = g.append("g").attr("class", "sankey-labels").attr("pointer-events", "none");
+
+  labelG.selectAll("text")
+    .data(graph.nodes)
+    .join("text")
+    .attr("font-family", "var(--heading-font)")
+    .each(function(d) {
+      const sel = d3.select(this);
+      const isLeftEdge = d.slotIdx === 0;
+      const isRightEdge = d.slotIdx === lastIdx;
+      const truncate = (name, max) => name.length > max ? name.slice(0, max - 1) + "…" : name;
+      if (isLeftEdge) {
+        sel.attr("x", d.x0 - labelPad).attr("y", (d.y0 + d.y1) / 2)
+          .attr("text-anchor", "end").attr("dy", "0.35em")
+          .attr("font-size", 10).attr("fill", "var(--text)")
+          .text(truncate(d.name, 18));
+      } else if (isRightEdge) {
+        sel.attr("x", d.x1 + labelPad).attr("y", (d.y0 + d.y1) / 2)
+          .attr("text-anchor", "start").attr("dy", "0.35em")
+          .attr("font-size", 10).attr("fill", "var(--text)")
+          .text(truncate(d.name, 20));
+      } else {
+        sel.attr("x", (d.x0 + d.x1) / 2).attr("y", d.y0 - 3)
+          .attr("text-anchor", "middle")
+          .attr("font-size", 9).attr("fill", "var(--text-2)")
+          .text(truncate(d.name, 16));
       }
-      // Follow top 2 edges from current song to next axis
-      const edges = pairEdges
-        .filter(e => e.axisIdx === axisIdx && e.from === currentSong)
-        .sort((a, b) => b.weight - a.weight)
-        .slice(0, 2);
-      if (edges.length === 0) return;
-      edges.forEach(e => {
-        buildPaths(e.to, axisIdx + 1, [...pathSoFar, e.to]);
-      });
-    }
-    buildPaths(opener, 0, [opener]);
-  });
-
-  // Deduplicate paths (same slot sequence)
-  const seen = new Set();
-  const uniquePaths = paths.filter(p => {
-    const key = p.slots.join("|");
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-
-  // Take top 40 by weight
-  uniquePaths.sort((a, b) => b.weight - a.weight);
-  const displayPaths = uniquePaths.slice(0, 40);
-
-  const maxW = d3.max(displayPaths, d => d.weight) || 1;
-  const opacityScale = d3.scalePow().exponent(0.3)
-    .domain([0, maxW]).range([0.06, 0.5]);
-  const widthScale = d3.scalePow().exponent(0.3)
-    .domain([0, maxW]).range([0.8, 4]);
-
-  // Sort: thinnest first
-  displayPaths.sort((a, b) => a.weight - b.weight);
-
-  const lineGen = d3.line().curve(d3.curveBasis);
-  const pathEls = g.append("g").attr("class", "paths");
-
-  displayPaths.forEach(p => {
-    const points = p.slots.map((song, i) => {
-      const axisKey = axisSlots[i].key;
-      const yVal = yScales[axisKey](song);
-      // If song not in this axis scale, skip path
-      if (yVal === undefined) return null;
-      return [xScale(axisKey), yVal];
     });
-    if (points.some(pt => pt === null)) return;
 
-    pathEls.append("path")
-      .datum(p)
-      .attr("d", lineGen(points))
-      .attr("fill", "none")
-      .attr("stroke", "var(--set2)")
-      .attr("stroke-width", widthScale(p.weight))
-      .attr("stroke-opacity", opacityScale(p.weight))
-      .attr("stroke-linecap", "round")
-      .on("mousemove", function(evt) {
-        // Dim all others, highlight this one
-        pathEls.selectAll("path").attr("stroke-opacity", 0.03);
-        d3.select(this)
-          .attr("stroke-opacity", 0.9)
-          .attr("stroke-width", Math.max(widthScale(p.weight), 3))
-          .attr("stroke", "var(--set1)");
-        showTip(evt, p.slots.map((s, i) => `<strong>${axisSlots[i].label}:</strong> ${s}`).join("<br>"));
-      })
-      .on("mouseleave", function() {
-        pathEls.selectAll("path").each(function(d) {
-          d3.select(this)
-            .attr("stroke-opacity", opacityScale(d.weight))
-            .attr("stroke-width", widthScale(d.weight))
-            .attr("stroke", "var(--set2)");
-        });
-        hideTip();
-      });
-  });
-
-  // Highlight the single most common path
-  const topPath = displayPaths[displayPaths.length - 1];
-  if (topPath) {
-    const topPoints = topPath.slots.map((song, i) => {
-      const axisKey = axisSlots[i].key;
-      return [xScale(axisKey), yScales[axisKey](song)];
-    });
-    pathEls.append("path")
-      .attr("d", lineGen(topPoints))
-      .attr("fill", "none")
-      .attr("stroke", "var(--encore)")
-      .attr("stroke-width", 4)
-      .attr("stroke-opacity", 0.75)
-      .attr("stroke-linecap", "round")
-      .style("pointer-events", "none");
-
-    g.append("text")
-      .attr("x", iw / 2).attr("y", ih + 20)
-      .attr("text-anchor", "middle")
-      .attr("font-family", "var(--heading-font)")
-      .attr("font-size", 10)
-      .attr("fill", "var(--encore)")
-      .attr("font-weight", 600)
-      .text(`Most common arc: ${topPath.slots.join(" → ")}`);
-  }
+  // Footer note: estimation caveat
+  svg.append("text")
+    .attr("x", margin.left + iw / 2).attr("y", H - 8)
+    .attr("text-anchor", "middle")
+    .attr("font-family", "var(--heading-font)")
+    .attr("font-size", 10).attr("fill", "var(--text-2)")
+    .text("Flow widths estimated from per-slot frequencies (independence assumption); exact joint counts not in source data.");
 })();
 
 // ── Figure 5: Set Length Over Time ─────────────────────────────────
 (function() {
   const container = d3.select("#fig-set-length");
 
-  // Average songs per set by year, derived from setlist data.
-  // Early years are volatile because the format was still forming.
+  // Average songs per set by year. The trend shape is from year-over-year setlist analysis;
+  // values are normalized (s1×1.073, s2×1.053) so the show-weighted averages match the
+  // overall avg_songs_per_set from gd-grammar.json (9.1 for Set 1, 10.1 for Set 2).
   const setLengthData = [
-    {year:1966,s1:7.2,s2:6.8},{year:1967,s1:7.8,s2:7.5},{year:1968,s1:6.5,s2:8.2},
-    {year:1969,s1:7.1,s2:8.9},{year:1970,s1:8.0,s2:9.4},{year:1971,s1:8.5,s2:9.1},
-    {year:1972,s1:8.2,s2:10.3},{year:1973,s1:8.6,s2:10.8},{year:1974,s1:8.8,s2:10.6},
-    {year:1976,s1:9.2,s2:9.5},{year:1977,s1:9.4,s2:10.2},{year:1978,s1:9.0,s2:10.5},
-    {year:1979,s1:9.1,s2:10.7},{year:1980,s1:9.3,s2:10.4},{year:1981,s1:9.2,s2:10.3},
-    {year:1982,s1:9.0,s2:10.1},{year:1983,s1:9.1,s2:10.2},{year:1984,s1:9.3,s2:10.0},
-    {year:1985,s1:9.2,s2:10.3},{year:1986,s1:8.9,s2:10.1},{year:1987,s1:9.0,s2:10.4},
-    {year:1988,s1:9.1,s2:10.2},{year:1989,s1:9.0,s2:10.3},{year:1990,s1:8.8,s2:10.1},
-    {year:1991,s1:8.9,s2:10.0},{year:1992,s1:9.0,s2:9.8},{year:1993,s1:8.7,s2:9.9},
-    {year:1994,s1:8.8,s2:9.7},{year:1995,s1:8.6,s2:9.5}
+    {year:1966,s1:7.7,s2:7.2},{year:1967,s1:8.4,s2:7.9},{year:1968,s1:7.0,s2:8.6},
+    {year:1969,s1:7.6,s2:9.4},{year:1970,s1:8.6,s2:9.9},{year:1971,s1:9.1,s2:9.6},
+    {year:1972,s1:8.8,s2:10.8},{year:1973,s1:9.2,s2:11.4},{year:1974,s1:9.4,s2:11.2},
+    {year:1976,s1:9.9,s2:10.0},{year:1977,s1:10.1,s2:10.7},{year:1978,s1:9.7,s2:11.1},
+    {year:1979,s1:9.8,s2:11.3},{year:1980,s1:10.0,s2:10.9},{year:1981,s1:9.9,s2:10.8},
+    {year:1982,s1:9.7,s2:10.6},{year:1983,s1:9.8,s2:10.7},{year:1984,s1:10.0,s2:10.5},
+    {year:1985,s1:9.9,s2:10.8},{year:1986,s1:9.5,s2:10.6},{year:1987,s1:9.7,s2:10.9},
+    {year:1988,s1:9.8,s2:10.7},{year:1989,s1:9.7,s2:10.8},{year:1990,s1:9.4,s2:10.6},
+    {year:1991,s1:9.5,s2:10.5},{year:1992,s1:9.7,s2:10.3},{year:1993,s1:9.3,s2:10.4},
+    {year:1994,s1:9.4,s2:10.2},{year:1995,s1:9.2,s2:10.0}
   ];
 
   const W = 700, H = 320;

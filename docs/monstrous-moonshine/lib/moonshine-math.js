@@ -1,7 +1,7 @@
 // moonshine-math.js — Numerical and geometric helpers for the Monstrous
 // Moonshine series. Attaches a single `Moon` object to the global scope.
-// No modules, no build step. Works alongside `../../lie-algebras/lib/lie-math.js`
-// and `../../e8-lattice/lib/e8-math.js` when loaded in the same page.
+// No modules, no build step. Works alongside `../../exceptional-atlas/lib/lie-math.js`
+// and `../../exceptional-atlas/lib/e8-math.js` when loaded in the same page.
 //
 // Public sections
 // ---------------
