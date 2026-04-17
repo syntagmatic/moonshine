@@ -1111,6 +1111,7 @@ const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matc
   var dpr = window.devicePixelRatio || 1;
   var w, h;
   var boids = [];
+  var predators = [];
   var N = 40;
 
   function init() {
@@ -1128,17 +1129,34 @@ const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matc
         vy: Math.sin(angle) * speed
       });
     }
+    predators = [];
+    for (var j = 0; j < 2; j++) {
+      var pa = Math.random() * Math.PI * 2;
+      predators.push({
+        x: Math.random() * w,
+        y: Math.random() * h,
+        vx: Math.cos(pa) * 0.3,
+        vy: Math.sin(pa) * 0.3
+      });
+    }
   }
 
   function step() {
     var sepDist = 20, aliDist = 40, cohDist = 60;
     var sepWeight = 0.03, aliWeight = 0.02, cohWeight = 0.002;
+    var fleeDist = 50, fleeWeight = 0.12;
     var maxSpeed = 0.8, minSpeed = 0.2;
+    var predMaxSpeed = 0.55, predMinSpeed = 0.25;
+    var predChaseDist = 140, predChaseWeight = 0.008;
+    var predSepDist = 180, predSepWeight = 0.06;
+    var predAntiAliWeight = 0.04;
+    var predMaxTurn = 0.015;
 
     boids.forEach(function(b) {
       var sx = 0, sy = 0, sc = 0;
       var ax = 0, ay = 0, ac = 0;
       var cx = 0, cy = 0, cc = 0;
+      var fx = 0, fy = 0, fc = 0;
 
       boids.forEach(function(o) {
         if (o === b) return;
@@ -1149,19 +1167,66 @@ const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matc
         if (d < cohDist) { cx += o.x; cy += o.y; cc++; }
       });
 
+      predators.forEach(function(p) {
+        var dx = p.x - b.x, dy = p.y - b.y;
+        var d = Math.sqrt(dx * dx + dy * dy);
+        if (d < fleeDist && d > 0) {
+          fx -= dx / d * (fleeDist - d) / fleeDist;
+          fy -= dy / d * (fleeDist - d) / fleeDist;
+          fc++;
+        }
+      });
+
       if (sc > 0) { b.vx += sx * sepWeight; b.vy += sy * sepWeight; }
       if (ac > 0) { b.vx += (ax / ac - b.vx) * aliWeight; b.vy += (ay / ac - b.vy) * aliWeight; }
       if (cc > 0) { b.vx += (cx / cc - b.x) * cohWeight; b.vy += (cy / cc - b.y) * cohWeight; }
+      if (fc > 0) { b.vx += fx * fleeWeight; b.vy += fy * fleeWeight; }
 
       var speed = Math.sqrt(b.vx * b.vx + b.vy * b.vy);
       if (speed > maxSpeed) { b.vx = (b.vx / speed) * maxSpeed; b.vy = (b.vy / speed) * maxSpeed; }
       else if (speed < minSpeed && speed > 0) { b.vx = (b.vx / speed) * minSpeed; b.vy = (b.vy / speed) * minSpeed; }
     });
 
+    predators.forEach(function(p) {
+      var sx = 0, sy = 0;
+      var nearest = null, nearestD = Infinity;
+      boids.forEach(function(b) {
+        var dx = b.x - p.x, dy = b.y - p.y;
+        var d = Math.sqrt(dx * dx + dy * dy);
+        if (d < predChaseDist && d < nearestD) { nearestD = d; nearest = b; }
+      });
+      if (nearest) {
+        sx += (nearest.x - p.x) * predChaseWeight;
+        sy += (nearest.y - p.y) * predChaseWeight;
+      }
+      predators.forEach(function(q) {
+        if (q === p) return;
+        var dx = q.x - p.x, dy = q.y - p.y;
+        var d = Math.sqrt(dx * dx + dy * dy);
+        if (d < predSepDist && d > 0) {
+          sx -= dx / d * predSepWeight;
+          sy -= dy / d * predSepWeight;
+          sx -= q.vx * predAntiAliWeight;
+          sy -= q.vy * predAntiAliWeight;
+        }
+      });
+      var sm = Math.sqrt(sx * sx + sy * sy);
+      if (sm > predMaxTurn) { sx = sx / sm * predMaxTurn; sy = sy / sm * predMaxTurn; }
+      p.vx += sx; p.vy += sy;
+      var ps = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
+      if (ps > predMaxSpeed) { p.vx = (p.vx / ps) * predMaxSpeed; p.vy = (p.vy / ps) * predMaxSpeed; }
+      else if (ps < predMinSpeed && ps > 0) { p.vx = (p.vx / ps) * predMinSpeed; p.vy = (p.vy / ps) * predMinSpeed; }
+    });
+
     boids.forEach(function(b) {
       b.x += b.vx; b.y += b.vy;
       if (b.x < 0) b.x += w; if (b.x > w) b.x -= w;
       if (b.y < 0) b.y += h; if (b.y > h) b.y -= h;
+    });
+    predators.forEach(function(p) {
+      p.x += p.vx; p.y += p.vy;
+      if (p.x < 0) p.x += w; if (p.x > w) p.x -= w;
+      if (p.y < 0) p.y += h; if (p.y > h) p.y -= h;
     });
   }
 
@@ -1179,6 +1244,19 @@ const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matc
       ctx.moveTo(b.x + Math.cos(angle) * len, b.y + Math.sin(angle) * len);
       ctx.lineTo(b.x + Math.cos(angle + 2.5) * len * 0.6, b.y + Math.sin(angle + 2.5) * len * 0.6);
       ctx.lineTo(b.x + Math.cos(angle - 2.5) * len * 0.6, b.y + Math.sin(angle - 2.5) * len * 0.6);
+      ctx.closePath();
+      ctx.fill();
+    });
+
+    predators.forEach(function(p) {
+      var angle = Math.atan2(p.vy, p.vx);
+      var len = 6;
+      ctx.fillStyle = '#dc2626';
+      ctx.globalAlpha = 0.9;
+      ctx.beginPath();
+      ctx.moveTo(p.x + Math.cos(angle) * len, p.y + Math.sin(angle) * len);
+      ctx.lineTo(p.x + Math.cos(angle + 2.5) * len * 0.6, p.y + Math.sin(angle + 2.5) * len * 0.6);
+      ctx.lineTo(p.x + Math.cos(angle - 2.5) * len * 0.6, p.y + Math.sin(angle - 2.5) * len * 0.6);
       ctx.closePath();
       ctx.fill();
     });
