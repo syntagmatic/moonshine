@@ -9,6 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;500&family=Source+Sans+3:wght@400;600;700&family=Source+Serif+4:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js" onload="renderMathInElement(document.body);"></script>
 <script src="https://d3js.org/d3.v7.min.js"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -94,13 +95,11 @@ The cycle starts again.
 </p>
 
 <p>
-This relationship is captured by the Lotka-Volterra equations, where the rate of change for prey $x$ and predator $y$ are coupled:
+This relationship is captured by the Lotka-Volterra equations, a coupled pair of ODEs in which prey density $x$ and predator density $y$ regulate each other through a shared predation term.
 </p>
 
-<div id="math-equations" style="margin: 2rem 0; text-align: center;"></div>
-
 <div class="figure" id="fig-predator-prey">
-  <div id="phase-container"></div>
+  <div id="phase-container" style="position:relative;"></div>
   <div id="ts-container" style="margin-top:0.75rem;"></div>
   <div class="legend">
     <span class="legend-item"><span class="legend-swatch" style="background:#10b981"></span> Prey ($x$)</span>
@@ -147,7 +146,7 @@ This relationship is captured by the Lotka-Volterra equations, where the rate of
   </div>
   <p class="figure-caption">
     <span class="figure-label">Figure 1.</span>
-    The Lotka-Volterra phase portrait and time series. The outer ring is the initial condition (drag it); the filled dot is the current state moving around the loop in real time. The system traces a closed orbit forever, representing a stable but oscillating ecosystem.
+    The Lotka-Volterra phase portrait and time series. The outer ring is the initial condition (drag it); the filled dot is the current state moving around the loop in real time. Dashed lines are the nullclines ($\dot x=0$ and $\dot y=0$); their intersection is the fixed point that every closed orbit encircles.
   </p>
 </div>
 
@@ -179,7 +178,8 @@ This is known as the Wa-Tor model (originally framed with fish and sharks by A.K
 </p>
 
 <div class="figure" id="fig-wator">
-  <canvas id="canvas-wator" style="image-rendering: pixelated; margin: 0 auto; display: block; border: 1px solid var(--border); border-radius: 3px;"></canvas>
+  <canvas id="canvas-wator" style="image-rendering: pixelated; margin: 0 auto; display: block; border: 1px solid var(--border); border-radius: 3px; cursor: crosshair;"></canvas>
+  <p style="font-family: var(--heading-font); font-size: 0.8rem; color: var(--text-2); text-align: center; margin-top: 0.35rem; font-style: italic;">Click or drag on the grid to paint: shift-click for predators, plain click for prey, alt-click to clear.</p>
   <div id="wator-ts-container" style="margin-top:0.75rem;"></div>
   <div class="legend" style="justify-content: center;">
     <span class="legend-item"><span class="legend-swatch" style="background:#10b981"></span> Prey</span>
@@ -272,12 +272,19 @@ function step(x, y, dt, alpha, beta, gamma, delta) {
   return [x + dx2 * dt, y + dy2 * dt];
 }
 
-// --- Formulas ---
+// --- Formulas (rendered as overlay in the chart top-right) ---
 window.addEventListener('load', () => {
-  if (window.katex) {
-    katex.render("\\begin{aligned} \\frac{dx}{dt} &= \\alpha x - \\beta xy \\\\ \\frac{dy}{dt} &= \\delta xy - \\gamma y \\end{aligned}", 
-      document.getElementById('math-equations'), { throwOnError: false, displayMode: true });
-  }
+  if (!window.katex) return;
+  const phaseContainer = document.getElementById('phase-container');
+  if (!phaseContainer) return;
+  const eq = document.createElement('div');
+  eq.style.cssText = 'position:absolute; top:0.5rem; right:0.75rem; font-size:0.85rem; background:rgba(255,255,255,0.85); padding:0.3rem 0.55rem; border-radius:3px; border:1px solid var(--border); pointer-events:none;';
+  phaseContainer.appendChild(eq);
+  katex.render(
+    "\\begin{aligned} \\dot x &= \\alpha x - \\beta xy \\\\ \\dot y &= \\delta xy - \\gamma y \\end{aligned}",
+    eq,
+    { throwOnError: false, displayMode: false }
+  );
 });
 
 (function() {
@@ -297,7 +304,7 @@ window.addEventListener('load', () => {
   const resetBtn = document.getElementById('reset-btn');
 
   let width = container.clientWidth || 700;
-  let height = 350;
+  let height = 260;
   const TS_WINDOW = 40; // time units shown on time-series
   const TRAJ_STEPS = 2000;
   const DT = 0.05;
@@ -306,7 +313,7 @@ window.addEventListener('load', () => {
   const tsSvg = d3.select(tsContainer).append('svg');
 
   const xSc = d3.scaleLinear().domain([0, 8]);
-  const ySc = d3.scaleLinear().domain([0, 6]);
+  const ySc = d3.scaleLinear().domain([0, 4]);
   const tSc = d3.scaleLinear().domain([0, TS_WINDOW]);
   const tySc = d3.scaleLinear().domain([0, 8]);
 
@@ -315,9 +322,45 @@ window.addEventListener('load', () => {
   const tsx = tsSvg.append('g');
   const tsy = tsSvg.append('g');
 
+  // Axis titles for phase portrait
+  const xAxisLabel = svg.append('text').attr('text-anchor', 'middle')
+    .attr('font-family', 'var(--heading-font)').attr('font-size', '11px')
+    .attr('fill', 'var(--text-2)').text('Prey population (x)');
+  const yAxisLabel = svg.append('text').attr('text-anchor', 'middle')
+    .attr('font-family', 'var(--heading-font)').attr('font-size', '11px')
+    .attr('fill', 'var(--text-2)').text('Predator population (y)');
+
+  // Axis titles for time series
+  const tsXLabel = tsSvg.append('text').attr('text-anchor', 'middle')
+    .attr('font-family', 'var(--heading-font)').attr('font-size', '11px')
+    .attr('fill', 'var(--text-2)').text('time');
+  const tsYLabel = tsSvg.append('text').attr('text-anchor', 'middle')
+    .attr('font-family', 'var(--heading-font)').attr('font-size', '11px')
+    .attr('fill', 'var(--text-2)').text('population');
+
+  // Nullclines: dy/dt = 0 at x = gamma/delta (vertical); dx/dt = 0 at y = alpha/beta (horizontal).
+  // The fixed point sits at their intersection and closed orbits encircle it.
+  const nullclineV = svg.append('line').attr('stroke', COLORS.pred).attr('stroke-width', 1)
+    .attr('stroke-dasharray', '3,3').attr('opacity', 0.4);
+  const nullclineH = svg.append('line').attr('stroke', COLORS.prey).attr('stroke-width', 1)
+    .attr('stroke-dasharray', '3,3').attr('opacity', 0.4);
+  const fixedPt = svg.append('circle').attr('r', 4).attr('fill', 'none')
+    .attr('stroke', COLORS.text).attr('stroke-width', 1.5).attr('opacity', 0.6);
+  const fixedPtLabel = svg.append('text').attr('font-family', 'var(--heading-font)')
+    .attr('font-size', '10px').attr('fill', COLORS.text).attr('opacity', 0.7)
+    .text('fixed point');
+
   const path = svg.append('path').attr('fill', 'none').attr('stroke', COLORS.text).attr('opacity', 0.2).attr('stroke-width', 1.5);
   const preyPath = tsSvg.append('path').attr('fill', 'none').attr('stroke', COLORS.prey).attr('stroke-width', 2);
   const predPath = tsSvg.append('path').attr('fill', 'none').attr('stroke', COLORS.pred).attr('stroke-width', 2);
+
+  // Inline labels at the right edge of the time series so viewers can tell curves apart without scanning a legend
+  const preyLabel = tsSvg.append('text').attr('font-family', 'var(--heading-font)')
+    .attr('font-size', '10px').attr('font-weight', '600').attr('fill', COLORS.prey)
+    .attr('text-anchor', 'end').text('prey');
+  const predLabel = tsSvg.append('text').attr('font-family', 'var(--heading-font)')
+    .attr('font-size', '10px').attr('font-weight', '600').attr('fill', COLORS.pred)
+    .attr('text-anchor', 'end').text('predators');
   // current-state marker: draggable initial condition AND animates along the trajectory
   const livePt = svg.append('circle').attr('r', 5).attr('fill', COLORS.accent).attr('opacity', 0.9).attr('pointer-events', 'none');
   const dot = svg.append('circle').attr('r', 8).attr('fill', 'none').attr('stroke', COLORS.accent).attr('stroke-width', 2).attr('cursor', 'grab').call(d3.drag().on('start', () => { dot.attr('cursor', 'grabbing'); }).on('drag', dragged).on('end', () => { dot.attr('cursor', 'grab'); }));
@@ -333,7 +376,7 @@ window.addEventListener('load', () => {
     state.x = xSc.invert(coords[0]);
     state.y = ySc.invert(coords[1]);
     state.x = Math.max(0.1, Math.min(7.9, state.x));
-    state.y = Math.max(0.1, Math.min(5.9, state.y));
+    state.y = Math.max(0.1, Math.min(3.9, state.y));
     resetTrajectory();
     redrawLoop();
   }
@@ -355,12 +398,38 @@ window.addEventListener('load', () => {
     tsx.attr('transform', 'translate(0,130)').call(d3.axisBottom(tSc).ticks(width / 80));
     tsy.attr('transform', 'translate(50,0)').call(d3.axisLeft(tySc).ticks(5));
 
+    // Position axis titles
+    xAxisLabel.attr('x', (50 + (width - 20)) / 2).attr('y', height - 6);
+    yAxisLabel.attr('transform', `translate(14, ${(20 + height - 40) / 2}) rotate(-90)`);
+    tsXLabel.attr('x', (50 + (width - 20)) / 2).attr('y', 148);
+    tsYLabel.attr('transform', `translate(14, 75) rotate(-90)`);
+
     redrawLoop();
     redrawTs();
   }
 
   function redrawLoop() {
     dot.attr('cx', xSc(state.x)).attr('cy', ySc(state.y));
+
+    // Fixed point of the Lotka-Volterra system sits at (gamma/delta, alpha/beta).
+    const fpx = state.gamma / state.delta;
+    const fpy = state.alpha / state.beta;
+    const xDom = xSc.domain(), yDom = ySc.domain();
+    const fpInView = fpx >= xDom[0] && fpx <= xDom[1] && fpy >= yDom[0] && fpy <= yDom[1];
+    if (fpInView) {
+      fixedPt.attr('cx', xSc(fpx)).attr('cy', ySc(fpy)).style('display', null);
+      fixedPtLabel.attr('x', xSc(fpx) + 7).attr('y', ySc(fpy) - 6).style('display', null);
+      nullclineV.attr('x1', xSc(fpx)).attr('x2', xSc(fpx))
+        .attr('y1', ySc(yDom[0])).attr('y2', ySc(yDom[1])).style('display', null);
+      nullclineH.attr('y1', ySc(fpy)).attr('y2', ySc(fpy))
+        .attr('x1', xSc(xDom[0])).attr('x2', xSc(xDom[1])).style('display', null);
+    } else {
+      fixedPt.style('display', 'none');
+      fixedPtLabel.style('display', 'none');
+      nullclineV.style('display', 'none');
+      nullclineH.style('display', 'none');
+    }
+
     let x = state.x, y = state.y;
     const pts = [];
     for (let i = 0; i < TRAJ_STEPS; i++) {
@@ -385,6 +454,12 @@ window.addEventListener('load', () => {
     const visible = history.filter(h => h.t >= tMin);
     preyPath.attr('d', line(visible.map(h => [tSc(h.t), tySc(h.x)])));
     predPath.attr('d', line(visible.map(h => [tSc(h.t), tySc(h.y)])));
+    // Position inline curve labels at the current sample so viewers can read prey vs. predator without hunting the legend
+    if (visible.length) {
+      const last = visible[visible.length - 1];
+      preyLabel.attr('x', tSc(last.t) - 4).attr('y', tySc(last.x) - 4);
+      predLabel.attr('x', tSc(last.t) - 4).attr('y', tySc(last.y) - 4);
+    }
     livePt.attr('cx', xSc(liveX)).attr('cy', ySc(liveY));
   }
 
@@ -513,16 +588,33 @@ window.addEventListener('load', () => {
 
   const tsSvg = d3.select(tsContainer).append('svg');
   let tsWidth = tsContainer.clientWidth || 700;
-  let tsHeight = 120;
-  
+  let tsHeight = 150;
+  const TS_BOT = 35; // reserve space below plot for axis + x-label
+
   const tSc = d3.scaleLinear().domain([0, MAX_HIST]).range([50, tsWidth-20]);
-  const tySc = d3.scaleLinear().domain([0, 2000]).range([tsHeight-20, 10]);
-  
-  const tsx = tsSvg.append('g').attr('transform', `translate(0,${tsHeight-20})`);
+  const tySc = d3.scaleLinear().domain([0, 2000]).range([tsHeight-TS_BOT, 10]);
+
+  const tsx = tsSvg.append('g').attr('transform', `translate(0,${tsHeight-TS_BOT})`);
   const tsy = tsSvg.append('g').attr('transform', `translate(50,0)`);
-  
+
+  // Axis titles for the Wa-Tor time series
+  const watorXLabel = tsSvg.append('text').attr('text-anchor', 'middle')
+    .attr('font-family', 'var(--heading-font)').attr('font-size', '10px')
+    .attr('fill', 'var(--text-2)').text('step');
+  const watorYLabel = tsSvg.append('text').attr('text-anchor', 'middle')
+    .attr('font-family', 'var(--heading-font)').attr('font-size', '10px')
+    .attr('fill', 'var(--text-2)').text('count');
+
   const preyPath = tsSvg.append('path').attr('fill', 'none').attr('stroke', '#10b981').attr('stroke-width', 2);
   const predPath = tsSvg.append('path').attr('fill', 'none').attr('stroke', '#ef4444').attr('stroke-width', 2);
+
+  // Inline curve labels follow the right edge of each line
+  const preyLabelW = tsSvg.append('text').attr('font-family', 'var(--heading-font)')
+    .attr('font-size', '9px').attr('font-weight', '600').attr('fill', '#10b981')
+    .attr('text-anchor', 'end').text('prey');
+  const predLabelW = tsSvg.append('text').attr('font-family', 'var(--heading-font)')
+    .attr('font-size', '9px').attr('font-weight', '600').attr('fill', '#ef4444')
+    .attr('text-anchor', 'end').text('predators');
 
   function resize() {
     const rect = container.getBoundingClientRect();
@@ -537,6 +629,9 @@ window.addEventListener('load', () => {
     tsSvg.attr('viewBox', `0 0 ${tsWidth} ${tsHeight}`);
     tSc.range([50, tsWidth-20]);
     tsx.call(d3.axisBottom(tSc).ticks(tsWidth / 80));
+
+    watorXLabel.attr('x', (50 + tsWidth - 20) / 2).attr('y', tsHeight - 4);
+    watorYLabel.attr('transform', `translate(12, ${(tsHeight - TS_BOT) / 2}) rotate(-90)`);
   }
   
   new ResizeObserver(resize).observe(container);
@@ -680,6 +775,11 @@ window.addEventListener('load', () => {
     const line = d3.line();
     preyPath.attr('d', line(historyPrey.map((d, i) => [tSc(i), tySc(d)])));
     predPath.attr('d', line(historyPred.map((d, i) => [tSc(i), tySc(d)])));
+    if (historyPrey.length) {
+      const iLast = historyPrey.length - 1;
+      preyLabelW.attr('x', tSc(iLast) - 4).attr('y', tySc(historyPrey[iLast]) - 3);
+      predLabelW.attr('x', tSc(iLast) - 4).attr('y', tySc(historyPred[iLast]) - 3);
+    }
   }
 
   function loop() {
@@ -708,6 +808,32 @@ window.addEventListener('load', () => {
   });
 
   resetBtn.addEventListener('click', init);
+
+  // Click / drag to paint the grid. Plain click = prey, shift = predator, alt = erase.
+  // Lets readers steer the simulation (e.g. wipe a predator hotspot or seed an isolated
+  // prey patch) without reshuffling the whole world.
+  let painting = false;
+  function paintCell(ev) {
+    const rect = canvas.getBoundingClientRect();
+    const cx = Math.floor((ev.clientX - rect.left) * (W / rect.width));
+    const cy = Math.floor((ev.clientY - rect.top) * (H / rect.height));
+    if (cx < 0 || cx >= W || cy < 0 || cy >= H) return;
+    const ps = parseInt(predStarveSlider.value);
+    const type = ev.altKey ? 0 : (ev.shiftKey ? 2 : 1);
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const x = cx + dx, y = cy + dy;
+        if (x < 0 || x >= W || y < 0 || y >= H) continue;
+        const idx = y * W + x;
+        grid[idx] = type;
+        age[idx] = 0;
+        if (type === 2) energy[idx] = ps;
+      }
+    }
+  }
+  canvas.addEventListener('mousedown', ev => { painting = true; paintCell(ev); });
+  canvas.addEventListener('mousemove', ev => { if (painting) paintCell(ev); });
+  window.addEventListener('mouseup', () => { painting = false; });
 
   resize();
   init();

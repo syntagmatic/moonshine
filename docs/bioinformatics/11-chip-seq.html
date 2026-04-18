@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ChIP-seq — Moonshine</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js" onload="renderMathInElement(document.body);"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --article-width: 740px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem;
+  --line-height: 1.6;
+  --text: #1a1a2e;
+  --text-2: #4a4a6a;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --bg: #fafafa;
+  --fig-bg: #ffffff;
+  --border: #e2e2e8;
+  --c-gene: #2563eb;
+  --c-sample: #0891b2;
+  --c-expression: #8b5cf6;
+  --c-significance: #ef4444;
+  --c-pathway: #10b981;
+  --muted: #94a3b8;
+  --grid: #e2e8f0;
+}
+
+.t-wt  { color: var(--c-gene);         font-weight: 600; }
+.t-mut { color: var(--c-significance); font-weight: 600; }
+.t-inp { color: var(--text-2);         font-weight: 600; }
+
+body { font-family: var(--body-font); font-size: var(--body-size); line-height: var(--line-height); color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased; }
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
+h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+h3 { font-size: 1rem; margin: 1.5rem 0 0.5rem; color: var(--text-2); }
+p { margin: 0 0 1rem; }
+a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+
+.figure { margin: 2rem 0; padding: 1.5rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.figure-wide { margin-left: -2rem; margin-right: -2rem; }
+.figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; line-height: 1.4; }
+.figure-label { font-weight: 600; color: var(--text); }
+
+.insight { background: var(--accent-light); border-left: 3px solid var(--accent); padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 4px 4px 0; }
+.insight p { margin: 0; }
+
+.controls { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; font-family: var(--heading-font); font-size: 0.83rem; color: var(--text-2); }
+.controls > label { display: flex; align-items: center; gap: 0.5rem; }
+.btn { font-family: var(--heading-font); font-size: 0.82rem; font-weight: 600; padding: 0.3rem 0.75rem; border-radius: 4px; border: 1px solid var(--border); background: var(--fig-bg); color: var(--text-2); cursor: pointer; transition: all 0.12s; user-select: none; }
+.btn:hover { border-color: var(--accent); color: var(--accent); }
+.btn.active { border-color: var(--accent); background: var(--accent); color: white; }
+.btn-group { display: inline-flex; gap: 0.3rem; }
+input[type="range"] { accent-color: var(--accent); }
+
+svg text { font-family: var(--heading-font); }
+.tip { position: fixed; pointer-events: none; background: var(--text); color: white; font-family: var(--heading-font); font-size: 0.75rem; padding: 0.4rem 0.6rem; border-radius: 4px; opacity: 0; transition: opacity 0.12s; z-index: 10; white-space: nowrap; line-height: 1.35; }
+.tip .tip-k { color: #a1a1aa; font-weight: 500; margin-right: 0.3rem; }
+
+.legend-row { display: flex; align-items: center; gap: 1.25rem; flex-wrap: wrap; margin-bottom: 0.75rem; font-family: var(--heading-font); font-size: 0.78rem; color: var(--text-2); }
+.legend-item { display: flex; align-items: center; gap: 0.35rem; }
+.legend-swatch { width: 14px; height: 10px; border-radius: 2px; }
+
+.stat { font-family: var(--heading-font); font-size: 0.82rem; color: var(--text-2); }
+.stat b { color: var(--text); font-weight: 700; }
+.stat-pill { display: inline-block; padding: 0.15rem 0.55rem; border-radius: 999px; background: #f1f5f9; margin-right: 0.4rem; }
+
+@media (max-width: 640px) { .figure-wide { margin-left: 0; margin-right: 0; } h1 { font-size: 1.75rem; } }
+</style>
+</head>
+<body>
+
+<div class="article">
+  <header style="margin-bottom: 3rem;">
+    <a href="index.html" style="font-family: var(--heading-font); font-size: 0.85rem; text-decoration: none; color: var(--text-2); display: inline-block; margin-bottom: 1rem;">&larr; Bioinformatics Series</a>
+    <h1>ChIP-seq Peaks</h1>
+    <p style="font-family: var(--heading-font); font-size: 1.15rem; color: var(--text-2); max-width: 620px;">
+      Measuring where a transcription factor binds DNA — and what loss-of-function looks like at single-base resolution.
+    </p>
+  </header>
+
+  <p>By this point in the investigation, we have seen that <span class="t-wt">TP53</span> is frequently mutated, that the promoter of its target <span class="t-wt">CDKN1A</span> can be methylated as a second silencing route, and that the pathway downstream fails in both cases. What we have not yet seen is direct physical evidence that mutant TP53 protein cannot do its job. <strong>ChIP-seq</strong> (chromatin immunoprecipitation followed by sequencing) measures exactly that: where on the genome a particular protein is physically bound, in a particular cell state, at the time the experiment was fixed.</p>
+
+  <p>The assay works by chemically cross-linking proteins to DNA, shearing the DNA into fragments, pulling down the fragments attached to your protein of interest with a specific antibody, and sequencing whatever DNA comes along for the ride. Map those sequenced reads back to the reference genome and you get a <em>pileup</em> — a histogram of how often each base appeared in fragments bound by your target protein.</p>
+
+  <h2>Reading the signal</h2>
+
+  <p>ChIP-seq is never read in isolation. Any antibody pull-down brings along some background DNA — chromatin that was accessible, repetitive regions, sequences that happen to stick. To separate real binding from this background, every experiment includes an <strong>input control</strong>: sonicated DNA from the same cells, with no immunoprecipitation. A peak is real when the ChIP signal rises meaningfully above its own input.</p>
+
+  <div class="figure figure-wide">
+    <div class="legend-row">
+      <div class="legend-item"><div class="legend-swatch" style="background: var(--c-gene);"></div><span class="t-wt">WT TP53 ChIP</span></div>
+      <div class="legend-item"><div class="legend-swatch" style="background: var(--c-significance);"></div><span class="t-mut">R175H mutant ChIP</span></div>
+      <div class="legend-item"><div class="legend-swatch" style="background: var(--muted);"></div><span class="t-inp">Input control</span></div>
+      <div class="legend-item"><div class="legend-swatch" style="background: var(--c-pathway); height: 12px;"></div><span>CDKN1A exon</span></div>
+    </div>
+    <div id="fig-tracks"></div>
+    <p class="figure-caption">
+      <span class="figure-label">Figure 1.</span> A 10-kb window around the <span class="t-wt">CDKN1A</span> transcription start site. Three tracks stacked on the same coordinate axis: wildtype <span class="t-wt">TP53</span> ChIP, the <span class="t-mut">R175H mutant</span> ChIP, and the <span class="t-inp">input control</span>. Hover anywhere on the track panel for a vertical crosshair and per-track signal readout. The gene body at the bottom shows exon structure; the tall peak sits about 2 kb upstream of the TSS — the canonical <span class="t-wt">TP53</span>-responsive element.
+    </p>
+  </div>
+
+  <p>The wildtype track shows a sharp, symmetric pileup centered on the p53 response element — a stack of reads about 200 bp wide, rising 25× above the local background. The input control is flat noise. The mutant track is also flat: no binding, no pileup, no peak at the CDKN1A promoter. This is the direct molecular evidence that R175H is a loss-of-function lesion for DNA binding specifically — not a folding defect, not a stability defect, but a loss of the sequence-specific contact the mutant hexamer used to make.</p>
+
+  <h2>Peak calling</h2>
+
+  <p>A skilled eye can point at the WT track and circle the peak. A pipeline cannot. <strong>Peak calling</strong> turns a continuous pileup into a discrete list of bound regions, which is what every downstream analysis (motif enrichment, target annotation, differential binding) actually consumes. The standard family of tools (MACS, HOMER, and their descendants) treat each genomic bin as a hypothesis test: given the local background estimated from the input, how unlikely would we be to see this many reads by chance? The resulting \(-\log_{10}(p)\) score is what we threshold.</p>
+
+  <div class="figure figure-wide">
+    <div class="controls">
+      <label>Threshold (−log₁₀ p): <input type="range" id="peak-thresh" min="1" max="8" value="5" step="0.1"> <span id="peak-thresh-val" class="stat"><b>5.0</b></span></label>
+      <span class="stat" id="peak-stats"></span>
+    </div>
+    <div id="fig-peaks"></div>
+    <p class="figure-caption">
+      <span class="figure-label">Figure 2.</span> The same wildtype signal from Figure 1, re-expressed as local enrichment scores and evaluated against a threshold. Bins above the line are called as belonging to a peak; contiguous runs of called bins are merged into discrete peak regions, outlined in <span style="color: var(--c-pathway); font-weight:600;">green</span>. Drag the threshold down — noise fragments quickly swamp the one real peak. Drag it up — even the real peak dissolves. The sweet spot around 5–6 isolates the one true signal. Synthetic data, MACS-style calling.
+    </p>
+  </div>
+
+  <div class="insight">
+    <p><strong>Why this matters.</strong> Every ChIP-seq paper's headline results are contingent on a threshold choice. Too permissive and you publish noise; too stringent and you miss the biology. The defensible choice is usually validated at an FDR (false discovery rate) — each candidate peak's p-value is converted to a q-value by Benjamini–Hochberg, and peaks below q = 0.01 or q = 0.05 are kept. A threshold of −log₁₀(p) ≈ 5 corresponds roughly to q ≈ 0.01 for a genome-sized test.</p>
+  </div>
+
+  <h2>Differential binding</h2>
+
+  <p>One locus shows one story. Genome-wide comparison tells us whether R175H is a broken key or simply a differently shaped one. The figure below compares <span class="t-wt">WT</span> and <span class="t-mut">mutant</span> ChIP signal at the ten canonical <span class="t-wt">TP53</span> target genes.</p>
+
+  <div class="figure figure-wide">
+    <div class="controls">
+      <span class="stat">Sort rows by:</span>
+      <div class="btn-group" id="diff-sort">
+        <button class="btn active" data-sort="wt">WT peak height</button>
+        <button class="btn" data-sort="mut">Mutant peak height</button>
+        <button class="btn" data-sort="lfc">Log₂ fold change</button>
+        <button class="btn" data-sort="name">Gene name</button>
+      </div>
+    </div>
+    <div id="fig-diff"></div>
+    <p class="figure-caption">
+      <span class="figure-label">Figure 3.</span> Differential binding summary for ten validated <span class="t-wt">TP53</span> target genes. The log₂ fold-change column uses a diverging scale centered on zero: values left of center (orange→red) mean the mutant binds <em>less</em>. Hover any row for the numeric values. Sort by fold change to see that the mutant binds essentially none of its canonical targets.
+    </p>
+  </div>
+
+  <p>The picture is categorical, not gradual. The mutant is not a weaker version of wildtype at each target; it is absent at most of them. A handful of sites retain marginal mutant binding — these are often the very strongest wildtype sites, where enough residual affinity survives that some occupancy remains detectable. But the main conclusion is unambiguous: R175H has lost the DNA-contact surface needed to recognise the p53 response element, and the transcriptional program that depends on TP53 occupancy collapses across the board.</p>
+
+  <h2>Beyond binding</h2>
+
+  <p>ChIP-seq answers <em>where</em> the protein was when the cells were fixed. It does not answer whether binding caused a transcriptional change at that locus — binding can be functional, decoy, or inconsequential. To close that loop, a ChIP-seq panel is almost always paired with an RNA-seq panel (from the same cells, at the same time) so the reader can see which bound sites coincide with expression changes. The next article stacks exactly those modalities — expression, methylation, mutation — onto a shared patient axis, to ask which patients actually look like every layer agrees.</p>
+
+  <footer style="margin-top: 4rem; padding-top: 2rem; border-top: 1px solid var(--border); font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2);">
+    <p>Previous: <a href="10-five-views.html" style="color: var(--accent);">Five Views of a Broken Pathway</a> · Next: <a href="12-multi-omics-heatmap.html" style="color: var(--accent);">Multi-Omics Heatmap</a> &rarr;</p>
+    <p style="margin-top: 1rem; opacity: 0.6;">Built with <a href="https://github.com/enjalot/moonshine" style="color: var(--text-2);">moonshine</a>. All data synthetic.</p>
+  </footer>
+</div>
+
+<div class="tip" id="tip"></div>
+
+<script>
+// ─────────────────────────────────────────────────────────────────────────
+// Shared utilities
+// ─────────────────────────────────────────────────────────────────────────
+function mulberry32(s) {
+  return () => {
+    s |= 0; s = s + 0x6D2B79F5 | 0;
+    let t = Math.imul(s ^ s >>> 15, 1 | s);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+const C = {
+  gene: '#2563eb', sample: '#0891b2', expression: '#8b5cf6',
+  significance: '#ef4444', pathway: '#10b981',
+  muted: '#94a3b8', grid: '#e2e8f0', text: '#1a1a2e', text2: '#4a4a6a'
+};
+
+const tip = d3.select('#tip');
+function showTip(event, html) {
+  tip.html(html).style('opacity', 1)
+    .style('left', (event.clientX + 12) + 'px')
+    .style('top', (event.clientY + 12) + 'px');
+}
+function moveTip(event) {
+  tip.style('left', (event.clientX + 12) + 'px').style('top', (event.clientY + 12) + 'px');
+}
+function hideTip() { tip.style('opacity', 0); }
+
+// ─────────────────────────────────────────────────────────────────────────
+// Shared signal: WT, mutant, input across the CDKN1A window
+// ─────────────────────────────────────────────────────────────────────────
+const N_BINS = 400;
+const WINDOW_KB = 10;  // −5kb to +5kb around TSS
+const TSS_BIN = 200;
+const PEAK_CENTER = 130;  // ~ −2kb upstream
+const PEAK_WIDTH = 8;     // std dev in bins
+
+const rng = mulberry32(4221);
+
+function buildSignals() {
+  const wt = new Array(N_BINS), mut = new Array(N_BINS), inp = new Array(N_BINS);
+  for (let i = 0; i < N_BINS; i++) {
+    const baseNoise = 1.5 + rng() * 1.8;
+    const burstWT = 30 * Math.exp(-0.5 * ((i - PEAK_CENTER) / PEAK_WIDTH) ** 2);
+    // A weak secondary site for one of the strongest targets
+    const secondaryWT = 7 * Math.exp(-0.5 * ((i - 280) / 10) ** 2);
+    wt[i]  = baseNoise + burstWT + secondaryWT + rng() * 2;
+    mut[i] = baseNoise + rng() * 2;
+    inp[i] = baseNoise * 0.9 + rng() * 1.2;
+  }
+  return { wt, mut, inp };
+}
+const SIG = buildSignals();
+
+// Also compute local -log10(p) for peak calling figure: Poisson against local input mean
+function computePvals(signal, input) {
+  const out = new Array(N_BINS);
+  for (let i = 0; i < N_BINS; i++) {
+    // Local lambda = smoothed input around this bin (±15 bin window)
+    let sum = 0, n = 0;
+    for (let j = Math.max(0, i - 15); j <= Math.min(N_BINS - 1, i + 15); j++) { sum += input[j]; n++; }
+    const lambda = Math.max(0.5, sum / n);
+    const obs = signal[i];
+    // Simple normal-approx log10 p (survival): z = (obs - lambda)/sqrt(lambda)
+    const z = (obs - lambda) / Math.sqrt(lambda);
+    // Upper-tail log10(p) ≈ -log10( Q(z) ), rough closed form for z > 0
+    let logp;
+    if (z <= 0) logp = 0;
+    else {
+      // Abramowitz & Stegun 26.2.17 approximation to Q(z)
+      const t = 1 / (1 + 0.2316419 * z);
+      const phi = Math.exp(-0.5 * z * z) / Math.sqrt(2 * Math.PI);
+      const Q = phi * (0.319381530*t - 0.356563782*t*t + 1.781477937*t*t*t - 1.821255978*t*t*t*t + 1.330274429*t*t*t*t*t);
+      logp = -Math.log10(Math.max(Q, 1e-16));
+    }
+    out[i] = logp;
+  }
+  return out;
+}
+const PVALS = computePvals(SIG.wt, SIG.inp);
+
+// ─────────────────────────────────────────────────────────────────────────
+// Figure 1 — Stacked tracks
+// ─────────────────────────────────────────────────────────────────────────
+(function() {
+  const container = d3.select('#fig-tracks');
+
+  function render() {
+    container.selectAll('*').remove();
+    const width = container.node().getBoundingClientRect().width || 700;
+    const margin = { top: 14, right: 20, bottom: 50, left: 72 };
+    const trackH = 70, gap = 8;
+    const geneH = 26;
+    const height = margin.top + 3 * trackH + 2 * gap + geneH + margin.bottom;
+
+    const svg = container.append('svg')
+      .attr('viewBox', `0 0 ${width} ${height}`).style('width', '100%').style('height', 'auto');
+
+    const x = d3.scaleLinear().domain([0, N_BINS]).range([margin.left, width - margin.right]);
+    const maxY = d3.max(SIG.wt) * 1.05;
+
+    const tracks = [
+      { name: 'WT TP53',  label: 'WT TP53',     data: SIG.wt,  color: C.gene },
+      { name: 'Mutant',   label: 'R175H mutant', data: SIG.mut, color: C.significance },
+      { name: 'Input',    label: 'Input control', data: SIG.inp, color: C.muted }
+    ];
+
+    tracks.forEach((tr, idx) => {
+      const y0 = margin.top + idx * (trackH + gap);
+      const y1 = y0 + trackH;
+      const y = d3.scaleLinear().domain([0, maxY]).range([y1, y0 + 4]);
+
+      // Track frame
+      svg.append('rect')
+        .attr('x', margin.left).attr('y', y0)
+        .attr('width', width - margin.right - margin.left).attr('height', trackH)
+        .attr('fill', '#fbfbfc').attr('stroke', C.grid);
+
+      // Pileup area
+      const area = d3.area()
+        .x((d, i) => x(i)).y0(y1).y1(d => y(d)).curve(d3.curveBasis);
+      svg.append('path').datum(tr.data).attr('d', area)
+        .attr('fill', tr.color).attr('opacity', 0.75);
+
+      // Summit marker on WT
+      if (tr.name === 'WT TP53') {
+        const summitY = y(d3.max(tr.data));
+        svg.append('line')
+          .attr('x1', x(PEAK_CENTER)).attr('x2', x(PEAK_CENTER))
+          .attr('y1', summitY - 8).attr('y2', summitY - 2)
+          .attr('stroke', C.pathway).attr('stroke-width', 2);
+        svg.append('text')
+          .attr('x', x(PEAK_CENTER)).attr('y', summitY - 11)
+          .attr('text-anchor', 'middle').style('font-size', '10px').style('font-weight', 700)
+          .attr('fill', C.pathway).text('summit');
+      }
+
+      // Track label on left
+      svg.append('text')
+        .attr('x', margin.left - 8).attr('y', (y0 + y1) / 2)
+        .attr('text-anchor', 'end').attr('dominant-baseline', 'central')
+        .style('font-size', '11px').style('font-weight', 700).attr('fill', tr.color)
+        .text(tr.label);
+
+      // Y axis per track
+      const yAxis = d3.axisLeft(y).ticks(3).tickSize(3);
+      svg.append('g').attr('transform', `translate(${margin.left},0)`).call(yAxis)
+        .call(g => g.selectAll('.domain, line').attr('stroke', C.grid))
+        .call(g => g.selectAll('text').style('font-size', '9px').attr('fill', C.text2));
+    });
+
+    // Gene track
+    const gy = margin.top + 3 * (trackH + gap);
+    const geneStart = TSS_BIN, geneEnd = 360;
+    const exons = [
+      { s: geneStart + 2, e: geneStart + 20 },
+      { s: geneStart + 60, e: geneStart + 80 },
+      { s: geneStart + 120, e: geneStart + 160 }
+    ];
+    // Intron line
+    svg.append('line')
+      .attr('x1', x(geneStart)).attr('x2', x(geneEnd))
+      .attr('y1', gy + geneH / 2).attr('y2', gy + geneH / 2)
+      .attr('stroke', C.pathway).attr('stroke-width', 1.5);
+    // Exons
+    exons.forEach(ex => {
+      svg.append('rect')
+        .attr('x', x(ex.s)).attr('y', gy + 6)
+        .attr('width', x(ex.e) - x(ex.s)).attr('height', geneH - 12)
+        .attr('fill', C.pathway);
+    });
+    // TSS arrow
+    svg.append('text')
+      .attr('x', x(TSS_BIN)).attr('y', gy - 4)
+      .attr('text-anchor', 'middle').style('font-size', '11px').style('font-weight', 700)
+      .attr('fill', C.pathway).text('▼ CDKN1A TSS');
+    svg.append('text')
+      .attr('x', margin.left - 8).attr('y', gy + geneH / 2)
+      .attr('text-anchor', 'end').attr('dominant-baseline', 'central')
+      .style('font-size', '11px').style('font-weight', 700).attr('fill', C.pathway)
+      .text('CDKN1A');
+
+    // X axis: kb coords relative to TSS
+    const xAxis = d3.axisBottom(x).ticks(9).tickFormat(d => {
+      const kb = ((d - TSS_BIN) * (WINDOW_KB / N_BINS));
+      return (kb >= 0 ? '+' : '') + kb.toFixed(1) + 'kb';
+    });
+    svg.append('g').attr('transform', `translate(0,${gy + geneH + 4})`).call(xAxis)
+      .call(g => g.selectAll('.domain, line').attr('stroke', C.grid))
+      .call(g => g.selectAll('text').style('font-size', '10px').attr('fill', C.text2));
+
+    svg.append('text')
+      .attr('x', (margin.left + width - margin.right) / 2).attr('y', height - 6)
+      .attr('text-anchor', 'middle').style('font-size', '11px').style('font-weight', 600)
+      .attr('fill', C.text2).text('position relative to CDKN1A TSS');
+
+    // Crosshair overlay
+    const overlay = svg.append('rect')
+      .attr('x', margin.left).attr('y', margin.top)
+      .attr('width', width - margin.right - margin.left).attr('height', 3 * trackH + 2 * gap)
+      .attr('fill', 'transparent').style('cursor', 'crosshair');
+
+    const crosshair = svg.append('line')
+      .attr('y1', margin.top).attr('y2', margin.top + 3 * trackH + 2 * gap)
+      .attr('stroke', C.text2).attr('stroke-dasharray', '2,3').attr('opacity', 0);
+
+    overlay.on('mousemove', function(event) {
+      const [mx] = d3.pointer(event, svg.node());
+      const bin = Math.round(x.invert(mx));
+      if (bin < 0 || bin >= N_BINS) return;
+      crosshair.attr('x1', x(bin)).attr('x2', x(bin)).attr('opacity', 1);
+      const kb = ((bin - TSS_BIN) * (WINDOW_KB / N_BINS)).toFixed(2);
+      showTip(event, `
+        <span class="tip-k">pos</span>${kb >= 0 ? '+' : ''}${kb} kb from TSS<br>
+        <span class="tip-k">WT</span>${SIG.wt[bin].toFixed(1)}<br>
+        <span class="tip-k">Mut</span>${SIG.mut[bin].toFixed(1)}<br>
+        <span class="tip-k">Input</span>${SIG.inp[bin].toFixed(1)}
+      `);
+    }).on('mouseleave', function() {
+      crosshair.attr('opacity', 0);
+      hideTip();
+    });
+  }
+  render();
+  new ResizeObserver(render).observe(container.node());
+})();
+
+// ─────────────────────────────────────────────────────────────────────────
+// Figure 2 — Peak calling with threshold
+// ─────────────────────────────────────────────────────────────────────────
+(function() {
+  const container = d3.select('#fig-peaks');
+  let threshold = 5.0;
+
+  function callPeaks(thresh) {
+    const peaks = [];
+    let start = -1, maxP = 0, maxBin = 0;
+    for (let i = 0; i < N_BINS; i++) {
+      const above = PVALS[i] >= thresh;
+      if (above && start < 0) { start = i; maxP = PVALS[i]; maxBin = i; }
+      else if (above) { if (PVALS[i] > maxP) { maxP = PVALS[i]; maxBin = i; } }
+      else if (start >= 0) {
+        // Merge peaks within 5 bins of each other — handled by bridging
+        if (i - start >= 2) peaks.push({ start, end: i - 1, summit: maxBin, maxP });
+        start = -1; maxP = 0;
+      }
+    }
+    if (start >= 0) peaks.push({ start, end: N_BINS - 1, summit: maxBin, maxP });
+    return peaks;
+  }
+
+  function render() {
+    container.selectAll('*').remove();
+    const width = container.node().getBoundingClientRect().width || 700;
+    const margin = { top: 14, right: 20, bottom: 46, left: 60 };
+    const height = 260;
+
+    const svg = container.append('svg')
+      .attr('viewBox', `0 0 ${width} ${height}`).style('width', '100%').style('height', 'auto');
+
+    const x = d3.scaleLinear().domain([0, N_BINS]).range([margin.left, width - margin.right]);
+    const maxY = Math.max(12, d3.max(PVALS) * 1.05);
+    const y = d3.scaleLinear().domain([0, maxY]).range([height - margin.bottom, margin.top]);
+
+    // Background
+    svg.append('rect')
+      .attr('x', margin.left).attr('y', margin.top)
+      .attr('width', width - margin.right - margin.left).attr('height', height - margin.top - margin.bottom)
+      .attr('fill', '#fbfbfc');
+
+    // Peaks (draw first so bars overlay)
+    const peaks = callPeaks(threshold);
+    peaks.forEach(p => {
+      svg.append('rect')
+        .attr('x', x(p.start) - 1).attr('y', margin.top)
+        .attr('width', Math.max(2, x(p.end) - x(p.start) + 2))
+        .attr('height', height - margin.top - margin.bottom)
+        .attr('fill', C.pathway).attr('opacity', 0.12)
+        .attr('stroke', C.pathway).attr('stroke-width', 1).attr('stroke-dasharray', '2,2');
+    });
+
+    // Bar for each bin
+    const barW = (width - margin.right - margin.left) / N_BINS;
+    svg.append('g').selectAll('rect.bin').data(PVALS).enter().append('rect')
+      .attr('x', (d, i) => x(i)).attr('y', d => y(d))
+      .attr('width', Math.max(0.5, barW - 0.2)).attr('height', d => y(0) - y(d))
+      .attr('fill', d => d >= threshold ? C.significance : C.muted)
+      .attr('opacity', d => d >= threshold ? 0.85 : 0.55);
+
+    // Threshold line
+    svg.append('line')
+      .attr('x1', margin.left).attr('x2', width - margin.right)
+      .attr('y1', y(threshold)).attr('y2', y(threshold))
+      .attr('stroke', C.text).attr('stroke-dasharray', '5,4').attr('stroke-width', 1.5);
+    svg.append('text')
+      .attr('x', width - margin.right - 4).attr('y', y(threshold) - 4)
+      .attr('text-anchor', 'end').style('font-size', '10px').style('font-weight', 700)
+      .attr('fill', C.text).text(`threshold = ${threshold.toFixed(1)}`);
+
+    // Summit markers
+    peaks.forEach(p => {
+      svg.append('circle')
+        .attr('cx', x(p.summit)).attr('cy', y(p.maxP))
+        .attr('r', 3).attr('fill', C.pathway).attr('stroke', '#fff').attr('stroke-width', 1.2);
+    });
+
+    // X axis: kb coords
+    const xAxis = d3.axisBottom(x).ticks(9).tickFormat(d => {
+      const kb = ((d - TSS_BIN) * (WINDOW_KB / N_BINS));
+      return (kb >= 0 ? '+' : '') + kb.toFixed(1) + 'kb';
+    });
+    svg.append('g').attr('transform', `translate(0,${height - margin.bottom})`).call(xAxis)
+      .call(g => g.selectAll('.domain, line').attr('stroke', C.grid))
+      .call(g => g.selectAll('text').style('font-size', '10px').attr('fill', C.text2));
+
+    // Y axis
+    svg.append('g').attr('transform', `translate(${margin.left},0)`).call(d3.axisLeft(y).ticks(5))
+      .call(g => g.selectAll('.domain, line').attr('stroke', C.grid))
+      .call(g => g.selectAll('text').style('font-size', '10px').attr('fill', C.text2));
+    svg.append('text')
+      .attr('transform', `translate(14,${(margin.top + height - margin.bottom) / 2}) rotate(-90)`)
+      .attr('text-anchor', 'middle').style('font-size', '11px').style('font-weight', 600)
+      .attr('fill', C.text2).text('−log₁₀(p)');
+    svg.append('text')
+      .attr('x', (margin.left + width - margin.right) / 2).attr('y', height - 6)
+      .attr('text-anchor', 'middle').style('font-size', '11px').style('font-weight', 600)
+      .attr('fill', C.text2).text('position relative to CDKN1A TSS');
+
+    // Stats
+    const widths = peaks.map(p => ((p.end - p.start) * (WINDOW_KB / N_BINS) * 1000));
+    const meanWidth = widths.length ? d3.mean(widths) : 0;
+    d3.select('#peak-stats').html(`
+      <span class="stat-pill"><b>${peaks.length}</b> peak${peaks.length === 1 ? '' : 's'} called</span>
+      <span class="stat-pill">mean width <b>${meanWidth.toFixed(0)} bp</b></span>
+    `);
+  }
+
+  d3.select('#peak-thresh').on('input', function() {
+    threshold = +this.value;
+    d3.select('#peak-thresh-val').html(`<b>${threshold.toFixed(1)}</b>`);
+    render();
+  });
+  render();
+  new ResizeObserver(render).observe(container.node());
+})();
+
+// ─────────────────────────────────────────────────────────────────────────
+// Figure 3 — Differential binding heatmap at canonical TP53 targets
+// ─────────────────────────────────────────────────────────────────────────
+(function() {
+  const rng = mulberry32(5678);
+  const targets = [
+    { gene: 'CDKN1A',  wt: 32, muttype: 'lost' },
+    { gene: 'MDM2',    wt: 28, muttype: 'lost' },
+    { gene: 'BAX',     wt: 24, muttype: 'lost' },
+    { gene: 'PUMA',    wt: 30, muttype: 'lost' },
+    { gene: 'NOXA',    wt: 22, muttype: 'lost' },
+    { gene: 'GADD45A', wt: 26, muttype: 'partial' },
+    { gene: 'TIGAR',   wt: 18, muttype: 'partial' },
+    { gene: 'SESN1',   wt: 20, muttype: 'lost' },
+    { gene: 'BTG2',    wt: 16, muttype: 'lost' },
+    { gene: 'RRM2B',   wt: 14, muttype: 'lost' }
+  ];
+  targets.forEach(t => {
+    // Mutant signal: mostly near noise floor, occasionally partial
+    let mut;
+    if (t.muttype === 'lost') mut = 1.5 + rng() * 1.5;
+    else mut = t.wt * (0.25 + rng() * 0.18);
+    t.mut = mut;
+    t.lfc = Math.log2(Math.max(t.mut, 0.5) / Math.max(t.wt, 0.5));
+  });
+
+  const container = d3.select('#fig-diff');
+  let sortMode = 'wt';
+
+  function sorted() {
+    const arr = targets.slice();
+    if (sortMode === 'wt')   arr.sort((a, b) => b.wt - a.wt);
+    if (sortMode === 'mut')  arr.sort((a, b) => b.mut - a.mut);
+    if (sortMode === 'lfc')  arr.sort((a, b) => a.lfc - b.lfc);
+    if (sortMode === 'name') arr.sort((a, b) => a.gene.localeCompare(b.gene));
+    return arr;
+  }
+
+  function render() {
+    container.selectAll('*').remove();
+    const width = container.node().getBoundingClientRect().width || 700;
+    const rowH = 24;
+    const colGap = 6;
+    const margin = { top: 48, right: 16, bottom: 20, left: 84 };
+    const height = margin.top + targets.length * rowH + margin.bottom;
+
+    const svg = container.append('svg')
+      .attr('viewBox', `0 0 ${width} ${height}`).style('width', '100%').style('height', 'auto');
+
+    const colW = (width - margin.left - margin.right - 2 * colGap) / 3;
+
+    // Column headers
+    const cols = [
+      { title: 'WT TP53 ChIP',  x: margin.left,                  color: C.gene },
+      { title: 'Mutant ChIP',   x: margin.left + colW + colGap,  color: C.significance },
+      { title: 'log₂ FC',       x: margin.left + 2 * (colW + colGap), color: C.expression }
+    ];
+    cols.forEach(col => {
+      svg.append('text')
+        .attr('x', col.x + colW / 2).attr('y', 18)
+        .attr('text-anchor', 'middle').style('font-size', '10px').style('font-weight', 700)
+        .attr('fill', col.color).text(col.title);
+    });
+
+    const maxSig = d3.max(targets, t => Math.max(t.wt, t.mut));
+    const wScale = d3.scaleLinear().domain([0, maxSig]).range([0, colW - 4]);
+    const lfcMax = d3.max(targets.map(t => Math.abs(t.lfc)));
+    const lfcColor = d3.scaleLinear()
+      .domain([-lfcMax, 0, lfcMax])
+      .range([C.significance, '#f5f5f5', C.gene]);
+
+    sorted().forEach((t, i) => {
+      const yy = margin.top + i * rowH;
+
+      // Gene label
+      svg.append('text')
+        .attr('x', margin.left - 8).attr('y', yy + rowH / 2)
+        .attr('text-anchor', 'end').attr('dominant-baseline', 'central')
+        .style('font-size', '11px').style('font-weight', 600).attr('fill', C.text)
+        .text(t.gene);
+
+      // WT bar
+      svg.append('rect')
+        .attr('x', cols[0].x).attr('y', yy + 4)
+        .attr('width', wScale(t.wt)).attr('height', rowH - 8)
+        .attr('fill', C.gene).attr('opacity', 0.75);
+      svg.append('text')
+        .attr('x', cols[0].x + wScale(t.wt) + 4).attr('y', yy + rowH / 2)
+        .attr('dominant-baseline', 'central').style('font-size', '10px').attr('fill', C.text2)
+        .text(t.wt.toFixed(1));
+
+      // Mutant bar
+      svg.append('rect')
+        .attr('x', cols[1].x).attr('y', yy + 4)
+        .attr('width', wScale(t.mut)).attr('height', rowH - 8)
+        .attr('fill', C.significance).attr('opacity', 0.75);
+      svg.append('text')
+        .attr('x', cols[1].x + wScale(t.mut) + 4).attr('y', yy + rowH / 2)
+        .attr('dominant-baseline', 'central').style('font-size', '10px').attr('fill', C.text2)
+        .text(t.mut.toFixed(1));
+
+      // LFC heatmap cell
+      svg.append('rect')
+        .attr('x', cols[2].x).attr('y', yy + 4)
+        .attr('width', colW).attr('height', rowH - 8)
+        .attr('fill', lfcColor(t.lfc));
+      svg.append('text')
+        .attr('x', cols[2].x + colW / 2).attr('y', yy + rowH / 2)
+        .attr('text-anchor', 'middle').attr('dominant-baseline', 'central')
+        .style('font-size', '10px').style('font-weight', 700)
+        .attr('fill', Math.abs(t.lfc) > 2.5 ? '#fff' : C.text)
+        .text(t.lfc.toFixed(2));
+
+      // Row hover band
+      svg.append('rect')
+        .attr('x', margin.left - 80).attr('y', yy)
+        .attr('width', width - margin.right - (margin.left - 80)).attr('height', rowH)
+        .attr('fill', 'transparent')
+        .on('mouseenter', (ev) => {
+          showTip(ev, `
+            <span class="tip-k">${t.gene}</span><br>
+            <span class="tip-k">WT</span>${t.wt.toFixed(1)}<br>
+            <span class="tip-k">Mut</span>${t.mut.toFixed(1)}<br>
+            <span class="tip-k">log₂ FC</span>${t.lfc.toFixed(2)}
+          `);
+        })
+        .on('mousemove', moveTip).on('mouseleave', hideTip);
+    });
+  }
+
+  d3.selectAll('#diff-sort .btn').on('click', function() {
+    d3.selectAll('#diff-sort .btn').classed('active', false);
+    d3.select(this).classed('active', true);
+    sortMode = this.dataset.sort;
+    render();
+  });
+  render();
+  new ResizeObserver(render).observe(container.node());
+})();
+</script>
+</body>
+</html>

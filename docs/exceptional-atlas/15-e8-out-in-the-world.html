@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>E₈ Out in the World — Exceptional Atlas</title>
-<script src="https://d3js.org/d3.v7.min.js"></script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
 <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -395,25 +394,35 @@ a:hover { color: #1d4ed8; }
   katex.render('r', document.getElementById('quasi-window-math'));
   katex.render('t', document.getElementById('quasi-plane-math'));
 
-  // ───── main svg ─────
+  // ───── main canvas ─────
+  // 26k points re-render on every slider frame, so canvas beats SVG.
   var width = 500, height = 500;
-  var svg = d3.select(mainContainer).append('svg')
-    .attr('viewBox', '0 0 ' + width + ' ' + height)
-    .attr('width', '100%')
-    .style('max-width', width + 'px')
-    .style('display', 'block');
-  var gMain = svg.append('g').attr('transform', 'translate(' + (width/2) + ',' + (height/2) + ')');
+  var dpr = Math.max(1, window.devicePixelRatio || 1);
+  var mainCanvas = document.createElement('canvas');
+  mainCanvas.width = width * dpr;
+  mainCanvas.height = height * dpr;
+  mainCanvas.style.width = '100%';
+  mainCanvas.style.maxWidth = width + 'px';
+  mainCanvas.style.aspectRatio = width + ' / ' + height;
+  mainCanvas.style.display = 'block';
+  mainContainer.appendChild(mainCanvas);
+  var ctxMain = mainCanvas.getContext('2d');
+  ctxMain.scale(dpr, dpr);
 
-  // ───── inset svg ─────
+  // ───── inset canvas ─────
   var insetW = 170, insetH = 170;
-  var insetSvg = d3.select(insetContainer).append('svg')
-    .attr('viewBox', '0 0 ' + insetW + ' ' + insetH)
-    .attr('width', '100%')
-    .style('max-width', insetW + 'px')
-    .style('display', 'block')
-    .style('background', '#fafafa')
-    .style('border-radius', '4px');
-  var gInset = insetSvg.append('g').attr('transform', 'translate(' + (insetW/2) + ',' + (insetH/2) + ')');
+  var insetCanvas = document.createElement('canvas');
+  insetCanvas.width = insetW * dpr;
+  insetCanvas.height = insetH * dpr;
+  insetCanvas.style.width = '100%';
+  insetCanvas.style.maxWidth = insetW + 'px';
+  insetCanvas.style.aspectRatio = insetW + ' / ' + insetH;
+  insetCanvas.style.display = 'block';
+  insetCanvas.style.background = '#fafafa';
+  insetCanvas.style.borderRadius = '4px';
+  insetContainer.appendChild(insetCanvas);
+  var ctxInset = insetCanvas.getContext('2d');
+  ctxInset.scale(dpr, dpr);
 
   // ───── plane families ─────
   // Family 0: a golden-ratio 2-plane. The entries involving φ give an
@@ -526,56 +535,59 @@ a:hover { color: #1d4ed8; }
   // the window test and (b) belong to an already-revealed shell are shown.
   function render() {
     var rSq = state.window * state.window;
-    var kept = [];
     var totalKept = 0;
+    var shown = 0;
+
+    // ─── main panel ───
+    ctxMain.clearRect(0, 0, width, height);
+    var cxMain = width / 2, cyMain = height / 2;
+    ctxMain.fillStyle = 'rgba(37, 99, 235, 0.85)';
+    ctxMain.beginPath();
     for (var i = 0; i < N; i++) {
       if (perpSq[i] > rSq + 1e-9) continue;
       totalKept++;
-      if (shellIdx[i] <= state.revealedShell) {
-        kept.push(i);
-      }
+      if (shellIdx[i] > state.revealedShell) continue;
+      shown++;
+      var x = cxMain + projX[i] * fixedScale;
+      var y = cyMain - projY[i] * fixedScale;
+      // rect instead of arc: ~5× faster for small point clouds and
+      // visually indistinguishable at r = 1.6.
+      ctxMain.rect(x - 1.3, y - 1.3, 2.6, 2.6);
+    }
+    ctxMain.fill();
+
+    // ─── inset panel ───
+    ctxInset.clearRect(0, 0, insetW, insetH);
+    var cxI = insetW / 2, cyI = insetH / 2;
+    // Axes (behind everything else).
+    ctxInset.strokeStyle = '#e2e2e8';
+    ctxInset.lineWidth = 1;
+    ctxInset.beginPath();
+    ctxInset.moveTo(6, cyI); ctxInset.lineTo(insetW - 6, cyI);
+    ctxInset.moveTo(cxI, 6); ctxInset.lineTo(cxI, insetH - 6);
+    ctxInset.stroke();
+
+    // Points: outside-window first (grey), then inside (blue) on top.
+    var insetStride = 3;
+    ctxInset.fillStyle = 'rgba(203, 213, 225, 0.35)';
+    for (var j = 0; j < N; j += insetStride) {
+      if (perpSq[j] <= rSq) continue;
+      ctxInset.fillRect(cxI + perpA[j] * insetScale - 0.8, cyI - perpB[j] * insetScale - 0.8, 1.6, 1.6);
+    }
+    ctxInset.fillStyle = 'rgba(37, 99, 235, 0.8)';
+    for (var j2 = 0; j2 < N; j2 += insetStride) {
+      if (perpSq[j2] > rSq) continue;
+      ctxInset.fillRect(cxI + perpA[j2] * insetScale - 0.8, cyI - perpB[j2] * insetScale - 0.8, 1.6, 1.6);
     }
 
-    // Main pattern: circle per kept point, keyed by index.
-    var sel = gMain.selectAll('circle.pt').data(kept, function (d) { return d; });
-    sel.exit().remove();
-    var entering = sel.enter().append('circle').attr('class', 'pt').attr('r', 1.6)
-      .attr('fill', '#2563eb').attr('fill-opacity', 0.85);
-    entering.merge(sel)
-      .attr('cx', function (i) { return projX[i] * fixedScale; })
-      .attr('cy', function (i) { return -projY[i] * fixedScale; });
-
-    // Inset: show a subsample of lattice points projected into a 2D slice
-    // of the 6D complement. Blue if inside window, grey if outside. We
-    // subsample for DOM throughput (keeping every one is fine on a fast
-    // machine but wastes frames on a phone).
-    var insetStride = 3;
-    var insetData = [];
-    for (var i = 0; i < N; i += insetStride) insetData.push(i);
-    var inSel = gInset.selectAll('circle.pt').data(insetData, function (d) { return d; });
-    inSel.enter().append('circle').attr('class', 'pt').attr('r', 0.8)
-      .merge(inSel)
-      .attr('cx', function (i) { return perpA[i] * insetScale; })
-      .attr('cy', function (i) { return -perpB[i] * insetScale; })
-      .attr('fill', function (i) { return perpSq[i] <= rSq ? '#2563eb' : '#cbd5e1'; })
-      .attr('fill-opacity', function (i) { return perpSq[i] <= rSq ? 0.8 : 0.35; });
-
-    // Window circle on inset.
-    gInset.selectAll('circle.window').data([state.window]).join('circle')
-      .attr('class', 'window')
-      .attr('cx', 0).attr('cy', 0)
-      .attr('r', function (d) { return d * insetScale; })
-      .attr('fill', 'none').attr('stroke', '#dc2626').attr('stroke-width', 1.25)
-      .attr('stroke-dasharray', '3,2');
-    // Axes on inset.
-    gInset.selectAll('line.axis').data([0, 1]).join('line')
-      .attr('class', 'axis')
-      .attr('x1', function (d) { return d === 0 ? -insetW/2 + 6 : 0; })
-      .attr('x2', function (d) { return d === 0 ? insetW/2 - 6 : 0; })
-      .attr('y1', function (d) { return d === 0 ? 0 : -insetH/2 + 6; })
-      .attr('y2', function (d) { return d === 0 ? 0 : insetH/2 - 6; })
-      .attr('stroke', '#e2e2e8').attr('stroke-width', 1);
-    gInset.selectAll('line.axis').lower();
+    // Window circle.
+    ctxInset.strokeStyle = '#dc2626';
+    ctxInset.lineWidth = 1.25;
+    ctxInset.setLineDash([3, 2]);
+    ctxInset.beginPath();
+    ctxInset.arc(cxI, cyI, state.window * insetScale, 0, Math.PI * 2);
+    ctxInset.stroke();
+    ctxInset.setLineDash([]);
 
     // Status readout.
     var shellTxt = state.revealedShell >= maxShell
@@ -584,7 +596,7 @@ a:hover { color: #1d4ed8; }
     statusEl.innerHTML =
       '<strong>N<sub>total</sub></strong> = ' + N.toLocaleString() + ' E8 lattice points probed · ' +
       '<strong>N<sub>kept</sub></strong> = ' + totalKept.toLocaleString() + ' pass the window · ' +
-      '<strong>shown</strong> = ' + kept.length.toLocaleString() + ' (' + shellTxt + ').';
+      '<strong>shown</strong> = ' + shown.toLocaleString() + ' (' + shellTxt + ').';
   }
 
   // Reproject when the plane slider changes, then render.

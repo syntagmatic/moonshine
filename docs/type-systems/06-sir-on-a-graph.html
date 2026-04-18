@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SIR on a Graph — Type Systems for Simulation</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
+<script src="lib/typeviz.js"></script>
+<script src="lib/simcore.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --article-width: 740px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem;
+  --line-height: 1.65;
+  --text: #1a1a2e;
+  --text-2: #4a4a6a;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --bg: #fafafa;
+  --fig-bg: #ffffff;
+  --border: #e2e2e8;
+  --c-position: #2563eb;
+  --c-velocity: #d97706;
+  --c-force:    #dc2626;
+  --c-mass:     #6b7280;
+  --c-time:     #059669;
+  --c-id:       #64748b;
+  /* Compartment colors — extension palette. Chosen to avoid the reserved six. */
+  --c-s: #60a5fa;   /* susceptible — lighter blue, does not shadow Position's #2563eb */
+  --c-i: #f97316;   /* infected    — orange distinct from Velocity's #d97706 */
+  --c-r: #14b8a6;   /* recovered   — teal distinct from Time's #059669 */
+}
+
+body { font-family: var(--body-font); font-size: var(--body-size); line-height: var(--line-height); color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased; }
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
+
+h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.15rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.3rem; margin: 3rem 0 0.75rem; }
+
+p { margin: 0 0 1rem; }
+a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+
+.back-links { font-family: var(--heading-font); font-size: 0.85rem; margin-bottom: 2rem; }
+.back-links a { color: var(--text-2); text-decoration: none; }
+.back-links a:hover { color: var(--accent); }
+.back-links .sep { margin: 0 0.5rem; opacity: 0.3; }
+
+header .subtitle { font-family: var(--heading-font); font-size: 1.05rem; color: var(--text-2); max-width: 620px; margin-top: 0.5rem; }
+
+.section { margin-top: 3rem; }
+.section-tag { font-family: var(--mono-font); font-size: 0.7rem; font-weight: 600; color: var(--accent); letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 0.25rem; }
+
+.figure { background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; padding: 1rem; margin: 1.5rem 0; }
+.figure-caption { font-family: var(--heading-font); font-size: 0.82rem; color: var(--text-2); margin-top: 0.5rem; }
+
+.controls { display: flex; gap: 0.75rem; align-items: center; margin-top: 0.75rem; flex-wrap: wrap; }
+.controls button { font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600; padding: 0.4rem 0.9rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 4px; cursor: pointer; color: var(--text); }
+.controls button:hover { border-color: var(--accent); color: var(--accent); }
+.controls label { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); display: flex; align-items: center; gap: 0.35rem; }
+.controls input[type=range] { width: 130px; }
+
+code { font-family: var(--mono-font); font-size: 0.85em; background: #f3f4f6; padding: 0.1em 0.35em; border-radius: 3px; }
+.haskell-block { font-family: var(--mono-font); font-size: 0.85rem; background: #f3f4f6; padding: 0.75rem 1rem; border-radius: 4px; margin: 0.75rem 0; border-left: 3px solid var(--accent); white-space: pre; overflow-x: auto; }
+
+.carry-forward { background: var(--accent-light); border-left: 3px solid var(--accent); padding: 0.75rem 1rem; margin: 1.5rem 0; font-size: 0.95rem; }
+.carry-forward strong { font-family: var(--heading-font); }
+
+.compartment-swatches { display: flex; gap: 0.75rem; margin-top: 0.75rem; font-family: var(--mono-font); font-size: 0.75rem; flex-wrap: wrap; }
+.compartment-swatches .sw { display: flex; align-items: center; gap: 0.35rem; }
+.compartment-swatches .dot { width: 10px; height: 10px; border-radius: 50%; }
+
+.conservation-bar { margin-top: 0.75rem; }
+.conservation-bar .cbar { display: flex; height: 14px; width: 100%; border-radius: 3px; overflow: hidden; border: 1px solid var(--border); }
+.conservation-bar .cseg { height: 100%; transition: width 0.15s linear; }
+.conservation-bar .ctotal { font-family: var(--mono-font); font-size: 0.72rem; color: var(--text-2); margin-top: 0.3rem; display: flex; justify-content: space-between; }
+.conservation-bar .ctotal .eq { color: var(--text); }
+</style>
+</head>
+<body>
+<div class="article">
+  <div class="back-links">
+    <a href="index.html">← type-systems</a>
+    <span class="sep">·</span>
+    <a href="../index.html">all series</a>
+  </div>
+
+  <header>
+    <h1>SIR on a Graph</h1>
+    <p class="subtitle">The force layout from #1 returns — this time carrying compartments. An indexed sum type labels each node, and a population-level refinement <code>|S| + |I| + |R| = N</code> makes the admissible state space a triangle.</p>
+  </header>
+
+  <!-- ────────────── §1 Cold sim ────────────── -->
+  <div class="section">
+    <div class="section-tag">§1 · Cold sim</div>
+    <h2>An epidemic spreads across a contact network</h2>
+    <p>Forty nodes, a handful of links per node, the same repulsion + spring + centering we forged in <a href="01-force-directed-graph.html">#1</a>. One patient zero starts infected at the center. Each tick an infected neighbor passes the disease along an edge with probability <code>β·dt</code>; each infected recovers after a fixed duration. Under the graph, a stacked bar tracks the three compartment populations — and always sums to N.</p>
+    <div class="figure">
+      <svg id="sir-sim" viewBox="0 0 680 340" width="100%" height="340" style="display:block"></svg>
+      <div class="conservation-bar">
+        <div class="cbar" id="cbar">
+          <div class="cseg" id="cseg-s" style="background: var(--c-s)"></div>
+          <div class="cseg" id="cseg-i" style="background: var(--c-i)"></div>
+          <div class="cseg" id="cseg-r" style="background: var(--c-r)"></div>
+        </div>
+        <div class="ctotal">
+          <span><span id="ctxt-s" style="color: var(--c-s)">|S| 39</span> &nbsp; <span id="ctxt-i" style="color: var(--c-i)">|I| 1</span> &nbsp; <span id="ctxt-r" style="color: var(--c-r)">|R| 0</span></span>
+          <span class="eq">|S| + |I| + |R| = <span id="ctxt-n">40</span></span>
+        </div>
+      </div>
+      <div class="controls">
+        <button id="sir-reseed">reseed epidemic</button>
+        <label>transmission β <input type="range" id="sir-beta" min="0" max="100" value="45"></label>
+        <label id="sir-beta-val" style="font-family: var(--mono-font)">0.45</label>
+      </div>
+      <div class="figure-caption">The graph is #1's layout with colored nodes. The bar beneath is the type-level invariant made visible — the segments shift, but the bar is always the same width.</div>
+      <div class="compartment-swatches">
+        <span class="sw"><span class="dot" style="background: var(--c-s)"></span>S · Susceptible</span>
+        <span class="sw"><span class="dot" style="background: var(--c-i)"></span>I · Infected</span>
+        <span class="sw"><span class="dot" style="background: var(--c-r)"></span>R · Recovered</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ────────────── §2 Name the types ────────────── -->
+  <div class="section">
+    <div class="section-tag">§2 · Name the types</div>
+    <h2>Three labels, one conservation law</h2>
+    <p>A <code>Compartment</code> is either <code>S</code>, <code>I</code>, or <code>R</code>. Unlike <a href="03-springs-and-constraints.html">#3</a>'s <code>Constraint</code>, these variants carry no payload — they're pure labels. But a second type lives one level up: the population distribution, refined so its three counts sum to the fixed population size.</p>
+    <div class="haskell-block">data Compartment = S | I | R
+
+data Node = Node { id   :: NodeId
+                 , pos  :: Position
+                 , comp :: Compartment
+                 , t    :: Time }     -- time of last transition
+
+type Population = Map Compartment Int
+
+-- Refinement on the population distribution:
+refined :: { p :: Population | sum p == N }</div>
+    <p>The sum on <code>Node.comp</code> is the indexed part — every individual carries its label. The refinement on <code>Population</code> is the geometric part — it lives not on any one node but on the whole system. Conservation isn't enforced by checking it each frame; it's a property of every reachable state because the only transitions are <code>S → I</code> and <code>I → R</code>, both of which leave the sum unchanged.</p>
+  </div>
+
+  <!-- ────────────── §3 Signature diagram ────────────── -->
+  <div class="section">
+    <div class="section-tag">§3 · Signature diagram</div>
+    <h2>Rates in, graph through, graph out</h2>
+    <p>The step function is a function of two rates (the transmission probability and the recovery rate) and the current graph — a product of a node list and an edge list. The sum on the left now shows up <em>inside</em> the node record: each node's <code>comp</code> field is a three-way fork.</p>
+    <div class="haskell-block">step :: Rates -> Graph -> Graph
+  where
+    Rates = { beta :: Scalar, gamma :: Scalar }
+    Graph = { nodes :: [Node], edges :: [Edge] }</div>
+    <div class="figure">
+      <svg id="step-sig" viewBox="0 0 680 180" width="100%" height="180" style="display:block"></svg>
+      <div class="figure-caption">Left: the <code>Compartment</code> sum living inside each node. Middle: the Graph product (nodes × edges) feeding the step box. Right: the updated graph. A dot flows through on every frame.</div>
+    </div>
+  </div>
+
+  <!-- ────────────── §4 What it lets you say ────────────── -->
+  <div class="section">
+    <div class="section-tag">§4 · What it lets you say</div>
+    <h2>The admissible states form a triangle</h2>
+    <p>Here is the geometry argument. The refinement <code>|S| + |I| + |R| = N</code> with non-negative counts is — geometrically — the standard <strong>2-simplex</strong>: a triangle whose three vertices are the three pure states ("all susceptible", "all infected", "all recovered"), and whose interior is every legal mixture. Every reachable configuration of the population sits somewhere in this triangle, never outside.</p>
+    <p>Plotted below is the same sim from §1, with the current <code>(|S|, |I|, |R|)</code> rendered as a barycentric point. The dashed boundary is the simplex itself — the type's shape in state space.</p>
+    <div class="figure">
+      <svg id="simplex" viewBox="0 0 680 380" width="100%" height="380" style="display:block"></svg>
+      <div class="figure-caption">The live trajectory sweeps from the S corner (pre-epidemic) toward the R corner (post-epidemic), bowing into the triangle as I spikes. The wall is the type — no algorithm in this sim needs to check <code>sum == N</code> because no update moves the point off the triangle.</div>
+    </div>
+    <p>The conservation law is a dependent equality: the type of a post-update population carries the predicate <code>s + i + r = N</code> as part of its definition, and the update function has to deliver a witness for that equality on every call. A proof assistant closes this by induction on the step — one generic argument, all trajectories protected for all time. The triangle also has an unforced S₃ symmetry when the three compartments are interchangeable; #12 is where that latent group action becomes the subject.</p>
+  </div>
+
+  <!-- ────────────── §5 Carry-forward ────────────── -->
+  <div class="section">
+    <div class="section-tag">§5 · Carry-forward</div>
+    <div class="carry-forward">
+      <p><strong>We added.</strong> The series' first <em>sim inheritance</em> — #1's force layout returned here specialized with compartment labels, the same repulsion + link-spring + centering physics carrying disease-dynamics state. Three compartment colors (S light-blue, I orange, R teal) named in the extension palette. The idea that a refinement type can carve out a <em>geometry</em> in state space, not just a predicate on a scalar.</p>
+      <p><strong>Reused where.</strong> Conservation-as-refinement returns in #7 (n-body total energy) and #12 (Weyl-invariant quantities). The state-space-as-simplex geometry sets up the #11 parcoords pivot — eleven simulations' signatures laid side by side, each tracing its own admissible shape.</p>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ────────────────────────────────────────────────────────────── §1 SIR sim ──
+// We also expose the sim state globally to §4 so both figures read the same counts.
+var SIR = (function () {
+  var svg = d3.select('#sir-sim');
+  var W = 680, H = 340;
+
+  var N = 40;
+  var beta = 0.45;   // per-contact transmission probability per second
+  var gamma = 0.20;  // recovery rate (1 / duration)
+  var nodes, links;
+
+  var edgeLayer = svg.append('g').attr('stroke', '#d4d4db').attr('stroke-width', 1);
+  var nodeLayer = svg.append('g');
+
+  function compColor(c) {
+    return c === 'S' ? 'var(--c-s)' : c === 'I' ? 'var(--c-i)' : 'var(--c-r)';
+  }
+
+  function makeGraph() {
+    var ns = d3.range(N).map(function (i) {
+      return {
+        id: i,
+        pos: [W / 2 + (Math.random() - 0.5) * 80, H / 2 + (Math.random() - 0.5) * 80],
+        vel: [0, 0],
+        mass: 1,
+        comp: 'S',
+        tTrans: 0
+      };
+    });
+    // Ring + random extras: gives a connected graph with small-world flavor.
+    var ls = [];
+    for (var i = 0; i < N; i++) {
+      ls.push({ source: i, target: (i + 1) % N, k: 0.025 });
+    }
+    for (var k = 0; k < N * 0.8; k++) {
+      var a = Math.floor(Math.random() * N);
+      var b = Math.floor(Math.random() * N);
+      if (a === b) continue;
+      if (ls.some(function (l) { return (l.source === a && l.target === b) || (l.source === b && l.target === a); })) continue;
+      ls.push({ source: a, target: b, k: 0.02 });
+    }
+    // Patient zero: the node nearest center.
+    ns[0].comp = 'I';
+    ns[0].tTrans = 0;
+    return { nodes: ns, links: ls };
+  }
+
+  var graph = makeGraph();
+  nodes = graph.nodes;
+  links = graph.links;
+
+  // Build a neighbor index for fast lookup in the infection step.
+  function rebuildNbrs() {
+    nodes.forEach(function (n) { n.nbrs = []; });
+    links.forEach(function (l) {
+      nodes[l.source].nbrs.push(l.target);
+      nodes[l.target].nbrs.push(l.source);
+    });
+  }
+  rebuildNbrs();
+
+  // Force model — carried over from #1 verbatim.
+  function repulsion(e, all) {
+    var f = [0, 0];
+    for (var i = 0; i < all.length; i++) {
+      var o = all[i]; if (o === e) continue;
+      var dx = e.pos[0] - o.pos[0], dy = e.pos[1] - o.pos[1];
+      var d2 = dx * dx + dy * dy + 1e-3;
+      var s = 700 / d2;
+      f[0] += dx * s; f[1] += dy * s;
+    }
+    return f;
+  }
+  function linkForce(e) {
+    var f = [0, 0];
+    links.forEach(function (l) {
+      var a = nodes[l.source], b = nodes[l.target];
+      if (a !== e && b !== e) return;
+      var other = (a === e) ? b : a;
+      var dx = other.pos[0] - e.pos[0], dy = other.pos[1] - e.pos[1];
+      f[0] += dx * l.k; f[1] += dy * l.k;
+    });
+    return f;
+  }
+  function centering(e) {
+    return [(W / 2 - e.pos[0]) * 0.0012, (H / 2 - e.pos[1]) * 0.0012];
+  }
+  var netForce = SC.forces([repulsion, linkForce, centering]);
+
+  function render() {
+    var eSel = edgeLayer.selectAll('line').data(links);
+    eSel.exit().remove();
+    eSel.enter().append('line').merge(eSel)
+      .attr('x1', function (l) { return nodes[l.source].pos[0]; })
+      .attr('y1', function (l) { return nodes[l.source].pos[1]; })
+      .attr('x2', function (l) { return nodes[l.target].pos[0]; })
+      .attr('y2', function (l) { return nodes[l.target].pos[1]; });
+
+    var nSel = nodeLayer.selectAll('circle').data(nodes, function (d) { return d.id; });
+    nSel.exit().remove();
+    nSel.enter().append('circle')
+      .attr('r', 7).attr('stroke', '#fff').attr('stroke-width', 1.5)
+      .call(d3.drag().on('drag', function (event, d) {
+        d.pos = [event.x, event.y]; d.vel = [0, 0];
+      }))
+      .merge(nSel)
+      .attr('cx', function (d) { return d.pos[0]; })
+      .attr('cy', function (d) { return d.pos[1]; })
+      .attr('fill', function (d) { return compColor(d.comp); });
+
+    // Update the conservation bar.
+    var counts = { S: 0, I: 0, R: 0 };
+    nodes.forEach(function (n) { counts[n.comp]++; });
+    var total = nodes.length;
+    d3.select('#cseg-s').style('width', (100 * counts.S / total) + '%');
+    d3.select('#cseg-i').style('width', (100 * counts.I / total) + '%');
+    d3.select('#cseg-r').style('width', (100 * counts.R / total) + '%');
+    d3.select('#ctxt-s').text('|S| ' + counts.S);
+    d3.select('#ctxt-i').text('|I| ' + counts.I);
+    d3.select('#ctxt-r').text('|R| ' + counts.R);
+    d3.select('#ctxt-n').text(total);
+
+    // Expose last counts on the sim object for §4.
+    sim.counts = counts;
+    sim.total = total;
+  }
+
+  function step(dt) {
+    var scaled = Math.min(dt, 0.03) * 2;
+
+    // Physics — #1's layout.
+    nodes.forEach(function (e) {
+      var f = netForce(e, nodes);
+      SC.integrate.euler(e, f, scaled);
+      e.vel = [e.vel[0] * 0.88, e.vel[1] * 0.88];
+    });
+
+    // Disease dynamics — the indexed-compartment update.
+    // Two transitions: S -> I (along an edge to an I neighbor) and I -> R (timed).
+    var transitions = [];
+    nodes.forEach(function (n) {
+      if (n.comp === 'S') {
+        // Probability of at least one infected neighbor transmitting this step.
+        for (var k = 0; k < n.nbrs.length; k++) {
+          if (nodes[n.nbrs[k]].comp === 'I') {
+            if (Math.random() < beta * scaled) { transitions.push({ n: n, to: 'I' }); break; }
+          }
+        }
+      } else if (n.comp === 'I') {
+        if (Math.random() < gamma * scaled) transitions.push({ n: n, to: 'R' });
+      }
+    });
+    // Apply transitions. The update is closed under conservation because every rule
+    // is a one-for-one swap: one S becomes one I, or one I becomes one R.
+    transitions.forEach(function (t) { t.n.comp = t.to; });
+
+    render();
+  }
+
+  var sim = { counts: { S: N - 1, I: 1, R: 0 }, total: N };
+
+  var loopHandle = SC.loop(step);
+  render();
+  loopHandle.start();
+
+  d3.select('#sir-reseed').on('click', function () {
+    graph = makeGraph();
+    nodes = graph.nodes;
+    links = graph.links;
+    rebuildNbrs();
+    render();
+  });
+  d3.select('#sir-beta').on('input', function () {
+    beta = (+this.value) / 100;
+    d3.select('#sir-beta-val').text(beta.toFixed(2));
+  });
+
+  return sim;
+})();
+
+// ────────────────────────────────────────────────────────────── §3 signature diagram ──
+(function () {
+  var svg = d3.select('#step-sig');
+  var g = svg.append('g').attr('transform', 'translate(20, 18)');
+
+  // Compartment sum (left-most)
+  TV.sum(g, {
+    x: 0, y: 0, w: 130, h: 70,
+    variants: [
+      { label: 'S', color: 'var(--c-s)' },
+      { label: 'I', color: 'var(--c-i)' },
+      { label: 'R', color: 'var(--c-r)' }
+    ],
+    label: 'Compartment'
+  });
+
+  // Graph product box — built with TV.product. Shows nodes [Node] and edges [Edge].
+  TV.product(g, { x: 170, y: 0, w: 160, h: 100, label: 'Graph' });
+  var gInner = g.append('g').attr('transform', 'translate(180, 22)');
+  TV.pipe(gInner, { kind: 'Id',       x1: 0, y1: 10, x2: 70, y2: 10, width: 2, dotR: 3 });
+  gInner.append('text').attr('x', 75).attr('y', 14)
+    .attr('font-family', 'Source Code Pro, monospace').attr('font-size', '0.62rem')
+    .attr('fill', '#334155').text('nodes');
+  TV.pipe(gInner, { kind: 'Position', x1: 0, y1: 28, x2: 70, y2: 28, width: 2, dotR: 3 });
+  gInner.append('text').attr('x', 75).attr('y', 32)
+    .attr('font-family', 'Source Code Pro, monospace').attr('font-size', '0.62rem')
+    .attr('fill', '#334155').text('edges');
+  TV.pipe(gInner, { kind: 'Time',     x1: 0, y1: 46, x2: 70, y2: 46, width: 2, dotR: 3 });
+  gInner.append('text').attr('x', 75).attr('y', 50)
+    .attr('font-family', 'Source Code Pro, monospace').attr('font-size', '0.62rem')
+    .attr('fill', '#334155').text('t');
+
+  // Arrow from sum down-into-graph
+  g.append('path')
+    .attr('d', 'M 130,35 Q 150,35 170,60')
+    .attr('fill', 'none').attr('stroke', '#94a3b8').attr('stroke-width', 1)
+    .attr('stroke-dasharray', '3 3');
+  g.append('text').attr('x', 134).attr('y', 32)
+    .attr('font-family', 'Source Code Pro, monospace').attr('font-size', '0.6rem')
+    .attr('fill', '#64748b').text('comp of');
+
+  // step box
+  g.append('rect')
+    .attr('x', 360).attr('y', 30).attr('width', 90).attr('height', 40)
+    .attr('rx', 6).attr('fill', '#fff')
+    .attr('stroke', '#334155').attr('stroke-width', 1.2);
+  g.append('text').attr('x', 405).attr('y', 55)
+    .attr('text-anchor', 'middle').attr('font-family', 'Source Code Pro, monospace')
+    .attr('font-size', '0.78rem').attr('fill', '#334155').text('step');
+
+  // Arrow: graph -> step
+  var pIn = TV.pipe(g, { kind: 'Position', x1: 330, y1: 50, x2: 360, y2: 50, width: 3 });
+
+  // Output: Graph'
+  var pOut = TV.pipe(g, { kind: 'Position', x1: 450, y1: 50, x2: 560, y2: 50, width: 3 });
+  TV.product(g, { x: 560, y: 10, w: 90, h: 80, label: "Graph'" });
+
+  // Rates label above step box
+  g.append('text').attr('x', 405).attr('y', 22)
+    .attr('text-anchor', 'middle').attr('font-family', 'Source Code Pro, monospace')
+    .attr('font-size', '0.66rem').attr('fill', 'var(--c-time)').text('Rates = {β, γ}');
+
+  // Animate a dot through the step.
+  var t0 = performance.now();
+  function animate() {
+    var phase = ((performance.now() - t0) / 1600) % 1;
+    if (phase < 0.5) {
+      pIn.feed(phase * 2);
+      pOut.feed(0);
+    } else {
+      pIn.feed(0);
+      pOut.feed((phase - 0.5) * 2);
+    }
+    requestAnimationFrame(animate);
+  }
+  animate();
+})();
+
+// ────────────────────────────────────────────────────────────── §4 simplex ──
+(function () {
+  var svg = d3.select('#simplex');
+  var W = 680, H = 380;
+
+  // Lay out an equilateral triangle centered in the viewbox.
+  // Vertices: S (bottom-left), I (top), R (bottom-right).
+  var cx = W / 2, cy = H / 2 + 30;
+  var size = 240;
+  var Sv = [cx - size, cy + size * 0.35];
+  var Iv = [cx,         cy - size * 0.65];
+  var Rv = [cx + size, cy + size * 0.35];
+
+  // Triangle wall (the 2-simplex itself — the type's geometry in state space).
+  var trianglePath = 'M ' + Sv[0] + ',' + Sv[1] +
+                    ' L ' + Iv[0] + ',' + Iv[1] +
+                    ' L ' + Rv[0] + ',' + Rv[1] + ' Z';
+
+  // Soft fill inside the simplex.
+  svg.append('path').attr('d', trianglePath)
+    .attr('fill', '#f8fafc').attr('stroke', 'none');
+
+  // The wall — dashed boundary of admissible states.
+  TV.wall(svg, {
+    path: trianglePath,
+    color: '#f59e0b',
+    width: 1.8,
+    label: '{(s,i,r) | s+i+r = N, s,i,r ≥ 0}',
+    labelX: cx - 150,
+    labelY: H - 20
+  });
+
+  // Corner labels.
+  function corner(pt, label, color, dx, dy) {
+    svg.append('circle').attr('cx', pt[0]).attr('cy', pt[1]).attr('r', 5).attr('fill', color);
+    svg.append('text').attr('x', pt[0] + dx).attr('y', pt[1] + dy)
+      .attr('font-family', 'Source Code Pro, monospace').attr('font-size', '0.78rem')
+      .attr('font-weight', 600).attr('fill', color).text(label);
+  }
+  corner(Sv, '(N, 0, 0)  all S', 'var(--c-s)', -90, 22);
+  corner(Iv, '(0, N, 0)  all I', 'var(--c-i)',  10, -10);
+  corner(Rv, '(0, 0, N)  all R', 'var(--c-r)', -85, 22);
+
+  // Axis hint: edge between S and R = the "no infections" edge (I = 0).
+  svg.append('text')
+    .attr('x', cx).attr('y', cy + size * 0.35 + 42)
+    .attr('text-anchor', 'middle').attr('font-family', 'Source Code Pro, monospace')
+    .attr('font-size', '0.66rem').attr('fill', '#94a3b8')
+    .text('I = 0 edge: epidemic extinguished');
+
+  // Barycentric → cartesian: given (s, i, r) with s + i + r = N.
+  function bary(s, i, r) {
+    var total = s + i + r;
+    var a = s / total, b = i / total, c = r / total;
+    return [a * Sv[0] + b * Iv[0] + c * Rv[0],
+            a * Sv[1] + b * Iv[1] + c * Rv[1]];
+  }
+
+  // Trajectory path — we record points as the sim runs.
+  var trajPath = svg.append('path')
+    .attr('fill', 'none')
+    .attr('stroke', '#1a1a2e')
+    .attr('stroke-width', 1.8)
+    .attr('stroke-linecap', 'round')
+    .attr('opacity', 0.45);
+
+  // Current-state marker: a ringed dot.
+  var nowRing = svg.append('circle')
+    .attr('r', 10).attr('fill', 'none').attr('stroke', 'var(--c-force)').attr('stroke-width', 1.4).attr('opacity', 0.8);
+  var nowDot = svg.append('circle')
+    .attr('r', 4.5).attr('fill', 'var(--c-force)');
+
+  // Live count label near the marker.
+  var nowLabel = svg.append('text')
+    .attr('font-family', 'Source Code Pro, monospace').attr('font-size', '0.7rem')
+    .attr('fill', '#1a1a2e');
+
+  var history = [];
+
+  function update() {
+    if (!SIR || !SIR.counts) return;
+    var s = SIR.counts.S, i = SIR.counts.I, r = SIR.counts.R;
+    var p = bary(s, i, r);
+    history.push(p);
+    if (history.length > 600) history.shift();
+
+    // Trajectory line.
+    if (history.length > 1) {
+      trajPath.attr('d', 'M ' + history.map(function (q) { return q[0].toFixed(1) + ',' + q[1].toFixed(1); }).join(' L '));
+    }
+    nowDot.attr('cx', p[0]).attr('cy', p[1]);
+    nowRing.attr('cx', p[0]).attr('cy', p[1]);
+    nowLabel.attr('x', p[0] + 12).attr('y', p[1] + 4)
+      .text('(' + s + ', ' + i + ', ' + r + ')');
+  }
+
+  // Reseed wipes the trajectory too.
+  d3.select('#sir-reseed').on('click.simplex', function () { history = []; });
+
+  // Drive the trajectory every frame — no second SC.loop needed; a plain rAF keeps
+  // this figure in lockstep with §1 without duplicating the physics clock.
+  (function tick() { update(); requestAnimationFrame(tick); })();
+})();
+</script>
+</body>
+</html>

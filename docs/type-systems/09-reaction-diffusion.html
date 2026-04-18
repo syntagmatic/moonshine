@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reaction-Diffusion — Type Systems for Simulation</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
+<script src="lib/typeviz.js"></script>
+<script src="lib/simcore.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --article-width: 740px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem;
+  --line-height: 1.65;
+  --text: #1a1a2e;
+  --text-2: #4a4a6a;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --bg: #fafafa;
+  --fig-bg: #ffffff;
+  --border: #e2e2e8;
+  --c-position: #2563eb;
+  --c-velocity: #d97706;
+  --c-force:    #dc2626;
+  --c-mass:     #6b7280;
+  --c-time:     #059669;
+  --c-id:       #64748b;
+  /* Shape-index highlight — same purple TV.shapeIndex picks by default. */
+  --c-shape: #7c3aed;
+  /* Field palette — a dark-teal → bright-teal → pale ramp, well away from the reserved six. */
+  --c-field-lo: #0b2a33;
+  --c-field-mid: #2e8b8b;
+  --c-field-hi: #e6fbf4;
+}
+
+body { font-family: var(--body-font); font-size: var(--body-size); line-height: var(--line-height); color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased; }
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
+
+h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.15rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.3rem; margin: 3rem 0 0.75rem; }
+
+p { margin: 0 0 1rem; }
+a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+
+.back-links { font-family: var(--heading-font); font-size: 0.85rem; margin-bottom: 2rem; }
+.back-links a { color: var(--text-2); text-decoration: none; }
+.back-links a:hover { color: var(--accent); }
+.back-links .sep { margin: 0 0.5rem; opacity: 0.3; }
+
+header .subtitle { font-family: var(--heading-font); font-size: 1.05rem; color: var(--text-2); max-width: 620px; margin-top: 0.5rem; }
+
+.section { margin-top: 3rem; }
+.section-tag { font-family: var(--mono-font); font-size: 0.7rem; font-weight: 600; color: var(--accent); letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 0.25rem; }
+
+.figure { background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; padding: 1rem; margin: 1.5rem 0; }
+.figure-caption { font-family: var(--heading-font); font-size: 0.82rem; color: var(--text-2); margin-top: 0.5rem; }
+
+.controls { display: flex; gap: 0.75rem; align-items: center; margin-top: 0.75rem; flex-wrap: wrap; }
+.controls button { font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600; padding: 0.4rem 0.9rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 4px; cursor: pointer; color: var(--text); }
+.controls button:hover { border-color: var(--accent); color: var(--accent); }
+.controls button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.controls label { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); display: flex; align-items: center; gap: 0.35rem; }
+.controls .group-label { font-family: var(--mono-font); font-size: 0.72rem; color: var(--text-2); }
+
+code { font-family: var(--mono-font); font-size: 0.85em; background: #f3f4f6; padding: 0.1em 0.35em; border-radius: 3px; }
+.haskell-block { font-family: var(--mono-font); font-size: 0.85rem; background: #f3f4f6; padding: 0.75rem 1rem; border-radius: 4px; margin: 0.75rem 0; border-left: 3px solid var(--accent); white-space: pre; overflow-x: auto; }
+
+.carry-forward { background: var(--accent-light); border-left: 3px solid var(--accent); padding: 0.75rem 1rem; margin: 1.5rem 0; font-size: 0.95rem; }
+.carry-forward strong { font-family: var(--heading-font); }
+
+.rd-canvas { image-rendering: pixelated; image-rendering: crisp-edges; display: block; width: 100%; max-width: 512px; height: auto; aspect-ratio: 1 / 1; margin: 0 auto; background: var(--c-field-lo); border-radius: 4px; }
+
+/* §4 Anisotropy comparison */
+.aniso-wrap { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-top: 0.5rem; }
+.aniso-tile { border: 1px solid var(--border); border-radius: 4px; padding: 0.6rem; background: #fdfdfe; display: flex; flex-direction: column; gap: 0.4rem; }
+.aniso-tile h4 { font-family: var(--heading-font); font-size: 0.82rem; font-weight: 700; color: var(--text); margin: 0; }
+.aniso-tile .aniso-sub { font-family: var(--heading-font); font-size: 0.72rem; color: var(--text-2); margin-bottom: 0.15rem; }
+.aniso-tile canvas { image-rendering: pixelated; image-rendering: crisp-edges; display: block; width: 100%; aspect-ratio: 1 / 1; background: var(--c-field-lo); border-radius: 3px; }
+.aniso-tile .aniso-note { font-family: var(--body-font); font-size: 0.78rem; color: var(--text-2); line-height: 1.4; }
+.aniso-tile .stencil-mini { display: grid; grid-template-columns: repeat(3, 22px); gap: 2px; font-family: var(--mono-font); font-size: 0.58rem; }
+.aniso-tile .stencil-mini .cell { padding: 2px 0; text-align: center; border-radius: 2px; }
+.aniso-tile .stencil-mini .cell.neg { background: #fee2e2; color: #991b1b; }
+.aniso-tile .stencil-mini .cell.zero { background: #f1f5f9; color: #94a3b8; }
+.aniso-tile .stencil-mini .cell.pos { background: #dcfce7; color: #166534; }
+.aniso-tile .stencil-mini .cell.pos-half { background: #ecfdf5; color: #15803d; }
+.aniso-controls { display: flex; gap: 0.5rem; align-items: center; margin-top: 0.5rem; }
+
+/* §4 Stencil gallery */
+.stencil-gallery { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; margin-top: 0.5rem; }
+@media (min-width: 620px) { .stencil-gallery { grid-template-columns: repeat(4, 1fr); } }
+.stencil-tile { border: 1px solid var(--border); border-radius: 4px; padding: 0.6rem; background: #fdfdfe; display: flex; flex-direction: column; gap: 0.4rem; }
+.stencil-tile .tile-header { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; }
+.stencil-tile .tile-name { font-family: var(--heading-font); font-size: 0.82rem; font-weight: 700; color: var(--text); }
+.stencil-tile .tile-tag { font-family: var(--mono-font); font-size: 0.66rem; font-weight: 600; color: var(--c-shape); }
+.stencil-tile .tile-grid { display: grid; gap: 2px; font-family: var(--mono-font); font-size: 0.62rem; color: #334155; }
+.stencil-tile .tile-grid .cell { background: #eef2ff; padding: 2px 0; text-align: center; border-radius: 2px; }
+.stencil-tile .tile-grid .cell.neg { background: #fee2e2; color: #991b1b; }
+.stencil-tile .tile-grid .cell.zero { background: #f1f5f9; color: #94a3b8; }
+.stencil-tile .tile-grid .cell.pos { background: #dcfce7; color: #166534; }
+.stencil-tile .tile-canvas { width: 100%; aspect-ratio: 1 / 1; background: var(--c-field-lo); border-radius: 3px; image-rendering: pixelated; display: block; }
+.stencil-tile .tile-note { font-family: var(--body-font); font-size: 0.78rem; color: var(--text-2); line-height: 1.35; }
+</style>
+</head>
+<body>
+<div class="article">
+  <div class="back-links">
+    <a href="index.html">← type-systems</a>
+    <span class="sep">·</span>
+    <a href="../index.html">all series</a>
+  </div>
+
+  <header>
+    <h1>Reaction-Diffusion</h1>
+    <p class="subtitle">Two chemicals on a grid. A 3×3 stencil stirs them every frame. The shapes <code>[128×128]</code> and <code>[3×3]</code> are not runtime checks — they live <em>in the type</em>, and the compiler can see a mismatched convolution before the program runs.</p>
+  </header>
+
+  <!-- ────────────── §1 Cold sim ────────────── -->
+  <div class="section">
+    <div class="section-tag">§1 · Cold sim</div>
+    <h2>Gray-Scott: two fields, one stencil</h2>
+    <p>Below, a 128×128 torus carries two concentration fields <code>U</code> and <code>V</code>. Each tick, both fields diffuse (a Laplacian stencil smears them into their neighbors) and react (V eats U, U is replenished, V decays). The visible color is <code>V</code>. Different <code>(F, k)</code> feed/kill settings carve the field into spots, stripes, or coral-like growths. Click to seed a new patch of V; the pattern re-organizes.</p>
+    <div class="figure">
+      <canvas id="rd-canvas" class="rd-canvas" width="128" height="128"></canvas>
+      <div class="controls">
+        <span class="group-label">preset:</span>
+        <button class="preset-btn" data-preset="coral">coral</button>
+        <button class="preset-btn" data-preset="spots">spots</button>
+        <button class="preset-btn" data-preset="stripes">stripes</button>
+        <button class="preset-btn" data-preset="mitosis">mitosis</button>
+        <button id="rd-seed">seed patch</button>
+        <button id="rd-reset">reset field</button>
+      </div>
+      <div class="figure-caption">Click the canvas to drop a V-patch anywhere. Each rAF frame runs four 1-second substeps, so the pattern develops visibly in a few seconds.</div>
+    </div>
+  </div>
+
+  <!-- ────────────── §2 Name the types ────────────── -->
+  <div class="section">
+    <div class="section-tag">§2 · Name the types</div>
+    <h2>Shapes ride along in the type</h2>
+    <p>Under the hood each field is a flat <code>Float32Array</code> of length <code>128 · 128 = 16384</code>. That's a runtime fact. The <em>type</em> wraps it in two natural-number parameters so the compiler can track what shape the array pretends to be:</p>
+    <div class="haskell-block">-- Natural-number parameters: w, h, k live at the type level.
+type Field   (w :: Nat) (h :: Nat) = Array 2 Double  -- refined: dim 0 = w, dim 1 = h
+type Stencil (k :: Nat)           = Array 2 Double  -- refined: k × k, k odd
+
+laplace5 :: Stencil 3       -- the 5-point star
+laplace9 :: Stencil 3       -- the 9-point (with corners) variant
+laplace5x5 :: Stencil 5     -- a wider isotropic Laplacian
+sobelX     :: Stencil 3     -- edge detector, horizontal
+
+convolve :: Stencil k -> Field w h -> Field w h
+step     :: ReactionParams -> Field w h -> Field w h  -- built on convolve</div>
+    <p>Read the <code>convolve</code> signature as a promise: for <em>any</em> odd <code>k</code> and <em>any</em> <code>w,h</code>, I can take a <code>k×k</code> stencil and a <code>w×h</code> field and hand you back a field of the same shape. The output shape is literally the input shape — a compile-time equality, not a runtime test. Try to apply a <code>[2×3]</code> stencil and the type checker rejects the call before a single multiplication happens; try to add a <code>Field 128 128</code> to a <code>Field 64 128</code> and the same thing.</p>
+    <p>This is the "dependent-types lite" move. Full dependent types let the shape be <em>any</em> expression; shape-indexing asks only for natural-number parameters — enough to catch every dimension-mismatch bug, cheap enough that Rust, Haskell (with <code>DataKinds</code>), Idris, and Swift all implement it today.</p>
+  </div>
+
+  <!-- ────────────── §3 Signature diagram ────────────── -->
+  <div class="section">
+    <div class="section-tag">§3 · Signature diagram</div>
+    <h2>Every pipe carries its shape</h2>
+    <p>Here is <code>step</code> drawn out. The stencil arrives on its own tagged pipe — a <code>[3×3]</code>. The field arrives on a wider pipe — a <code>[128×128]</code>. The output field's tag is the same as the input field's tag because the signature says so. The shape tags are rendered by <code>TV.shapeIndex</code>; think of them as the type checker's commentary floating over each wire.</p>
+    <div class="haskell-block">step :: ReactionParams -> Stencil 3 -> Field 128 128 -> Field 128 128
+  where
+    ReactionParams = { F :: Scalar, k :: Scalar, dU :: Scalar, dV :: Scalar }</div>
+    <div class="figure">
+      <svg id="step-sig" viewBox="0 0 680 220" width="100%" height="220" style="display:block"></svg>
+      <div class="figure-caption">The purple brackets are the shape index. The wide teal pipes carry the field; the narrower pipe carries the 3×3 stencil. A dot animates through to show that one <code>step</code> consumes a stencil and a field and produces a field of the <em>same</em> shape — a promise visible in the diagram and enforced by the type.</div>
+    </div>
+  </div>
+
+  <!-- ────────────── §4 What it lets you say ────────────── -->
+  <div class="section">
+    <div class="section-tag">§4 · What it lets you say</div>
+    <h2>A stencil is a type-level value</h2>
+    <p>Because the shape is part of the type, we can enumerate stencils of a given shape and treat them as <em>different types</em> rather than different arrays. Four stencils below, all applied to the same seeded blob. A Laplacian smears. An edge-detector emphasizes the boundary. A 5×5 wider kernel blurs farther per step. The field shape stays <code>[64×64]</code> throughout — that's a compile-time fact; the <em>behavior</em> is the thing that changes.</p>
+    <div class="figure">
+      <div class="stencil-gallery" id="gallery"></div>
+      <div class="figure-caption">Every tile runs the same <code>convolve :: Stencil k -> Field 64 64 -> Field 64 64</code>, differing only in which <code>Stencil k</code> they pass. Swap a <code>Stencil 3</code> for a <code>Stencil 5</code>, the buffer layout changes but the signature still type-checks. Swap a <code>[2×3]</code> shape in, and the line wouldn't compile.</div>
+    </div>
+    <p>The gallery is the expressiveness payoff. You can ship a library of named stencils, each with its own type, and combine them via well-typed combinators — <code>transpose :: Stencil k -> Stencil k</code>, <code>compose :: Stencil k -> Stencil k -> Stencil k</code> — knowing the dimensions will always line up.</p>
+    <p>Shape is the easy guarantee. The harder one — and the reason #12 ends the series — is <em>symmetry</em>. A 5-point Laplacian on a square grid doesn't commute with 60° rotation; if you run Gray-Scott long enough the Turing stripes line up with the grid axes, and the pattern you publish is half the chemistry and half the memory layout. A hex stencil that commutes with the lattice's six-fold Weyl action removes that artefact. Shape indices prove the dimensions line up; equivariance proofs prove the physics does.</p>
+
+    <div class="figure">
+      <div class="aniso-wrap">
+        <div class="aniso-tile">
+          <h4>5-point star  ·  Stencil 3</h4>
+          <div class="aniso-sub">only the four grid-axis neighbours contribute</div>
+          <div class="stencil-mini" id="mini-5pt"></div>
+          <canvas id="rd-5pt" width="128" height="128"></canvas>
+          <div class="aniso-note">Stripes align with the <em>x</em> and <em>y</em> axes because the stencil itself does. The dihedral group of this operator is <em>D₄</em>, not <em>SO(2)</em> — 90° is a symmetry, 60° is not.</div>
+        </div>
+        <div class="aniso-tile">
+          <h4>9-point isotropic  ·  Stencil 3</h4>
+          <div class="aniso-sub">diagonal neighbours included with weights that recover rotational invariance to second order</div>
+          <div class="stencil-mini" id="mini-9pt"></div>
+          <canvas id="rd-9pt" width="128" height="128"></canvas>
+          <div class="aniso-note">Same <code>Stencil 3</code> type, different entries. The weights <code>¼ · 1 · ¼ / 1 · −3 · 1 / ¼ · 1 · ¼</code> make the Laplacian approximate any direction equally; the stripes curl and branch like the chemistry says they should.</div>
+        </div>
+      </div>
+      <div class="aniso-controls">
+        <button id="rd-aniso-reseed">re-seed both</button>
+        <button id="rd-aniso-pause">pause</button>
+      </div>
+      <div class="figure-caption">Both panels run Gray-Scott with identical parameters (<code>F=0.0367, k=0.0649</code> "spots" preset), identical seed, identical dt. The only difference is the Laplacian stencil. The left panel's <code>step</code> function does not commute with 60° rotation; the right one's approximately does. #12 §5d specializes this to a true 7-point hex stencil where the commuting is exact.</div>
+    </div>
+  </div>
+
+  <!-- ────────────── §5 Carry-forward ────────────── -->
+  <div class="section">
+    <div class="section-tag">§5 · Carry-forward</div>
+    <div class="carry-forward">
+      <p><strong>We added.</strong> <code>TV.shapeIndex</code> — a compact <code>[w×h]</code> tag that rides on a pipe the way a color does, naming a type-level number. Shape-dependence is now an <em>axis</em> of the visual vocabulary. The teal field palette (<code>--c-field-lo</code> → <code>--c-field-hi</code>) is a per-explainer extension that stays clear of the reserved six.</p>
+      <p><strong>Reused where.</strong> Shape indices become a column on #11's parcoords: every prior signature gets re-drawn with its shape tags, so "expressiveness" is visible as how many shape constraints survive. #10's trait bounds are the same kind of type-level reasoning, one level up (constraints on <em>what</em> a type can do, not on <em>how big</em> it is). #12 §5d specializes <em>this</em> sim to a hex-stencil reaction-diffusion where <code>Weyl(A₂)</code> acts on the stencil — a <code>Stencil 3</code> whose entries are forced to be symmetric under the six-fold root-system symmetry.</p>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ────────────────────────────────────────────────────────────── §1 RD sim ──
+// Gray-Scott on a 128x128 torus. Two Float32Array fields, double-buffered.
+// Renders to a <canvas> via putImageData every frame.
+(function () {
+  var N = 128;
+  var canvas = document.getElementById('rd-canvas');
+  var ctx = canvas.getContext('2d');
+  var img = ctx.createImageData(N, N);
+
+  // Two fields, double-buffered.
+  var U  = new Float32Array(N * N);
+  var V  = new Float32Array(N * N);
+  var U2 = new Float32Array(N * N);
+  var V2 = new Float32Array(N * N);
+
+  // Presets: each picks (F, k, dU, dV). dU, dV are diffusion rates.
+  var PRESETS = {
+    coral:   { F: 0.0545, k: 0.062, dU: 0.16, dV: 0.08, label: 'coral' },
+    spots:   { F: 0.0367, k: 0.0649, dU: 0.16, dV: 0.08, label: 'spots' },
+    stripes: { F: 0.022,  k: 0.051,  dU: 0.16, dV: 0.08, label: 'stripes' },
+    mitosis: { F: 0.0367, k: 0.0649, dU: 0.2097, dV: 0.105, label: 'mitosis' }
+  };
+  var params = Object.assign({}, PRESETS.coral);
+  var currentPreset = 'coral';
+
+  function idx(x, y) { return y * N + x; }
+
+  function reset() {
+    for (var i = 0; i < N * N; i++) { U[i] = 1.0; V[i] = 0.0; }
+    // Seed a central patch of V to kick the reaction off.
+    seedAt(N / 2, N / 2, 10);
+  }
+
+  // Add a noisy patch of V at (cx, cy) of given radius. U is depressed accordingly.
+  function seedAt(cx, cy, r) {
+    for (var y = 0; y < N; y++) {
+      for (var x = 0; x < N; x++) {
+        var dx = x - cx, dy = y - cy;
+        if (dx * dx + dy * dy <= r * r) {
+          var i = idx(x, y);
+          V[i] = 0.5 + 0.25 * Math.random();
+          U[i] = 0.5 - 0.25 * Math.random();
+        }
+      }
+    }
+  }
+
+  // One Gray-Scott substep with a 5-point Laplacian. Toroidal wrap at edges.
+  function substep() {
+    var F = params.F, k = params.k, dU = params.dU, dV = params.dV;
+    // dt is absorbed into the diffusion coefficients; one "substep" is one unit of time.
+    for (var y = 0; y < N; y++) {
+      var ym = (y - 1 + N) % N, yp = (y + 1) % N;
+      var yRow = y * N, ymRow = ym * N, ypRow = yp * N;
+      for (var x = 0; x < N; x++) {
+        var xm = (x - 1 + N) % N, xp = (x + 1) % N;
+        var i  = yRow + x;
+        var iL = yRow + xm, iR = yRow + xp;
+        var iU = ymRow + x, iD = ypRow + x;
+        var u = U[i], v = V[i];
+        var lapU = U[iL] + U[iR] + U[iU] + U[iD] - 4 * u;
+        var lapV = V[iL] + V[iR] + V[iU] + V[iD] - 4 * v;
+        var uvv = u * v * v;
+        U2[i] = u + (dU * lapU - uvv + F * (1 - u));
+        V2[i] = v + (dV * lapV + uvv - (F + k) * v);
+      }
+    }
+    // Swap buffers.
+    var t;
+    t = U; U = U2; U2 = t;
+    t = V; V = V2; V2 = t;
+  }
+
+  // Render V to the canvas image data.
+  // Ramp: dark teal (V≈0) → mid teal → pale (V≈0.4+). Hand-unrolled for speed.
+  function render() {
+    var data = img.data;
+    for (var i = 0, p = 0; i < N * N; i++, p += 4) {
+      var v = V[i];
+      // Clamp and remap to [0, 1].
+      var t = v * 2.5;
+      if (t < 0) t = 0; else if (t > 1) t = 1;
+      // Teal ramp: two-stop linear gradient in sRGB. Endpoints match --c-field-*.
+      // lo #0b2a33 → mid #2e8b8b (t=0.5) → hi #e6fbf4 (t=1.0).
+      var r, g, b;
+      if (t < 0.5) {
+        var s = t * 2;
+        r = 0x0b + (0x2e - 0x0b) * s;
+        g = 0x2a + (0x8b - 0x2a) * s;
+        b = 0x33 + (0x8b - 0x33) * s;
+      } else {
+        var s2 = (t - 0.5) * 2;
+        r = 0x2e + (0xe6 - 0x2e) * s2;
+        g = 0x8b + (0xfb - 0x8b) * s2;
+        b = 0x8b + (0xf4 - 0x8b) * s2;
+      }
+      data[p]   = r;
+      data[p+1] = g;
+      data[p+2] = b;
+      data[p+3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+  }
+
+  var SUBSTEPS_PER_FRAME = 4;
+  function frame() {
+    for (var s = 0; s < SUBSTEPS_PER_FRAME; s++) substep();
+    render();
+    requestAnimationFrame(frame);
+  }
+
+  // Controls.
+  d3.selectAll('.preset-btn').on('click', function () {
+    var which = this.dataset.preset;
+    currentPreset = which;
+    params = Object.assign({}, PRESETS[which]);
+    d3.selectAll('.preset-btn').classed('active', function () { return this.dataset.preset === which; });
+    reset();
+  });
+  d3.select('#rd-seed').on('click', function () {
+    // A patch in a random location.
+    seedAt(20 + Math.random() * (N - 40), 20 + Math.random() * (N - 40), 6 + Math.random() * 6);
+  });
+  d3.select('#rd-reset').on('click', reset);
+
+  // Click canvas → drop a patch where the user clicked.
+  canvas.addEventListener('click', function (ev) {
+    var rect = canvas.getBoundingClientRect();
+    var cx = Math.floor((ev.clientX - rect.left) / rect.width  * N);
+    var cy = Math.floor((ev.clientY - rect.top)  / rect.height * N);
+    seedAt(cx, cy, 7);
+  });
+
+  // Mark the default preset button active on first paint.
+  d3.selectAll('.preset-btn').classed('active', function () { return this.dataset.preset === currentPreset; });
+  reset();
+  requestAnimationFrame(frame);
+})();
+
+// ────────────────────────────────────────────────────────────── §3 signature diagram ──
+(function () {
+  var svg = d3.select('#step-sig');
+  var g = svg.append('g').attr('transform', 'translate(20, 24)');
+
+  // Rates label (above step box).
+  var stepX = 340, stepY = 70, stepW = 110, stepH = 52;
+
+  // Input 1: stencil pipe (narrower, neutral Id gray — the shape tag is what distinguishes it).
+  var stencilLabel = g.append('text').attr('x', 0).attr('y', 14)
+    .attr('font-family', 'Source Code Pro, monospace').attr('font-size', '0.72rem')
+    .attr('fill', '#334155').text('stencil');
+  var pStencil = TV.pipe(g, { kind: 'Id', x1: 60, y1: 30, x2: stepX, y2: 80, width: 2.2, dotR: 3 });
+  TV.shapeIndex(g, { x: 150, y: 22, shape: [3, 3] });
+
+  // Input 2: field pipe (wide, Position-blue... but we avoid that; use Extra3 teal-ish via kind override).
+  // Keep palette clean: use Time (green) for field pipes? No — field is not time.
+  // Use 'Id' gray for structural pipes, shape tag does the heavy lifting.
+  g.append('text').attr('x', 0).attr('y', 118)
+    .attr('font-family', 'Source Code Pro, monospace').attr('font-size', '0.72rem')
+    .attr('fill', '#334155').text('field');
+  var pFieldIn = TV.pipe(g, { kind: 'Id', x1: 60, y1: 132, x2: stepX, y2: 108, width: 4, dotR: 4 });
+  TV.shapeIndex(g, { x: 150, y: 125, shape: [128, 128] });
+
+  // step box.
+  g.append('rect').attr('x', stepX).attr('y', stepY)
+    .attr('width', stepW).attr('height', stepH)
+    .attr('rx', 6).attr('fill', '#fff')
+    .attr('stroke', '#334155').attr('stroke-width', 1.2);
+  g.append('text').attr('x', stepX + stepW / 2).attr('y', stepY + stepH / 2 + 5)
+    .attr('text-anchor', 'middle').attr('font-family', 'Source Code Pro, monospace')
+    .attr('font-size', '0.85rem').attr('fill', '#334155').text('step');
+
+  // Rates above the step box.
+  g.append('text').attr('x', stepX + stepW / 2).attr('y', stepY - 6)
+    .attr('text-anchor', 'middle').attr('font-family', 'Source Code Pro, monospace')
+    .attr('font-size', '0.66rem').attr('fill', 'var(--c-time)').text('ReactionParams = {F, k, dU, dV}');
+
+  // Output: field pipe out, wide gray with matching shape tag.
+  var pFieldOut = TV.pipe(g, { kind: 'Id', x1: stepX + stepW, y1: stepY + stepH / 2, x2: 620, y2: stepY + stepH / 2, width: 4, dotR: 4 });
+  TV.shapeIndex(g, { x: 530, y: stepY + stepH / 2 - 8, shape: [128, 128] });
+  g.append('text').attr('x', 620).attr('y', stepY + stepH / 2 + 22)
+    .attr('text-anchor', 'end').attr('font-family', 'Source Code Pro, monospace')
+    .attr('font-size', '0.72rem').attr('fill', '#334155').text("field'");
+
+  // An explicit equality arc between the two [128×128] tags, to make the
+  // "shapes match" constraint read as geometric rather than verbal.
+  g.append('path')
+    .attr('d', 'M 176 132 Q 360 170 540 88')
+    .attr('fill', 'none').attr('stroke', 'var(--c-shape)').attr('stroke-width', 1)
+    .attr('stroke-dasharray', '2 3').attr('opacity', 0.5);
+  g.append('text').attr('x', 360).attr('y', 182)
+    .attr('text-anchor', 'middle').attr('font-family', 'Source Code Pro, monospace')
+    .attr('font-size', '0.64rem').attr('fill', 'var(--c-shape)')
+    .text('shape unchanged — a type-level equality');
+
+  // Animate two dots in lockstep.
+  var t0 = performance.now();
+  (function animate() {
+    var phase = ((performance.now() - t0) / 1800) % 1;
+    if (phase < 0.5) {
+      var u = phase * 2;
+      pStencil.feed(u);
+      pFieldIn.feed(u);
+      pFieldOut.feed(0);
+    } else {
+      pStencil.feed(0);
+      pFieldIn.feed(0);
+      pFieldOut.feed((phase - 0.5) * 2);
+    }
+    requestAnimationFrame(animate);
+  })();
+})();
+
+// ────────────────────────────────────────────────────────────── §4 anisotropy compare ──
+// Two Gray-Scott panels running in lockstep. Shared (F, k, dU, dV) and a shared seed; only the
+// Laplacian stencil differs. 5-point on the left (breaks 60° rotation), 9-point isotropic on the
+// right (approximately preserves it).
+(function () {
+  var N = 128;
+  var canvasA = document.getElementById('rd-5pt');
+  var canvasB = document.getElementById('rd-9pt');
+  var ctxA = canvasA.getContext('2d'), ctxB = canvasB.getContext('2d');
+  var imgA = ctxA.createImageData(N, N), imgB = ctxB.createImageData(N, N);
+
+  // Mini-stencil value swatches (pos / neg / pos-half / zero).
+  function renderMini(id, cells) {
+    var el = document.getElementById(id);
+    el.innerHTML = '';
+    cells.forEach(function (v) {
+      var d = document.createElement('div');
+      d.className = 'cell ' + (v.cls);
+      d.textContent = v.label;
+      el.appendChild(d);
+    });
+  }
+  renderMini('mini-5pt', [
+    { cls: 'zero', label: '0' }, { cls: 'pos', label: '1' }, { cls: 'zero', label: '0' },
+    { cls: 'pos', label: '1' },  { cls: 'neg', label: '−4' },{ cls: 'pos', label: '1' },
+    { cls: 'zero', label: '0' }, { cls: 'pos', label: '1' }, { cls: 'zero', label: '0' }
+  ]);
+  renderMini('mini-9pt', [
+    { cls: 'pos-half', label: '¼' }, { cls: 'pos', label: '1' }, { cls: 'pos-half', label: '¼' },
+    { cls: 'pos', label: '1' },      { cls: 'neg', label: '−3' },{ cls: 'pos', label: '1' },
+    { cls: 'pos-half', label: '¼' }, { cls: 'pos', label: '1' }, { cls: 'pos-half', label: '¼' }
+  ]);
+
+  // Four float buffers per panel (double-buffered U and V).
+  function mkPanel() {
+    return {
+      U:  new Float32Array(N * N), V:  new Float32Array(N * N),
+      U2: new Float32Array(N * N), V2: new Float32Array(N * N)
+    };
+  }
+  var A = mkPanel(), B = mkPanel();
+
+  // Spots-preset parameters — thin, stringy stripes, maximally sensitive to stencil symmetry.
+  var F = 0.037, k = 0.06, dU = 0.16, dV = 0.08;
+
+  // Deterministic seeded speckle pattern shared by both panels.
+  function seedPair(seed) {
+    var s = seed >>> 0;
+    function rnd() { s = (s + 0x6D2B79F5) >>> 0; var t = s; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }
+    for (var i = 0; i < N * N; i++) { A.U[i] = 1.0; A.V[i] = 0.0; B.U[i] = 1.0; B.V[i] = 0.0; }
+    var cx = N / 2, cy = N / 2;
+    for (var y = 0; y < N; y++) {
+      for (var x = 0; x < N; x++) {
+        var dx = x - cx, dy = y - cy;
+        if (dx * dx + dy * dy < 400) {
+          var vv = 0.25 + 0.4 * rnd();
+          var uu = 0.5 - 0.25 * rnd();
+          var i2 = y * N + x;
+          A.V[i2] = vv; A.U[i2] = uu; B.V[i2] = vv; B.U[i2] = uu;
+        }
+      }
+    }
+  }
+  seedPair(7);
+
+  // 5-point Laplacian substep: only four axial neighbours.
+  function substep5(p) {
+    for (var y = 0; y < N; y++) {
+      var ym = (y - 1 + N) % N, yp = (y + 1) % N;
+      for (var x = 0; x < N; x++) {
+        var xm = (x - 1 + N) % N, xp = (x + 1) % N;
+        var i  = y * N + x;
+        var iL = y * N + xm, iR = y * N + xp;
+        var iU = ym * N + x, iD = yp * N + x;
+        var u = p.U[i], v = p.V[i];
+        var lapU = p.U[iL] + p.U[iR] + p.U[iU] + p.U[iD] - 4 * u;
+        var lapV = p.V[iL] + p.V[iR] + p.V[iU] + p.V[iD] - 4 * v;
+        var uvv = u * v * v;
+        p.U2[i] = u + (dU * lapU - uvv + F * (1 - u));
+        p.V2[i] = v + (dV * lapV + uvv - (F + k) * v);
+      }
+    }
+    var t; t = p.U; p.U = p.U2; p.U2 = t; t = p.V; p.V = p.V2; p.V2 = t;
+  }
+
+  // 9-point isotropic Laplacian substep: axial weights 1, diagonal weights ¼, centre −3.
+  // Overall scale matches the 5-point version so the effective dU, dV are comparable.
+  function substep9(p) {
+    for (var y = 0; y < N; y++) {
+      var ym = (y - 1 + N) % N, yp = (y + 1) % N;
+      for (var x = 0; x < N; x++) {
+        var xm = (x - 1 + N) % N, xp = (x + 1) % N;
+        var i  = y * N + x;
+        var iL = y * N + xm, iR = y * N + xp;
+        var iU = ym * N + x, iD = yp * N + x;
+        var iNE = ym * N + xp, iNW = ym * N + xm, iSE = yp * N + xp, iSW = yp * N + xm;
+        var u = p.U[i], v = p.V[i];
+        var lapU = p.U[iL] + p.U[iR] + p.U[iU] + p.U[iD]
+                 + 0.25 * (p.U[iNE] + p.U[iNW] + p.U[iSE] + p.U[iSW]) - 5 * u;
+        var lapV = p.V[iL] + p.V[iR] + p.V[iU] + p.V[iD]
+                 + 0.25 * (p.V[iNE] + p.V[iNW] + p.V[iSE] + p.V[iSW]) - 5 * v;
+        // Normalise by 5/4 so mean-weight sum matches the 5-point's; stripes then appear on comparable timescales.
+        lapU *= 0.8; lapV *= 0.8;
+        var uvv = u * v * v;
+        p.U2[i] = u + (dU * lapU - uvv + F * (1 - u));
+        p.V2[i] = v + (dV * lapV + uvv - (F + k) * v);
+      }
+    }
+    var t; t = p.U; p.U = p.U2; p.U2 = t; t = p.V; p.V = p.V2; p.V2 = t;
+  }
+
+  function renderPanel(ctx, img, V) {
+    var data = img.data;
+    for (var i = 0, p = 0; i < N * N; i++, p += 4) {
+      var v = V[i];
+      var t = v * 2.5;
+      if (t < 0) t = 0; else if (t > 1) t = 1;
+      var r, g, b;
+      if (t < 0.5) {
+        var s = t * 2;
+        r = 0x0b + (0x2e - 0x0b) * s;
+        g = 0x2a + (0x8b - 0x2a) * s;
+        b = 0x33 + (0x8b - 0x33) * s;
+      } else {
+        var s2 = (t - 0.5) * 2;
+        r = 0x2e + (0xe6 - 0x2e) * s2;
+        g = 0x8b + (0xfb - 0x8b) * s2;
+        b = 0x8b + (0xf4 - 0x8b) * s2;
+      }
+      data[p] = r; data[p+1] = g; data[p+2] = b; data[p+3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+  }
+
+  var paused = false, seedCounter = 7;
+  var SUBS = 5;
+  function frame() {
+    if (!paused) {
+      for (var i = 0; i < SUBS; i++) { substep5(A); substep9(B); }
+    }
+    renderPanel(ctxA, imgA, A.V);
+    renderPanel(ctxB, imgB, B.V);
+    requestAnimationFrame(frame);
+  }
+
+  d3.select('#rd-aniso-reseed').on('click', function () { seedCounter++; seedPair(seedCounter * 13 + 1); });
+  d3.select('#rd-aniso-pause').on('click', function () {
+    paused = !paused;
+    d3.select(this).text(paused ? 'resume' : 'pause');
+  });
+
+  frame();
+})();
+
+// ────────────────────────────────────────────────────────────── §4 stencil gallery ──
+// Four tiles. Each runs a small 64×64 convolution-only simulation on a seeded field.
+// Keeps the fields independent so the reader can see the stencil's effect in isolation.
+(function () {
+  var M = 64;                  // tile field size
+  var gallery = d3.select('#gallery');
+
+  // Stencils — each is either a 3×3 or 5×5 array of weights. Shape parameter comes through.
+  var STENCILS = [
+    {
+      name: '5-point Laplacian',
+      tag: 'Stencil 3',
+      k: 3,
+      grid: [[0, 1, 0], [1, -4, 1], [0, 1, 0]],
+      mode: 'diffuse',       // apply as Δu; positive → smear
+      rate: 0.22,
+      note: 'The classical isotropic smear. Every <code>Field w h</code> shrinks toward its neighbor-average.'
+    },
+    {
+      name: '9-point Laplacian',
+      tag: 'Stencil 3',
+      k: 3,
+      grid: [[0.25, 0.5, 0.25], [0.5, -3, 0.5], [0.25, 0.5, 0.25]],
+      mode: 'diffuse',
+      rate: 0.22,
+      note: 'Diagonals included. Same type as the 5-point variant; different numerical behavior.'
+    },
+    {
+      name: '5×5 wide Laplacian',
+      tag: 'Stencil 5',
+      k: 5,
+      grid: [
+        [0, 0, 1, 0, 0],
+        [0, 1, 2, 1, 0],
+        [1, 2, -16, 2, 1],
+        [0, 1, 2, 1, 0],
+        [0, 0, 1, 0, 0]
+      ],
+      mode: 'diffuse',
+      rate: 0.04,
+      note: 'A different <em>type</em>: <code>Stencil 5</code>. Reaches two cells out per step, so the blur spreads twice as fast.'
+    },
+    {
+      name: 'Sobel-X edge',
+      tag: 'Stencil 3',
+      k: 3,
+      grid: [[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]],
+      mode: 'edge',          // visualize |Su|
+      rate: 1.0,
+      note: 'Same shape as the Laplacian, different meaning: this is an edge detector, not a smoother.'
+    }
+  ];
+
+  // Seed: a bright blob at the center. Each tile starts from the same field.
+  function seedField() {
+    var f = new Float32Array(M * M);
+    for (var y = 0; y < M; y++) {
+      for (var x = 0; x < M; x++) {
+        var dx = x - M / 2, dy = y - M / 2;
+        var r2 = dx * dx + dy * dy;
+        f[y * M + x] = Math.exp(-r2 / 60);
+        // A second smaller off-center blob, to give edge detectors something interesting.
+        var dx2 = x - M * 0.3, dy2 = y - M * 0.75;
+        f[y * M + x] += 0.6 * Math.exp(-(dx2 * dx2 + dy2 * dy2) / 35);
+      }
+    }
+    return f;
+  }
+
+  // Apply a k×k stencil once (toroidal). `out` accumulates the convolution.
+  function convolveOnce(field, stencil, k, out) {
+    var r = (k - 1) >> 1;
+    for (var y = 0; y < M; y++) {
+      for (var x = 0; x < M; x++) {
+        var sum = 0;
+        for (var j = 0; j < k; j++) {
+          var yy = (y + j - r + M) % M;
+          for (var i = 0; i < k; i++) {
+            var xx = (x + i - r + M) % M;
+            sum += stencil[j][i] * field[yy * M + xx];
+          }
+        }
+        out[y * M + x] = sum;
+      }
+    }
+  }
+
+  function renderToCanvas(ctx, img, field, minV, maxV) {
+    var data = img.data;
+    var span = (maxV - minV) || 1;
+    for (var i = 0, p = 0; i < M * M; i++, p += 4) {
+      var t = (field[i] - minV) / span;
+      if (t < 0) t = 0; else if (t > 1) t = 1;
+      var r, g, b;
+      if (t < 0.5) {
+        var s = t * 2;
+        r = 0x0b + (0x2e - 0x0b) * s;
+        g = 0x2a + (0x8b - 0x2a) * s;
+        b = 0x33 + (0x8b - 0x33) * s;
+      } else {
+        var s2 = (t - 0.5) * 2;
+        r = 0x2e + (0xe6 - 0x2e) * s2;
+        g = 0x8b + (0xfb - 0x8b) * s2;
+        b = 0x8b + (0xf4 - 0x8b) * s2;
+      }
+      data[p]   = r;
+      data[p+1] = g;
+      data[p+2] = b;
+      data[p+3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+  }
+
+  // Build each tile.
+  STENCILS.forEach(function (stencil) {
+    var tile = gallery.append('div').attr('class', 'stencil-tile');
+    var header = tile.append('div').attr('class', 'tile-header');
+    header.append('span').attr('class', 'tile-name').text(stencil.name);
+    header.append('span').attr('class', 'tile-tag').text('[' + stencil.k + '×' + stencil.k + ']');
+
+    // Stencil values grid.
+    var gridEl = tile.append('div').attr('class', 'tile-grid')
+      .style('grid-template-columns', 'repeat(' + stencil.k + ', 1fr)');
+    stencil.grid.forEach(function (row) {
+      row.forEach(function (v) {
+        var cls = v > 0 ? 'pos' : v < 0 ? 'neg' : 'zero';
+        gridEl.append('div').attr('class', 'cell ' + cls).text(
+          Number.isInteger(v) ? v.toString() : v.toFixed(2)
+        );
+      });
+    });
+
+    // Mini canvas.
+    var canvas = tile.append('canvas').attr('class', 'tile-canvas')
+      .attr('width', M).attr('height', M).node();
+    var ctx = canvas.getContext('2d');
+    var img = ctx.createImageData(M, M);
+
+    tile.append('div').attr('class', 'tile-note').html(stencil.note);
+
+    // Local field + scratch.
+    var field = seedField();
+    var scratch = new Float32Array(M * M);
+    stencil.field = field;
+    stencil.scratch = scratch;
+    stencil.ctx = ctx;
+    stencil.img = img;
+  });
+
+  // Animation: each tile advances its own convolution every rAF.
+  function animate() {
+    STENCILS.forEach(function (s) {
+      convolveOnce(s.field, s.grid, s.k, s.scratch);
+      if (s.mode === 'diffuse') {
+        // Explicit-Euler heat-equation: u += rate · Δu.
+        for (var i = 0; i < M * M; i++) {
+          s.field[i] = s.field[i] + s.rate * s.scratch[i];
+        }
+        renderToCanvas(s.ctx, s.img, s.field, 0, 1);
+      } else if (s.mode === 'edge') {
+        // Visualize |S · f| as the response; the field itself doesn't evolve.
+        var minV = Infinity, maxV = -Infinity;
+        for (var i2 = 0; i2 < M * M; i2++) {
+          var a = Math.abs(s.scratch[i2]);
+          if (a < minV) minV = a;
+          if (a > maxV) maxV = a;
+          s.scratch[i2] = a;
+        }
+        renderToCanvas(s.ctx, s.img, s.scratch, minV, maxV || 1);
+      }
+    });
+    requestAnimationFrame(animate);
+  }
+  requestAnimationFrame(animate);
+
+  // Re-seed all tiles every 8 seconds so the diffusers don't flatten to zero.
+  setInterval(function () {
+    STENCILS.forEach(function (s) {
+      if (s.mode === 'diffuse') s.field.set(seedField());
+    });
+  }, 8000);
+})();
+</script>
+</body>
+</html>

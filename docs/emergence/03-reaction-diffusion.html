@@ -69,6 +69,8 @@ input[type="range"] { width: 140px; accent-color: var(--accent); }
 .param-map-wrap { position: relative; }
 .param-map-canvas { cursor: crosshair; border-radius: 3px; display: block; width: 100%; image-rendering: auto; }
 .param-marker { position: absolute; width: 14px; height: 14px; border: 2px solid white; border-radius: 50%; box-shadow: 0 0 0 1px rgba(0,0,0,0.3), 0 0 6px rgba(0,0,0,0.4); pointer-events: none; transform: translate(-50%, -50%); transition: left 0.1s, top 0.1s; }
+.param-hover-tip { position: absolute; pointer-events: none; font-family: var(--mono-font); font-size: 0.72rem; color: #fff; background: rgba(14, 16, 32, 0.85); padding: 2px 6px; border-radius: 3px; transform: translate(8px, -50%); white-space: nowrap; opacity: 0; transition: opacity 0.12s; }
+.param-map-wrap:hover .param-hover-tip { opacity: 1; }
 .param-axis-label { font-family: var(--heading-font); font-size: 0.75rem; color: var(--text-2); font-weight: 600; position: absolute; }
 .param-axis-x { bottom: 0; left: 1.5rem; right: 0; text-align: center; }
 .param-axis-y { writing-mode: vertical-rl; transform: rotate(180deg); left: 0; top: 0; bottom: 1.5rem; display: flex; align-items: center; justify-content: center; }
@@ -159,7 +161,7 @@ input[type="range"] { width: 140px; accent-color: var(--accent); }
     The feed rate f controls how fast fresh U flows in. The kill rate k controls how fast V decays. Together, these two numbers determine everything about the pattern. A tiny change can flip the system from spots to stripes, or from quiet stripes to a pulsing, dividing mass.
   </p>
   <p>
-    The map below shows which regions of (f, k) space produce which behavior. Dark regions are dead zones where V cannot survive. Bright regions are where interesting patterns form. Click anywhere on the map to load those parameters into the simulation above.
+    The map below shows which regions of (f, k) space produce which behavior. Dark regions are dead zones where V cannot survive. Bright regions are where interesting patterns form.
   </p>
 
   <div class="figure" id="fig-param-map">
@@ -168,6 +170,7 @@ input[type="range"] { width: 140px; accent-color: var(--accent); }
       <div class="param-map-wrap" id="param-map-wrap">
         <canvas class="param-map-canvas" id="param-map-canvas"></canvas>
         <div class="param-marker" id="param-marker"></div>
+        <div class="param-hover-tip" id="param-hover-tip">f=0.050 k=0.062</div>
       </div>
       <span class="param-axis-label param-axis-x">feed rate (f)</span>
     </div>
@@ -182,7 +185,7 @@ input[type="range"] { width: 140px; accent-color: var(--accent); }
     Initial conditions matter. A single seed point in a uniform field can grow into a spreading coral. A stripe of V can break apart into chains of spots. Random noise produces the most organic textures.
   </p>
   <p>
-    Draw seed regions of V onto the blank grid below. The simulation fills and transforms whatever you lay down. Try drawing a circle and watch it fracture. Try a line and watch it bead up into spots.
+    Try drawing a circle and watch it fracture. Try a line and watch it bead up into spots.
   </p>
 
   <div class="figure" id="fig-paint">
@@ -507,6 +510,17 @@ const dispatch = d3.dispatch('paramChange', 'reset', 'clear');
     this.classList.toggle("active", state.paused);
   });
 
+  // Space toggles pause when the main sim is in view. Matches the expectation set
+  // by media players and unblocks keyboard-first readers.
+  window.addEventListener("keydown", function(ev) {
+    if (ev.code !== "Space") return;
+    if (ev.target && (ev.target.tagName === "INPUT" || ev.target.tagName === "TEXTAREA")) return;
+    var rect = canvas.getBoundingClientRect();
+    if (rect.bottom < 0 || rect.top > window.innerHeight) return;
+    ev.preventDefault();
+    btnPause.click();
+  });
+
   btnReset.addEventListener("click", init);
   btnPerturb.addEventListener("click", function() { RD.perturb(gridA, 6); paint(); });
 
@@ -656,6 +670,18 @@ const dispatch = d3.dispatch('paramChange', 'reset', 'clear');
     var k = Math.max(K_MIN, Math.min(K_MAX, yToK((e.clientY - rect.top) / rect.height * MAP_H)));
     state.f = f; state.k = k;
     dispatch.call('paramChange', null, state.f, state.k);
+  });
+
+  // Hover tooltip: show (f, k) at cursor so readers can see the exact coords they're aiming for.
+  var hoverTip = document.getElementById("param-hover-tip");
+  mapCanvas.addEventListener("mousemove", function(e) {
+    var rect = mapCanvas.getBoundingClientRect();
+    var mx = e.clientX - rect.left, my = e.clientY - rect.top;
+    var f = Math.max(F_MIN, Math.min(F_MAX, xToF(mx / rect.width * MAP_W)));
+    var k = Math.max(K_MIN, Math.min(K_MAX, yToK(my / rect.height * MAP_H)));
+    hoverTip.style.left = mx + "px";
+    hoverTip.style.top = my + "px";
+    hoverTip.textContent = "f=" + f.toFixed(3) + "  k=" + k.toFixed(3);
   });
 
   new ResizeObserver(() => updateMarker(state.f, state.k)).observe(mapWrap);

@@ -260,7 +260,6 @@ This framework first appeared in chemistry. The Belousov-Zhabotinsky reaction is
 cerium ions, malonic acid, and bromate in sulfuric acid that oscillates spontaneously and,
 spread into a thin film, organizes into turning spiral fronts. The same dynamics appear in
 the heart, where spirals cause ventricular tachycardia and, if they shatter, fibrillation.
-We start with the abstract framework, then walk through both examples.
 </p>
 
 <!-- ====== Section 1: The Excitable Cell ====== -->
@@ -421,9 +420,8 @@ now in 1D.
 
 <p>
 Spread the cells across a 2D sheet and you have a simple model of the atrial or ventricular
-wall. A small pacemaker region in the top-left fires at a steady rate. Each firing launches
-a wave that sweeps across the tissue as a smooth front. Every cell fires once per heartbeat,
-producing a coordinated contraction.
+wall. A small pacemaker region in the top-left fires at a steady rate, and every cell fires
+once per heartbeat, producing a coordinated contraction.
 </p>
 
 <p>
@@ -489,9 +487,7 @@ The "S1-S2 protocol" is how cardiologists create reentry in a lab preparation, a
 tends to happen clinically. S1 is a normal planar wave. Before the trailing tissue has fully
 recovered, we drop a premature stimulus (S2) onto the recovering tail. The premature beat
 can only spread sideways into recovered tissue, not back into refractory tissue — and a
-spiral is born. "Induce fibrillation" scatters many premature stimuli at once. "Defibrillate"
-resets every cell simultaneously: with no gradients, there is nothing for a spiral to feed
-on, and the sinus node can take over again.
+spiral is born.
 </p>
 
 <div class="figure" id="fig-spirals">
@@ -673,7 +669,7 @@ function fhnRestingState(a, b, I) {
     const gP = svgPhase.append("g").attr("transform", `translate(${ppMargin.left},${ppMargin.top})`);
 
     const xP = d3.scaleLinear().domain([-2.5, 2.5]).range([0, pW]);
-    const yP = d3.scaleLinear().domain([-1.5, 3.0]).range([pH, 0]);
+    const yP = d3.scaleLinear().domain([-1.0, 2.5]).range([pH, 0]);
 
     gP.append("g").attr("transform", `translate(0,${pH})`).call(d3.axisBottom(xP).ticks(5)).call(s => s.select(".domain").attr("stroke", "#ccc"));
     gP.append("g").call(d3.axisLeft(yP).ticks(5)).call(s => s.select(".domain").attr("stroke", "#ccc"));
@@ -692,7 +688,7 @@ function fhnRestingState(a, b, I) {
 
     // Fixed point: where nullclines cross. Solve u - u^3/3 + I = (u+a)/b for u.
     const fp = fhnRestingState(state.a, b, I);
-    if (fp.u >= -2.5 && fp.u <= 2.5 && fp.v >= -1.5 && fp.v <= 3.0) {
+    if (fp.u >= -2.5 && fp.u <= 2.5 && fp.v >= -1.0 && fp.v <= 2.5) {
       gP.append("circle").attr("cx", xP(fp.u)).attr("cy", yP(fp.v)).attr("r", 4)
         .attr("fill", "none").attr("stroke", "#666").attr("stroke-width", 1.5);
     }
@@ -730,6 +726,24 @@ function fhnRestingState(a, b, I) {
       gT.append("path").attr("d", uL(state.history)).attr("fill", "none").attr("stroke", "var(--c-agent)").attr("stroke-width", 2);
       gT.append("path").attr("d", vL(state.history)).attr("fill", "none").attr("stroke", "var(--c-danger)").attr("stroke-width", 1.5).attr("stroke-dasharray", "4,2");
     }
+
+    // Axis labels
+    gT.append("text").attr("x", tW / 2).attr("y", tH + 24).attr("text-anchor", "middle")
+      .attr("font-size", 11).attr("fill", "var(--text-2)").text("time");
+    gT.append("text").attr("transform", "rotate(-90)").attr("x", -tH / 2).attr("y", -28)
+      .attr("text-anchor", "middle").attr("font-size", 11).attr("fill", "var(--text-2)").text("u, v");
+
+    // Inline curve labels
+    gT.append("text").attr("x", tW - 4).attr("y", 14).attr("text-anchor", "end")
+      .attr("fill", "var(--c-agent)").attr("font-size", 11).attr("font-weight", 600).text("u (activator)");
+    gT.append("text").attr("x", tW - 4).attr("y", 28).attr("text-anchor", "end")
+      .attr("fill", "var(--c-danger)").attr("font-size", 11).attr("font-weight", 600).text("v (inhibitor)");
+
+    // Phase-plane axis labels
+    gP.append("text").attr("x", pW / 2).attr("y", pH + 24).attr("text-anchor", "middle")
+      .attr("font-size", 11).attr("fill", "var(--text-2)").text("u (activator)");
+    gP.append("text").attr("transform", "rotate(-90)").attr("x", -pH / 2).attr("y", -28)
+      .attr("text-anchor", "middle").attr("font-size", 11).attr("fill", "var(--text-2)").text("v (inhibitor)");
 
     cellSwatch.style.background = cellColor(state.u).toString();
     cellStateText.textContent = stateLabel(state.u);
@@ -1187,6 +1201,16 @@ var ExcitableEngine = (function() {
     btnPause.textContent = paused ? "Play" : "Pause";
     btnPause.classList.toggle("active", paused);
   });
+  // Space toggles pause when the figure is in view and no slider is focused.
+  document.addEventListener("keydown", function(e) {
+    if (e.code !== "Space" || e.target.tagName === "INPUT") return;
+    var rect = canvas.getBoundingClientRect();
+    if (rect.bottom < 0 || rect.top > window.innerHeight) return;
+    e.preventDefault();
+    paused = !paused;
+    btnPause.textContent = paused ? "Play" : "Pause";
+    btnPause.classList.toggle("active", paused);
+  });
   btnReset.addEventListener("click", function() {
     ExcitableEngine.clear(world);
     waves = 0;
@@ -1464,7 +1488,8 @@ var ExcitableEngine = (function() {
       if (nowAbove && !above) firings++;
       above = nowAbove;
     }
-    var windowMs = HIST_LEN * MS_PER_STEP * stepsPerFrame;
+    // updateStats runs every 4 frames, so each history sample covers 4*stepsPerFrame integration steps.
+    var windowMs = HIST_LEN * MS_PER_STEP * stepsPerFrame * 4;
     var hz = firings / (windowMs / 1000);
     rateEl.textContent = (hz > 0.05 ? hz.toFixed(1) : "--") + " Hz";
 

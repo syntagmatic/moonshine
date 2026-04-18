@@ -71,6 +71,10 @@ svg text { font-family: var(--heading-font); }
 
 .stats-row { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 1rem; font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); }
 .stats-row b { color: var(--text); font-family: var(--mono-font); }
+.fig-rel { position: relative; }
+.eq-overlay { position: absolute; top: 10px; right: 14px; background: rgba(255,255,255,0.9);
+  border: 1px solid var(--border); border-radius: 4px; padding: 0.3rem 0.6rem;
+  font-size: 0.8rem; color: var(--text-2); pointer-events: none; z-index: 2; }
 
 @media (prefers-reduced-motion: reduce) {
   .figure canvas { outline: 2px dashed var(--border); outline-offset: -2px; }
@@ -138,12 +142,11 @@ The asymmetry is the key. Because the peak is closer to the minimum on one side 
 In a flashing ratchet, the potential toggles automatically. The efficiency of the transport depends on the flashing frequency. If the potential switches too fast, particles don't have time to diffuse. If it's too slow, they diffuse too far and the asymmetry is lost.
 </p>
 
-<p>
-\[ \langle v \rangle \propto \frac{L}{\tau} \]
-</p>
-
 <div class="figure" id="fig-multi">
-  <canvas id="canvas-multi"></canvas>
+  <div class="fig-rel">
+    <canvas id="canvas-multi"></canvas>
+    <div class="eq-overlay">\(\langle v \rangle \propto L/\tau\)</div>
+  </div>
   <div class="controls">
     <div class="control-group">
       <label>Frequency</label>
@@ -170,8 +173,8 @@ In a flashing ratchet, the potential toggles automatically. The efficiency of th
     <button class="btn" id="btn-pause">Pause</button>
   </div>
   <div class="stats-row">
-    <span>Mean Displacement: <b id="stat-mean">0.00</b></span>
-    <span>Drift Velocity: <b id="stat-vel">0.00</b></span>
+    <span>Mean Displacement: <b id="stat-mean">0.00</b> px</span>
+    <span>Drift Velocity: <b id="stat-vel">0.00</b> px/s</span>
   </div>
   <p class="figure-caption"><span class="figure-label">Figure 2.</span> A population of particles in a flashing ratchet. The blue line tracks the average position, showing a steady drift despite the random motion of individual particles.</p>
 </div>
@@ -242,6 +245,14 @@ function getForce(x, asym, L=100) {
     ctx.arc(x, h/2 + 50 - (on ? getSawtooth(x, asym, L) : 0) * 80 - 10, 8, 0, Math.PI*2);
     ctx.fillStyle = '#ef4444';
     ctx.fill();
+
+    // Drift direction indicator (based on asymmetry: peak nearer to left => drift right)
+    ctx.fillStyle = '#4a4a6a';
+    ctx.font = '11px "Source Sans 3", sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText('net drift  \u2192', w - 8, 16);
+    ctx.textAlign = 'left';
+    ctx.fillText(on ? 'potential ON' : 'potential OFF (free diffusion)', 8, 16);
   }
 
   function step() {
@@ -364,9 +375,21 @@ function getForce(x, asym, L=100) {
     ctx.fillStyle = '#4a4a6a';
     ctx.font = '10px "Source Sans 3", sans-serif';
     ctx.textAlign = 'left';
-    ctx.fillText('mean displacement', 4, traceTop + 10);
+    ctx.fillText('mean displacement (px) vs. time', 4, traceTop + 10);
     ctx.textAlign = 'right';
     ctx.fillText(`window: ${TRACE_MAX_SECONDS}s`, w - 4, traceTop + 10);
+
+    // Legend for particle dots and mean marker
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#2563eb';
+    ctx.beginPath(); ctx.arc(8, 10, 3, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#4a4a6a';
+    ctx.fillText('particles', 16, 13);
+    ctx.strokeStyle = '#ef4444';
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath(); ctx.moveTo(84, 4); ctx.lineTo(84, 16); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillText('mean position', 90, 13);
 
     if (trace.length > 1) {
       // Scale so the largest |d| in the trace fills ~80% of the band.
@@ -452,6 +475,18 @@ function getForce(x, asym, L=100) {
   btnPause.addEventListener('click', () => {
     paused = !paused;
     btnPause.textContent = paused ? 'Resume' : 'Pause';
+  });
+
+  // Space toggles pause when the figure is in view and the user hasn't
+  // clicked into an input elsewhere.
+  document.addEventListener('keydown', e => {
+    if (e.code !== 'Space') return;
+    const tag = (e.target.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+    const r = container.getBoundingClientRect();
+    if (r.bottom < 0 || r.top > window.innerHeight) return;
+    e.preventDefault();
+    btnPause.click();
   });
 
   new ResizeObserver(() => {

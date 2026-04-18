@@ -1,7 +1,7 @@
 // e8-viz.js — shared visual conventions for the E8 lattice series.
 //
 // Attaches to the same `E8` global as e8-math.js. Loads after e8-math.js.
-// Holds the color palette, a few reusable SVG helpers, and a minimal 3D
+// Holds the color palette, a figure-scaffolding helper, and a minimal 3D
 // projection utility that multiple explainers use for rotating 3D views.
 //
 // Keeping this file thin is deliberate: figure-specific code belongs in the
@@ -147,100 +147,13 @@
     };
   }
 
-  // ───────────────────────────────────────────── parallel coordinates ─────
-  // Basic axis + polyline drawing for N-dimensional vectors. Returns a handle
-  // the caller can use to redraw with new data or highlight specific rows.
-
-  function parallelCoords(svgRoot, dims, options) {
-    options = options || {};
-    var width  = options.width  || 640;
-    var height = options.height || 300;
-    var margin = options.margin || {top: 20, right: 20, bottom: 30, left: 40};
-    var innerW = width - margin.left - margin.right;
-    var innerH = height - margin.top - margin.bottom;
-    var yMin = options.yMin != null ? options.yMin : -1;
-    var yMax = options.yMax != null ? options.yMax :  1;
-
-    var svgNS = 'http://www.w3.org/2000/svg';
-    var svg = document.createElementNS(svgNS, 'svg');
-    svg.setAttribute('viewBox', '0 0 ' + width + ' ' + height);
-    svg.setAttribute('width', '100%');
-    svg.setAttribute('style', 'max-width: ' + width + 'px; height: auto;');
-    svgRoot.appendChild(svg);
-
-    var g = document.createElementNS(svgNS, 'g');
-    g.setAttribute('transform', 'translate(' + margin.left + ',' + margin.top + ')');
-    svg.appendChild(g);
-
-    function xScale(k) {
-      if (dims === 1) return innerW / 2;
-      return (k / (dims - 1)) * innerW;
-    }
-    function yScale(v) {
-      return innerH - (v - yMin) / (yMax - yMin) * innerH;
-    }
-
-    // Axes
-    for (var k = 0; k < dims; k++) {
-      var axis = document.createElementNS(svgNS, 'line');
-      axis.setAttribute('x1', xScale(k));
-      axis.setAttribute('y1', 0);
-      axis.setAttribute('x2', xScale(k));
-      axis.setAttribute('y2', innerH);
-      axis.setAttribute('stroke', colors.axis);
-      axis.setAttribute('stroke-width', '1');
-      g.appendChild(axis);
-      var label = document.createElementNS(svgNS, 'text');
-      label.setAttribute('x', xScale(k));
-      label.setAttribute('y', innerH + 18);
-      label.setAttribute('text-anchor', 'middle');
-      label.setAttribute('font-size', '11');
-      label.setAttribute('fill', colors.textSecondary);
-      label.textContent = (options.axisLabels && options.axisLabels[k]) || ('x' + (k + 1));
-      g.appendChild(label);
-    }
-
-    var polylinesGroup = document.createElementNS(svgNS, 'g');
-    polylinesGroup.setAttribute('class', 'polylines');
-    g.appendChild(polylinesGroup);
-
-    function drawPolylines(rows, rowOptions) {
-      while (polylinesGroup.firstChild) polylinesGroup.removeChild(polylinesGroup.firstChild);
-      for (var r = 0; r < rows.length; r++) {
-        var row = rows[r];
-        var opts = rowOptions ? rowOptions(row, r) : {};
-        var pts = [];
-        for (var k = 0; k < dims; k++) {
-          pts.push(xScale(k) + ',' + yScale(row[k]));
-        }
-        var poly = document.createElementNS(svgNS, 'polyline');
-        poly.setAttribute('points', pts.join(' '));
-        poly.setAttribute('fill', 'none');
-        poly.setAttribute('stroke', opts.stroke || colors.integerFamily);
-        poly.setAttribute('stroke-width', opts.strokeWidth || 1);
-        poly.setAttribute('stroke-opacity', opts.opacity != null ? opts.opacity : 0.6);
-        if (opts.id) poly.setAttribute('data-id', opts.id);
-        polylinesGroup.appendChild(poly);
-      }
-    }
-
-    return {
-      svg: svg,
-      g: g,
-      xScale: xScale,
-      yScale: yScale,
-      drawPolylines: drawPolylines
-    };
-  }
-
   // ───────────────────────────────────────────── public API ─────
 
   E8.viz = {
     colors: colors,
     figure: figure,
     rotate3D: rotate3D,
-    project3D: project3D,
-    parallelCoords: parallelCoords
+    project3D: project3D
   };
 
 })(typeof window !== 'undefined' ? window : globalThis);

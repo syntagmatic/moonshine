@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>N-Body, Symplectic — Type Systems for Simulation</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
+<script src="lib/typeviz.js"></script>
+<script src="lib/simcore.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --article-width: 740px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem;
+  --line-height: 1.65;
+  --text: #1a1a2e;
+  --text-2: #4a4a6a;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --bg: #fafafa;
+  --fig-bg: #ffffff;
+  --border: #e2e2e8;
+  --c-position: #2563eb;
+  --c-velocity: #d97706;
+  --c-force:    #dc2626;
+  --c-mass:     #6b7280;
+  --c-time:     #059669;
+  --c-id:       #64748b;
+  /* Integrator variant colors — extension palette. Chosen to avoid the reserved six. */
+  --c-euler: #ef4444;   /* bright red, distinct from Force's deeper #dc2626 */
+  --c-semi:  #f59e0b;   /* amber */
+  --c-symp:  #7c3aed;   /* violet */
+  --c-wall:  #f59e0b;   /* conservation surface, same amber as #4's refinement wall */
+}
+
+body { font-family: var(--body-font); font-size: var(--body-size); line-height: var(--line-height); color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased; }
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
+
+h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.15rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.3rem; margin: 3rem 0 0.75rem; }
+
+p { margin: 0 0 1rem; }
+a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+
+.back-links { font-family: var(--heading-font); font-size: 0.85rem; margin-bottom: 2rem; }
+.back-links a { color: var(--text-2); text-decoration: none; }
+.back-links a:hover { color: var(--accent); }
+.back-links .sep { margin: 0 0.5rem; opacity: 0.3; }
+
+header .subtitle { font-family: var(--heading-font); font-size: 1.05rem; color: var(--text-2); max-width: 620px; margin-top: 0.5rem; }
+
+.section { margin-top: 3rem; }
+.section-tag { font-family: var(--mono-font); font-size: 0.7rem; font-weight: 600; color: var(--accent); letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 0.25rem; }
+
+.figure { background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; padding: 1rem; margin: 1.5rem 0; }
+.figure-caption { font-family: var(--heading-font); font-size: 0.82rem; color: var(--text-2); margin-top: 0.5rem; }
+
+.controls { display: flex; gap: 0.75rem; align-items: center; margin-top: 0.75rem; flex-wrap: wrap; }
+.controls button { font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600; padding: 0.4rem 0.9rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 4px; cursor: pointer; color: var(--text); }
+.controls button:hover { border-color: var(--accent); color: var(--accent); }
+.controls label { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); display: flex; align-items: center; gap: 0.35rem; }
+.controls select { font-family: var(--mono-font); font-size: 0.8rem; padding: 0.25rem 0.4rem; border: 1px solid var(--border); border-radius: 4px; background: var(--fig-bg); color: var(--text); }
+
+code { font-family: var(--mono-font); font-size: 0.85em; background: #f3f4f6; padding: 0.1em 0.35em; border-radius: 3px; }
+.haskell-block { font-family: var(--mono-font); font-size: 0.85rem; background: #f3f4f6; padding: 0.75rem 1rem; border-radius: 4px; margin: 0.75rem 0; border-left: 3px solid var(--accent); white-space: pre; overflow-x: auto; }
+
+.carry-forward { background: var(--accent-light); border-left: 3px solid var(--accent); padding: 0.75rem 1rem; margin: 1.5rem 0; font-size: 0.95rem; }
+.carry-forward strong { font-family: var(--heading-font); }
+
+.integrator-swatches { display: flex; gap: 0.75rem; margin-top: 0.75rem; font-family: var(--mono-font); font-size: 0.75rem; flex-wrap: wrap; }
+.integrator-swatches .sw { display: flex; align-items: center; gap: 0.35rem; }
+.integrator-swatches .dot { width: 10px; height: 10px; border-radius: 50%; }
+
+.sim-grid { display: grid; grid-template-columns: 1.3fr 1fr; gap: 0.75rem; align-items: stretch; }
+@media (max-width: 620px) { .sim-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="article">
+  <div class="back-links">
+    <a href="index.html">← type-systems</a>
+    <span class="sep">·</span>
+    <a href="../index.html">all series</a>
+  </div>
+
+  <header>
+    <h1>N-Body, Symplectic</h1>
+    <p class="subtitle">Three gravitating bodies. A phantom type tag on the integrator tells the type checker — and the eye — whether the Hamiltonian will still be conserved a thousand steps from now. Two functions with the same value signature: only one respects the geometry of phase space.</p>
+  </header>
+
+  <!-- ────────────── §1 Cold sim ────────────── -->
+  <div class="section">
+    <div class="section-tag">§1 · Cold sim</div>
+    <h2>Three equal masses tracing each other through gravity</h2>
+    <p>Three point masses, all equal, pulling on each other through inverse-square gravity. The initial positions and velocities are the classic Chenciner–Montgomery figure-eight choreography: a single closed curve that all three bodies chase, each one lagging the next by a third of the period. It is beautiful, and it is <em>fragile</em> — the total energy is conserved exactly by the differential equations, but the discrete integrator you pick decides whether your simulation still knows that after a hundred revolutions.</p>
+    <div class="figure">
+      <div class="sim-grid">
+        <svg id="nb-orbit" viewBox="0 0 440 340" width="100%" height="340" style="display:block"></svg>
+        <svg id="nb-energy" viewBox="0 0 320 340" width="100%" height="340" style="display:block"></svg>
+      </div>
+      <div class="controls">
+        <label>config
+          <select id="nb-config">
+            <option value="fig8" selected>Chenciner–Montgomery figure-eight</option>
+            <option value="lagrange">Lagrange equilateral (L4/L5 test)</option>
+          </select>
+        </label>
+        <label>integrator
+          <select id="nb-int">
+            <option value="euler">Euler (explicit)</option>
+            <option value="semi">Semi-implicit Euler</option>
+            <option value="symp" selected>Leapfrog (symplectic)</option>
+          </select>
+        </label>
+        <button id="nb-reset">reset</button>
+        <button id="nb-pause">pause</button>
+      </div>
+      <div class="figure-caption">Left: positions of the three bodies, with fading trails. Right: total energy <code>H = T + V</code> plotted over time — the dashed line is <code>H₀</code>, the true energy. Switch integrator and watch what happens to the right-hand curve. Euler sheds energy like a leaking balloon; leapfrog oscillates around <code>H₀</code> without drift. Switch config to <em>Lagrange equilateral</em> and the same drift manifests as a different physical pathology: the rigid triangle distorts, one corner flies outward, and the L4/L5 Trojan stability is gone.</div>
+      <div class="integrator-swatches">
+        <span class="sw"><span class="dot" style="background: var(--c-euler)"></span>Euler — <code>Integrator Euler</code></span>
+        <span class="sw"><span class="dot" style="background: var(--c-semi)"></span>Semi-implicit — <code>Integrator Semi</code></span>
+        <span class="sw"><span class="dot" style="background: var(--c-symp)"></span>Leapfrog — <code>Integrator Symp</code></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ────────────── §2 Name the types ────────────── -->
+  <div class="section">
+    <div class="section-tag">§2 · Name the types</div>
+    <h2>A phantom tag for what the function preserves</h2>
+    <p>At the value level, all three integrators above have the same signature: take a Hamiltonian, take a state, take a timestep, return a new state. You cannot tell them apart from their input and output types alone. So we reach for a <em>phantom type</em> — a type parameter that appears in the signature but has no runtime representation. It exists solely to carry a claim.</p>
+    <div class="haskell-block">data Euler        -- empty; exists only as a tag
+data Semi
+data Symp
+
+newtype Integrator law
+  = Integrator (Hamiltonian -> State -> Dt -> State)
+  --            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  --            the value-level signature is identical for all three
+
+euler    :: Integrator Euler   -- drifts: H(t) - H₀ grows secularly
+semi     :: Integrator Semi    -- better — implicit in velocity update
+leapfrog :: Integrator Symp    -- preserves H to leading order, forever</div>
+    <p>The tag <code>law</code> is the guarantee. <code>Integrator Euler</code> and <code>Integrator Symp</code> have the same arrows between the same types; what distinguishes them is a <em>claim about the function's behavior over many steps</em>, not a local property you could spot in one evaluation. This is the headline: the type-level distinction captures a long-run invariant that no single call can witness.</p>
+    <p>In a language with phantom types you can export a safer constructor for downstream code:</p>
+    <div class="haskell-block">-- Only accepts integrators that claim symplecticity.
+simulate :: Integrator Symp -> Hamiltonian -> State -> [State]
+simulate (Integrator step) h s0 = iterate (\s -> step h s dt) s0</div>
+    <p>A caller who tries to pass <code>euler</code> in gets a type error — not because Euler produces the wrong type of value, but because it makes the wrong type of <em>promise</em>.</p>
+  </div>
+
+  <!-- ────────────── §3 Signature diagram ────────────── -->
+  <div class="section">
+    <div class="section-tag">§3 · Signature diagram</div>
+    <h2>Same pipes in, same pipes out — different tag on top</h2>
+    <p>Drawn as a signature diagram, the three integrators differ in exactly one visual element: a small superscript tag above the output pipe. The Hamiltonian and State inputs are products; the timestep is a <code>Time</code> pipe; the output is a new State pipe. The phantom <code>law</code> rides along with the arrow like a label on a shipping container — it doesn't change the cargo, it changes what you are allowed to assume about the cargo's journey.</p>
+    <div class="figure">
+      <svg id="step-sig" viewBox="0 0 680 220" width="100%" height="220" style="display:block"></svg>
+      <div class="figure-caption">Three panels, one per integrator. The pipes, products, and step box are identical. Only the floating tag above the output differs — <code>Euler</code>, <code>Semi</code>, <code>Symp</code> — and that tag is the claim the type system relays to callers.</div>
+    </div>
+  </div>
+
+  <!-- ────────────── §4 What it lets you say ────────────── -->
+  <div class="section">
+    <div class="section-tag">§4 · What it lets you say</div>
+    <h2>The Hamiltonian is a wall in phase space</h2>
+    <p>The geometric payoff. Phase space for one body of the 3-body problem is four-dimensional (two position, two momentum), but the key picture compresses down into one plane: <em>radial position vs. radial momentum</em> for a single body, conditioned on the rest. The surface <code>H = H₀</code> — the true initial energy — is a 1D curve in that plane, and the type <code>Integrator Symp</code> makes a geometric promise: <em>the trajectory stays near this wall</em>.</p>
+    <p>Below, two trails are overlaid. The violet one is <code>leapfrog :: Integrator Symp</code>; it hugs the dashed energy wall, oscillating around it by a bounded amount. The red one is <code>euler :: Integrator Euler</code>; it drifts steadily outward, away from the wall, because every step bleeds or gains a little energy — and the bleeding accumulates. This is the type promise rendered literally.</p>
+    <div class="figure">
+      <svg id="phase-space" viewBox="0 0 680 380" width="100%" height="380" style="display:block"></svg>
+      <div class="figure-caption">Phase-space projection (radial position <em>r</em>, radial momentum <em>p<sub>r</sub></em>) of body 0. The amber dashed curve is the constant-energy level set <code>H = H₀</code> — the refinement predicate that <code>Integrator Symp</code> claims to preserve. Leapfrog's orbit hugs it; Euler's unwinds outward, no matter how long you wait.</div>
+    </div>
+    <p>That the phantom tag is doing real geometric work is the lesson of the series carried through here: in <a href="04-predator-prey.html">#4</a> a refinement predicate drew the non-negativity walls of a phase portrait. Here a phantom tag on an <em>integrator</em> — a function type — makes a claim about the <em>trajectory's relationship to a wall</em>. Same visual vocabulary (<code>TV.wall</code>, dashed boundary), new grammar (claim is carried on the function, not the state).</p>
+    <p>The three equal-mass Chenciner–Montgomery case carries a second invariant the phantom tag doesn't yet name: permutation symmetry. Relabel body 1 as body 2, body 2 as body 3, body 3 as body 1, and the physics is unchanged — that's the group S₃ acting on the state. A well-typed <code>step</code> is therefore also <em>equivariant</em>: <code>step ∘ permute ≡ permute ∘ step</code>. Lagrange's equilateral triangle and its L4/L5 Trojan points sit at the fixed-point set of this action; a numerical bias that evaluates "body 1 pulls on body 2" with different floating-point rounding than "body 2 pulls on body 1" breaks the commuting diagram by one ULP per step and, a million steps later, ejects the Trojans. #12 §5a respecializes this sim to the equilateral configuration; the type the phantom tag would acquire there is exactly <code>Integrator (Symp ∧ S₃-equivariant)</code>.</p>
+  </div>
+
+  <!-- ────────────── §5 Carry-forward ────────────── -->
+  <div class="section">
+    <div class="section-tag">§5 · Carry-forward</div>
+    <div class="carry-forward">
+      <p><strong>We added.</strong> Phantom tags on function types. Three integrator variants (<code>Euler</code>, <code>Semi</code>, <code>Symp</code>) reserved in the extension palette. The idea that <em>two functions with identical value signatures can still carry different type-level promises</em>, and that those promises are visible in phase space as how close the trajectory stays to a conservation wall.</p>
+      <p><strong>Reused where.</strong> #8 uses the same phantom-tag pattern for effect systems: <code>Pure</code>, <code>Rand</code>, <code>IO</code> tags on otherwise-identical step functions. #11's type lattice plots the phantom-tag dimension as a parcoords axis, eleven simulations side by side. #12 §5a respecializes the 3-body sim here to the Lagrange triangular equilibrium, where the three bodies sit at the corners of an equilateral triangle — the state space carries an <code>S₃ = Weyl(A₂)</code> symmetry that the Hamiltonian respects.</p>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ────────────────────────────────────────────────────────────── §1 n-body sim ──
+// Chenciner-Montgomery figure-eight: three equal masses chasing one closed curve.
+// G = m = 1 natural units; small softening keeps numerics sane near close approaches.
+var NB = (function () {
+  var orbitSvg  = d3.select('#nb-orbit');
+  var energySvg = d3.select('#nb-energy');
+  var OW = 440, OH = 340, EW = 320, EH = 340;
+
+  var IC_FIG8 = {
+    pos: [[0.97000436,-0.24308753],[-0.97000436,0.24308753],[0,0]],
+    vel: [[0.466203685,0.43236573],[0.466203685,0.43236573],[-0.93240737,-0.86473146]],
+    mass: [1,1,1]
+  };
+
+  // Lagrange equilateral: three equal masses at r=1 on a triangle, orbiting common CoM.
+  // Orbital speed balances the (1/√3)·G m/r² net inward gravity: v = (1/√3)^{1/2} ≈ 0.7598.
+  var LAG_R = 1.0;
+  var LAG_V = Math.pow(1 / Math.sqrt(3), 0.5);
+  var SQRT3_HALF = Math.sqrt(3) / 2;
+  var IC_LAGRANGE = {
+    pos: [
+      [LAG_R,          0],
+      [-LAG_R * 0.5,   LAG_R * SQRT3_HALF],
+      [-LAG_R * 0.5,  -LAG_R * SQRT3_HALF]
+    ],
+    // Tangential velocities (perpendicular to radius, consistent circulation).
+    vel: [
+      [0,                       LAG_V],
+      [-LAG_V * SQRT3_HALF,    -LAG_V * 0.5],
+      [ LAG_V * SQRT3_HALF,    -LAG_V * 0.5]
+    ],
+    mass: [1, 1, 1]
+  };
+
+  var N = 3, SOFT2 = 1e-6;
+  var currentConfig = 'fig8';
+  function currentIC() { return currentConfig === 'lagrange' ? IC_LAGRANGE : IC_FIG8; }
+
+  var state = null;
+  function resetState() {
+    var IC = currentIC();
+    state = {
+      pos:  IC.pos.map(function (p) { return p.slice(); }),
+      vel:  IC.vel.map(function (v) { return v.slice(); }),
+      mass: IC.mass.slice(), t: 0
+    };
+  }
+  resetState();
+
+  function accelerations(pos, mass) {
+    var acc = [[0,0],[0,0],[0,0]];
+    for (var i = 0; i < N; i++) for (var j = 0; j < N; j++) {
+      if (i === j) continue;
+      var dx = pos[j][0]-pos[i][0], dy = pos[j][1]-pos[i][1];
+      var r2 = dx*dx + dy*dy + SOFT2, invR3 = 1/(r2*Math.sqrt(r2));
+      acc[i][0] += mass[j]*dx*invR3; acc[i][1] += mass[j]*dy*invR3;
+    }
+    return acc;
+  }
+  function energy(s) {
+    var T = 0, V = 0;
+    for (var i = 0; i < N; i++) {
+      T += 0.5 * s.mass[i] * (s.vel[i][0]*s.vel[i][0] + s.vel[i][1]*s.vel[i][1]);
+      for (var j = i+1; j < N; j++) {
+        var dx = s.pos[j][0]-s.pos[i][0], dy = s.pos[j][1]-s.pos[i][1];
+        V -= s.mass[i] * s.mass[j] / Math.sqrt(dx*dx + dy*dy + SOFT2);
+      }
+    }
+    return T + V;
+  }
+
+  // Three integrators, identical value-level signature, different phantom-tag claims.
+  //   euler: explicit — drifts outward secularly
+  //   semi:  semi-implicit Euler — symplectic for separable H
+  //   symp:  leapfrog / velocity-Verlet — second-order symplectic
+  var integrators = {
+    euler: function (s, dt) {
+      var a = accelerations(s.pos, s.mass);
+      for (var i = 0; i < N; i++) {
+        s.pos[i][0] += s.vel[i][0]*dt; s.pos[i][1] += s.vel[i][1]*dt;
+        s.vel[i][0] += a[i][0]*dt;     s.vel[i][1] += a[i][1]*dt;
+      }
+    },
+    semi: function (s, dt) {
+      var a = accelerations(s.pos, s.mass);
+      for (var i = 0; i < N; i++) {
+        s.vel[i][0] += a[i][0]*dt;     s.vel[i][1] += a[i][1]*dt;
+        s.pos[i][0] += s.vel[i][0]*dt; s.pos[i][1] += s.vel[i][1]*dt;
+      }
+    },
+    symp: function (s, dt) {
+      var a1 = accelerations(s.pos, s.mass);
+      for (var i = 0; i < N; i++) {
+        s.vel[i][0] += 0.5*a1[i][0]*dt; s.vel[i][1] += 0.5*a1[i][1]*dt;
+        s.pos[i][0] += s.vel[i][0]*dt;  s.pos[i][1] += s.vel[i][1]*dt;
+      }
+      var a2 = accelerations(s.pos, s.mass);
+      for (var j = 0; j < N; j++) {
+        s.vel[j][0] += 0.5*a2[j][0]*dt; s.vel[j][1] += 0.5*a2[j][1]*dt;
+      }
+    }
+  };
+
+  var currentIntegrator = 'symp';
+  var dt = 0.005, stepsPerFrame = 6;
+
+  function integratorColor(tag) {
+    return tag === 'euler' ? 'var(--c-euler)' : tag === 'semi' ? 'var(--c-semi)' : 'var(--c-symp)';
+  }
+
+  // ────── orbit panel ──
+  orbitSvg.append('rect').attr('x',0).attr('y',0).attr('width',OW).attr('height',OH).attr('fill', '#fcfcfd');
+  var oX = d3.scaleLinear().domain([-1.4, 1.4]).range([20, OW - 20]);
+  var oY = d3.scaleLinear().domain([-1.1, 1.1]).range([OH - 20, 20]);
+  var orbitTitle = orbitSvg.append('text').attr('x', 14).attr('y', 20)
+    .attr('font-family', 'Source Code Pro, monospace').attr('font-size', '0.7rem')
+    .attr('fill', '#64748b').text('orbit — three equal masses');
+
+  // Faint equilateral reference triangle (Lagrange mode only). Drawn at r = LAG_R; hidden otherwise.
+  var lagrangeRef = orbitSvg.append('g').attr('opacity', 0);
+  var refTri = (function () {
+    var pts = IC_LAGRANGE.pos.map(function (p) { return [oX(p[0]), oY(p[1])].join(','); }).join(' ');
+    return pts;
+  })();
+  lagrangeRef.append('polygon').attr('points', refTri)
+    .attr('fill', 'none').attr('stroke', 'var(--c-wall)')
+    .attr('stroke-dasharray', '4 4').attr('stroke-width', 1);
+  lagrangeRef.append('text').attr('x', 14).attr('y', OH - 16)
+    .attr('font-family', 'Source Code Pro, monospace').attr('font-size', '0.66rem')
+    .attr('fill', 'var(--c-wall)').text('dashed triangle = Lagrange reference (L4/L5 fixed points of S₃)');
+
+  // Body colors carry identity, not integrator.
+  var bodyColors = ['#2563eb', '#059669', '#db2777'];
+  var trails = [[],[],[]], TRAIL_LEN = 600;
+  var trailPaths = bodyColors.map(function (c) {
+    return orbitSvg.append('path').attr('fill','none').attr('stroke', c).attr('stroke-width', 1.4).attr('opacity', 0.55);
+  });
+  var bodyDots = bodyColors.map(function (c) {
+    return orbitSvg.append('circle').attr('r', 5).attr('fill', c).attr('stroke', '#fff').attr('stroke-width', 1.3);
+  });
+
+  var tagBadge = orbitSvg.append('g');
+  tagBadge.append('rect').attr('x', OW - 118).attr('y', 8).attr('width', 108).attr('height', 22)
+    .attr('rx', 4).attr('fill', '#fff').attr('stroke', 'var(--c-symp)').attr('stroke-width', 1.2);
+  var tagText = tagBadge.append('text').attr('x', OW - 64).attr('y', 23)
+    .attr('text-anchor', 'middle').attr('font-family', 'Source Code Pro, monospace')
+    .attr('font-size', '0.72rem').attr('font-weight', 600)
+    .attr('fill', 'var(--c-symp)').text('Integrator Symp');
+
+  // ────── energy panel ──
+  var E0 = energy(state);
+  var eHistory = [], TMAX = 40;
+  var eX = d3.scaleLinear().domain([0, TMAX]).range([42, EW - 14]);
+  var eY = d3.scaleLinear().range([EH - 28, 24]);
+  function setEnergyDomain() {
+    var EAXIS = Math.abs(E0) * 0.25;
+    eY.domain([E0 - EAXIS, E0 + EAXIS]);
+  }
+  setEnergyDomain();
+
+  function styleAxis(g) {
+    g.selectAll('path,line').attr('stroke','#cbd5e1');
+    g.selectAll('text').attr('font-family','Source Code Pro, monospace').attr('font-size','0.68rem').attr('fill','#64748b');
+  }
+  energySvg.append('g').attr('transform','translate(0,'+(EH-28)+')').call(d3.axisBottom(eX).ticks(5)).call(styleAxis);
+  var eYAxisG = energySvg.append('g').attr('transform','translate(42,0)').call(d3.axisLeft(eY).ticks(5));
+  eYAxisG.call(styleAxis);
+  energySvg.append('text').attr('x', 42).attr('y', 18)
+    .attr('font-family','Source Code Pro, monospace').attr('font-size','0.7rem')
+    .attr('fill','#64748b').text('total energy  H(t)');
+  energySvg.append('text').attr('x', EW - 14).attr('y', EH - 8)
+    .attr('text-anchor','end').attr('font-family','Source Code Pro, monospace')
+    .attr('font-size','0.65rem').attr('fill','#64748b').text('sim time →');
+
+  // The true-energy reference line — H₀. Kept as a handle so we can move it on config change.
+  var refLine = energySvg.append('line')
+    .attr('x1', eX(0)).attr('x2', eX(TMAX))
+    .attr('stroke', 'var(--c-wall)').attr('stroke-width', 1.4).attr('stroke-dasharray', '5 4');
+  var refLabel = energySvg.append('text').attr('x', eX(TMAX) - 6)
+    .attr('text-anchor','end').attr('font-family','Source Code Pro, monospace')
+    .attr('font-size','0.66rem').attr('fill','var(--c-wall)').text('H₀ (true)');
+  function placeRefLine() {
+    refLine.attr('y1', eY(E0)).attr('y2', eY(E0));
+    refLabel.attr('y', eY(E0) - 4);
+  }
+  placeRefLine();
+
+  var ePath = energySvg.append('path').attr('fill','none').attr('stroke', 'var(--c-symp)').attr('stroke-width', 1.8);
+  var eLine = d3.line().x(function(d){ return eX(d.t); }).y(function(d){ return eY(d.E); });
+  var driftText = energySvg.append('text').attr('x', 48).attr('y', 38)
+    .attr('font-family','Source Code Pro, monospace').attr('font-size','0.7rem')
+    .attr('fill','var(--c-symp)').text('ΔH / |H₀| = 0.00%');
+
+  // ────── simulation loop ──
+  var paused = false;
+  function advance() {
+    var stepper = integrators[currentIntegrator];
+    for (var k = 0; k < stepsPerFrame; k++) { stepper(state, dt); state.t += dt; }
+    for (var i = 0; i < N; i++) {
+      trails[i].push([state.pos[i][0], state.pos[i][1]]);
+      if (trails[i].length > TRAIL_LEN) trails[i].shift();
+    }
+    // Clamp energy to visible band so a runaway Euler curve doesn't stretch the axis.
+    var E = energy(state);
+    var clampedE = Math.max(eY.domain()[0], Math.min(eY.domain()[1], E));
+    eHistory.push({ t: state.t, E: clampedE });
+    if (state.t > TMAX) {
+      eHistory = eHistory.filter(function(d){ return d.t > state.t - TMAX; });
+      eX.domain([state.t - TMAX, state.t]);
+    }
+  }
+  function render() {
+    trails.forEach(function (trail, i) {
+      if (trail.length < 2) return;
+      trailPaths[i].attr('d', 'M ' + trail.map(function (p) { return oX(p[0]).toFixed(1)+','+oY(p[1]).toFixed(1); }).join(' L '));
+    });
+    for (var i = 0; i < N; i++) bodyDots[i].attr('cx', oX(state.pos[i][0])).attr('cy', oY(state.pos[i][1]));
+    ePath.datum(eHistory).attr('d', eLine).attr('stroke', integratorColor(currentIntegrator));
+    if (eHistory.length) {
+      var pct = 100 * (eHistory[eHistory.length-1].E - E0) / Math.abs(E0);
+      driftText.text('ΔH / |H₀| = ' + (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%')
+        .attr('fill', integratorColor(currentIntegrator));
+    }
+  }
+  function switchIntegrator(tag) {
+    currentIntegrator = tag;
+    resetState();
+    E0 = energy(state);
+    setEnergyDomain();
+    eYAxisG.call(d3.axisLeft(eY).ticks(5)).call(styleAxis);
+    placeRefLine();
+    trails = [[],[],[]]; eHistory = []; eX.domain([0, TMAX]);
+    var color = integratorColor(tag);
+    var labels = { euler: 'Integrator Euler', semi: 'Integrator Semi', symp: 'Integrator Symp' };
+    tagBadge.select('rect').attr('stroke', color);
+    tagText.text(labels[tag]).attr('fill', color);
+    driftText.attr('fill', color);
+  }
+  function switchConfig(cfg) {
+    currentConfig = cfg;
+    // Update title strip and show/hide Lagrange reference.
+    orbitTitle.text(cfg === 'lagrange'
+      ? 'orbit — Lagrange equilateral (three equal masses, L4/L5 test)'
+      : 'orbit — Chenciner–Montgomery figure-eight');
+    lagrangeRef.attr('opacity', cfg === 'lagrange' ? 0.85 : 0);
+    // A full reset — new IC, new E₀, new reference line.
+    switchIntegrator(currentIntegrator);
+  }
+  switchIntegrator('symp');
+
+  SC.loop(function () { if (!paused) { advance(); render(); } }).start();
+
+  d3.select('#nb-int').on('change', function () { switchIntegrator(this.value); });
+  d3.select('#nb-config').on('change', function () { switchConfig(this.value); });
+  d3.select('#nb-reset').on('click', function () { switchIntegrator(currentIntegrator); });
+  d3.select('#nb-pause').on('click', function () {
+    paused = !paused;
+    d3.select(this).text(paused ? 'resume' : 'pause');
+  });
+
+  // Expose the live state for §4 to read.
+  return {
+    getSnapshot: function () { return state; },
+    E0: function () { return E0; },
+    getCurrentTag: function () { return currentIntegrator; }
+  };
+})();
+
+// ────────────────────────────────────────────────────────────── §3 signature diagram ──
+// Three mini-signatures stacked horizontally, identical in value-level structure,
+// differing only in a phantom-tag label above the output pipe.
+(function () {
+  var svg = d3.select('#step-sig');
+
+  var panels = [
+    { tag: 'Euler', color: 'var(--c-euler)', xoff: 10 },
+    { tag: 'Semi',  color: 'var(--c-semi)',  xoff: 235 },
+    { tag: 'Symp',  color: 'var(--c-symp)',  xoff: 460 }
+  ];
+
+  panels.forEach(function (panel) {
+    var g = svg.append('g').attr('transform', 'translate(' + panel.xoff + ', 18)');
+    TV.product(g, { x: 0, y: 8,  w: 90, h: 30, label: 'Hamiltonian' });
+    TV.product(g, { x: 0, y: 50, w: 90, h: 30, label: 'State' });
+    TV.pipe(g, { kind: 'Time', x1: 0, y1: 105, x2: 90, y2: 105, width: 2.2, dotR: 3 });
+    g.append('text').attr('x', 0).attr('y', 98)
+      .attr('font-family', 'Source Code Pro, monospace').attr('font-size', '0.62rem')
+      .attr('fill', 'var(--c-time)').text('Dt');
+
+    g.append('rect').attr('x', 110).attr('y', 50).attr('width', 60).attr('height', 44)
+      .attr('rx', 6).attr('fill', '#fff').attr('stroke', '#334155').attr('stroke-width', 1.2);
+    g.append('text').attr('x', 140).attr('y', 68).attr('text-anchor', 'middle')
+      .attr('font-family', 'Source Code Pro, monospace').attr('font-size', '0.72rem')
+      .attr('fill', '#334155').text('step');
+    g.append('text').attr('x', 140).attr('y', 84).attr('text-anchor', 'middle')
+      .attr('font-family', 'Source Code Pro, monospace').attr('font-size', '0.58rem')
+      .attr('fill', '#94a3b8').text(panel.tag.toLowerCase());
+
+    // Converging connectors from the three inputs to the step box.
+    g.append('path').attr('d','M 90,23 C 100,23 102,60 110,65').attr('fill','none').attr('stroke','#94a3b8').attr('stroke-width',1);
+    g.append('path').attr('d','M 90,65 L 110,72').attr('fill','none').attr('stroke','#94a3b8').attr('stroke-width',1);
+    g.append('path').attr('d','M 90,105 C 100,105 102,80 110,80').attr('fill','none').attr('stroke','#94a3b8').attr('stroke-width',1);
+
+    var outPipe = TV.pipe(g, { kind: 'Position', x1: 170, y1: 72, x2: 210, y2: 72, width: 3 });
+    g.append('text').attr('x', 175).attr('y', 92)
+      .attr('font-family', 'Source Code Pro, monospace').attr('font-size', '0.66rem')
+      .attr('fill', 'var(--c-position)').text("State'");
+
+    // Phantom-tag pill — the single visual element that differs between panels.
+    g.append('line').attr('x1', 190).attr('y1', 72).attr('x2', 190).attr('y2', 42)
+      .attr('stroke', panel.color).attr('stroke-width', 1).attr('stroke-dasharray', '2 2');
+    g.append('rect').attr('x', 150).attr('y', 22).attr('width', 76).attr('height', 22)
+      .attr('rx', 10).attr('fill', '#fff').attr('stroke', panel.color).attr('stroke-width', 1.4);
+    g.append('text').attr('x', 188).attr('y', 37).attr('text-anchor', 'middle')
+      .attr('font-family', 'Source Code Pro, monospace').attr('font-size', '0.66rem')
+      .attr('font-weight', 600).attr('fill', panel.color).text('law = ' + panel.tag);
+
+    var t0 = performance.now() + panel.xoff * 3;
+    (function animate() {
+      outPipe.feed(((performance.now() - t0) / 1800) % 1);
+      requestAnimationFrame(animate);
+    })();
+  });
+
+  // One title above the trio.
+  svg.append('text').attr('x', 10).attr('y', 12)
+    .attr('font-family', 'Source Code Pro, monospace').attr('font-size', '0.7rem')
+    .attr('fill', '#64748b')
+    .text('three integrators · one value-level signature · three phantom tags');
+
+  // Arrow between panels to show they are the same function, just re-tagged.
+  svg.append('text').attr('x', 220).attr('y', 120)
+    .attr('text-anchor', 'middle').attr('font-family', 'Source Code Pro, monospace')
+    .attr('font-size', '0.72rem').attr('fill', '#94a3b8').text('≡');
+  svg.append('text').attr('x', 445).attr('y', 120)
+    .attr('text-anchor', 'middle').attr('font-family', 'Source Code Pro, monospace')
+    .attr('font-size', '0.72rem').attr('fill', '#94a3b8').text('≡');
+})();
+
+// ────────────────────────────────────────────────────────────── §4 phase-space wall ──
+// Body 0's phase slice: radial position r vs. radial velocity v_r. Two trails overlaid —
+// a leapfrog trace that stays on the H=H₀ level set, and an Euler trace that drifts off.
+// Rendered statically so the viewer can read a geometric argument, not chase motion.
+(function () {
+  var svg = d3.select('#phase-space');
+  var W = 680, H = 380;
+  var margin = { top: 32, right: 30, bottom: 50, left: 60 };
+
+  var IC4 = {
+    pos: [[0.97000436,-0.24308753],[-0.97000436,0.24308753],[0,0]],
+    vel: [[0.466203685,0.43236573],[0.466203685,0.43236573],[-0.93240737,-0.86473146]],
+    mass: [1,1,1]
+  };
+  var SOFT2 = 1e-6;
+
+  function accs(pos, m) {
+    var a = [[0,0],[0,0],[0,0]];
+    for (var i=0;i<3;i++) for (var j=0;j<3;j++) {
+      if (i===j) continue;
+      var dx=pos[j][0]-pos[i][0], dy=pos[j][1]-pos[i][1];
+      var r2=dx*dx+dy*dy+SOFT2, inv=1/(r2*Math.sqrt(r2));
+      a[i][0]+=m[j]*dx*inv; a[i][1]+=m[j]*dy*inv;
+    }
+    return a;
+  }
+  function stepEuler(s, dt) {
+    var a = accs(s.pos, s.mass);
+    for (var i=0;i<3;i++) {
+      s.pos[i][0]+=s.vel[i][0]*dt; s.pos[i][1]+=s.vel[i][1]*dt;
+      s.vel[i][0]+=a[i][0]*dt;     s.vel[i][1]+=a[i][1]*dt;
+    }
+  }
+  function stepLeap(s, dt) {
+    var a1 = accs(s.pos, s.mass);
+    for (var i=0;i<3;i++) {
+      s.vel[i][0]+=0.5*a1[i][0]*dt; s.vel[i][1]+=0.5*a1[i][1]*dt;
+      s.pos[i][0]+=s.vel[i][0]*dt;  s.pos[i][1]+=s.vel[i][1]*dt;
+    }
+    var a2 = accs(s.pos, s.mass);
+    for (var j=0;j<3;j++) {
+      s.vel[j][0]+=0.5*a2[j][0]*dt; s.vel[j][1]+=0.5*a2[j][1]*dt;
+    }
+  }
+  function copyIC() {
+    return { pos: IC4.pos.map(function(p){return p.slice();}),
+             vel: IC4.vel.map(function(v){return v.slice();}),
+             mass: IC4.mass.slice() };
+  }
+
+  // Generate (r, v_r) trace for body 0 under a given integrator.
+  function traceRadial(stepper, steps, dt) {
+    var s = copyIC();
+    var pts = [];
+    for (var k = 0; k < steps; k++) {
+      var x = s.pos[0][0], y = s.pos[0][1];
+      var vx = s.vel[0][0], vy = s.vel[0][1];
+      var r = Math.sqrt(x*x + y*y);
+      // radial velocity = (r̂ · v)
+      var vr = r > 1e-9 ? (x*vx + y*vy) / r : 0;
+      pts.push([r, vr]);
+      stepper(s, dt);
+    }
+    return pts;
+  }
+
+  var dt = 0.008;
+  var steps = 5500;
+  var leapTrace  = traceRadial(stepLeap,  steps, dt);
+  var eulerTrace = traceRadial(stepEuler, steps, dt);
+
+  // Compute plot domain from leapfrog trace (it is bounded) and inflate a bit for Euler drift.
+  var rs = leapTrace.map(function(p){ return p[0]; });
+  var vs = leapTrace.map(function(p){ return p[1]; });
+  var rMax = d3.max(rs), rMin = d3.min(rs);
+  var vMax = d3.max(vs), vMin = d3.min(vs);
+  // Inflate the domain so we can also see Euler's drift outside the band.
+  var rLo = Math.max(0, rMin - 0.12), rHi = rMax + 0.55;
+  var vLo = vMin - 0.35, vHi = vMax + 0.35;
+
+  var x = d3.scaleLinear().domain([rLo, rHi]).range([margin.left, W - margin.right]);
+  var y = d3.scaleLinear().domain([vLo, vHi]).range([H - margin.bottom, margin.top]);
+
+  function styleAxis4(g) {
+    g.selectAll('path,line').attr('stroke','#cbd5e1');
+    g.selectAll('text').attr('font-family','Source Code Pro, monospace').attr('font-size','0.7rem').attr('fill','#64748b');
+  }
+  svg.append('g').attr('transform','translate(0,'+(H-margin.bottom)+')').call(d3.axisBottom(x).ticks(6)).call(styleAxis4);
+  svg.append('g').attr('transform','translate('+margin.left+',0)').call(d3.axisLeft(y).ticks(5)).call(styleAxis4);
+  svg.append('text').attr('x', W - margin.right).attr('y', H - 14)
+    .attr('text-anchor','end').attr('font-family','Source Code Pro, monospace')
+    .attr('font-size','0.75rem').attr('fill','var(--c-position)').text('radial position  r');
+  svg.append('text').attr('x', margin.left).attr('y', margin.top - 8)
+    .attr('font-family','Source Code Pro, monospace').attr('font-size','0.75rem')
+    .attr('fill','var(--c-velocity)').text('↑ radial velocity  v_r');
+
+  // The energy wall — sketch of the H = H₀ boundary for body 0's radial slice.
+  // We approximate it as the convex hull of the (bounded) leapfrog trace, which IS the
+  // image of the constant-energy trajectory projected to this plane. The "wall" is thus
+  // literally what Integrator Symp promises to stay on.
+  var hull = d3.polygonHull(leapTrace.map(function(p){ return [x(p[0]), y(p[1])]; }));
+  if (hull) {
+    var pathD = 'M ' + hull.map(function(pt){ return pt[0].toFixed(1)+','+pt[1].toFixed(1); }).join(' L ') + ' Z';
+    TV.wall(svg, {
+      path: pathD,
+      color: 'var(--c-wall)',
+      width: 2,
+      label: 'H = H₀  (constant-energy level set, projected)',
+      labelX: margin.left + 12,
+      labelY: margin.top + 14
+    });
+  }
+
+  var line = d3.line().x(function(p){ return x(p[0]); }).y(function(p){ return y(p[1]); });
+
+  // Euler trail — red, drifts outward.
+  svg.append('path').datum(eulerTrace)
+    .attr('fill','none').attr('stroke', 'var(--c-euler)').attr('stroke-width', 1.3)
+    .attr('opacity', 0.75).attr('d', line);
+
+  // Leapfrog trail — violet, hugs the wall.
+  svg.append('path').datum(leapTrace)
+    .attr('fill','none').attr('stroke', 'var(--c-symp)').attr('stroke-width', 1.4)
+    .attr('opacity', 0.85).attr('d', line);
+
+  // Starting point marker (shared IC).
+  var start = leapTrace[0];
+  svg.append('circle').attr('cx', x(start[0])).attr('cy', y(start[1])).attr('r', 4)
+    .attr('fill', '#1a1a2e').attr('stroke', '#fff').attr('stroke-width', 1.2);
+  svg.append('text').attr('x', x(start[0]) + 8).attr('y', y(start[1]) - 8)
+    .attr('font-family','Source Code Pro, monospace').attr('font-size','0.66rem')
+    .attr('fill', '#1a1a2e').text('t = 0');
+
+  // Legend.
+  var leg = svg.append('g').attr('transform', 'translate(' + (W - margin.right - 180) + ',' + (margin.top + 8) + ')');
+  leg.append('rect').attr('width', 180).attr('height', 54).attr('rx', 4).attr('fill', '#ffffffcc').attr('stroke', '#e2e2e8');
+  [ { y: 16, color: 'var(--c-symp)',  label: 'leapfrog (Symp)' },
+    { y: 36, color: 'var(--c-euler)', label: 'euler' } ].forEach(function (row) {
+    leg.append('line').attr('x1', 10).attr('y1', row.y).attr('x2', 30).attr('y2', row.y)
+      .attr('stroke', row.color).attr('stroke-width', 2);
+    leg.append('text').attr('x', 36).attr('y', row.y + 4)
+      .attr('font-family','Source Code Pro, monospace').attr('font-size','0.7rem')
+      .attr('fill', row.color).text(row.label);
+  });
+})();
+</script>
+</body>
+</html>

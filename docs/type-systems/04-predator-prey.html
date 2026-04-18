@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Predator and Prey — Type Systems for Simulation</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
+<script src="lib/typeviz.js"></script>
+<script src="lib/simcore.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --article-width: 740px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem;
+  --line-height: 1.65;
+  --text: #1a1a2e;
+  --text-2: #4a4a6a;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --bg: #fafafa;
+  --fig-bg: #ffffff;
+  --border: #e2e2e8;
+  --c-position: #2563eb;
+  --c-velocity: #d97706;
+  --c-force:    #dc2626;
+  --c-mass:     #6b7280;
+  --c-time:     #059669;
+  --c-id:       #64748b;
+  /* Species variant colors — extension palette */
+  --c-prey:     #0891b2;
+  --c-predator: #db2777;
+  --c-sp-c:     #f59e0b;
+  /* Refinement-type wall */
+  --c-wall:     #f59e0b;
+}
+
+body { font-family: var(--body-font); font-size: var(--body-size); line-height: var(--line-height); color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased; }
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
+
+h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.15rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.3rem; margin: 3rem 0 0.75rem; }
+
+p { margin: 0 0 1rem; }
+a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+
+.back-links { font-family: var(--heading-font); font-size: 0.85rem; margin-bottom: 2rem; }
+.back-links a { color: var(--text-2); text-decoration: none; }
+.back-links a:hover { color: var(--accent); }
+.back-links .sep { margin: 0 0.5rem; opacity: 0.3; }
+
+header .subtitle { font-family: var(--heading-font); font-size: 1.05rem; color: var(--text-2); max-width: 620px; margin-top: 0.5rem; }
+
+.section { margin-top: 3rem; }
+.section-tag { font-family: var(--mono-font); font-size: 0.7rem; font-weight: 600; color: var(--accent); letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 0.25rem; }
+
+.figure { background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; padding: 1rem; margin: 1.5rem 0; }
+.figure-caption { font-family: var(--heading-font); font-size: 0.82rem; color: var(--text-2); margin-top: 0.5rem; }
+
+.controls { display: flex; gap: 0.75rem; align-items: center; margin-top: 0.75rem; flex-wrap: wrap; }
+.controls button { font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600; padding: 0.4rem 0.9rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 4px; cursor: pointer; color: var(--text); }
+.controls button:hover { border-color: var(--accent); color: var(--accent); }
+.controls label { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); display: flex; align-items: center; gap: 0.35rem; }
+.controls input[type=range] { width: 140px; }
+
+code { font-family: var(--mono-font); font-size: 0.85em; background: #f3f4f6; padding: 0.1em 0.35em; border-radius: 3px; }
+.haskell-block { font-family: var(--mono-font); font-size: 0.85rem; background: #f3f4f6; padding: 0.75rem 1rem; border-radius: 4px; margin: 0.75rem 0; border-left: 3px solid var(--accent); white-space: pre; overflow-x: auto; }
+
+.carry-forward { background: var(--accent-light); border-left: 3px solid var(--accent); padding: 0.75rem 1rem; margin: 1.5rem 0; font-size: 0.95rem; }
+.carry-forward strong { font-family: var(--heading-font); }
+
+.species-swatches { display: flex; gap: 0.75rem; margin-top: 0.75rem; font-family: var(--mono-font); font-size: 0.75rem; flex-wrap: wrap; }
+.species-swatches .sw { display: flex; align-items: center; gap: 0.35rem; }
+.species-swatches .dot { width: 10px; height: 10px; border-radius: 50%; }
+
+.sim-grid { display: grid; grid-template-columns: 1.15fr 1fr; gap: 0.75rem; align-items: stretch; }
+@media (max-width: 620px) { .sim-grid { grid-template-columns: 1fr; } }
+
+/* 3-species RPS lattice comparison */
+.rps-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+.rps-tile { border: 1px solid var(--border); border-radius: 4px; padding: 0.6rem; background: #fdfdfe; display: flex; flex-direction: column; gap: 0.4rem; }
+.rps-tile h4 { font-family: var(--heading-font); font-size: 0.82rem; font-weight: 700; color: var(--text); margin: 0; }
+.rps-tile .rps-sub { font-family: var(--heading-font); font-size: 0.72rem; color: var(--text-2); margin-bottom: 0.1rem; }
+.rps-tile canvas { image-rendering: pixelated; image-rendering: crisp-edges; display: block; width: 100%; aspect-ratio: 1 / 1; border-radius: 3px; background: #0f172a; }
+.rps-tile .rps-counts { display: flex; gap: 0.6rem; justify-content: space-between; font-family: var(--mono-font); font-size: 0.68rem; margin-top: 0.2rem; }
+.rps-tile .rps-counts .c { display: flex; align-items: center; gap: 0.3rem; }
+.rps-tile .rps-counts .dot { width: 8px; height: 8px; border-radius: 50%; }
+.rps-tile .rps-note { font-family: var(--body-font); font-size: 0.78rem; color: var(--text-2); line-height: 1.4; }
+</style>
+</head>
+<body>
+<div class="article">
+  <div class="back-links">
+    <a href="index.html">← type-systems</a>
+    <span class="sep">·</span>
+    <a href="../index.html">all series</a>
+  </div>
+
+  <header>
+    <h1>Predator and Prey</h1>
+    <p class="subtitle">Two species oscillate. One newtype with a refinement predicate tells the type checker — and the eye — that populations cannot fall below zero. The predicate draws the walls of the phase portrait.</p>
+  </header>
+
+  <!-- ────────────── §1 Cold sim ────────────── -->
+  <div class="section">
+    <div class="section-tag">§1 · Cold sim</div>
+    <h2>Two populations chasing each other around a fixed point</h2>
+    <p>Prey grow when left alone; they are eaten when predators find them. Predators starve without prey; they breed when prey are plentiful. The two counts oscillate — and the trail of the state in (prey, predator) space loops around a single fixed point forever.</p>
+    <div class="figure">
+      <div class="sim-grid">
+        <svg id="lv-time" viewBox="0 0 400 260" width="100%" height="260" style="display:block"></svg>
+        <svg id="lv-phase" viewBox="0 0 320 260" width="100%" height="260" style="display:block"></svg>
+      </div>
+      <div class="controls">
+        <button id="lv-reset">reset</button>
+        <button id="lv-pause">pause</button>
+        <label>predation&nbsp;rate <input type="range" id="lv-beta" min="0.005" max="0.04" step="0.001" value="0.02"></label>
+      </div>
+      <div class="figure-caption">Left: prey and predator counts over time. Right: the same run plotted in phase space — prey on the x-axis, predators on the y. Adjust predation rate and watch the orbit resize around a new equilibrium.</div>
+      <div class="species-swatches">
+        <span class="sw"><span class="dot" style="background: var(--c-prey)"></span>Prey</span>
+        <span class="sw"><span class="dot" style="background: var(--c-predator)"></span>Predator</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ────────────── §2 Name the types ────────────── -->
+  <div class="section">
+    <div class="section-tag">§2 · Name the types</div>
+    <h2>A sum for species, a refinement for populations</h2>
+    <p>Two moves. First, <strong>species</strong> is a sum type — the same fork container we introduced for constraints, but with two bands instead of three. Second, <strong>population</strong> is a <code>newtype</code> around a double with a refinement predicate: <em>the number must be non-negative</em>. A value of type <code>Pop</code> that is negative is, by construction, not a value of type <code>Pop</code>.</p>
+    <div class="haskell-block">data Species = Prey | Predator
+
+newtype Pop = Pop Double
+  where  { p | p >= 0 }        -- refinement predicate
+
+data State = State { prey :: Pop, pred :: Pop }
+
+data Params = Params
+  { alpha :: Double    -- prey birth rate
+  , beta  :: Double    -- predation rate
+  , gamma :: Double    -- predator death
+  , delta :: Double    -- predator birth per prey eaten
+  }</div>
+    <p>Refinement types are predicates the type checker carries along with the value. There is no runtime <code>if n &lt; 0 then error</code> scattered through the step function — the predicate lives in the type, and every constructor, destructor, and combinator that produces a <code>Pop</code> must preserve it. The shape of what is allowed is baked into the types.</p>
+    <p>The payoff is geometric. A <code>Pop</code> is a half-line, not a line. A <code>State</code> is a quadrant, not a plane. Refinement types <em>are boundaries in state space</em> — and that is what §4 will draw.</p>
+  </div>
+
+  <!-- ────────────── §3 Signature diagram ────────────── -->
+  <div class="section">
+    <div class="section-tag">§3 · Signature diagram</div>
+    <h2>A Species picks the rule; Params and State flow through</h2>
+    <p>The one-species update rule takes a species tag, the parameter bundle, and the current state, and returns the new state. The sum type on the left is the species — two variants, colored by extension palette. <code>TV.sum</code> renders it the same way it did for constraints; the fork container is now part of the shared vocabulary.</p>
+    <div class="haskell-block">rateFor :: Species -> Params -> State -> Double
+rateFor Prey     (Params a b _ _) (State p q) =  a * p - b * p * q
+rateFor Predator (Params _ _ c d) (State p q) = -c * q + d * p * q
+
+step :: Params -> State -> State
+step ps s = State
+  (clamp (prey s + dt * rateFor Prey     ps s))
+  (clamp (pred s + dt * rateFor Predator ps s))</div>
+    <div class="figure">
+      <svg id="step-sig" viewBox="0 0 680 180" width="100%" height="180" style="display:block"></svg>
+      <div class="figure-caption">Second appearance of <code>TV.sum</code>: the species fork feeds the rate selector. Params and State enter as products, and a <code>State'</code> pipe leaves on the right. The <code>clamp</code> stage is where the refinement predicate is enforced — and in a real refinement-typed language, the type checker would prove it rather than runtime-check it.</div>
+    </div>
+  </div>
+
+  <!-- ────────────── §4 What it lets you say ────────────── -->
+  <div class="section">
+    <div class="section-tag">§4 · What it lets you say</div>
+    <h2>The predicate is a wall</h2>
+    <p>Here is the payoff. The phase portrait lives in the (prey, predator) plane. The refinement predicate says <code>p &gt;= 0</code> for both coordinates. That predicate <em>is</em> the two axes: the non-negativity wall along <em>x</em>&nbsp;=&nbsp;0, and the one along <em>y</em>&nbsp;=&nbsp;0. Four trajectories seeded at different points all orbit the fixed point — and none of them cross the walls. The type system says they never can.</p>
+    <div class="figure">
+      <svg id="wall-phase" viewBox="0 0 680 400" width="100%" height="400" style="display:block"></svg>
+      <div class="figure-caption">Four orbits around the Lotka-Volterra equilibrium. The dashed amber walls are the refinement predicate <code>Pop &gt;= 0</code> rendered literally into state space via <code>TV.wall</code>. A trajectory that touches a wall is a population that reaches zero — extinction — and a refinement-typed simulation is one where that boundary is proved unreachable from any starting state you can construct.</div>
+    </div>
+    <p>This is the series' thesis in miniature. A type predicate is a shape. The shape is drawable. The program's state space is a mathematical object, and the type system is drawing it for you whether you look or not — refinement types just let you put the drawing on the page.</p>
+    <p>The two-species sum extends cleanly to a three-species rock-paper-scissors cycle — A eats B, B eats C, C eats A — and that extension brings a new symmetry: the cyclic group Z₃, sitting as a subgroup of the S₃ that permutes the three species' labels. On a spatial lattice the ecosystem forms macroscopic spiral waves of the three populations, and a simulation update that quietly favours one species over another (a left-to-right sweep over the grid, for instance, when a synchronous sweep was assumed) breaks Z₃-equivariance and collapses the spirals into extinction. The empirical scientist then reports that the model is unstable — except the instability was in the update loop, not the biology. #12 §5b revisits this sim at three species; the type system's job is to make the Z₃ commuting diagram mandatory.</p>
+
+    <div class="figure">
+      <div class="rps-grid">
+        <div class="rps-tile">
+          <h4>equivariant update  ·  Z₃-symmetric pair sampling</h4>
+          <div class="rps-sub">each tick, uniformly random adjacent pairs contest under A→B→C→A</div>
+          <canvas id="rps-fair" width="120" height="120"></canvas>
+          <div class="rps-counts" id="rps-fair-counts"></div>
+          <div class="rps-note">Stable macroscopic spirals. The commuting diagram <code>step · rotate ≡ rotate · step</code> holds — relabel (A,B,C) as (B,C,A) and the distribution is statistically the same.</div>
+        </div>
+        <div class="rps-tile">
+          <h4>biased update  ·  low-index species nudged</h4>
+          <div class="rps-sub">same Monte-Carlo kernel, but ~5% of contested pairs favour whichever species has the lower label</div>
+          <canvas id="rps-biased" width="120" height="120"></canvas>
+          <div class="rps-counts" id="rps-biased-counts"></div>
+          <div class="rps-note">Z₃-equivariance is broken. A sweeps the lattice; B and C extinct. The ecosystem isn't unstable — the update loop is.</div>
+        </div>
+      </div>
+      <div class="controls">
+        <button id="rps-reset">reset both</button>
+        <button id="rps-pause">pause</button>
+      </div>
+      <div class="figure-caption">Identical 120×120 lattices, identical initial conditions (random A/B/C mix), identical seed. Only the update rule differs — the left respects Z₃, the right does not. A type-theoretic proof that <code>step</code> commutes with the species-rotation is what rules out the right panel's behaviour at compile time.</div>
+    </div>
+  </div>
+
+  <!-- ────────────── §5 Carry-forward ────────────── -->
+  <div class="section">
+    <div class="section-tag">§5 · Carry-forward</div>
+    <div class="carry-forward">
+      <p><strong>We added.</strong> <code>TV.wall</code> — the dashed-boundary primitive — is now in the shared vocabulary. Two extension-palette colors (Prey teal, Predator magenta) named and reserved for species variants. The idea that <em>a refinement predicate renders as a literal geometric boundary</em> is now available for later explainers.</p>
+      <p><strong>Reused where.</strong> #6 (SIR) uses refinement for the conservation law S + I + R = N — a wall that is a diagonal plane rather than an axis. #7 (n-body) uses energy conservation as a refinement-shaped invariant, again drawable. #12 §5b respecializes this page's two-species sum to a three-species predator-prey, where permuting species is the Weyl group S₃ of A₂ — the sum type grows a symmetry.</p>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ────────────────────────────────────────────────────────────── §1 Lotka-Volterra sim ──
+(function () {
+  var timeSvg = d3.select('#lv-time');
+  var phaseSvg = d3.select('#lv-phase');
+
+  var TW = 400, TH = 260, PW = 320, PH = 260;
+  var tMargin = { top: 16, right: 14, bottom: 28, left: 34 };
+  var pMargin = { top: 16, right: 14, bottom: 28, left: 34 };
+
+  // Parameters — classic LV with moderate oscillation.
+  var params = { alpha: 0.8, beta: 0.02, gamma: 0.5, delta: 0.015 };
+  var dt = 0.04;       // integrator step
+  var stepsPerFrame = 2;
+
+  // History buffers for the time plot.
+  var BUFFER = 400;
+  var history = [];    // { t, prey, pred }
+  var state = null;
+
+  function reset() {
+    state = { prey: 40, pred: 9, t: 0 };
+    history = [];
+  }
+  reset();
+
+  // Scales for the time plot (x is a rolling window).
+  var tX = d3.scaleLinear().range([tMargin.left, TW - tMargin.right]);
+  var tY = d3.scaleLinear().domain([0, 120]).range([TH - tMargin.bottom, tMargin.top]);
+
+  // Scales for the phase portrait. Fixed domains so the orbit is readable.
+  var pX = d3.scaleLinear().domain([0, 120]).range([pMargin.left, PW - pMargin.right]);
+  var pY = d3.scaleLinear().domain([0, 60]).range([PH - pMargin.bottom, pMargin.top]);
+
+  // Time-plot static chrome.
+  timeSvg.append('g').attr('transform', 'translate(0,' + (TH - tMargin.bottom) + ')')
+    .call(d3.axisBottom(d3.scaleLinear().domain([0, 1]).range([tMargin.left, TW - tMargin.right])).ticks(0))
+    .selectAll('path,line').attr('stroke', '#94a3b8');
+  timeSvg.append('g').attr('transform', 'translate(' + tMargin.left + ',0)')
+    .call(d3.axisLeft(tY).ticks(4).tickSize(-1 * (TW - tMargin.left - tMargin.right)))
+    .call(function (g) {
+      g.selectAll('path').attr('stroke', '#94a3b8');
+      g.selectAll('line').attr('stroke', '#eef2f7');
+      g.selectAll('text').attr('font-family', 'Source Code Pro, monospace').attr('font-size', '0.7rem').attr('fill', '#64748b');
+    });
+  timeSvg.append('text').attr('x', tMargin.left).attr('y', 12)
+    .attr('font-family', 'Source Code Pro, monospace').attr('font-size', '0.7rem')
+    .attr('fill', '#64748b').text('population over time');
+
+  var preyPath = timeSvg.append('path').attr('fill', 'none').attr('stroke', 'var(--c-prey)').attr('stroke-width', 1.8);
+  var predPath = timeSvg.append('path').attr('fill', 'none').attr('stroke', 'var(--c-predator)').attr('stroke-width', 1.8);
+
+  // Phase-portrait chrome.
+  phaseSvg.append('g').attr('transform', 'translate(0,' + (PH - pMargin.bottom) + ')')
+    .call(d3.axisBottom(pX).ticks(4))
+    .call(function (g) {
+      g.selectAll('path,line').attr('stroke', '#94a3b8');
+      g.selectAll('text').attr('font-family', 'Source Code Pro, monospace').attr('font-size', '0.7rem').attr('fill', '#64748b');
+    });
+  phaseSvg.append('g').attr('transform', 'translate(' + pMargin.left + ',0)')
+    .call(d3.axisLeft(pY).ticks(4))
+    .call(function (g) {
+      g.selectAll('path,line').attr('stroke', '#94a3b8');
+      g.selectAll('text').attr('font-family', 'Source Code Pro, monospace').attr('font-size', '0.7rem').attr('fill', '#64748b');
+    });
+  phaseSvg.append('text').attr('x', pMargin.left).attr('y', 12)
+    .attr('font-family', 'Source Code Pro, monospace').attr('font-size', '0.7rem')
+    .attr('fill', '#64748b').text('phase portrait');
+  phaseSvg.append('text').attr('x', PW - pMargin.right - 4).attr('y', PH - 8)
+    .attr('text-anchor', 'end').attr('font-family', 'Source Code Pro, monospace')
+    .attr('font-size', '0.65rem').attr('fill', 'var(--c-prey)').text('prey →');
+  phaseSvg.append('text').attr('x', 6).attr('y', pMargin.top + 4)
+    .attr('font-family', 'Source Code Pro, monospace')
+    .attr('font-size', '0.65rem').attr('fill', 'var(--c-predator)').text('↑ pred');
+
+  var orbitPath = phaseSvg.append('path').attr('fill', 'none')
+    .attr('stroke', '#64748b').attr('stroke-width', 1.2).attr('opacity', 0.55);
+  var nowDot = phaseSvg.append('circle').attr('r', 4).attr('fill', '#1a1a2e').attr('stroke', '#fff').attr('stroke-width', 1.2);
+
+  // One LV step, semi-explicit. clamp enforces the refinement predicate at runtime.
+  // In a refinement-typed language this would be a proof obligation, not a runtime check.
+  function clamp(x) { return x < 0 ? 0 : x; }
+  function advance() {
+    for (var k = 0; k < stepsPerFrame; k++) {
+      var p = state.prey, q = state.pred;
+      var dp = params.alpha * p - params.beta * p * q;
+      var dq = -params.gamma * q + params.delta * p * q;
+      state.prey = clamp(p + dt * dp);
+      state.pred = clamp(q + dt * dq);
+      state.t += dt;
+      history.push({ t: state.t, prey: state.prey, pred: state.pred });
+      if (history.length > BUFFER) history.shift();
+    }
+  }
+
+  var timeLine = d3.line().x(function (d) { return tX(d.t); }).y(function (d) { return tY(d.prey); });
+  var predLine = d3.line().x(function (d) { return tX(d.t); }).y(function (d) { return tY(d.pred); });
+  var orbitLine = d3.line().x(function (d) { return pX(d.prey); }).y(function (d) { return pY(d.pred); });
+
+  function render() {
+    if (history.length < 2) return;
+    tX.domain([history[0].t, history[history.length - 1].t]);
+    preyPath.datum(history).attr('d', timeLine);
+    predPath.datum(history).attr('d', predLine);
+    orbitPath.datum(history).attr('d', orbitLine);
+    nowDot.attr('cx', pX(state.prey)).attr('cy', pY(state.pred));
+  }
+
+  var paused = false;
+  var loop = SC.loop(function () { if (!paused) { advance(); render(); } });
+  loop.start();
+
+  d3.select('#lv-reset').on('click', function () { reset(); render(); });
+  d3.select('#lv-pause').on('click', function () {
+    paused = !paused;
+    d3.select(this).text(paused ? 'resume' : 'pause');
+  });
+  d3.select('#lv-beta').on('input', function () {
+    params.beta = +this.value;
+    // delta tracks beta loosely so the predator response stays interesting.
+    params.delta = 0.75 * params.beta;
+  });
+})();
+
+// ────────────────────────────────────────────────────────────── §3 step signature diagram ──
+(function () {
+  var svg = d3.select('#step-sig');
+  var g = svg.append('g').attr('transform', 'translate(20, 16)');
+
+  // Sum type: Species, with two variants.
+  TV.sum(g, {
+    x: 0, y: 0, w: 150, h: 50,
+    variants: [
+      { label: 'Prey',     color: 'var(--c-prey)' },
+      { label: 'Predator', color: 'var(--c-predator)' }
+    ],
+    label: 'Species'
+  });
+
+  // Params product — below the species fork.
+  TV.product(g, { x: 0, y: 70, w: 150, h: 34, label: 'Params α β γ δ' });
+
+  // State product — below params.
+  TV.product(g, { x: 0, y: 114, w: 150, h: 34, label: 'State prey pred' });
+
+  // Converging lines to the step/rate box.
+  g.append('path').attr('d', 'M 150,25  C 210,25 230,65 280,85')
+    .attr('stroke', '#334155').attr('stroke-width', 1.4).attr('fill', 'none');
+  g.append('path').attr('d', 'M 150,87  C 220,87 240,85 280,85')
+    .attr('stroke', '#334155').attr('stroke-width', 1.4).attr('fill', 'none');
+  g.append('path').attr('d', 'M 150,131 C 210,131 240,100 280,85')
+    .attr('stroke', '#334155').attr('stroke-width', 1.4).attr('fill', 'none');
+
+  // step / rate box
+  g.append('rect')
+    .attr('x', 280).attr('y', 65).attr('width', 110).attr('height', 44)
+    .attr('rx', 6).attr('fill', '#fff')
+    .attr('stroke', '#334155').attr('stroke-width', 1.2);
+  g.append('text').attr('x', 335).attr('y', 83)
+    .attr('text-anchor', 'middle').attr('font-family', 'Source Code Pro, monospace')
+    .attr('font-size', '0.78rem').attr('fill', '#334155').text('step');
+  g.append('text').attr('x', 335).attr('y', 99)
+    .attr('text-anchor', 'middle').attr('font-family', 'Source Code Pro, monospace')
+    .attr('font-size', '0.62rem').attr('fill', '#64748b').text('· clamp · refine ·');
+
+  // Output pipe — State'
+  TV.pipe(g, { kind: 'Position', x1: 390, y1: 87, x2: 620, y2: 87, width: 4 });
+  g.append('text').attr('x', 390).attr('y', 80)
+    .attr('font-family', 'Source Code Pro, monospace').attr('font-size', '0.7rem')
+    .attr('fill', 'var(--c-position)').text("State'");
+
+  // Animate a dot picking one species band each cycle, flowing through step, out as State'.
+  var dotSum = g.append('circle').attr('r', 4).attr('opacity', 0);
+  var dotOut = g.append('circle').attr('r', 4).attr('fill', 'var(--c-position)').attr('opacity', 0);
+  var t0 = performance.now();
+  function animate() {
+    var phase = ((performance.now() - t0) / 2200) % 1;
+    var cycle = Math.floor((performance.now() - t0) / 2200);
+    var isPrey = cycle % 2 === 0;
+    var bandY = isPrey ? 12 : 38;
+    var color = isPrey ? 'var(--c-prey)' : 'var(--c-predator)';
+    dotSum.attr('fill', color);
+    if (phase < 0.5) {
+      var p = phase / 0.5;
+      var x = 150 + (280 - 150) * p;
+      var y = bandY + (85 - bandY) * p;
+      dotSum.attr('cx', x).attr('cy', y).attr('opacity', 1);
+      dotOut.attr('opacity', 0);
+    } else {
+      var q = (phase - 0.5) / 0.5;
+      dotSum.attr('opacity', 0);
+      dotOut.attr('cx', 390 + q * 230).attr('cy', 87).attr('opacity', 1);
+    }
+    requestAnimationFrame(animate);
+  }
+  animate();
+})();
+
+// ────────────────────────────────────────────────────────────── §4 phase portrait with walls ──
+(function () {
+  var svg = d3.select('#wall-phase');
+  var W = 680, H = 400;
+  var margin = { top: 24, right: 30, bottom: 50, left: 60 };
+
+  // Domain: prey up to ~140, predators up to ~70. Includes generous space above 0 for walls to read.
+  var x = d3.scaleLinear().domain([-8, 140]).range([margin.left, W - margin.right]);
+  var y = d3.scaleLinear().domain([-6, 70]).range([H - margin.bottom, margin.top]);
+
+  // Axes (muted — the actual non-negativity walls are drawn separately and prominently).
+  svg.append('g').attr('transform', 'translate(0,' + (H - margin.bottom) + ')')
+    .call(d3.axisBottom(x).ticks(6))
+    .call(function (g) {
+      g.selectAll('path,line').attr('stroke', '#cbd5e1');
+      g.selectAll('text').attr('font-family', 'Source Code Pro, monospace').attr('font-size', '0.7rem').attr('fill', '#64748b');
+    });
+  svg.append('g').attr('transform', 'translate(' + margin.left + ',0)')
+    .call(d3.axisLeft(y).ticks(5))
+    .call(function (g) {
+      g.selectAll('path,line').attr('stroke', '#cbd5e1');
+      g.selectAll('text').attr('font-family', 'Source Code Pro, monospace').attr('font-size', '0.7rem').attr('fill', '#64748b');
+    });
+  svg.append('text').attr('x', W - margin.right).attr('y', H - 14)
+    .attr('text-anchor', 'end').attr('font-family', 'Source Code Pro, monospace')
+    .attr('font-size', '0.75rem').attr('fill', 'var(--c-prey)').text('prey population');
+  svg.append('text').attr('x', margin.left).attr('y', margin.top - 8)
+    .attr('font-family', 'Source Code Pro, monospace')
+    .attr('font-size', '0.75rem').attr('fill', 'var(--c-predator)').text('↑ predator population');
+
+  // The non-negativity walls — refinement predicate p >= 0 rendered into state space.
+  // x = 0 wall (vertical)
+  TV.wall(svg, {
+    x1: x(0), y1: y(-6), x2: x(0), y2: y(70),
+    color: 'var(--c-wall)', width: 2.2,
+    label: 'Pop ≥ 0', labelX: x(0) + 8, labelY: y(67)
+  });
+  // y = 0 wall (horizontal)
+  TV.wall(svg, {
+    x1: x(-8), y1: y(0), x2: x(140), y2: y(0),
+    color: 'var(--c-wall)', width: 2.2,
+    label: 'Pop ≥ 0', labelX: x(128), labelY: y(0) - 6
+  });
+
+  // Equilibrium point: (gamma/delta, alpha/beta). With alpha=0.8, beta=0.02, gamma=0.5, delta=0.015:
+  // (33.33, 40). Mark it.
+  var P = { alpha: 0.8, beta: 0.02, gamma: 0.5, delta: 0.015 };
+  var eqX = P.gamma / P.delta, eqY = P.alpha / P.beta;
+  svg.append('circle').attr('cx', x(eqX)).attr('cy', y(eqY)).attr('r', 3.2)
+    .attr('fill', '#334155');
+  svg.append('text').attr('x', x(eqX) + 8).attr('y', y(eqY) + 4)
+    .attr('font-family', 'Source Code Pro, monospace').attr('font-size', '0.65rem')
+    .attr('fill', '#334155').text('equilibrium (γ/δ, α/β)');
+
+  // Four seed points, each producing a closed orbit around the fixed point.
+  var seeds = [
+    { prey: 60, pred: 18, hue: '#0891b2' },
+    { prey: 80, pred: 30, hue: '#7c3aed' },
+    { prey: 50, pred: 55, hue: '#db2777' },
+    { prey: 25, pred: 25, hue: '#059669' }
+  ];
+
+  function integrateOrbit(seed, steps, dt) {
+    var traj = [{ p: seed.prey, q: seed.pred }];
+    var p = seed.prey, q = seed.pred;
+    for (var i = 0; i < steps; i++) {
+      // RK2 midpoint — small enough step that Euler drift doesn't blur the closed orbit.
+      var k1p = P.alpha * p - P.beta * p * q;
+      var k1q = -P.gamma * q + P.delta * p * q;
+      var mp = p + 0.5 * dt * k1p, mq = q + 0.5 * dt * k1q;
+      var k2p = P.alpha * mp - P.beta * mp * mq;
+      var k2q = -P.gamma * mq + P.delta * mp * mq;
+      p += dt * k2p; q += dt * k2q;
+      traj.push({ p: p, q: q });
+    }
+    return traj;
+  }
+
+  var orbitLine = d3.line().x(function (d) { return x(d.p); }).y(function (d) { return y(d.q); });
+
+  // Precompute trajectories long enough to close the loop.
+  var trajs = seeds.map(function (s) { return { seed: s, traj: integrateOrbit(s, 2600, 0.012) }; });
+
+  // Draw each orbit as a faint closed curve.
+  trajs.forEach(function (t) {
+    svg.append('path').datum(t.traj)
+      .attr('fill', 'none').attr('stroke', t.seed.hue).attr('stroke-width', 1.3)
+      .attr('opacity', 0.45).attr('d', orbitLine);
+    // Seed marker
+    svg.append('circle')
+      .attr('cx', x(t.seed.prey)).attr('cy', y(t.seed.pred))
+      .attr('r', 3).attr('fill', t.seed.hue).attr('stroke', '#fff').attr('stroke-width', 1);
+  });
+
+  // A traveling dot per orbit — gives the portrait motion without noise.
+  var dots = trajs.map(function (t) {
+    return svg.append('circle').attr('r', 4)
+      .attr('fill', t.seed.hue).attr('stroke', '#fff').attr('stroke-width', 1.2);
+  });
+
+  var t0 = performance.now();
+  function animate() {
+    var now = performance.now();
+    trajs.forEach(function (t, i) {
+      var len = t.traj.length;
+      // Phase offset per seed so the four dots don't move in lockstep.
+      var phase = ((now - t0) / 9000 + i * 0.27) % 1;
+      var idx = Math.floor(phase * len);
+      var pt = t.traj[idx];
+      dots[i].attr('cx', x(pt.p)).attr('cy', y(pt.q));
+    });
+    requestAnimationFrame(animate);
+  }
+  animate();
+
+  // Annotation tying the wall to the type predicate.
+  svg.append('text').attr('x', margin.left + 10).attr('y', H - margin.bottom + 36)
+    .attr('font-family', 'Source Code Pro, monospace').attr('font-size', '0.7rem')
+    .attr('fill', 'var(--c-wall)')
+    .text('dashed walls = refinement predicate Pop ≥ 0, rendered literally');
+})();
+
+// ────────────────────────────────────────────────────────────── §4b spatial rock-paper-scissors ──
+// Two 120×120 lattices with identical seeds, identical RPS rules, identical step counts per frame.
+// Only the update kernel differs:
+//   - fair:   pick random adjacent pair; invader wins iff it is the predator in A→B→C→A.
+//   - biased: same kernel, but ~5% of contests are decided by "lower label wins" regardless of predator.
+// The biased rule is still a function; it just fails to commute with the cyclic relabel r : (A,B,C) → (B,C,A).
+// Its fixed-point distribution is a single surviving species.
+(function () {
+  var N = 120;
+  var PIXELS = N * N;
+  // Species encoding: 0 = A, 1 = B, 2 = C.
+  // Predator[prey] = species that can eat this prey. RPS cycle: A eats B, B eats C, C eats A.
+  // So predator[A]=C, predator[B]=A, predator[C]=B. That means species m eats species n iff (m - n + 3) % 3 == 2,
+  // equivalently iff (n - m + 3) % 3 == 1 (i.e. prey is one step forward in the cycle from predator).
+  function eats(m, n) { return ((n - m + 3) % 3) === 1; }
+
+  var COLORS = [
+    [8, 145, 178],    // A teal = --c-prey
+    [219, 39, 119],   // B magenta = --c-predator
+    [245, 158, 11]    // C amber = --c-sp-c
+  ];
+
+  // Simple deterministic PRNG so both panels share an identical starting lattice AND identical
+  // random streams up to the point they diverge. (The rules still diverge even with shared streams.)
+  function mulberry32(seed) {
+    var a = seed >>> 0;
+    return function () {
+      a = (a + 0x6D2B79F5) >>> 0;
+      var t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  function makePanel(canvasId, countsId, kernel) {
+    var canvas = document.getElementById(canvasId);
+    var ctx = canvas.getContext('2d');
+    var img = ctx.createImageData(N, N);
+    var arr = new Uint8Array(PIXELS);
+    var rng = mulberry32(20260418);
+    return { canvas: canvas, ctx: ctx, img: img, arr: arr, rng: rng, kernel: kernel, countsEl: document.getElementById(countsId) };
+  }
+
+  function seedPanel(panel) {
+    panel.rng = mulberry32(20260418);
+    for (var i = 0; i < PIXELS; i++) {
+      panel.arr[i] = Math.floor(panel.rng() * 3);
+    }
+  }
+
+  // Fair update: Z₃-equivariant pair contest.
+  function stepFair(panel, iters) {
+    var a = panel.arr, r = panel.rng;
+    for (var k = 0; k < iters; k++) {
+      var x = (r() * N) | 0;
+      var y = (r() * N) | 0;
+      var dir = (r() * 4) | 0;
+      var nx = x, ny = y;
+      if (dir === 0) nx = (x + N - 1) % N;
+      else if (dir === 1) nx = (x + 1) % N;
+      else if (dir === 2) ny = (y + N - 1) % N;
+      else ny = (y + 1) % N;
+      var i = y * N + x, j = ny * N + nx;
+      var mi = a[i], mj = a[j];
+      if (mi === mj) continue;
+      if (eats(mi, mj)) a[j] = mi;
+      else if (eats(mj, mi)) a[i] = mj;
+    }
+  }
+
+  // Biased update: same kernel, but tiny probability of a label-order override.
+  // Breaks the Z₃-equivariance (still a function — just not a Z₃-commuting one).
+  function stepBiased(panel, iters) {
+    var a = panel.arr, r = panel.rng;
+    for (var k = 0; k < iters; k++) {
+      var x = (r() * N) | 0;
+      var y = (r() * N) | 0;
+      var dir = (r() * 4) | 0;
+      var nx = x, ny = y;
+      if (dir === 0) nx = (x + N - 1) % N;
+      else if (dir === 1) nx = (x + 1) % N;
+      else if (dir === 2) ny = (y + N - 1) % N;
+      else ny = (y + 1) % N;
+      var i = y * N + x, j = ny * N + nx;
+      var mi = a[i], mj = a[j];
+      if (mi === mj) continue;
+      if (r() < 0.05) {
+        // Bias: lower label wins, regardless of predator relation.
+        if (mi < mj) a[j] = mi; else a[i] = mj;
+        continue;
+      }
+      if (eats(mi, mj)) a[j] = mi;
+      else if (eats(mj, mi)) a[i] = mj;
+    }
+  }
+
+  function renderPanel(panel) {
+    var data = panel.img.data;
+    var a = panel.arr;
+    for (var i = 0, p = 0; i < PIXELS; i++, p += 4) {
+      var c = COLORS[a[i]];
+      data[p] = c[0]; data[p+1] = c[1]; data[p+2] = c[2]; data[p+3] = 255;
+    }
+    panel.ctx.putImageData(panel.img, 0, 0);
+  }
+
+  function updateCounts(panel) {
+    var counts = [0, 0, 0];
+    for (var i = 0; i < PIXELS; i++) counts[panel.arr[i]]++;
+    var pct = counts.map(function (v) { return (100 * v / PIXELS).toFixed(0) + '%'; });
+    var el = panel.countsEl;
+    el.innerHTML = '';
+    ['A', 'B', 'C'].forEach(function (lbl, k) {
+      var c = document.createElement('span'); c.className = 'c';
+      var dot = document.createElement('span');
+      dot.className = 'dot';
+      dot.style.background = 'rgb(' + COLORS[k].join(',') + ')';
+      c.appendChild(dot);
+      c.appendChild(document.createTextNode(lbl + ' ' + pct[k]));
+      el.appendChild(c);
+    });
+  }
+
+  var fair = makePanel('rps-fair', 'rps-fair-counts', stepFair);
+  var biased = makePanel('rps-biased', 'rps-biased-counts', stepBiased);
+  seedPanel(fair); seedPanel(biased);
+
+  var paused = false;
+  var ITERS = 6000;  // updates per frame per panel
+  var countUpdateEvery = 12;
+  var frameCounter = 0;
+
+  function frame() {
+    if (!paused) {
+      fair.kernel(fair, ITERS);
+      biased.kernel(biased, ITERS);
+    }
+    renderPanel(fair); renderPanel(biased);
+    if (frameCounter % countUpdateEvery === 0) {
+      updateCounts(fair); updateCounts(biased);
+    }
+    frameCounter++;
+    requestAnimationFrame(frame);
+  }
+
+  d3.select('#rps-reset').on('click', function () {
+    seedPanel(fair); seedPanel(biased);
+  });
+  d3.select('#rps-pause').on('click', function () {
+    paused = !paused;
+    d3.select(this).text(paused ? 'resume' : 'pause');
+  });
+
+  frame();
+})();
+</script>
+</body>
+</html>

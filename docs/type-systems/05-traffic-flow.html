@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Traffic Flow — Type Systems for Simulation</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
+<script src="lib/typeviz.js"></script>
+<script src="lib/simcore.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --article-width: 740px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem;
+  --line-height: 1.65;
+  --text: #1a1a2e;
+  --text-2: #4a4a6a;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --bg: #fafafa;
+  --fig-bg: #ffffff;
+  --border: #e2e2e8;
+  --c-position: #2563eb;
+  --c-velocity: #d97706;
+  --c-force:    #dc2626;
+  --c-mass:     #6b7280;
+  --c-time:     #059669;
+  --c-id:       #64748b;
+  /* CarState variant colors — extension palette, chosen to not collide with reserved atomic colors. */
+  --c-moving:   #10b981;
+  --c-braking:  #f59e0b;
+  --c-stopped:  #ef4444;
+}
+
+body { font-family: var(--body-font); font-size: var(--body-size); line-height: var(--line-height); color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased; }
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
+
+h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.15rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.3rem; margin: 3rem 0 0.75rem; }
+
+p { margin: 0 0 1rem; }
+a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+
+.back-links { font-family: var(--heading-font); font-size: 0.85rem; margin-bottom: 2rem; }
+.back-links a { color: var(--text-2); text-decoration: none; }
+.back-links a:hover { color: var(--accent); }
+.back-links .sep { margin: 0 0.5rem; opacity: 0.3; }
+
+header .subtitle { font-family: var(--heading-font); font-size: 1.05rem; color: var(--text-2); max-width: 620px; margin-top: 0.5rem; }
+
+.section { margin-top: 3rem; }
+.section-tag { font-family: var(--mono-font); font-size: 0.7rem; font-weight: 600; color: var(--accent); letter-spacing: 0.05em; text-transform: uppercase; margin-bottom: 0.25rem; }
+
+.figure { background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; padding: 1rem; margin: 1.5rem 0; }
+.figure-caption { font-family: var(--heading-font); font-size: 0.82rem; color: var(--text-2); margin-top: 0.5rem; }
+
+.controls { display: flex; gap: 0.75rem; align-items: center; margin-top: 0.75rem; flex-wrap: wrap; }
+.controls button { font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600; padding: 0.4rem 0.9rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 4px; cursor: pointer; color: var(--text); }
+.controls button:hover { border-color: var(--accent); color: var(--accent); }
+.controls label { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); display: flex; align-items: center; gap: 0.35rem; }
+.controls input[type="range"] { width: 120px; }
+
+code { font-family: var(--mono-font); font-size: 0.85em; background: #f3f4f6; padding: 0.1em 0.35em; border-radius: 3px; }
+.haskell-block { font-family: var(--mono-font); font-size: 0.85rem; background: #f3f4f6; padding: 0.75rem 1rem; border-radius: 4px; margin: 0.75rem 0; border-left: 3px solid var(--accent); white-space: pre; overflow-x: auto; }
+
+.carry-forward { background: var(--accent-light); border-left: 3px solid var(--accent); padding: 0.75rem 1rem; margin: 1.5rem 0; font-size: 0.95rem; }
+.carry-forward strong { font-family: var(--heading-font); }
+
+.constraint-swatches { display: flex; gap: 0.75rem; margin-top: 0.75rem; font-family: var(--mono-font); font-size: 0.75rem; flex-wrap: wrap; }
+.constraint-swatches .sw { display: flex; align-items: center; gap: 0.35rem; }
+.constraint-swatches .dot { width: 10px; height: 10px; border-radius: 50%; }
+</style>
+</head>
+<body>
+<div class="article">
+  <div class="back-links">
+    <a href="index.html">← type-systems</a>
+    <span class="sep">·</span>
+    <a href="../index.html">all series</a>
+  </div>
+
+  <header>
+    <h1>Traffic Flow</h1>
+    <p class="subtitle">When a car is always in exactly one of three states, the state-transition diagram and the Haskell type definition are literally the same picture.</p>
+  </header>
+
+  <!-- ────────────── §1 Cold sim ────────────── -->
+  <div class="section">
+    <div class="section-tag">§1 · Cold sim</div>
+    <h2>A ring of cars, and a wave that travels backward</h2>
+    <p>Twenty cars on a circular track. Each is <strong>Moving</strong>, <strong>Braking</strong>, or <strong>Stopped</strong> — no fourth option, no in-between. Tap <em>brake lead car</em> and watch the shockwave crawl <em>against</em> the direction of travel as each driver reacts to the one in front.</p>
+    <div class="figure">
+      <svg id="traffic-sim" viewBox="0 0 680 380" width="100%" height="380" style="display:block"></svg>
+      <div class="controls">
+        <button id="traffic-brake">brake lead car</button>
+        <button id="traffic-pause">pause</button>
+        <label>density <input type="range" id="traffic-density" min="10" max="32" value="20"></label>
+      </div>
+      <div class="figure-caption">The headway between cars shrinks upstream of any braker. A dense-enough ring will jam spontaneously even without the button.</div>
+      <div class="constraint-swatches">
+        <span class="sw"><span class="dot" style="background: var(--c-moving)"></span>Moving  Speed</span>
+        <span class="sw"><span class="dot" style="background: var(--c-braking)"></span>Braking Decel</span>
+        <span class="sw"><span class="dot" style="background: var(--c-stopped)"></span>Stopped</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ────────────── §2 Name the types ────────────── -->
+  <div class="section">
+    <div class="section-tag">§2 · Name the types</div>
+    <h2>A sum type where the payload depends on the variant</h2>
+    <p>A car's state is one of three constructors. Each carries a different payload — a <code>Speed</code>, a <code>Decel</code>, or nothing at all — and the type of that payload is tied to the variant. You can't ask <code>Stopped</code> for its speed, because there isn't one to ask for.</p>
+    <div class="haskell-block">data CarState
+  = Moving   Speed
+  | Braking  Decel
+  | Stopped
+
+data Input
+  = SeeBrakeLights
+  | ClearRoad
+  | HitZero
+  | LeaderMoves
+
+transition :: CarState -> Input -> CarState</div>
+    <p>This is the kernel of a GADT: a sum where each branch carries its own shape of payload, and a function that pattern-matches on both the state and the input to decide what's next. Only the transitions listed in §4 are reachable — every other pair is simply not in the function's body.</p>
+  </div>
+
+  <!-- ────────────── §3 Signature diagram ────────────── -->
+  <div class="section">
+    <div class="section-tag">§3 · Signature diagram</div>
+    <h2>State in, input in, state out</h2>
+    <p>The transition function takes a <code>CarState</code> (a sum of three variants) and an <code>Input</code> (a sum of four) and returns a new <code>CarState</code>. Two sum containers flank a single <code>step</code> box. Sum-to-sum: the whole page.</p>
+    <div class="haskell-block">step :: CarState -> Input -> CarState</div>
+    <div class="figure">
+      <svg id="step-sig" viewBox="0 0 680 200" width="100%" height="200" style="display:block"></svg>
+      <div class="figure-caption">Input sum at the bottom, state sum at the top, <code>step</code> in the middle, a state sum on the right as the return. A single variant flows through the diagram on every tick.</div>
+    </div>
+  </div>
+
+  <!-- ────────────── §4 What it lets you say ────────────── -->
+  <div class="section">
+    <div class="section-tag">§4 · What it lets you say</div>
+    <h2>The transition diagram <em>is</em> the type</h2>
+    <p>Three nodes, one per variant. Draw an arrow for every transition the <code>step</code> function actually implements. What you get back is identical to the Haskell definition — the shape of the <code>data</code> declaration and the body of <code>transition</code> compressed into a single picture. If a transition isn't drawn, it isn't in the code; if it isn't in the code, a car can't make it.</p>
+    <div class="figure">
+      <svg id="fsm" viewBox="0 0 680 320" width="100%" height="320" style="display:block"></svg>
+      <div class="figure-caption">Nodes are constructors. Edges are clauses of <code>transition</code>. The absence of <code>Stopped → Braking</code> is information: a stopped car cannot decelerate further. The absence of <code>Moving → Stopped</code> is a design choice — every stop passes through braking first.</div>
+    </div>
+    <p>This is why the pattern scales. A six-state fighter-jet mode selector, a twelve-state TCP connection lifecycle, a hundred-state dialog tree — each is a sum type whose state-transition diagram is literally the type drawn. The visualization is the source of truth, and the code is just its dictation.</p>
+    <p>The same move covers thermodynamic phase transitions. Magnetite above its Verwey temperature and magnetite below it are distinct structural regimes; the operators that act on one are not meaningful on the other. Encoding this as <code>HighT | LowT</code> with the transition function <code>crossVerwey :: HighT -&gt; LowT</code> makes every phase-crossing a visible event in the type, and every illegal "use the high-T susceptibility past the transition" a compile-time error. The FSM pattern here is the same shape; only the science changes.</p>
+
+    <div class="figure">
+      <svg id="phase-sig" viewBox="0 0 680 260" width="100%" height="260" style="display:block"></svg>
+      <div class="figure-caption">Two regimes as two distinct types. The green operators are closed within the Free-flow regime; the red operators are closed within the Jammed regime. <code>nucleate</code> is the only legal crossing — the phase transition lifted into the type system. The dashed refused arrow underneath shows the typing judgment <code>Γ ⊢ accelerate j : ⊥</code>: no derivation exists for applying a free-flow operator to a jammed state. It is the same refusal #1 used for <code>Node Fixed</code> and #7 used for <code>Integrator Euler</code> in a <code>Symp</code>-expecting slot, re-framed as a thermodynamic boundary.</div>
+    </div>
+  </div>
+
+  <!-- ────────────── §5 Carry-forward ────────────── -->
+  <div class="section">
+    <div class="section-tag">§5 · Carry-forward</div>
+    <div class="carry-forward">
+      <p><strong>We added.</strong> The state-machine-as-sum pattern: <em>a sum type plus a transition function is a directed graph of constructors</em>. Three extension-palette colors (Moving emerald, Braking amber, Stopped red) reserved for car-state variants.</p>
+      <p><strong>Reused where.</strong> #6 (SIR epidemics) uses the same shape for S → I → R compartment transitions. #10 (GA) uses it for population-lifecycle phases (Evaluate → Select → Breed → Mutate). #12 closes the loop: permutation groups acting on roots are themselves state-space transitions — the Weyl group is a finite-state machine whose arrows are reflections.</p>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ────────────────────────────────────────────────────────────── §1 traffic sim ──
+(function () {
+  var svg = d3.select('#traffic-sim');
+  var W = 680, H = 380;
+  var cx = W / 2, cy = H / 2 + 10;
+  var R = 140;
+
+  // Track outline
+  svg.append('circle').attr('cx', cx).attr('cy', cy).attr('r', R + 14)
+    .attr('fill', 'none').attr('stroke', '#e2e8f0').attr('stroke-width', 28);
+  svg.append('circle').attr('cx', cx).attr('cy', cy).attr('r', R + 14)
+    .attr('fill', 'none').attr('stroke', '#fff').attr('stroke-width', 1)
+    .attr('stroke-dasharray', '4 6');
+
+  // Cars live in parameter space s in [0, 1), converted to (x, y) on the ring.
+  var cars = [];
+  var density = 20;
+  var VMAX = 0.065;   // max speed in units of ring-fraction per second
+  var ACCEL = 0.07;
+  var DECEL = 0.30;
+  var SAFE = 0.035;   // headway below which we start braking
+
+  function makeCars(n) {
+    var arr = [];
+    for (var i = 0; i < n; i++) {
+      arr.push({
+        id: i,
+        s: i / n,                 // position on ring
+        v: VMAX * 0.8,            // current speed
+        state: 'Moving',           // Moving | Braking | Stopped
+        payload: VMAX * 0.8         // Speed (Moving) or Decel (Braking)
+      });
+    }
+    return arr;
+  }
+  cars = makeCars(density);
+
+  var layer = svg.append('g');
+
+  function colorFor(state) {
+    if (state === 'Moving')  return 'var(--c-moving)';
+    if (state === 'Braking') return 'var(--c-braking)';
+    return 'var(--c-stopped)';
+  }
+
+  function headway(i, all) {
+    // Circular gap to the car in front.
+    var next = all[(i + 1) % all.length];
+    var gap = next.s - all[i].s;
+    if (gap < 0) gap += 1;
+    return gap;
+  }
+
+  // The transition function — pattern-match on state and input.
+  function transition(car, input) {
+    if (car.state === 'Moving' && input === 'SeeBrakeLights') {
+      return { state: 'Braking', payload: DECEL };
+    }
+    if (car.state === 'Braking' && input === 'HitZero') {
+      return { state: 'Stopped', payload: 0 };
+    }
+    if (car.state === 'Braking' && input === 'ClearRoad') {
+      return { state: 'Moving', payload: Math.max(car.v, VMAX * 0.3) };
+    }
+    if (car.state === 'Stopped' && input === 'LeaderMoves') {
+      return { state: 'Moving', payload: VMAX * 0.3 };
+    }
+    return null; // no transition
+  }
+
+  function applyInput(car, input) {
+    var next = transition(car, input);
+    if (next) { car.state = next.state; car.payload = next.payload; }
+  }
+
+  function step(dt) {
+    if (dt <= 0) return;
+    // Decide inputs first (look at neighbor ahead), then integrate.
+    var inputs = cars.map(function (c, i) {
+      var h = headway(i, cars);
+      var ahead = cars[(i + 1) % cars.length];
+      if (c.state === 'Moving') {
+        if (h < SAFE || ahead.state !== 'Moving') return 'SeeBrakeLights';
+      } else if (c.state === 'Braking') {
+        if (c.v <= 0.001) return 'HitZero';
+        if (h > SAFE * 2 && ahead.state === 'Moving') return 'ClearRoad';
+      } else if (c.state === 'Stopped') {
+        if (h > SAFE * 1.4 && ahead.state !== 'Stopped') return 'LeaderMoves';
+      }
+      return null;
+    });
+    cars.forEach(function (c, i) { if (inputs[i]) applyInput(c, inputs[i]); });
+
+    // Integrate speed and position per variant.
+    cars.forEach(function (c, i) {
+      var h = headway(i, cars);
+      if (c.state === 'Moving') {
+        // Accelerate toward max speed, but cap by headway safety.
+        c.v = Math.min(VMAX, c.v + ACCEL * dt);
+        c.v = Math.min(c.v, Math.max(0, h - 0.008) * 2.0);
+        c.payload = c.v;
+      } else if (c.state === 'Braking') {
+        c.v = Math.max(0, c.v - DECEL * dt);
+      } else {
+        c.v = 0;
+      }
+      c.s = (c.s + c.v * dt) % 1;
+    });
+    render();
+  }
+
+  function render() {
+    var nodes = layer.selectAll('circle').data(cars, function (d) { return d.id; });
+    nodes.exit().remove();
+    nodes = nodes.enter().append('circle')
+      .attr('r', 6.5).attr('stroke', '#fff').attr('stroke-width', 1.4)
+      .merge(nodes)
+      .attr('cx', function (d) { var a = d.s * 2 * Math.PI - Math.PI / 2; return cx + (R + 14) * Math.cos(a); })
+      .attr('cy', function (d) { var a = d.s * 2 * Math.PI - Math.PI / 2; return cy + (R + 14) * Math.sin(a); })
+      .attr('fill', function (d) { return colorFor(d.state); });
+  }
+
+  var loop = SC.loop(step); loop.start();
+  render();
+
+  d3.select('#traffic-brake').on('click', function () {
+    // Force the "lead" car (car 0) into Braking.
+    cars[0].state = 'Braking';
+    cars[0].payload = DECEL;
+  });
+  var paused = false;
+  d3.select('#traffic-pause').on('click', function () {
+    paused = !paused;
+    if (paused) { loop.pause(); d3.select(this).text('resume'); }
+    else { loop.start(); d3.select(this).text('pause'); }
+  });
+  d3.select('#traffic-density').on('input', function () {
+    density = +this.value;
+    cars = makeCars(density);
+    render();
+  });
+})();
+
+// ────────────────────────────────────────────────────────────── §3 signature diagram ──
+(function () {
+  var svg = d3.select('#step-sig');
+  var g = svg.append('g').attr('transform', 'translate(20, 12)');
+
+  // CarState sum on upper-left
+  TV.sum(g, {
+    x: 0, y: 10, w: 180, h: 70,
+    variants: [
+      { label: 'Moving  Speed',  color: 'var(--c-moving)' },
+      { label: 'Braking Decel',  color: 'var(--c-braking)' },
+      { label: 'Stopped',        color: 'var(--c-stopped)' }
+    ],
+    label: 'CarState'
+  });
+
+  // Input sum on lower-left
+  TV.sum(g, {
+    x: 0, y: 105, w: 180, h: 65,
+    variants: [
+      { label: 'SeeBrakeLights', color: 'var(--c-id)' },
+      { label: 'ClearRoad',      color: 'var(--c-id)' },
+      { label: 'HitZero',        color: 'var(--c-id)' },
+      { label: 'LeaderMoves',    color: 'var(--c-id)' }
+    ],
+    label: 'Input'
+  });
+
+  // Converging arcs into the step box
+  g.append('path')
+    .attr('d', 'M 180,45 Q 240,45 280,90')
+    .attr('stroke', '#334155').attr('stroke-width', 1.5).attr('fill', 'none');
+  g.append('path')
+    .attr('d', 'M 180,137 Q 240,137 280,90')
+    .attr('stroke', '#334155').attr('stroke-width', 1.5).attr('fill', 'none');
+
+  // step box
+  g.append('rect')
+    .attr('x', 280).attr('y', 72).attr('width', 90).attr('height', 40)
+    .attr('rx', 6).attr('fill', '#fff')
+    .attr('stroke', '#334155').attr('stroke-width', 1.2);
+  g.append('text').attr('x', 325).attr('y', 97)
+    .attr('text-anchor', 'middle').attr('font-family', 'Source Code Pro, monospace')
+    .attr('font-size', '0.78rem').attr('fill', '#334155').text('step');
+
+  // Output CarState sum on the right
+  TV.sum(g, {
+    x: 420, y: 55, w: 180, h: 70,
+    variants: [
+      { label: 'Moving  Speed',  color: 'var(--c-moving)' },
+      { label: 'Braking Decel',  color: 'var(--c-braking)' },
+      { label: 'Stopped',        color: 'var(--c-stopped)' }
+    ],
+    label: "CarState'"
+  });
+
+  // Arrow step → output
+  g.append('path')
+    .attr('d', 'M 370,92 L 420,90')
+    .attr('stroke', '#334155').attr('stroke-width', 1.5).attr('fill', 'none')
+    .attr('marker-end', 'url(#step-arrow)');
+  var defs = svg.append('defs');
+  defs.append('marker')
+    .attr('id', 'step-arrow').attr('viewBox', '0 0 10 10')
+    .attr('refX', 8).attr('refY', 5).attr('markerWidth', 6).attr('markerHeight', 6)
+    .attr('orient', 'auto')
+    .append('path').attr('d', 'M 0 0 L 10 5 L 0 10 z').attr('fill', '#334155');
+
+  // Animate a "Moving" input flowing to a "Braking" output once per cycle.
+  var dot = g.append('circle').attr('r', 4).attr('opacity', 0);
+  var t0 = performance.now();
+  function animate() {
+    var phase = ((performance.now() - t0) / 2400) % 1;
+    if (phase < 0.35) {
+      // dot rides from Moving band into step
+      var p = phase / 0.35;
+      dot.attr('fill', 'var(--c-moving)').attr('opacity', 1)
+         .attr('cx', 180 + (280 - 180) * p)
+         .attr('cy', 45 + (90 - 45) * p * p);
+    } else if (phase < 0.55) {
+      // dot rides from Input band into step
+      var p = (phase - 0.35) / 0.20;
+      dot.attr('fill', 'var(--c-id)').attr('opacity', 1)
+         .attr('cx', 180 + (280 - 180) * p)
+         .attr('cy', 137 + (90 - 137) * p * p);
+    } else {
+      // dot rides out as a Braking state
+      var p = (phase - 0.55) / 0.45;
+      dot.attr('fill', 'var(--c-braking)').attr('opacity', 1)
+         .attr('cx', 370 + (510 - 370) * p).attr('cy', 92);
+    }
+    requestAnimationFrame(animate);
+  }
+  animate();
+})();
+
+// ────────────────────────────────────────────────────────────── §4 FSM diagram ──
+(function () {
+  var svg = d3.select('#fsm');
+  var W = 680, H = 320;
+
+  // Three nodes — laid out as an isoceles triangle.
+  var nodes = [
+    { id: 'Moving',  x: 170, y: 110, color: 'var(--c-moving)',  payload: 'Speed' },
+    { id: 'Braking', x: 510, y: 110, color: 'var(--c-braking)', payload: 'Decel' },
+    { id: 'Stopped', x: 340, y: 260, color: 'var(--c-stopped)', payload: null }
+  ];
+
+  // Edges — legal transitions only.
+  var edges = [
+    { from: 'Moving',  to: 'Braking', label: 'SeeBrakeLights', curve: -50 },
+    { from: 'Braking', to: 'Moving',  label: 'ClearRoad',      curve: -50 },
+    { from: 'Braking', to: 'Stopped', label: 'HitZero',         curve:  30 },
+    { from: 'Stopped', to: 'Moving',  label: 'LeaderMoves',     curve:  30 }
+  ];
+
+  var nodeById = {};
+  nodes.forEach(function (n) { nodeById[n.id] = n; });
+
+  var defs = svg.append('defs');
+  defs.append('marker')
+    .attr('id', 'fsm-arrow').attr('viewBox', '0 0 10 10')
+    .attr('refX', 9).attr('refY', 5).attr('markerWidth', 7).attr('markerHeight', 7)
+    .attr('orient', 'auto')
+    .append('path').attr('d', 'M 0 0 L 10 5 L 0 10 z').attr('fill', '#475569');
+
+  // Edge geometry — quadratic curve with perpendicular offset.
+  function edgePath(from, to, curve) {
+    var dx = to.x - from.x, dy = to.y - from.y;
+    var mx = (from.x + to.x) / 2, my = (from.y + to.y) / 2;
+    var len = Math.hypot(dx, dy) + 1e-6;
+    // Perpendicular unit vector
+    var px = -dy / len, py = dx / len;
+    var cxp = mx + px * curve, cyp = my + py * curve;
+    // Trim path to stop at node radius (34)
+    var r = 36;
+    // Start point offset from 'from' toward control
+    var fsx = from.x + (cxp - from.x) / Math.hypot(cxp - from.x, cyp - from.y) * r;
+    var fsy = from.y + (cyp - from.y) / Math.hypot(cxp - from.x, cyp - from.y) * r;
+    var tex = to.x - (to.x - cxp) / Math.hypot(to.x - cxp, to.y - cyp) * (r + 6);
+    var tey = to.y - (to.y - cyp) / Math.hypot(to.x - cxp, to.y - cyp) * (r + 6);
+    return { d: 'M ' + fsx + ',' + fsy + ' Q ' + cxp + ',' + cyp + ' ' + tex + ',' + tey,
+             labelX: cxp, labelY: cyp };
+  }
+
+  // Draw edges
+  var edgeG = svg.append('g');
+  edges.forEach(function (e) {
+    var p = edgePath(nodeById[e.from], nodeById[e.to], e.curve);
+    edgeG.append('path').attr('d', p.d)
+      .attr('fill', 'none').attr('stroke', '#475569').attr('stroke-width', 1.4)
+      .attr('marker-end', 'url(#fsm-arrow)');
+    // Label background
+    var lbl = edgeG.append('g').attr('transform', 'translate(' + p.labelX + ',' + p.labelY + ')');
+    lbl.append('rect').attr('x', -56).attr('y', -9).attr('width', 112).attr('height', 17)
+       .attr('rx', 3).attr('fill', '#fff').attr('opacity', 0.9);
+    lbl.append('text').attr('text-anchor', 'middle').attr('y', 3)
+       .attr('font-family', 'Source Code Pro, monospace').attr('font-size', '0.7rem')
+       .attr('fill', '#334155').text(e.label);
+  });
+
+  // Draw nodes
+  var nodeG = svg.append('g');
+  nodes.forEach(function (n) {
+    var g = nodeG.append('g').attr('transform', 'translate(' + n.x + ',' + n.y + ')');
+    g.append('circle').attr('r', 36)
+      .attr('fill', '#fff').attr('stroke', n.color).attr('stroke-width', 2.5);
+    g.append('circle').attr('r', 6).attr('cy', -14).attr('fill', n.color);
+    g.append('text').attr('text-anchor', 'middle').attr('y', 2)
+      .attr('font-family', 'Source Sans 3, sans-serif').attr('font-weight', 700)
+      .attr('font-size', '0.88rem').attr('fill', n.color).text(n.id);
+    if (n.payload) {
+      g.append('text').attr('text-anchor', 'middle').attr('y', 18)
+        .attr('font-family', 'Source Code Pro, monospace').attr('font-size', '0.68rem')
+        .attr('fill', '#64748b').text(n.payload);
+    }
+  });
+
+  // Caption legend under the diagram
+  var legend = svg.append('g').attr('transform', 'translate(' + (W/2 - 120) + ', ' + (H - 22) + ')');
+  legend.append('text').attr('x', 0).attr('y', 0)
+    .attr('font-family', 'Source Sans 3, sans-serif').attr('font-size', '0.75rem')
+    .attr('fill', '#64748b').attr('font-style', 'italic')
+    .text('nodes are constructors · edges are clauses of transition');
+
+  // Token animation — trace a dot along each edge in turn to suggest a car's life.
+  var order = [0, 2, 3, 0, 1]; // Moving→Braking→Stopped→Moving→Braking→Moving
+  var tIndex = 0, t0 = performance.now();
+  var token = svg.append('circle').attr('r', 5).attr('fill', '#334155').attr('opacity', 0);
+  function interpQ(p0, p1, p2, t) {
+    var u = 1 - t;
+    return [u * u * p0[0] + 2 * u * t * p1[0] + t * t * p2[0],
+            u * u * p0[1] + 2 * u * t * p1[1] + t * t * p2[1]];
+  }
+  function animate() {
+    var DUR = 1400;
+    var elapsed = performance.now() - t0;
+    var t = Math.min(1, elapsed / DUR);
+    var e = edges[order[tIndex]];
+    var from = nodeById[e.from], to = nodeById[e.to];
+    var mx = (from.x + to.x) / 2, my = (from.y + to.y) / 2;
+    var dx = to.x - from.x, dy = to.y - from.y;
+    var len = Math.hypot(dx, dy) + 1e-6;
+    var px = -dy / len, py = dx / len;
+    var cxp = mx + px * e.curve, cyp = my + py * e.curve;
+    var pos = interpQ([from.x, from.y], [cxp, cyp], [to.x, to.y], t);
+    token.attr('cx', pos[0]).attr('cy', pos[1])
+         .attr('fill', to.color).attr('opacity', 0.9);
+    if (t >= 1) {
+      tIndex = (tIndex + 1) % order.length;
+      t0 = performance.now() + 300; // brief pause
+    }
+    requestAnimationFrame(animate);
+  }
+  animate();
+})();
+
+// ────────────────────────────────────────────────────────────── §4b phase-transition signature ──
+// Two regime-typed boxes (Free, Jammed) with operators that close inside each. A single labeled
+// arrow crosses the boundary (nucleate). A dashed arrow underneath attempts to apply a Free-flow
+// operator to a Jammed state and is refused with an X — the typing judgment Γ ⊢ accelerate j : ⊥.
+(function () {
+  var svg = d3.select('#phase-sig');
+
+  var free = { x: 40, y: 50, w: 260, h: 130, color: '#10b981', label: 'Free' };
+  var jam  = { x: 380, y: 50, w: 260, h: 130, color: '#ef4444', label: 'Jammed' };
+  var regions = [free, jam];
+
+  regions.forEach(function (r) {
+    svg.append('rect').attr('x', r.x).attr('y', r.y).attr('width', r.w).attr('height', r.h)
+      .attr('rx', 8).attr('fill', '#fff').attr('stroke', r.color).attr('stroke-width', 1.6);
+    svg.append('text').attr('x', r.x + 14).attr('y', r.y + 22)
+      .attr('font-family', 'Source Code Pro, monospace').attr('font-size', '0.82rem')
+      .attr('font-weight', 700).attr('fill', r.color).text('data  ' + r.label);
+  });
+
+  // Free operators (inside free region)
+  var freeOps = [
+    { y: 52, label: 'accelerate : Free → Free' },
+    { y: 74, label: 'coast      : Free → Free' },
+    { y: 96, label: 'change_lane: Free → Free' }
+  ];
+  freeOps.forEach(function (op) {
+    svg.append('text').attr('x', free.x + 20).attr('y', free.y + op.y)
+      .attr('font-family', 'Source Code Pro, monospace').attr('font-size', '0.75rem')
+      .attr('fill', '#065f46').text(op.label);
+  });
+  // Jam operators
+  var jamOps = [
+    { y: 52, label: 'creep   : Jammed → Jammed' },
+    { y: 74, label: 'dissipate: Jammed → Jammed' }
+  ];
+  jamOps.forEach(function (op) {
+    svg.append('text').attr('x', jam.x + 20).attr('y', jam.y + op.y)
+      .attr('font-family', 'Source Code Pro, monospace').attr('font-size', '0.75rem')
+      .attr('fill', '#991b1b').text(op.label);
+  });
+
+  // Phase-transition arrow: nucleate : Free → Jammed (legal crossing).
+  svg.append('defs').append('marker').attr('id', 'ar-head')
+    .attr('viewBox', '0 -5 10 10').attr('refX', 9).attr('refY', 0)
+    .attr('markerWidth', 7).attr('markerHeight', 7).attr('orient', 'auto')
+    .append('path').attr('d', 'M0,-5L10,0L0,5').attr('fill', '#334155');
+
+  svg.append('line').attr('x1', free.x + free.w).attr('y1', 110)
+    .attr('x2', jam.x).attr('y2', 110)
+    .attr('stroke', '#334155').attr('stroke-width', 1.6).attr('marker-end', 'url(#ar-head)');
+  svg.append('rect').attr('x', 310).attr('y', 92).attr('width', 68).attr('height', 24).attr('rx', 3)
+    .attr('fill', '#fff').attr('stroke', '#334155').attr('stroke-width', 1);
+  svg.append('text').attr('x', 344).attr('y', 109).attr('text-anchor', 'middle')
+    .attr('font-family', 'Source Code Pro, monospace').attr('font-size', '0.72rem')
+    .attr('font-weight', 600).attr('fill', '#334155').text('nucleate');
+  svg.append('text').attr('x', 344).attr('y', 78).attr('text-anchor', 'middle')
+    .attr('font-family', 'Source Code Pro, monospace').attr('font-size', '0.66rem')
+    .attr('fill', '#64748b').text('Free → Jammed  ·  the phase transition');
+
+  // Illegal call beneath: accelerate applied to Jammed — refused.
+  var badY = 210;
+  svg.append('text').attr('x', jam.x + 60).attr('y', badY - 6)
+    .attr('font-family', 'Source Code Pro, monospace').attr('font-size', '0.72rem')
+    .attr('fill', '#334155').text('accelerate (j :: Jammed)');
+  // dashed pipe from the "accelerate" word back over toward Free region, blocked.
+  svg.append('line').attr('x1', jam.x + 100).attr('y1', badY)
+    .attr('x2', free.x + free.w - 14).attr('y2', badY)
+    .attr('stroke', '#94a3b8').attr('stroke-width', 1.4).attr('stroke-dasharray', '5 4');
+  // X icon at the refusal point.
+  var xx = free.x + free.w - 14, xy = badY;
+  svg.append('circle').attr('cx', xx).attr('cy', xy).attr('r', 11)
+    .attr('fill', '#fef2f2').attr('stroke', '#ef4444').attr('stroke-width', 1.4);
+  svg.append('line').attr('x1', xx - 5).attr('y1', xy - 5).attr('x2', xx + 5).attr('y2', xy + 5)
+    .attr('stroke', '#ef4444').attr('stroke-width', 2);
+  svg.append('line').attr('x1', xx - 5).attr('y1', xy + 5).attr('x2', xx + 5).attr('y2', xy - 5)
+    .attr('stroke', '#ef4444').attr('stroke-width', 2);
+  svg.append('text').attr('x', 200).attr('y', badY + 20)
+    .attr('font-family', 'Source Code Pro, monospace').attr('font-size', '0.68rem')
+    .attr('fill', '#ef4444')
+    .text('Γ ⊢ accelerate j : ⊥   — no derivation; the regimes do not share this operator');
+})();
+</script>
+</body>
+</html>

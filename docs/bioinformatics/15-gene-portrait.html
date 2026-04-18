@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gene Portrait — Moonshine</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --article-width: 740px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem;
+  --line-height: 1.6;
+  --text: #1a1a2e;
+  --text-2: #4a4a6a;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --bg: #fafafa;
+  --fig-bg: #ffffff;
+  --border: #e2e2e8;
+  --c-gene: #2563eb;
+  --c-sample: #0891b2;
+  --c-expression: #8b5cf6;
+  --c-significance: #ef4444;
+  --c-pathway: #10b981;
+  --muted: #94a3b8;
+  --grid: #e2e8f0;
+}
+
+body { font-family: var(--body-font); font-size: var(--body-size); line-height: var(--line-height); color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased; }
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
+h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+h3 { font-size: 1rem; margin: 1.5rem 0 0.5rem; color: var(--text-2); font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.75rem; }
+p { margin: 0 0 1rem; }
+a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+
+.t-wt  { color: var(--c-gene);         font-weight: 600; }
+.t-mut { color: var(--c-significance); font-weight: 600; }
+
+.figure { margin: 2rem 0; padding: 1.5rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.figure-wide { margin-left: -2rem; margin-right: -2rem; }
+.figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; line-height: 1.4; }
+.figure-label { font-weight: 600; color: var(--text); }
+
+.insight { background: var(--accent-light); border-left: 3px solid var(--accent); padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 4px 4px 0; }
+.insight p { margin: 0; }
+
+.controls { display: flex; align-items: center; justify-content: center; gap: 0.5rem; margin: 0 0 1.25rem; }
+.btn { font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600; padding: 0.4rem 1rem; border-radius: 4px; border: 1px solid var(--border); background: var(--fig-bg); color: var(--text-2); cursor: pointer; transition: all 0.15s; user-select: none; }
+.btn:hover { border-color: var(--accent); color: var(--accent); }
+.btn.active { border-color: var(--accent); background: var(--accent); color: white; }
+
+.portrait-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 1rem;
+}
+.panel {
+  background: var(--fig-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1rem 1rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+}
+.panel-header {
+  display: flex; align-items: baseline; justify-content: space-between;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 0.6rem;
+}
+.panel-title {
+  font-family: var(--heading-font);
+  font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--text-2);
+}
+.panel-hint {
+  font-family: var(--heading-font); font-size: 0.7rem;
+  color: var(--muted);
+}
+.panel-caption {
+  font-family: var(--heading-font); font-size: 0.75rem;
+  color: var(--text-2); margin-top: 0.5rem; line-height: 1.4;
+}
+.panel-viz { flex: 1; min-height: 100px; }
+
+.tip { position: fixed; pointer-events: none; background: var(--text); color: white; font-family: var(--heading-font); font-size: 0.75rem; padding: 0.4rem 0.6rem; border-radius: 4px; opacity: 0; transition: opacity 0.12s; z-index: 10; white-space: nowrap; line-height: 1.35; }
+.tip .tip-k { color: #a1a1aa; font-weight: 500; margin-right: 0.3rem; }
+
+.legend-row { display: flex; justify-content: center; align-items: center; gap: 1.5rem; flex-wrap: wrap; font-family: var(--heading-font); font-size: 0.78rem; color: var(--text-2); margin-top: 1rem; }
+.legend-item { display: flex; align-items: center; gap: 0.35rem; }
+.legend-swatch { width: 14px; height: 14px; border-radius: 2px; }
+.legend-swatch.round { border-radius: 50%; }
+
+svg text { font-family: var(--heading-font); }
+
+.summary-table { width: 100%; border-collapse: collapse; font-family: var(--heading-font); font-size: 0.85rem; margin-top: 0.5rem; }
+.summary-table th { text-align: left; padding: 0.55rem 0.4rem; border-bottom: 2px solid var(--border); color: var(--text-2); font-weight: 700; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
+.summary-table td { padding: 0.55rem 0.4rem; border-bottom: 1px solid var(--border); }
+.summary-table td.num { font-family: var(--mono-font); text-align: right; }
+.summary-table .t-wt  { color: var(--c-gene); font-weight: 700; }
+.summary-table .t-mut { color: var(--c-significance); font-weight: 700; }
+
+@media (max-width: 640px) {
+  .figure-wide { margin-left: 0; margin-right: 0; }
+  .portrait-grid { grid-template-columns: 1fr; }
+  h1 { font-size: 1.75rem; }
+}
+</style>
+</head>
+<body>
+<div class="article">
+  <header style="margin-bottom: 3rem;">
+    <a href="index.html" style="font-family: var(--heading-font); font-size: 0.85rem; text-decoration: none; color: var(--text-2); display: inline-block; margin-bottom: 1rem;">&larr; Bioinformatics Series</a>
+    <h1>Gene Portrait</h1>
+    <p style="font-family: var(--heading-font); font-size: 1.15rem; color: var(--text-2); max-width: 640px;">
+      A compact dashboard that collapses everything we have learned about a single gene into one printable page.
+    </p>
+  </header>
+
+  <p>Every chart in this series has answered one question about one piece of evidence. A real-world read on a gene — the kind you would see on a clinical decision-support dashboard, a GeneCards entry, or the first page of a collaborator's slide deck — collapses all of those questions into a single page. The <strong>Gene Portrait</strong> is that summary view: six labeled mini-panels, each inheriting its vocabulary from one of the standalone techniques, arranged so that a biologist can read the whole story in under a minute.</p>
+
+  <p>The portrait below is built for <strong>TP53</strong>. The panels are not independent — the same patients are represented in each, sliced differently. When they move in the same direction, the story converges.</p>
+
+  <div class="figure figure-wide">
+    <div class="controls">
+      <button class="btn active" id="btn-wt">TP53 wildtype cohort</button>
+      <button class="btn" id="btn-mut">TP53 mutant cohort</button>
+    </div>
+
+    <div class="portrait-grid">
+      <div class="panel" id="p-muts">
+        <div class="panel-header"><span class="panel-title">① Variant map</span><span class="panel-hint">protein · amino-acid position</span></div>
+        <div class="panel-viz"></div>
+        <p class="panel-caption">Inherited from the <em>lollipop</em> (08). Mutant cohort shows the three canonical hotspots at residues 175, 248, and 273 — all in the DNA-binding domain.</p>
+      </div>
+
+      <div class="panel" id="p-expr">
+        <div class="panel-header"><span class="panel-title">② Expression distribution</span><span class="panel-hint">violin · log₂ fold change</span></div>
+        <div class="panel-viz"></div>
+        <p class="panel-caption">Inherited from the <em>MA</em>, <em>volcano</em> and <em>waterfall</em> plots. Distribution of <em>CDKN1A</em> expression across patients; dashed line marks the cohort median.</p>
+      </div>
+
+      <div class="panel" id="p-meth">
+        <div class="panel-header"><span class="panel-title">③ Promoter methylation</span><span class="panel-hint">CpG β value · position relative to TSS</span></div>
+        <div class="panel-viz"></div>
+        <p class="panel-caption">Inherited from the <em>five views</em> epigenome panel. Per-CpG mean β value across the <em>CDKN1A</em> promoter; 1.0 is fully silenced, 0 is fully active.</p>
+      </div>
+
+      <div class="panel" id="p-pathway">
+        <div class="panel-header"><span class="panel-title">④ Signaling status</span><span class="panel-hint">pathway node wiring</span></div>
+        <div class="panel-viz"></div>
+        <p class="panel-caption">Inherited from the <em>pathway</em> panel of the five-views article. A broken edge is dashed red. Downstream outcomes show which branches reach completion.</p>
+      </div>
+
+      <div class="panel" id="p-survival">
+        <div class="panel-header"><span class="panel-title">⑤ Overall survival</span><span class="panel-hint">Kaplan–Meier · months</span></div>
+        <div class="panel-viz"></div>
+        <p class="panel-caption">Inherited from the <em>survival curves</em> (07). Curves show the two cohort arms; the log-rank p-value appears beside the legend.</p>
+      </div>
+
+      <div class="panel" id="p-meta">
+        <div class="panel-header"><span class="panel-title">⑥ Meta-analytic effect</span><span class="panel-hint">studies · log₂ hazard ratio</span></div>
+        <div class="panel-viz"></div>
+        <p class="panel-caption">Inherited from the <em>forest plot</em> (14). Each row is a published study; the summary diamond pools effect sizes with inverse-variance weighting.</p>
+      </div>
+    </div>
+
+    <div class="legend-row">
+      <div class="legend-item"><div class="legend-swatch" style="background: var(--c-gene);"></div><span class="t-wt">wildtype cohort</span></div>
+      <div class="legend-item"><div class="legend-swatch" style="background: var(--c-significance);"></div><span class="t-mut">mutant cohort</span></div>
+      <div class="legend-item"><div class="legend-swatch" style="background: var(--muted);"></div><span>reference / control</span></div>
+      <div class="legend-item"><div class="legend-swatch round" style="background: var(--c-pathway);"></div><span>positive signal</span></div>
+    </div>
+
+    <p class="figure-caption">
+      <span class="figure-label">Figure 1.</span> Hover any panel for detailed values. The same two cohort buttons drive every panel simultaneously. The labelled circled numbers trace back to the earlier article that introduced each visual primitive.
+    </p>
+  </div>
+
+  <div class="insight">
+    <p>What makes the portrait a portrait — and not just a grid of unrelated charts — is that all six panels share a cohort axis. A biologist looking at this page has a single question in mind: "is the story consistent?" Every panel is an independent test of the same hypothesis, and the portrait lets the reader see at a glance whether evidence converges.</p>
+  </div>
+
+  <h2>Reading the portrait</h2>
+
+  <p>When the mutant cohort is selected, the story is categorical: the variant map lights up at the hotspot positions, the expression distribution of <em>CDKN1A</em> shifts downward, the promoter methylation track climbs toward fully silenced, the pathway's activating edge breaks, survival separates downward, and the forest plot's pooled effect is both significant and consistent across studies. Each of these on its own could be noise. Together they are a diagnosis.</p>
+
+  <p>A portrait is always specific to a claim. This one is built for "TP53 loss silences CDKN1A and worsens outcomes." A different question — say, "MDM2 amplification as an alternative route to the same functional state" — would need its own portrait with a different cohort axis. The template generalises; the conclusions do not.</p>
+
+  <div class="figure">
+    <h3 style="color: var(--text); text-transform: none; letter-spacing: 0; font-size: 1rem; font-weight: 700; margin-bottom: 0.75rem;">Numeric summary</h3>
+    <table class="summary-table">
+      <thead>
+        <tr><th>Dimension</th><th>Metric</th><th class="num t-wt">Wildtype</th><th class="num t-mut">Mutant</th><th class="num">Δ</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Variants</td><td>Hotspot mutation rate</td><td class="num">0%</td><td class="num">82%</td><td class="num">+82 pp</td></tr>
+        <tr><td>Expression</td><td>CDKN1A median log₂FC</td><td class="num">+1.8</td><td class="num">−2.1</td><td class="num">−3.9</td></tr>
+        <tr><td>Methylation</td><td>Promoter mean β</td><td class="num">0.14</td><td class="num">0.62</td><td class="num">+0.48</td></tr>
+        <tr><td>Signaling</td><td>Active TP53→CDKN1A edge</td><td class="num">✓</td><td class="num">✗</td><td class="num">—</td></tr>
+        <tr><td>Survival</td><td>Median OS (months)</td><td class="num">42</td><td class="num">21</td><td class="num">−21</td></tr>
+        <tr><td>Meta-analysis</td><td>Pooled log₂ HR (95% CI)</td><td class="num">—</td><td class="num">0.94 (0.71–1.18)</td><td class="num">—</td></tr>
+      </tbody>
+    </table>
+    <p class="figure-caption">
+      <span class="figure-label">Figure 2.</span> The same evidence as the dashboard, numerically. Clinically-formatted tables are what get read at tumor board. Synthetic data.
+    </p>
+  </div>
+
+  <h2>Where this series leaves you</h2>
+
+  <p>A reader who has followed every article now has the full bioinformatics visual vocabulary: heatmaps and dendrograms for raw matrices; MA and volcano plots for statistical filtering; UMAP for high-dimensional landscapes; genome browsers and circos plots for spatial and long-range context; survival curves, dot plots, and lollipops for clinical and protein-level reads; a consolidated triangulation article that walks one regulatory story through five modalities; ChIP-seq for physical binding; multi-omics heatmaps and waterfalls for integrating across layers; forest plots for meta-analytic rigour; and this portrait for the synthesis that lands on a single page.</p>
+
+  <p>The dashboards and tools you will encounter in practice — cBioPortal, GeneCards, TCGA's PanCancer Atlas viewers, your lab's in-house portal — are all elaborations on the same primitives. The vocabulary is finite; the questions you can ask with it are not.</p>
+
+  <footer style="margin-top: 4rem; padding-top: 2rem; border-top: 1px solid var(--border); font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2);">
+    <p>Previous: <a href="14-forest-plot.html" style="color: var(--accent);">Forest Plots</a> · <a href="index.html" style="color: var(--accent);">Back to Index</a></p>
+    <p style="margin-top: 1rem; opacity: 0.6;">Built with <a href="https://github.com/enjalot/moonshine" style="color: var(--text-2);">moonshine</a>. All data synthetic.</p>
+  </footer>
+</div>
+
+<div class="tip" id="tip"></div>
+
+<script>
+// ─────────────────────────────────────────────────────────────────────────
+// Shared utilities
+// ─────────────────────────────────────────────────────────────────────────
+const C = {
+  gene: '#2563eb', sample: '#0891b2', expression: '#8b5cf6',
+  significance: '#ef4444', pathway: '#10b981',
+  muted: '#94a3b8', grid: '#e2e8f0', text: '#1a1a2e', text2: '#4a4a6a'
+};
+
+const tip = d3.select('#tip');
+function showTip(event, html) {
+  tip.html(html).style('opacity', 1)
+    .style('left', (event.clientX + 12) + 'px')
+    .style('top', (event.clientY + 12) + 'px');
+}
+function moveTip(event) {
+  tip.style('left', (event.clientX + 12) + 'px').style('top', (event.clientY + 12) + 'px');
+}
+function hideTip() { tip.style('opacity', 0); }
+
+function mulberry32(s) {
+  return () => { s |= 0; s = s + 0x6D2B79F5 | 0;
+    let t = Math.imul(s ^ s >>> 15, 1 | s);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+}
+
+// Global state: which cohort is selected
+const state = { mutant: false };
+
+// ─────────────────────────────────────────────────────────────────────────
+// Panel 1 — Variant map (lollipop across TP53 protein)
+// ─────────────────────────────────────────────────────────────────────────
+function drawVariants() {
+  const container = d3.select('#p-muts .panel-viz');
+  container.selectAll('*').remove();
+  const width = container.node().clientWidth;
+  const height = 120;
+  const margin = { top: 10, right: 10, bottom: 24, left: 8 };
+  const svg = container.append('svg')
+    .attr('viewBox', `0 0 ${width} ${height}`).style('width', '100%').style('height', 'auto');
+
+  const proteinLen = 393;
+  const x = d3.scaleLinear().domain([0, proteinLen]).range([margin.left, width - margin.right]);
+
+  // Protein backbone
+  svg.append('rect')
+    .attr('x', margin.left).attr('y', height - margin.bottom - 10)
+    .attr('width', width - margin.left - margin.right).attr('height', 6)
+    .attr('fill', C.muted).attr('rx', 2);
+
+  // DNA-binding domain (94–312), tetramerization (323–356)
+  const domains = [
+    { s: 94, e: 312, label: 'DNA-binding', c: C.gene },
+    { s: 323, e: 356, label: 'Tetra', c: C.pathway }
+  ];
+  domains.forEach(d => {
+    svg.append('rect')
+      .attr('x', x(d.s)).attr('y', height - margin.bottom - 13)
+      .attr('width', x(d.e) - x(d.s)).attr('height', 12)
+      .attr('fill', d.c).attr('opacity', 0.4).attr('rx', 2)
+      .on('mouseenter', (ev) => showTip(ev, `<span class="tip-k">domain</span>${d.label} (${d.s}–${d.e})`))
+      .on('mousemove', moveTip).on('mouseleave', hideTip);
+  });
+
+  // Hotspot mutations (only when mutant)
+  const muts = state.mutant ? [
+    { pos: 175, freq: 0.28, label: 'R175H' },
+    { pos: 248, freq: 0.32, label: 'R248Q/W' },
+    { pos: 273, freq: 0.22, label: 'R273H/C' }
+  ] : [];
+
+  // Axis
+  const axis = d3.axisBottom(x).ticks(4);
+  svg.append('g').attr('transform', `translate(0,${height - margin.bottom})`).call(axis)
+    .call(g => g.selectAll('.domain, line').attr('stroke', C.grid))
+    .call(g => g.selectAll('text').style('font-size', '9px').attr('fill', C.text2));
+
+  // Lollipops with enter transition
+  const lolliG = svg.append('g');
+  muts.forEach(m => {
+    const mx = x(m.pos);
+    const stemTop = margin.top + 10;
+    const stemBottom = height - margin.bottom - 7;
+    lolliG.append('line')
+      .attr('x1', mx).attr('x2', mx).attr('y1', stemBottom).attr('y2', stemBottom)
+      .attr('stroke', C.significance).attr('stroke-width', 1.5)
+      .transition().duration(400).attr('y2', stemTop);
+    lolliG.append('circle')
+      .attr('cx', mx).attr('cy', stemBottom).attr('r', 0)
+      .attr('fill', C.significance).attr('stroke', '#fff').attr('stroke-width', 1.5)
+      .on('mouseenter', (ev) => showTip(ev, `<span class="tip-k">${m.label}</span><br><span class="tip-k">frequency</span>${(m.freq*100).toFixed(0)}%`))
+      .on('mousemove', moveTip).on('mouseleave', hideTip)
+      .transition().delay(300).duration(300)
+      .attr('cy', stemTop).attr('r', 5 + m.freq * 6);
+  });
+
+  // "No hotspots in cohort" message when wildtype
+  if (!state.mutant) {
+    svg.append('text')
+      .attr('x', width / 2).attr('y', margin.top + 30)
+      .attr('text-anchor', 'middle').style('font-size', '11px').style('font-style', 'italic')
+      .attr('fill', C.muted).text('no hotspot variants in wildtype cohort');
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Panel 2 — Expression distribution (violin + median line)
+// ─────────────────────────────────────────────────────────────────────────
+function drawExpression() {
+  const container = d3.select('#p-expr .panel-viz');
+  container.selectAll('*').remove();
+  const width = container.node().clientWidth;
+  const height = 120;
+  const margin = { top: 10, right: 10, bottom: 30, left: 8 };
+  const svg = container.append('svg')
+    .attr('viewBox', `0 0 ${width} ${height}`).style('width', '100%').style('height', 'auto');
+
+  // Generate cohort samples
+  const rng = mulberry32(state.mutant ? 4200 : 1100);
+  const mean = state.mutant ? -2.1 : 1.8;
+  const n = 120;
+  const samples = [];
+  for (let i = 0; i < n; i++) {
+    // Simple Box-Muller for normal
+    const u = rng(), v = rng();
+    const z = Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+    samples.push(mean + z * 1.0);
+  }
+  const median = d3.median(samples);
+  const fillColor = state.mutant ? C.significance : C.gene;
+
+  const x = d3.scaleLinear().domain([-5, 5]).range([margin.left, width - margin.right]);
+
+  // KDE via histogram-smoothing
+  const bins = d3.histogram().domain(x.domain()).thresholds(25)(samples);
+  const maxCount = d3.max(bins, b => b.length);
+  const centerY = (margin.top + height - margin.bottom) / 2;
+  const halfW = (height - margin.top - margin.bottom) / 2 - 4;
+  const widthAt = count => halfW * (count / maxCount);
+
+  const area = d3.area()
+    .x(d => x((d.x0 + d.x1) / 2))
+    .y0(d => centerY + widthAt(d.length))
+    .y1(d => centerY - widthAt(d.length))
+    .curve(d3.curveBasis);
+
+  svg.append('path').datum(bins).attr('d', area)
+    .attr('fill', fillColor).attr('opacity', 0.35)
+    .attr('stroke', fillColor).attr('stroke-width', 1);
+
+  // Zero reference line
+  svg.append('line')
+    .attr('x1', x(0)).attr('x2', x(0)).attr('y1', margin.top + 2).attr('y2', height - margin.bottom - 2)
+    .attr('stroke', C.muted).attr('stroke-dasharray', '2,3');
+
+  // Median dashed
+  svg.append('line')
+    .attr('x1', x(median)).attr('x2', x(median))
+    .attr('y1', centerY - halfW).attr('y2', centerY + halfW)
+    .attr('stroke', fillColor).attr('stroke-width', 2).attr('stroke-dasharray', '4,3');
+  svg.append('text')
+    .attr('x', x(median)).attr('y', centerY - halfW - 2)
+    .attr('text-anchor', 'middle').style('font-size', '9px').style('font-weight', 700)
+    .attr('fill', fillColor).text(`median ${median.toFixed(2)}`);
+
+  // Axis
+  svg.append('g').attr('transform', `translate(0,${height - margin.bottom + 4})`)
+    .call(d3.axisBottom(x).ticks(5).tickFormat(d => (d > 0 ? '+' : '') + d))
+    .call(g => g.selectAll('.domain, line').attr('stroke', C.grid))
+    .call(g => g.selectAll('text').style('font-size', '9px').attr('fill', C.text2));
+
+  // Axis label
+  svg.append('text')
+    .attr('x', width / 2).attr('y', height - 4)
+    .attr('text-anchor', 'middle').style('font-size', '9px').attr('fill', C.text2)
+    .text('CDKN1A log₂ fold-change');
+
+  // Hover region
+  svg.append('rect')
+    .attr('x', margin.left).attr('y', margin.top).attr('width', width - margin.left - margin.right).attr('height', height - margin.top - margin.bottom)
+    .attr('fill', 'transparent')
+    .on('mousemove', (ev) => {
+      const [mx] = d3.pointer(ev, svg.node());
+      const val = x.invert(mx);
+      showTip(ev, `<span class="tip-k">log₂FC</span>${val.toFixed(2)}<br><span class="tip-k">median</span>${median.toFixed(2)}<br><span class="tip-k">n</span>${n}`);
+    })
+    .on('mouseleave', hideTip);
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Panel 3 — Promoter methylation (lollipop over CpGs)
+// ─────────────────────────────────────────────────────────────────────────
+function drawMethylation() {
+  const container = d3.select('#p-meth .panel-viz');
+  container.selectAll('*').remove();
+  const width = container.node().clientWidth;
+  const height = 120;
+  const margin = { top: 14, right: 10, bottom: 28, left: 28 };
+  const svg = container.append('svg')
+    .attr('viewBox', `0 0 ${width} ${height}`).style('width', '100%').style('height', 'auto');
+
+  const rng = mulberry32(state.mutant ? 900 : 300);
+  const cpgs = [];
+  let p = -1000;
+  while (p < 200) { cpgs.push(p); p += 80 + rng() * 100; }
+
+  const x = d3.scaleLinear().domain([-1100, 300]).range([margin.left, width - margin.right]);
+  const y = d3.scaleLinear().domain([0, 1]).range([height - margin.bottom, margin.top]);
+
+  // Gridlines
+  [0.25, 0.5, 0.75].forEach(v => {
+    svg.append('line').attr('x1', margin.left).attr('x2', width - margin.right)
+      .attr('y1', y(v)).attr('y2', y(v))
+      .attr('stroke', C.grid).attr('stroke-dasharray', '2,3');
+  });
+
+  // TSS line
+  svg.append('line').attr('x1', x(0)).attr('x2', x(0))
+    .attr('y1', margin.top).attr('y2', height - margin.bottom)
+    .attr('stroke', C.muted).attr('stroke-dasharray', '3,3');
+  svg.append('text').attr('x', x(0) + 3).attr('y', margin.top + 8)
+    .style('font-size', '9px').attr('fill', C.text2).style('font-weight', 600).text('TSS');
+
+  const color = state.mutant ? C.significance : C.gene;
+  const cpgVals = cpgs.map(p => {
+    if (!state.mutant) return 0.08 + rng() * 0.12;
+    const proximity = Math.max(0, 1 - Math.abs(p + 50) / 600);
+    return Math.min(0.98, 0.15 + proximity * (0.55 + rng() * 0.35));
+  });
+
+  // Lollipops
+  cpgs.forEach((pos, i) => {
+    const v = cpgVals[i];
+    svg.append('line')
+      .attr('x1', x(pos)).attr('x2', x(pos))
+      .attr('y1', y(0)).attr('y2', y(v))
+      .attr('stroke', color).attr('stroke-width', 1).attr('opacity', 0.5);
+    svg.append('circle')
+      .attr('cx', x(pos)).attr('cy', y(v)).attr('r', 3.5)
+      .attr('fill', color).attr('opacity', 0.8)
+      .on('mouseenter', (ev) => showTip(ev, `<span class="tip-k">pos</span>${pos >= 0 ? '+' : ''}${pos.toFixed(0)}bp<br><span class="tip-k">β</span>${v.toFixed(2)}`))
+      .on('mousemove', moveTip).on('mouseleave', hideTip);
+  });
+
+  // Mean β
+  const meanBeta = d3.mean(cpgVals);
+  svg.append('line')
+    .attr('x1', margin.left).attr('x2', width - margin.right)
+    .attr('y1', y(meanBeta)).attr('y2', y(meanBeta))
+    .attr('stroke', color).attr('stroke-width', 1.5).attr('stroke-dasharray', '5,4').attr('opacity', 0.7);
+  svg.append('text')
+    .attr('x', width - margin.right - 2).attr('y', y(meanBeta) - 3)
+    .attr('text-anchor', 'end').style('font-size', '9px').style('font-weight', 700)
+    .attr('fill', color).text(`β̄ ${meanBeta.toFixed(2)}`);
+
+  // Axes
+  svg.append('g').attr('transform', `translate(${margin.left},0)`).call(d3.axisLeft(y).ticks(3))
+    .call(g => g.selectAll('.domain, line').attr('stroke', C.grid))
+    .call(g => g.selectAll('text').style('font-size', '9px').attr('fill', C.text2));
+  svg.append('g').attr('transform', `translate(0,${height - margin.bottom})`)
+    .call(d3.axisBottom(x).ticks(4).tickFormat(d => (d >= 0 ? '+' : '') + d))
+    .call(g => g.selectAll('.domain, line').attr('stroke', C.grid))
+    .call(g => g.selectAll('text').style('font-size', '9px').attr('fill', C.text2));
+  svg.append('text')
+    .attr('x', width / 2).attr('y', height - 2)
+    .attr('text-anchor', 'middle').style('font-size', '9px').attr('fill', C.text2)
+    .text('bp from TSS');
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Panel 4 — Signaling status (mini pathway)
+// ─────────────────────────────────────────────────────────────────────────
+function drawPathway() {
+  const container = d3.select('#p-pathway .panel-viz');
+  container.selectAll('*').remove();
+  const width = container.node().clientWidth;
+  const height = 120;
+  const svg = container.append('svg')
+    .attr('viewBox', `0 0 ${width} ${height}`).style('width', '100%').style('height', 'auto');
+
+  const nodes = [
+    { id: 'DNA',    label: 'damage',  x: 0.10, y: 0.25 },
+    { id: 'TP53',   label: 'TP53',    x: 0.38, y: 0.50 },
+    { id: 'CDKN1A', label: 'CDKN1A',  x: 0.70, y: 0.30 },
+    { id: 'BAX',    label: 'BAX',     x: 0.70, y: 0.75 },
+    { id: 'ARR',    label: 'arrest',  x: 0.92, y: 0.30 },
+    { id: 'APO',    label: 'death',   x: 0.92, y: 0.75 }
+  ];
+  const nx = id => width * nodes.find(n => n.id === id).x;
+  const ny = id => height * nodes.find(n => n.id === id).y;
+
+  // Defs
+  svg.append('defs').append('marker').attr('id', 'arr15-ok')
+    .attr('viewBox', '0 0 10 10').attr('refX', 9).attr('refY', 5)
+    .attr('markerWidth', 6).attr('markerHeight', 6).attr('orient', 'auto-start-reverse')
+    .append('path').attr('d', 'M 0 0 L 10 5 L 0 10 z').attr('fill', C.pathway);
+  svg.select('defs').append('marker').attr('id', 'arr15-mut')
+    .attr('viewBox', '0 0 10 10').attr('refX', 9).attr('refY', 5)
+    .attr('markerWidth', 6).attr('markerHeight', 6).attr('orient', 'auto-start-reverse')
+    .append('path').attr('d', 'M 0 0 L 10 5 L 0 10 z').attr('fill', C.significance);
+
+  const edges = [
+    { s: 'DNA', t: 'TP53',   always: true },
+    { s: 'TP53', t: 'CDKN1A', broken: state.mutant },
+    { s: 'TP53', t: 'BAX',    broken: state.mutant },
+    { s: 'CDKN1A', t: 'ARR',  broken: state.mutant },
+    { s: 'BAX', t: 'APO',     broken: state.mutant }
+  ];
+  edges.forEach(e => {
+    const x1 = nx(e.s), y1 = ny(e.s), x2 = nx(e.t), y2 = ny(e.t);
+    const dx = x2 - x1, dy = y2 - y1, L = Math.sqrt(dx * dx + dy * dy);
+    const ux = dx / L, uy = dy / L;
+    const R = 14;
+    const sx = x1 + ux * R, sy = y1 + uy * R;
+    const tx = x2 - ux * R, ty = y2 - uy * R;
+    const color = e.broken ? C.significance : C.pathway;
+    const dash = e.broken ? '4,3' : null;
+    svg.append('line')
+      .attr('x1', sx).attr('y1', sy).attr('x2', tx).attr('y2', ty)
+      .attr('stroke', color).attr('stroke-width', 1.8)
+      .attr('stroke-dasharray', dash)
+      .attr('marker-end', `url(#arr15-${e.broken ? 'mut' : 'ok'})`);
+  });
+
+  // Nodes
+  nodes.forEach(n => {
+    const isTP53 = n.id === 'TP53';
+    const isOutcome = n.id === 'ARR' || n.id === 'APO';
+    const fill = isTP53 ? (state.mutant ? C.significance : C.gene)
+               : isOutcome ? (state.mutant ? '#f1f5f9' : '#e7f9f0')
+               : C.gene;
+    const g = svg.append('g').attr('transform', `translate(${nx(n.id)},${ny(n.id)})`);
+    g.append('circle').attr('r', 13).attr('fill', fill).attr('stroke', '#fff').attr('stroke-width', 1.5)
+      .on('mouseenter', (ev) => showTip(ev, `<span class="tip-k">${n.id}</span>${n.label}`))
+      .on('mousemove', moveTip).on('mouseleave', hideTip);
+    g.append('text')
+      .attr('text-anchor', 'middle').attr('dominant-baseline', 'central')
+      .style('font-size', n.id === 'CDKN1A' ? '8px' : '9px').style('font-weight', 700)
+      .attr('fill', isOutcome ? C.text : '#fff')
+      .text(n.label);
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Panel 5 — Overall survival (Kaplan–Meier)
+// ─────────────────────────────────────────────────────────────────────────
+function drawSurvival() {
+  const container = d3.select('#p-survival .panel-viz');
+  container.selectAll('*').remove();
+  const width = container.node().clientWidth;
+  const height = 120;
+  const margin = { top: 12, right: 10, bottom: 28, left: 32 };
+  const svg = container.append('svg')
+    .attr('viewBox', `0 0 ${width} ${height}`).style('width', '100%').style('height', 'auto');
+
+  const x = d3.scaleLinear().domain([0, 60]).range([margin.left, width - margin.right]);
+  const y = d3.scaleLinear().domain([0, 1]).range([height - margin.bottom, margin.top]);
+
+  // Both curves drawn, but dimmed when not selected
+  // Synthetic stepwise KM data (time, survival fraction)
+  const wtCurve = [ [0,1],[6,0.96],[12,0.91],[18,0.87],[24,0.82],[30,0.77],[36,0.69],[42,0.58],[48,0.51],[54,0.45],[60,0.40] ];
+  const mutCurve = [ [0,1],[3,0.93],[6,0.84],[9,0.76],[12,0.66],[15,0.58],[18,0.51],[21,0.46],[27,0.38],[33,0.30],[42,0.21],[52,0.14],[60,0.10] ];
+
+  // Gridlines
+  [0.25, 0.5, 0.75].forEach(v => {
+    svg.append('line').attr('x1', margin.left).attr('x2', width - margin.right)
+      .attr('y1', y(v)).attr('y2', y(v))
+      .attr('stroke', C.grid).attr('stroke-dasharray', '2,3');
+  });
+
+  const line = d3.line().x(d => x(d[0])).y(d => y(d[1])).curve(d3.curveStepAfter);
+
+  function drawCurve(data, color, active) {
+    const op = active ? 1 : 0.22;
+    svg.append('path').datum(data).attr('d', line)
+      .attr('fill', 'none').attr('stroke', color).attr('stroke-width', active ? 2.2 : 1.5)
+      .attr('opacity', op);
+    // Median marker (y=0.5)
+    if (active) {
+      const medT = data.find((d, i) => i > 0 && d[1] <= 0.5 && data[i - 1][1] > 0.5);
+      if (medT) {
+        svg.append('line')
+          .attr('x1', x(medT[0])).attr('x2', x(medT[0]))
+          .attr('y1', y(0.5)).attr('y2', height - margin.bottom)
+          .attr('stroke', color).attr('stroke-dasharray', '3,3').attr('opacity', 0.5);
+        svg.append('text')
+          .attr('x', x(medT[0])).attr('y', height - margin.bottom + 11)
+          .attr('text-anchor', 'middle').style('font-size', '9px').style('font-weight', 700).attr('fill', color)
+          .text(`${medT[0]}mo`);
+      }
+    }
+  }
+
+  drawCurve(wtCurve, C.gene, !state.mutant);
+  drawCurve(mutCurve, C.significance, state.mutant);
+
+  // Log-rank p
+  svg.append('text')
+    .attr('x', width - margin.right - 4).attr('y', margin.top + 10)
+    .attr('text-anchor', 'end').style('font-size', '9px').style('font-weight', 700)
+    .attr('fill', C.text2).text('log-rank p < 0.001');
+
+  // Axes
+  svg.append('g').attr('transform', `translate(${margin.left},0)`).call(d3.axisLeft(y).ticks(3).tickFormat(d3.format('.0%')))
+    .call(g => g.selectAll('.domain, line').attr('stroke', C.grid))
+    .call(g => g.selectAll('text').style('font-size', '9px').attr('fill', C.text2));
+  svg.append('g').attr('transform', `translate(0,${height - margin.bottom})`).call(d3.axisBottom(x).ticks(5))
+    .call(g => g.selectAll('.domain, line').attr('stroke', C.grid))
+    .call(g => g.selectAll('text').style('font-size', '9px').attr('fill', C.text2));
+  svg.append('text')
+    .attr('x', width / 2).attr('y', height - 2)
+    .attr('text-anchor', 'middle').style('font-size', '9px').attr('fill', C.text2)
+    .text('months');
+
+  // Hover
+  svg.append('rect')
+    .attr('x', margin.left).attr('y', margin.top)
+    .attr('width', width - margin.left - margin.right).attr('height', height - margin.top - margin.bottom)
+    .attr('fill', 'transparent')
+    .on('mousemove', (ev) => {
+      const [mx] = d3.pointer(ev, svg.node());
+      const t = x.invert(mx);
+      const active = state.mutant ? mutCurve : wtCurve;
+      const other = state.mutant ? wtCurve : mutCurve;
+      const find = (curve) => {
+        let s = 1;
+        for (const pt of curve) { if (pt[0] <= t) s = pt[1]; else break; }
+        return s;
+      };
+      showTip(ev, `
+        <span class="tip-k">month</span>${t.toFixed(0)}<br>
+        <span class="tip-k">${state.mutant ? 'Mut' : 'WT'}</span>${(find(active) * 100).toFixed(0)}% alive<br>
+        <span class="tip-k">${state.mutant ? 'WT' : 'Mut'}</span>${(find(other) * 100).toFixed(0)}% alive
+      `);
+    })
+    .on('mouseleave', hideTip);
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Panel 6 — Forest meta-analysis
+// ─────────────────────────────────────────────────────────────────────────
+function drawForest() {
+  const container = d3.select('#p-meta .panel-viz');
+  container.selectAll('*').remove();
+  const width = container.node().clientWidth;
+  const height = 120;
+  const margin = { top: 10, right: 10, bottom: 22, left: 50 };
+  const svg = container.append('svg')
+    .attr('viewBox', `0 0 ${width} ${height}`).style('width', '100%').style('height', 'auto');
+
+  // Studies: log2 HR, SE. Mutant shows larger effects; wildtype is null-ish.
+  const wtStudies = [
+    { n: 'Stokes 14', hr: 0.08, se: 0.22 },
+    { n: 'Arai 17',   hr: -0.12, se: 0.30 },
+    { n: 'Vu 19',     hr: 0.05, se: 0.18 },
+    { n: 'Chen 21',   hr: -0.02, se: 0.25 }
+  ];
+  const mutStudies = [
+    { n: 'Stokes 14', hr: 0.88, se: 0.22 },
+    { n: 'Arai 17',   hr: 1.02, se: 0.30 },
+    { n: 'Vu 19',     hr: 0.76, se: 0.18 },
+    { n: 'Chen 21',   hr: 1.14, se: 0.25 }
+  ];
+  const studies = state.mutant ? mutStudies : wtStudies;
+
+  // Inverse-variance pooled
+  const weights = studies.map(s => 1 / (s.se * s.se));
+  const totW = d3.sum(weights);
+  const pooledHR = d3.sum(studies.map((s, i) => s.hr * weights[i])) / totW;
+  const pooledSE = Math.sqrt(1 / totW);
+  const pooledLo = pooledHR - 1.96 * pooledSE;
+  const pooledHi = pooledHR + 1.96 * pooledSE;
+
+  const x = d3.scaleLinear().domain([-1, 2]).range([margin.left, width - margin.right]);
+  const yRow = i => margin.top + 4 + i * 15;
+
+  // Null line
+  svg.append('line').attr('x1', x(0)).attr('x2', x(0))
+    .attr('y1', margin.top).attr('y2', height - margin.bottom)
+    .attr('stroke', C.muted).attr('stroke-dasharray', '3,3');
+
+  // Per-study CI
+  studies.forEach((s, i) => {
+    const yy = yRow(i);
+    const lo = s.hr - 1.96 * s.se, hi = s.hr + 1.96 * s.se;
+    svg.append('line').attr('x1', x(lo)).attr('x2', x(hi)).attr('y1', yy).attr('y2', yy)
+      .attr('stroke', C.text2).attr('stroke-width', 1);
+    svg.append('rect')
+      .attr('x', x(s.hr) - 3).attr('y', yy - 3).attr('width', 6).attr('height', 6)
+      .attr('fill', state.mutant ? C.significance : C.gene)
+      .on('mouseenter', (ev) => showTip(ev, `<span class="tip-k">${s.n}</span><br><span class="tip-k">log₂HR</span>${s.hr.toFixed(2)}<br><span class="tip-k">95% CI</span>${lo.toFixed(2)}–${hi.toFixed(2)}`))
+      .on('mousemove', moveTip).on('mouseleave', hideTip);
+    svg.append('text')
+      .attr('x', margin.left - 6).attr('y', yy)
+      .attr('text-anchor', 'end').attr('dominant-baseline', 'central')
+      .style('font-size', '9px').attr('fill', C.text2).text(s.n);
+  });
+
+  // Pooled diamond
+  const yy = yRow(studies.length) + 4;
+  const diamond = `M${x(pooledLo)},${yy} L${x(pooledHR)},${yy - 5} L${x(pooledHi)},${yy} L${x(pooledHR)},${yy + 5} Z`;
+  svg.append('path').attr('d', diamond)
+    .attr('fill', state.mutant ? C.significance : C.gene)
+    .attr('stroke', '#fff').attr('stroke-width', 0.5)
+    .on('mouseenter', (ev) => showTip(ev, `<span class="tip-k">pooled</span>${pooledHR.toFixed(2)}<br><span class="tip-k">95% CI</span>${pooledLo.toFixed(2)}–${pooledHi.toFixed(2)}`))
+    .on('mousemove', moveTip).on('mouseleave', hideTip);
+  svg.append('text')
+    .attr('x', margin.left - 6).attr('y', yy)
+    .attr('text-anchor', 'end').attr('dominant-baseline', 'central')
+    .style('font-size', '9px').style('font-weight', 700).attr('fill', C.text).text('Pooled');
+
+  // Axis
+  svg.append('g').attr('transform', `translate(0,${height - margin.bottom})`).call(d3.axisBottom(x).ticks(4))
+    .call(g => g.selectAll('.domain, line').attr('stroke', C.grid))
+    .call(g => g.selectAll('text').style('font-size', '9px').attr('fill', C.text2));
+  svg.append('text')
+    .attr('x', width / 2).attr('y', height - 2)
+    .attr('text-anchor', 'middle').style('font-size', '9px').attr('fill', C.text2)
+    .text('log₂ hazard ratio');
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Orchestration
+// ─────────────────────────────────────────────────────────────────────────
+function updateAll() {
+  drawVariants();
+  drawExpression();
+  drawMethylation();
+  drawPathway();
+  drawSurvival();
+  drawForest();
+}
+
+d3.select('#btn-wt').on('click', function() {
+  if (!state.mutant) return;
+  state.mutant = false;
+  d3.select('#btn-wt').classed('active', true);
+  d3.select('#btn-mut').classed('active', false);
+  updateAll();
+});
+d3.select('#btn-mut').on('click', function() {
+  if (state.mutant) return;
+  state.mutant = true;
+  d3.select('#btn-wt').classed('active', false);
+  d3.select('#btn-mut').classed('active', true);
+  updateAll();
+});
+
+updateAll();
+new ResizeObserver(updateAll).observe(document.querySelector('.portrait-grid'));
+</script>
+</body>
+</html>

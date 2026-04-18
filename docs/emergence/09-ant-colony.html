@@ -112,13 +112,6 @@ and wander randomly. When one stumbles onto food, it picks it up and wanders ran
 back toward the nest. This works, eventually. But it is painfully slow.
 </p>
 
-<p>
-The simulation below shows ants wandering between a nest (left circle)
-and a food source (right circle). Each ant performs a random walk. Watch how long it
-takes for a round trip. The counter tracks the average trip time across all completed
-deliveries.
-</p>
-
 <div class="figure" id="fig-random">
   <canvas id="canvas-random"></canvas>
   <div class="stat-row" style="margin-top: 1rem;">
@@ -199,6 +192,7 @@ random trails would persist forever and the system could never converge.
         <span class="val" id="antcount-val">60</span>
       </div>
     </div>
+    <button class="btn" id="pause-pheromone">Pause</button>
     <button class="btn" id="reset-pheromone">Reset</button>
   </div>
   <p class="figure-caption"><span class="figure-label">Figure 2.</span> Pheromone heatmap with ant dots overlaid. Watch trails self-organize from random exploration into a highway. The colony converges on a solution much faster than through random search alone.</p>
@@ -218,7 +212,7 @@ The evaporation of pheromone can be modeled as a decay process. If $P(t)$ is the
 <div id="math-evap" style="margin: 1.5rem 0; text-align: center;"></div>
 
 <p>
-Play with the sliders. High evaporation makes the colony forgetful. Trails die before
+High evaporation makes the colony forgetful. Trails die before
 they can be reinforced, and the ants revert to near-random behavior. Low evaporation
 makes the colony stubborn. Early trails persist even if they are suboptimal, because
 the pheromone never fades enough for a better path to compete.
@@ -232,12 +226,6 @@ they have not encountered. But the colony adapts anyway. When an obstacle appear
 that hit it scatter and explore alternatives. Those that find a way around deposit
 pheromone on the detour. The detour trail grows. The old trail evaporates. The colony
 reroutes.
-</p>
-
-<p>
-Click and drag on the canvas below to draw rectangular obstacles. The colony will find
-its way around them. Then remove an obstacle and watch the colony discover the newly
-opened shortcut.
 </p>
 
 <div class="figure" id="fig-obstacles">
@@ -583,6 +571,7 @@ window.addEventListener('load', () => {
     const sim = setupCanvas("canvas-pheromone", 0.5);
     const pheroScratch = {};
     let ants = [], grid = null, tripTimes = [], totalDeliveries = 0, tick = 0;
+    let playing = true;
     const NEST_R = 22, FOOD_R = 18;
     const nestPos = () => ({ x: sim.W * 0.12, y: sim.H * 0.5 });
     const foodPos = () => ({ x: sim.W * 0.88, y: sim.H * 0.5 });
@@ -596,7 +585,15 @@ window.addEventListener('load', () => {
     function loop() {
       if (sim.W <= 0) { requestAnimationFrame(loop); return; }
       if (!grid) init();
-      const np = nestPos(), fp = foodPos(); tick++;
+      const np = nestPos(), fp = foodPos();
+      if (!playing) {
+        // still paint the current state so the canvas does not appear frozen on initial pause
+        sim.ctx.fillStyle = COLORS.bg; sim.ctx.fillRect(0, 0, sim.W, sim.H);
+        drawPheromone(sim.ctx, grid, sim.cols, sim.rows, sim.W, sim.H, pheroScratch);
+        drawAnts(sim.ctx, ants); drawNest(sim.ctx, np.x, np.y, NEST_R); drawFood(sim.ctx, fp.x, fp.y, FOOD_R);
+        requestAnimationFrame(loop); return;
+      }
+      tick++;
       for (let s = 0; s < 3; s++) {
         ants.forEach(a => {
           if (a.hasFood) { steerToward(a, np.x, np.y, 0.15); randomWalkStep(a, sim.W, sim.H, null); deposit(a, grid, sim.cols, state.depositRate); }
@@ -626,6 +623,11 @@ window.addEventListener('load', () => {
       while (ants.length > state.antCount) ants.pop();
     });
     document.getElementById("reset-pheromone").addEventListener("click", init);
+    document.getElementById("pause-pheromone").addEventListener("click", function() {
+      playing = !playing;
+      this.textContent = playing ? "Pause" : "Play";
+      this.classList.toggle("active", !playing);
+    });
     init(); loop();
   })();
 
@@ -740,11 +742,15 @@ window.addEventListener('load', () => {
       drawPheromone(sim.ctx, grid, sim.cols, sim.rows, sim.W, sim.H, pheroScratch);
       drawAnts(sim.ctx, ants); drawNest(sim.ctx, np.x, np.y, NEST_R);
       foods.forEach(f => drawFood(sim.ctx, f.x, f.y, FOOD_R, f.label));
+      // Show each source's share of the total. This is the whole point of the viz:
+      // readers should be able to see that closer sources (A, B) outpace far ones.
       document.getElementById("stat-multi-deliveries").textContent = totalDeliveries;
-      document.getElementById("stat-multi-A").textContent = perSource.A;
-      document.getElementById("stat-multi-B").textContent = perSource.B;
-      document.getElementById("stat-multi-C").textContent = perSource.C;
-      document.getElementById("stat-multi-D").textContent = perSource.D;
+      const tot = totalDeliveries || 1;
+      const fmt = n => n + " (" + Math.round(100 * n / tot) + "%)";
+      document.getElementById("stat-multi-A").textContent = fmt(perSource.A);
+      document.getElementById("stat-multi-B").textContent = fmt(perSource.B);
+      document.getElementById("stat-multi-C").textContent = fmt(perSource.C);
+      document.getElementById("stat-multi-D").textContent = fmt(perSource.D);
       requestAnimationFrame(loop);
     }
     document.getElementById("reset-multi").addEventListener("click", init);
