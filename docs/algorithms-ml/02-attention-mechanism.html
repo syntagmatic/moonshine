@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>The Attention Mechanism | Moonshine</title>
 <script src="https://d3js.org/d3.v7.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -160,6 +162,21 @@ code {
 }
 .insight p { margin: 0; }
 
+.eq-block {
+  margin: 1.5rem 0;
+  text-align: center;
+  font-size: 1.05rem;
+  overflow-x: auto;
+}
+.softmax-sum {
+  font-family: var(--mono-font);
+  font-size: 0.8rem;
+  color: var(--text-2);
+  margin-top: 0.5rem;
+}
+.softmax-sum.ok { color: var(--c-target); }
+.softmax-sum.bad { color: var(--c-loss); }
+
 .margin-note {
   font-size: 0.8125rem;
   color: var(--text-2);
@@ -300,6 +317,8 @@ svg .axis line, svg .axis path { stroke: var(--border); }
 
   <p>The <strong style="color:var(--q-color)">query</strong> represents what a word is looking for. The <strong style="color:var(--k-color)">key</strong> represents what a word offers to be found by. The <strong style="color:var(--v-color)">value</strong> represents the information a word contributes when it is attended to. These are produced by multiplying the input embedding by three learned weight matrices: W<sub>Q</sub>, W<sub>K</sub>, and W<sub>V</sub>.</p>
 
+  <div class="eq-block" id="eq-qkv"></div>
+
   <p>The same word plays all three roles. "Cat" has a query (what is cat looking for?), a key (what makes cat findable?), and a value (what information does cat carry?). The model learns to separate these roles during training.</p>
 
   <div class="figure figure-wide" id="fig-qkv">
@@ -308,7 +327,8 @@ svg .axis line, svg .axis path { stroke: var(--border); }
     </div>
     <div id="qkv-viz"></div>
     <div id="qkv-bar" style="margin-top:1rem;"></div>
-    <p class="figure-caption"><span class="figure-label">Figure 2.</span> Each input word is projected into query, key, and value spaces via learned matrices. Click a word to highlight its query vector and see its dot-product scores against all keys. The bar chart below shows the resulting attention weights after softmax.</p>
+    <div class="softmax-sum" id="qkv-sum"></div>
+    <p class="figure-caption"><span class="figure-label">Figure 2.</span> Each input word is projected into query, key, and value spaces via learned matrices. Click a word to highlight its query row and see the resulting attention distribution after the dot-product scores against all keys are normalized through softmax.</p>
   </div>
 
   <div class="margin-note">
@@ -324,6 +344,8 @@ svg .axis line, svg .axis path { stroke: var(--border); }
 
   <p>After scaling, softmax normalizes each row so the weights sum to 1. This turns raw affinity scores into a proper probability distribution. Finally, these weights multiply the value vectors to produce the output: a weighted blend of information from across the sentence.</p>
 
+  <div class="eq-block" id="eq-attn"></div>
+
   <div class="scroll-section" id="fig-heatmap">
     <div class="scroll-graphic" id="heatmap-sticky">
       <div class="figure" style="margin:0;">
@@ -334,6 +356,7 @@ svg .axis line, svg .axis path { stroke: var(--border); }
           <button data-hstep="3">4. Output</button>
         </div>
         <div id="heatmap-viz"></div>
+        <div class="softmax-sum" id="heatmap-sum"></div>
         <p class="figure-caption"><span class="figure-label">Figure 3.</span> The attention computation in four stages. Step through with the buttons or scroll. Click a row to inspect which words that query attends to. "Sat" attends heavily to "cat" (who sat?) and "mat" (sat where?).</p>
       </div>
     </div>
@@ -401,6 +424,23 @@ svg .axis line, svg .axis path { stroke: var(--border); }
 const tip = document.getElementById('tip');
 const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 function dur(ms) { return prefersReducedMotion ? 0 : ms; }
+
+// ─── KaTeX color-coded equations (Q/K are data-like inputs, V carries the prediction payload) ───
+function renderKatex() {
+  if (typeof katex === 'undefined') { setTimeout(renderKatex, 50); return; }
+  const cd = '#2563eb', cm = '#8b5cf6', cp = '#0891b2';
+  katex.render(
+    `\\textcolor{${cd}}{Q} = X W_Q,\\quad \\textcolor{${cd}}{K} = X W_K,\\quad \\textcolor{${cp}}{V} = X W_V`,
+    document.getElementById('eq-qkv'),
+    { displayMode: true, throwOnError: false }
+  );
+  katex.render(
+    `\\mathrm{Attention}(\\textcolor{${cd}}{Q},\\textcolor{${cd}}{K},\\textcolor{${cp}}{V}) = \\textcolor{${cp}}{\\mathrm{softmax}\\!\\left(\\frac{\\textcolor{${cd}}{Q}\\textcolor{${cd}}{K}^{\\top}}{\\sqrt{d_k}}\\right) \\textcolor{${cp}}{V}}`,
+    document.getElementById('eq-attn'),
+    { displayMode: true, throwOnError: false }
+  );
+}
+renderKatex();
 
 function showTip(evt, html) {
   tip.innerHTML = html;
@@ -828,7 +868,15 @@ const heatWeights = designedWeights;
     });
   }
 
-  function renderAll() { renderQKV(); renderBar(); }
+  function renderSum() {
+    const w = designedWeights[selectedWord];
+    const s = d3.sum(w);
+    const ok = Math.abs(s - 1) < 1e-6;
+    const el = document.getElementById('qkv-sum');
+    el.className = 'softmax-sum ' + (ok ? 'ok' : 'bad');
+    el.textContent = `Σ weights for "${words[selectedWord]}" = ${s.toFixed(4)}` + (ok ? '  (valid probability distribution)' : '  (does not sum to 1)');
+  }
+  function renderAll() { renderQKV(); renderBar(); renderSum(); }
   renderAll();
   let resizeTimer2;
   new ResizeObserver(() => {
@@ -973,6 +1021,20 @@ const heatWeights = designedWeights;
         cell.on('click', () => { selectedRow = ri; render(); });
       });
     });
+
+    // Live softmax-sum readout (verifies the prose claim that each row sums to 1)
+    const sumEl = document.getElementById('heatmap-sum');
+    if (sumEl) {
+      const rowSum = d3.sum(data[selectedRow]);
+      if (currentStage >= 2) {
+        const ok = Math.abs(rowSum - 1) < 1e-6;
+        sumEl.className = 'softmax-sum ' + (ok ? 'ok' : 'bad');
+        sumEl.textContent = `Σ row "${words[selectedRow]}" = ${rowSum.toFixed(4)}  (probability distribution)`;
+      } else {
+        sumEl.className = 'softmax-sum';
+        sumEl.textContent = `Σ row "${words[selectedRow]}" = ${rowSum.toFixed(2)}  (raw scores, not yet normalized)`;
+      }
+    }
 
     // Selected row summary below the grid
     if (currentStage >= 2) {

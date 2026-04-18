@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Decision Trees and Random Forests</title>
 <script src="https://d3js.org/d3.v7.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -183,6 +185,7 @@ code {
   font-size: 0.8rem;
   color: var(--text-2);
   margin-top: 0.5rem;
+  flex-wrap: wrap;
 }
 .metric-bar .metric-label { min-width: 110px; }
 .metric-bar .metric-value {
@@ -191,6 +194,11 @@ code {
   color: var(--text);
   min-width: 3em;
 }
+
+.eq { text-align: center; margin: 1rem 0 1.25rem; font-size: 1.05rem; overflow-x: auto; }
+
+.figure { opacity: 0; transform: translateY(8px); transition: opacity 0.5s ease, transform 0.5s ease; }
+.figure.is-visible { opacity: 1; transform: none; }
 
 .linked-layout {
   display: flex;
@@ -301,7 +309,13 @@ svg .grid path { stroke: none; }
 
   <p>Not all questions are equal. A question that splits 50 blue points from 50 red points into perfectly pure groups is excellent. A question that puts 48 blue and 47 red on one side and 2 blue and 3 red on the other is nearly useless. We need a way to measure how good a split is.</p>
 
-  <p>The standard measure is Gini impurity. A node that contains only one class has Gini impurity of 0 (perfectly pure). A node with a 50/50 mix has the maximum impurity of 0.5. The information gain of a split is the parent's impurity minus the weighted average of the children's impurities. Higher gain means a better split.</p>
+  <p>The standard measure is <span class="t-loss">Gini impurity</span>. A node that contains only one class has Gini impurity of 0 (perfectly pure). A node with a 50/50 mix has the maximum impurity of 0.5. The Gini of a node is one minus the sum of squared class probabilities, where each <span class="t-target">class label</span> contributes its share.</p>
+
+  <p class="eq" id="eq-gini"></p>
+
+  <p>The information gain of a <span class="t-model">split</span> is the parent's impurity minus the weighted average of the children's impurities. Higher gain means a better split. The algorithm scans every <span class="t-data">feature</span> and every threshold, picks whichever pair maximizes this gain.</p>
+
+  <p class="eq" id="eq-gain"></p>
 
   <div class="figure figure-wide" id="fig-split">
     <div class="controls">
@@ -312,12 +326,14 @@ svg .grid path { stroke: none; }
     </div>
     <div id="split-chart"></div>
     <div class="metric-bar">
-      <span class="metric-label">Gini gain:</span>
+      <span class="metric-label">Gini gain (drag):</span>
       <span class="metric-value" id="split-gain">0.000</span>
-      <span style="margin-left: 1rem;" class="metric-label">Best possible:</span>
+      <span style="margin-left: 1rem;" class="metric-label">Best on this axis:</span>
+      <span class="metric-value" id="split-best-axis">0.000</span>
+      <span style="margin-left: 1rem;" class="metric-label">Best overall:</span>
       <span class="metric-value" id="split-best">0.000</span>
     </div>
-    <p class="figure-caption"><span class="figure-label">Figure 1.</span> Drag the green line to split the two classes. The information gain updates in real time. A dashed line marks the best possible split along the current axis. After placing one split, click "Add second split" to partition one of the regions further.</p>
+    <p class="figure-caption"><span class="figure-label">Figure 1.</span> Drag the green line to split the two classes. The information gain updates in real time. The dashed line marks the best split overall (across both features). After placing one split, click "Add second split" to subdivide the resulting regions, building a small tree by hand.</p>
   </div>
 
   <div class="insight">
@@ -354,9 +370,9 @@ svg .grid path { stroke: none; }
   <!-- ════════════════════════════════════════════ -->
   <h2>When to Stop: Overfitting and Pruning</h2>
 
-  <p>If you never stop splitting, the tree will eventually give every single training point its own region. Training accuracy hits 100%. The decision boundary becomes a jagged mess that memorizes noise rather than learning the true pattern. This is overfitting.</p>
+  <p>If you never stop splitting, the tree will eventually give every single training point its own region. <span class="t-data">Training</span> accuracy hits 100%. The decision boundary becomes a jagged mess that memorizes noise rather than learning the true pattern. This is overfitting.</p>
 
-  <p>The telltale sign: training accuracy keeps climbing, but test accuracy peaks and then drops. The model gets better at the data it has seen and worse at everything else.</p>
+  <p>The telltale sign: <span class="t-data">training</span> accuracy keeps climbing, but <span class="t-prediction">test</span> accuracy peaks and then drops. The model gets better at the data it has seen and worse at everything else. The gap between the two is the empirical signature of overfitting.</p>
 
   <div class="figure figure-wide" id="fig-overfit">
     <div class="controls">
@@ -364,10 +380,17 @@ svg .grid path { stroke: none; }
         <input type="range" id="depth-slider" min="1" max="15" value="3" step="1">
         <span class="value" id="depth-val">3</span>
       </label>
+      <span style="margin-left: auto;">
+        Train <span class="metric-value" id="overfit-train" style="color: var(--c-data);">--</span>
+        &nbsp;·&nbsp;
+        Test <span class="metric-value" id="overfit-test" style="color: var(--c-prediction);">--</span>
+        &nbsp;·&nbsp;
+        Gap <span class="metric-value" id="overfit-gap" style="color: var(--c-loss);">--</span>
+      </span>
     </div>
     <div id="overfit-scatter"></div>
     <div id="overfit-accuracy"></div>
-    <p class="figure-caption"><span class="figure-label">Figure 3.</span> Drag the depth slider. At depth 1: underfitting, one coarse split. At depth 5: a reasonable boundary that captures the pattern. At depth 15: overfitting, the boundary contorts to wrap around every training point. The accuracy chart below shows training and test accuracy diverging.</p>
+    <p class="figure-caption"><span class="figure-label">Figure 3.</span> Drag the depth slider. At depth 1: underfitting, one coarse split. Around depth 4 to 6: a reasonable boundary that captures the pattern. At depth 15: overfitting, the boundary contorts to wrap around every training point. The accuracy chart below shows training and test accuracy diverging; the readout above tracks the live gap.</p>
   </div>
 
   <p>In practice, you control tree depth with stopping rules (maximum depth, minimum samples per leaf) or by pruning: grow the full tree, then remove branches that do not improve performance on a held-out validation set. Both approaches trade a small loss in training accuracy for a large gain in generalization.</p>
@@ -388,8 +411,15 @@ svg .grid path { stroke: none; }
   <div class="figure figure-wide" id="fig-forest">
     <div class="controls">
       <button id="btn-resample">Re-sample</button>
-      <span id="forest-status" style="margin-left: auto; font-style: italic;"></span>
+      <span style="margin-left: auto;">
+        Avg single tree <span class="metric-value" id="forest-single" style="color: var(--c-data);">--</span>
+        &nbsp;·&nbsp;
+        Ensemble <span class="metric-value" id="forest-ensemble-acc" style="color: var(--c-target);">--</span>
+        &nbsp;·&nbsp;
+        Lift <span class="metric-value" id="forest-lift" style="color: var(--c-prediction);">--</span>
+      </span>
     </div>
+    <div id="forest-status" style="display: none;"></div>
     <div class="forest-grid" id="forest-grid">
       <div class="tree-panel"><div class="tree-panel-label">Tree 1</div><div class="forest-scatter" id="forest-tree-0"></div></div>
       <div class="tree-panel"><div class="tree-panel-label">Tree 2</div><div class="forest-scatter" id="forest-tree-1"></div></div>
@@ -398,7 +428,7 @@ svg .grid path { stroke: none; }
       <div class="tree-panel"><div class="tree-panel-label">Tree 5</div><div class="forest-scatter" id="forest-tree-4"></div></div>
       <div class="ensemble-panel"><div class="tree-panel-label">Ensemble (majority vote)</div><div class="forest-scatter" id="forest-ensemble"></div></div>
     </div>
-    <p class="figure-caption"><span class="figure-label">Figure 4.</span> Five individual decision trees, each trained on a different bootstrap sample. Each has a different, somewhat quirky boundary. The ensemble panel combines them by majority vote, producing a smoother, more robust boundary. Click "Re-sample" to draw new bootstrap samples and rebuild all five trees.</p>
+    <p class="figure-caption"><span class="figure-label">Figure 4.</span> Five individual decision trees, each trained on a different bootstrap sample and restricted to a random subset of features at every split. Each has a different, somewhat quirky boundary. The ensemble panel combines them by majority vote, producing a smoother, more robust boundary. The readout above compares the average accuracy of one tree against the ensemble, so you can see the lift from voting. Click "Re-sample" to redraw all five.</p>
   </div>
 
   <p>This is the central insight of ensemble methods: combining many imperfect models can produce a result better than any individual model. The individual trees do not need to be deep or accurate. They just need to be different from each other. The randomness is not a weakness. It is the mechanism that creates diversity, and diversity is what makes the ensemble work.</p>
@@ -607,6 +637,7 @@ const TEST_DATA = generateData(rngTest, 60);
   const container = d3.select('#split-chart');
   const gainEl = document.getElementById('split-gain');
   const bestEl = document.getElementById('split-best');
+  const bestAxisEl = document.getElementById('split-best-axis');
   const btnAdd = document.getElementById('btn-add-split');
   const btnReset = document.getElementById('btn-reset-splits');
   const btnToggleAxis = document.getElementById('btn-toggle-axis');
@@ -661,32 +692,31 @@ const TEST_DATA = generateData(rngTest, 60);
     g.append('g').attr('class', 'grid')
       .call(d3.axisLeft(y).ticks(8).tickSize(-w).tickFormat(''));
 
-    // Region shading for placed splits
+    // Partition the plot into a grid of rectangles using all placed splits.
+    // Each cell is colored by the majority class of points falling inside it.
+    const xCuts = [DOMAIN.x[0], ...splits.filter(s => s.feature === 'x').map(s => s.threshold), DOMAIN.x[1]].sort((a, b) => a - b);
+    const yCuts = [DOMAIN.y[0], ...splits.filter(s => s.feature === 'y').map(s => s.threshold), DOMAIN.y[1]].sort((a, b) => a - b);
+    for (let i = 0; i < xCuts.length - 1; i++) {
+      for (let j = 0; j < yCuts.length - 1; j++) {
+        const x0 = xCuts[i], x1 = xCuts[i + 1], y0 = yCuts[j], y1 = yCuts[j + 1];
+        const cellPts = DATA.filter(p => p.x > x0 && p.x <= x1 && p.y > y0 && p.y <= y1);
+        if (cellPts.length === 0) continue;
+        const maj = cellPts.filter(p => p.cls === 0).length >= cellPts.length / 2 ? 0 : 1;
+        g.append('rect')
+          .attr('x', x(x0)).attr('y', y(y1))
+          .attr('width', x(x1) - x(x0)).attr('height', y(y0) - y(y1))
+          .attr('fill', CLS_BG[maj]).attr('opacity', 0.6);
+      }
+    }
     splits.forEach(s => {
       if (s.feature === 'x') {
-        const leftPts = DATA.filter(p => p.x <= s.threshold);
-        const rightPts = DATA.filter(p => p.x > s.threshold);
-        const leftMaj = leftPts.filter(p => p.cls === 0).length >= leftPts.length / 2 ? 0 : 1;
-        const rightMaj = rightPts.filter(p => p.cls === 0).length >= rightPts.length / 2 ? 0 : 1;
-        g.append('rect').attr('x', 0).attr('y', 0).attr('width', x(s.threshold)).attr('height', h)
-          .attr('fill', CLS_BG[leftMaj]).attr('opacity', 0.6);
-        g.append('rect').attr('x', x(s.threshold)).attr('y', 0).attr('width', w - x(s.threshold)).attr('height', h)
-          .attr('fill', CLS_BG[rightMaj]).attr('opacity', 0.6);
         g.append('line').attr('x1', x(s.threshold)).attr('x2', x(s.threshold))
           .attr('y1', 0).attr('y2', h)
-          .attr('stroke', 'var(--split-color)').attr('stroke-width', 2).attr('opacity', 0.5);
+          .attr('stroke', 'var(--split-color)').attr('stroke-width', 2).attr('opacity', 0.55);
       } else {
-        const topPts = DATA.filter(p => p.y > s.threshold);
-        const botPts = DATA.filter(p => p.y <= s.threshold);
-        const topMaj = topPts.filter(p => p.cls === 0).length >= topPts.length / 2 ? 0 : 1;
-        const botMaj = botPts.filter(p => p.cls === 0).length >= botPts.length / 2 ? 0 : 1;
-        g.append('rect').attr('x', 0).attr('y', 0).attr('width', w).attr('height', y(s.threshold))
-          .attr('fill', CLS_BG[topMaj]).attr('opacity', 0.6);
-        g.append('rect').attr('x', 0).attr('y', y(s.threshold)).attr('width', w).attr('height', h - y(s.threshold))
-          .attr('fill', CLS_BG[botMaj]).attr('opacity', 0.6);
         g.append('line').attr('x1', 0).attr('x2', w)
           .attr('y1', y(s.threshold)).attr('y2', y(s.threshold))
-          .attr('stroke', 'var(--split-color)').attr('stroke-width', 2).attr('opacity', 0.5);
+          .attr('stroke', 'var(--split-color)').attr('stroke-width', 2).attr('opacity', 0.55);
       }
     });
 
@@ -696,6 +726,8 @@ const TEST_DATA = generateData(rngTest, 60);
     const bestY = bestForFeature(pts, 'y');
     const overallBest = bestX.gain >= bestY.gain ? { feature: 'x', ...bestX } : { feature: 'y', ...bestY };
     bestEl.textContent = overallBest.gain.toFixed(3);
+    const bestForCurrent = dragSplit.feature === 'x' ? bestX : bestY;
+    bestAxisEl.textContent = bestForCurrent.gain.toFixed(3);
 
     if (overallBest.feature === 'x' && overallBest.threshold != null) {
       g.append('line').attr('x1', x(overallBest.threshold)).attr('x2', x(overallBest.threshold))
@@ -1033,6 +1065,9 @@ const TEST_DATA = generateData(rngTest, 60);
   const accContainer = d3.select('#overfit-accuracy');
   const slider = document.getElementById('depth-slider');
   const depthVal = document.getElementById('depth-val');
+  const trainEl = document.getElementById('overfit-train');
+  const testEl = document.getElementById('overfit-test');
+  const gapEl = document.getElementById('overfit-gap');
 
   // Pre-compute accuracy at each depth
   const accuracies = [];
@@ -1055,6 +1090,10 @@ const TEST_DATA = generateData(rngTest, 60);
   function renderAll() {
     const depth = +slider.value;
     depthVal.textContent = depth;
+    const a = accuracies[depth - 1];
+    trainEl.textContent = (a.train * 100).toFixed(0) + '%';
+    testEl.textContent = (a.test * 100).toFixed(0) + '%';
+    gapEl.textContent = ((a.train - a.test) * 100).toFixed(0) + '%';
     renderScatter(depth);
     renderAccuracy(depth);
   }
@@ -1205,7 +1244,9 @@ const TEST_DATA = generateData(rngTest, 60);
 
 (function figure4() {
   const btnResample = document.getElementById('btn-resample');
-  const statusEl = document.getElementById('forest-status');
+  const singleEl = document.getElementById('forest-single');
+  const ensembleAccEl = document.getElementById('forest-ensemble-acc');
+  const liftEl = document.getElementById('forest-lift');
 
   let forestSeed = 100;
 
@@ -1218,19 +1259,19 @@ const TEST_DATA = generateData(rngTest, 60);
     return sample;
   }
 
+  // With only 2 features available, a "random subset" picks 1 of 2 each tree.
+  // That forces axis-aligned trees that disagree, the actual source of diversity.
   function buildForest() {
     const rng = mulberry32(forestSeed);
     const trees = [];
     for (let t = 0; t < 5; t++) {
       const sample = bootstrap(DATA, rng);
-      // Consume a random value per tree to advance the RNG, creating diversity
-      // across resamples even though we use both features for splitting
-      rng();
+      const featureSubset = rng() < 0.5 ? ['x'] : ['y'];
       const dtree = buildTree(sample, 4, 0,
         { x0: DOMAIN.x[0], x1: DOMAIN.x[1], y0: DOMAIN.y[0], y1: DOMAIN.y[1] },
-        null
+        featureSubset
       );
-      trees.push({ tree: dtree, sample: sample });
+      trees.push({ tree: dtree, sample: sample, featureSubset: featureSubset });
     }
     return trees;
   }
@@ -1244,12 +1285,26 @@ const TEST_DATA = generateData(rngTest, 60);
   function renderForest() {
     const trees = buildForest();
 
+    // Average single-tree accuracy on test set
+    let singleSum = 0;
+    trees.forEach(tobj => {
+      let c = 0;
+      TEST_DATA.forEach(p => { if (classifyPoint(tobj.tree, p.x, p.y) === p.cls) c++; });
+      singleSum += c / TEST_DATA.length;
+    });
+    const singleAvg = singleSum / trees.length;
+
     // Ensemble accuracy on test set
     let correct = 0;
     TEST_DATA.forEach(p => {
       if (ensembleClassify(trees, p.x, p.y) === p.cls) correct++;
     });
-    statusEl.textContent = 'Ensemble test accuracy: ' + (correct / TEST_DATA.length * 100).toFixed(0) + '%';
+    const ensembleAcc = correct / TEST_DATA.length;
+    const lift = ensembleAcc - singleAvg;
+
+    singleEl.textContent = (singleAvg * 100).toFixed(0) + '%';
+    ensembleAccEl.textContent = (ensembleAcc * 100).toFixed(0) + '%';
+    liftEl.textContent = (lift >= 0 ? '+' : '') + (lift * 100).toFixed(1) + '%';
 
     // Render each individual tree panel
     trees.forEach((treeObj, i) => {
@@ -1316,6 +1371,52 @@ const TEST_DATA = generateData(rngTest, 60);
   renderForest();
 })();
 
+
+// ════════════════════════════════════════════════════════════════
+// KaTeX: color-coded equations
+// ════════════════════════════════════════════════════════════════
+
+(function renderEquations() {
+  function tryRender() {
+    if (typeof katex === 'undefined') { setTimeout(tryRender, 50); return; }
+    const C = {
+      data: '#2563eb', model: '#8b5cf6', prediction: '#0891b2',
+      loss: '#ef4444', target: '#10b981',
+    };
+    const eqs = [
+      ['eq-gini',
+        `\\textcolor{${C.loss}}{\\mathrm{Gini}}(\\textcolor{${C.model}}{S}) \\;=\\; 1 - \\sum_{k} \\, p_k^{2}, \\quad p_k = \\frac{|\\{i \\in \\textcolor{${C.model}}{S} : \\textcolor{${C.target}}{y_i} = k\\}|}{|\\textcolor{${C.model}}{S}|}`],
+      ['eq-gain',
+        `\\mathrm{Gain}(\\textcolor{${C.model}}{S}, \\textcolor{${C.data}}{x_j}, t) \\;=\\; \\textcolor{${C.loss}}{\\mathrm{Gini}}(\\textcolor{${C.model}}{S}) \\;-\\; \\frac{|\\textcolor{${C.model}}{S_L}|}{|\\textcolor{${C.model}}{S}|}\\,\\textcolor{${C.loss}}{\\mathrm{Gini}}(\\textcolor{${C.model}}{S_L}) \\;-\\; \\frac{|\\textcolor{${C.model}}{S_R}|}{|\\textcolor{${C.model}}{S}|}\\,\\textcolor{${C.loss}}{\\mathrm{Gini}}(\\textcolor{${C.model}}{S_R})`],
+    ];
+    eqs.forEach(([id, tex]) => {
+      const el = document.getElementById(id);
+      if (el) katex.render(tex, el, { throwOnError: false, displayMode: true });
+    });
+  }
+  tryRender();
+})();
+
+// ════════════════════════════════════════════════════════════════
+// IntersectionObserver: fade figures into view
+// ════════════════════════════════════════════════════════════════
+
+(function fadeInFigures() {
+  const figs = document.querySelectorAll('.figure');
+  if (!('IntersectionObserver' in window)) {
+    figs.forEach(f => f.classList.add('is-visible'));
+    return;
+  }
+  const obs = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        e.target.classList.add('is-visible');
+        obs.unobserve(e.target);
+      }
+    });
+  }, { threshold: 0.1 });
+  figs.forEach(f => obs.observe(f));
+})();
 
 })(); // end main IIFE
 </script>

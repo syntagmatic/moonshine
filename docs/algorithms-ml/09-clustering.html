@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Clustering — Moonshine</title>
 <script src="https://d3js.org/d3.v7.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -297,7 +299,10 @@ svg .grid path { stroke: none; }
 
   <h2>K-Means, Step by Step</h2>
 
-  <p>K-means alternates between two operations. First, <strong>assign</strong> each point to whichever centroid is closest. Second, <strong>update</strong> each centroid to the mean position of its assigned points. These two steps repeat until the centroids stop moving. The algorithm always converges, though where it converges depends on where it starts.</p>
+  <p>K-means alternates between two operations. First, <strong>assign</strong> each <span class="t-data">point</span> to whichever <span class="t-model">centroid</span> is closest. Second, <strong>update</strong> each <span class="t-model">centroid</span> to the mean position of its assigned points. These two steps repeat until the centroids stop moving. The algorithm always converges to a local minimum of the <span class="t-loss">within-cluster sum of squares</span>, though where it converges depends on where it starts.</p>
+
+  <p id="eq-kmeans-objective" style="margin: 1.25rem 0;"></p>
+  <p id="eq-kmeans-update" style="margin: 1.25rem 0;"></p>
 
   <div class="figure figure-wide" id="fig-kmeans">
     <div class="controls" id="kmeans-controls">
@@ -309,7 +314,7 @@ svg .grid path { stroke: none; }
     </div>
     <div id="kmeans-chart"></div>
     <div class="variance-readout" id="kmeans-variance"></div>
-    <p class="figure-caption"><span class="figure-label">Figure 1.</span> K-means with K=3 on synthetic data with three natural clusters. The Voronoi boundaries show each centroid's territory. Watch the within-cluster variance drop with each iteration.</p>
+    <p class="figure-caption"><span class="figure-label">Figure 1.</span> K-means with K=3 on synthetic <span class="t-data">data</span> with three natural clusters. The Voronoi boundaries show each <span class="t-model">centroid's</span> territory. Watch the <span class="t-loss">within-cluster sum of squares</span> drop with each iteration and settle when assignments stop changing.</p>
   </div>
 
   <div class="insight">
@@ -596,7 +601,7 @@ clusterCenters.forEach((c, ci) => {
     const v = computeVariance();
     const el = document.getElementById('kmeans-variance');
     if (assignments.some(a => a >= 0)) {
-      el.textContent = `Iteration ${iterCount} · Within-cluster variance: ${v.toFixed(1)}`;
+      el.textContent = `Iteration ${iterCount} · Within-cluster sum of squares (J): ${v.toFixed(1)}`;
     } else {
       el.textContent = '';
     }
@@ -612,10 +617,11 @@ clusterCenters.forEach((c, ci) => {
       renderVoronoi();
       if (!changed && iterCount > 0) {
         phase = 'converged';
-        document.getElementById('kmeans-status').textContent = 'Converged.';
+        document.getElementById('kmeans-status').textContent = `Converged after ${iterCount} iteration${iterCount === 1 ? '' : 's'}.`;
         stopPlay();
       } else {
         phase = 'update';
+        document.getElementById('kmeans-status').textContent = `Iteration ${iterCount + 1}: assigned points to nearest centroid.`;
       }
       updateVariance();
     } else if (phase === 'update') {
@@ -623,6 +629,7 @@ clusterCenters.forEach((c, ci) => {
       iterCount++;
       renderCentroids();
       phase = 'assign';
+      document.getElementById('kmeans-status').textContent = `Iteration ${iterCount}: moved each centroid to its cluster's mean.`;
       updateVariance();
     }
   }
@@ -923,7 +930,7 @@ clusterCenters.forEach((c, ci) => {
 
   let linkageType = 'average';
   let result = agglomerative(data, linkageType);
-  let cutHeight = null; // will be set after first render
+  let cutHeight = (result.root.height || 1) * 0.45;
 
   function getClustersAtCut(node, height) {
     if (!node.children) return [[node.id]];
@@ -1001,7 +1008,6 @@ clusterCenters.forEach((c, ci) => {
     const h = H - margin.top - margin.bottom;
 
     const maxHeight = result.root.height || 1;
-    if (cutHeight === null) cutHeight = maxHeight * 0.45;
 
     const yScale = d3.scaleLinear().domain([0, maxHeight * 1.05]).range([h, 0]);
 
@@ -1322,6 +1328,46 @@ clusterCenters.forEach((c, ci) => {
 
   const ro = new ResizeObserver(() => renderFailures());
   ro.observe(container.node());
+})();
+
+// ─── KaTeX Equations ───
+(function renderEquations() {
+  function tryRender() {
+    if (typeof katex === 'undefined') { setTimeout(tryRender, 50); return; }
+    const C = {
+      data: '#2563eb', model: '#8b5cf6', prediction: '#0891b2',
+      loss: '#ef4444', target: '#10b981',
+    };
+    const eqs = [
+      ['eq-kmeans-objective',
+        `\\textcolor{${C.loss}}{J} \\;=\\; \\sum_{i=1}^{N} \\bigl\\| \\textcolor{${C.data}}{x_i} - \\textcolor{${C.model}}{\\mu_{\\textcolor{${C.prediction}}{c(i)}}} \\bigr\\|^2`],
+      ['eq-kmeans-update',
+        `\\textcolor{${C.model}}{\\mu_k} \\;=\\; \\frac{1}{|S_k|} \\sum_{\\textcolor{${C.data}}{x_i} \\in S_k} \\textcolor{${C.data}}{x_i} \\qquad S_k = \\{\\, i : \\textcolor{${C.prediction}}{c(i)} = k \\,\\}`],
+    ];
+    eqs.forEach(([id, tex]) => {
+      const el = document.getElementById(id);
+      if (el) katex.render(tex, el, { throwOnError: false, displayMode: true });
+    });
+  }
+  tryRender();
+})();
+
+// ─── IntersectionObserver: auto-play K-means on first reveal ───
+(function autoplayKmeans() {
+  const fig = document.getElementById('fig-kmeans');
+  const btnPlay = document.getElementById('btn-play');
+  if (!fig || !btnPlay) return;
+  let fired = false;
+  const io = new IntersectionObserver((entries) => {
+    for (const e of entries) {
+      if (e.isIntersecting && !fired) {
+        fired = true;
+        btnPlay.click();
+        io.disconnect();
+      }
+    }
+  }, { threshold: 0.45 });
+  io.observe(fig);
 })();
 </script>
 

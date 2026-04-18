@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Bayes' Theorem — Moonshine</title>
 <script src="https://d3js.org/d3.v7.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -269,11 +271,9 @@ svg .axis line, svg .axis path { stroke: var(--border); }
 
   <p>What you just saw has a formula behind it. Bayes' theorem says:</p>
 
-  <p style="text-align: center; font-family: var(--mono-font); font-size: 1rem; margin: 1.5rem 0;">
-    P(disease | positive) = P(positive | disease) &times; P(disease) / P(positive)
-  </p>
+  <div id="eq-bayes" style="text-align: center; margin: 1.5rem 0;"></div>
 
-  <p>In words: the probability of the hypothesis given the evidence equals the likelihood of the evidence under the hypothesis, times the prior probability of the hypothesis, divided by the total probability of the evidence.</p>
+  <p>In words: the <span class="t-prediction">posterior</span> (the probability of the hypothesis given the evidence) equals the <span class="t-model">likelihood</span> (the probability of the evidence under the hypothesis), times the <span class="t-target">prior</span> (the base rate of the hypothesis), divided by the <span class="t-data">evidence</span> (the total probability of seeing what we saw).</p>
 
   <p>The formula is simple. The insight is not. The denominator, P(positive), accounts for <em>all</em> the ways you could test positive, including false positives from the much larger healthy group. That denominator is what drags the posterior down when the base rate is low.</p>
 
@@ -294,6 +294,7 @@ svg .axis line, svg .axis path { stroke: var(--border); }
     </div>
     <div id="update-chart"></div>
     <div id="trajectory-chart" style="margin-top: 0.75rem;"></div>
+    <div class="readout" id="update-readout"></div>
     <p class="figure-caption"><span class="figure-label">Figure 2.</span> Sequential Bayesian updating. The top chart shows the belief distribution (beta distribution) over possible coin biases. The bottom chart tracks the estimated probability of heads (the mean of the posterior) as observations accumulate. Each flip sharpens the curve.</p>
   </div>
 
@@ -394,6 +395,24 @@ function betaPDFArray(a, b, n) {
 }
 
 function betaMean(a, b) { return a / (a + b); }
+
+// Probability mass of Beta(a,b) in [lo, hi] via trapezoidal integration on raw PDF.
+function betaIntervalMass(a, b, lo, hi, steps = 400) {
+  let totalNum = 0, total = 0;
+  const dx = 1 / steps;
+  for (let i = 0; i < steps; i++) {
+    const x0 = i * dx, x1 = (i + 1) * dx;
+    const y0 = betaPDF(x0, a, b), y1 = betaPDF(x1, a, b);
+    const piece = (y0 + y1) * 0.5 * dx;
+    total += piece;
+    if (x1 > lo && x0 < hi) {
+      const cLo = Math.max(x0, lo), cHi = Math.min(x1, hi);
+      const f = (cHi - cLo) / dx;
+      totalNum += piece * f;
+    }
+  }
+  return total > 0 ? totalNum / total : 0;
+}
 
 
 // ─── Figure 1: The Area Model ───
@@ -584,6 +603,7 @@ function betaMean(a, b) { return a / (a + b); }
   const container = d3.select('#update-chart');
   const trajContainer = d3.select('#trajectory-chart');
   const countEl = document.getElementById('update-count');
+  const readoutEl = d3.select('#update-readout');
 
   let alpha = 1, beta_param = 1; // Beta(1,1) = uniform
   let observations = [];  // array of 'H' or 'T'
@@ -596,6 +616,7 @@ function betaMean(a, b) { return a / (a + b); }
     countEl.textContent = observations.length + ' observation' + (observations.length !== 1 ? 's' : '');
     renderDist();
     renderTrajectory();
+    renderReadout();
   }
 
   function reset() {
@@ -605,6 +626,27 @@ function betaMean(a, b) { return a / (a + b); }
     countEl.textContent = '0 observations';
     renderDist();
     renderTrajectory();
+    renderReadout();
+  }
+
+  function renderReadout() {
+    const n = observations.length;
+    const mean = betaMean(alpha, beta_param);
+    const variance = (alpha * beta_param) / (Math.pow(alpha + beta_param, 2) * (alpha + beta_param + 1));
+    const std = Math.sqrt(variance);
+    if (n === 0) {
+      readoutEl.html(
+        `Starting with a uniform <span class="t-target">prior</span>: every bias from 0 to 1 is equally plausible. ` +
+        `<span class="t-prediction">Posterior</span> mean = <strong>0.500</strong>, std = <strong>${std.toFixed(3)}</strong>.`
+      );
+      return;
+    }
+    const heads = observations.filter(o => o === 'H').length;
+    readoutEl.html(
+      `<strong>${n}</strong> observation${n === 1 ? '' : 's'} (<strong>${heads}</strong> heads, <strong>${n - heads}</strong> tails). ` +
+      `<span class="t-prediction">Posterior</span> mean = <strong>${mean.toFixed(3)}</strong>, std = <strong>${std.toFixed(3)}</strong>. ` +
+      `Width has shrunk to <strong>${(std / Math.sqrt(1 / 12) * 100).toFixed(0)}%</strong> of the uniform prior.`
+    );
   }
 
   document.getElementById('btn-heads').addEventListener('click', () => addObs('H'));
@@ -734,6 +776,7 @@ function betaMean(a, b) { return a / (a + b); }
   ro.observe(container.node());
   renderDist();
   renderTrajectory();
+  renderReadout();
 })();
 
 
@@ -955,6 +998,9 @@ function betaMean(a, b) { return a / (a + b); }
   document.getElementById('btn-compare-reset').addEventListener('click', reset);
   biasSlider.addEventListener('input', () => {
     biasVal.textContent = (getTrueBias()).toFixed(2);
+    renderFreqChart();
+    renderBayesChart();
+    renderReadout();
   });
 
   function renderFreqChart() {
@@ -1114,11 +1160,15 @@ function betaMean(a, b) { return a / (a + b); }
     const pHat = nHeads / n;
     const a = 1 + nHeads;
     const b = 1 + (n - nHeads);
+    const mean = betaMean(a, b);
+    const lo = Math.max(0, mean - 0.05), hi = Math.min(1, mean + 0.05);
+    const mass = betaIntervalMass(a, b, lo, hi);
     readoutEl.html(
       `<strong>${n}</strong> flips: <strong>${nHeads}</strong> heads, <strong>${n - nHeads}</strong> tails. ` +
-      `Frequentist estimate: <strong>${pHat.toFixed(3)}</strong>. ` +
-      `Bayesian posterior mean: <strong>${betaMean(a, b).toFixed(3)}</strong>. ` +
-      `True bias: <strong>${getTrueBias().toFixed(2)}</strong>.`
+      `Frequentist <span class="t-prediction">p&#x0302;</span> = <strong>${pHat.toFixed(3)}</strong>. ` +
+      `Bayesian <span class="t-prediction">posterior</span> mean = <strong>${mean.toFixed(3)}</strong>. ` +
+      `<span class="t-target">True</span> = <strong>${getTrueBias().toFixed(2)}</strong>. ` +
+      `P(bias &isin; [${lo.toFixed(2)}, ${hi.toFixed(2)}]) = <strong>${(mass * 100).toFixed(1)}%</strong>.`
     );
   }
 
@@ -1131,6 +1181,27 @@ function betaMean(a, b) { return a / (a + b); }
   const ro = new ResizeObserver(() => renderAll());
   ro.observe(freqContainer.node());
   renderAll();
+})();
+
+
+// ─── KaTeX Equations ───
+(function renderEquations() {
+  function tryRender() {
+    if (typeof katex === 'undefined') { setTimeout(tryRender, 50); return; }
+    const C = {
+      data: '#2563eb', model: '#8b5cf6', prediction: '#0891b2',
+      loss: '#ef4444', target: '#10b981',
+    };
+    const eqs = [
+      ['eq-bayes',
+        `\\textcolor{${C.prediction}}{P(H \\mid E)} \\;=\\; \\frac{\\textcolor{${C.model}}{P(E \\mid H)}\\,\\textcolor{${C.target}}{P(H)}}{\\textcolor{${C.data}}{P(E)}}`],
+    ];
+    eqs.forEach(([id, tex]) => {
+      const el = document.getElementById(id);
+      if (el) katex.render(tex, el, { throwOnError: false, displayMode: true });
+    });
+  }
+  tryRender();
 })();
 </script>
 
