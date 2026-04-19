@@ -877,7 +877,11 @@ table.compact tr:hover td { background: var(--accent-light); }
     <button class="btn tencell-isolate" data-cell="9" style="padding: 0.35rem 0.6rem;">O₅</button>
     <button class="btn" id="tencell-btn-reset" style="margin-left: 0.5rem;">reset</button>
   </div>
-  <p class="figure-caption" id="tencell-caption"><span class="figure-label">Figure 22.</span> The 240 E<sub>8</sub> roots in the Coxeter plane, recoloured by which of the ten 24-cells they belong to. Five saturated colours for the inner 600-cell's five 24-cells, five pastels for the outer. Every colour appears exactly 24 times. Click <em>I<sub>k</sub></em> or <em>O<sub>k</sub></em> to isolate one 24-cell: its 24 roots light up while the other 216 fade to grey, revealing the 24-cell's own star pattern inside the 8-ring mandala.</p>
+  <div id="tencell-info" style="display: none; margin-top: 0.75rem; padding: 0.8rem 1rem; background: #f8fafc; border-left: 3px solid var(--accent); border-radius: 0 4px 4px 0; font-family: var(--heading-font); font-size: 0.82rem; color: var(--text-2); line-height: 1.5;">
+    <div id="tencell-info-head" style="font-weight: 700; color: var(--text); margin-bottom: 0.35rem;"></div>
+    <div id="tencell-info-body"></div>
+  </div>
+  <p class="figure-caption" id="tencell-caption"><span class="figure-label">Figure 22.</span> The 240 E<sub>8</sub> roots in the Coxeter plane, recoloured by which of the ten 24-cells they belong to. Five saturated colours for the inner 600-cell's five 24-cells, five pastels for the outer. Every colour appears exactly 24 times. <strong>Click any root on the canvas</strong> to isolate its 24-cell (or use the I<sub>k</sub>/O<sub>k</sub> buttons). The info panel lists the 24 E<sub>8</sub> coordinates of the selected cell, grouped into the 8 integer roots (±e<sub>i</sub>±e<sub>j</sub>) and 16 half-integer roots (±½ combinations) that make up the underlying D<sub>4</sub> / 24-cell skeleton.</p>
 </div>
 
 <h2>Takeaways</h2>
@@ -5340,13 +5344,75 @@ var ringColors_coxeter = ['#2563eb', '#7c3aed', '#dc2626', '#f59e0b', '#059669',
   var ctx = canvas.getContext('2d');
   ctx.scale(dpr, dpr);
 
-  var state = { showInner: true, showOuter: true, isolate: -1 };
+  var state = { showInner: true, showOuter: true, isolate: -1, hover: -1 };
 
   function isVisibleCoset(c) {
     if (state.isolate >= 0) return c === state.isolate;
     if (c < 5 && !state.showInner) return false;
     if (c >= 5 && !state.showOuter) return false;
     return true;
+  }
+
+  // Format an E8 Bourbaki root as a compact coord string, e.g. "(+1,−1,0,0,0,0,0,0)"
+  // or "(+½,+½,−½,−½,+½,+½,−½,+½)".
+  function fmtRoot(r) {
+    return '(' + r.map(function (x) {
+      if (x === 0) return ' 0 ';
+      if (x === 1) return '+1 ';
+      if (x === -1) return '−1 ';
+      if (Math.abs(x - 0.5) < 1e-9) return '+½';
+      if (Math.abs(x + 0.5) < 1e-9) return '−½';
+      return x.toFixed(2);
+    }).join(', ') + ')';
+  }
+
+  function updateInfoPanel() {
+    var el = document.getElementById('tencell-info');
+    if (!el) return;
+    if (state.isolate < 0) { el.style.display = 'none'; return; }
+    var c = state.isolate;
+    var shell = c < 5 ? 'inner' : 'outer';
+    var label = c < 5 ? ('I' + (c + 1)) : ('O' + (c - 4));
+    var members = [];
+    for (var i = 0; i < N; i++) if (partition[i] === c) members.push({ idx: i, coords: allRoots[i] });
+    var intMembers = members.filter(function (m) {
+      return m.coords.every(function (x) { return x === 0 || Math.abs(x) === 1; });
+    });
+    var halfMembers = members.filter(function (m) { return !intMembers.includes(m); });
+
+    var shortExamples = function (arr, n) {
+      return arr.slice(0, n).map(function (m) { return fmtRoot(m.coords); }).join('  ·  ');
+    };
+
+    document.getElementById('tencell-info-head').innerHTML =
+      '24-cell ' + label + ' · ' + shell + ' shell · ' + members.length + ' roots · ' +
+      intMembers.length + ' integer + ' + halfMembers.length + ' half-integer · 96 internal edges';
+    document.getElementById('tencell-info-body').innerHTML =
+      '<div style="font-family: var(--mono-font); font-size: 0.76rem; color: var(--text); margin-top: 0.2rem;">' +
+      'Integer members: ' + (intMembers.length === 0
+        ? '<em>none</em>'
+        : shortExamples(intMembers, 4) + (intMembers.length > 4 ? '  …' : '')) + '</div>' +
+      '<div style="font-family: var(--mono-font); font-size: 0.76rem; color: var(--text); margin-top: 0.25rem;">' +
+      'Half-integer members: ' + (halfMembers.length === 0
+        ? '<em>none</em>'
+        : shortExamples(halfMembers, 3) + (halfMembers.length > 3 ? '  …' : '')) + '</div>' +
+      '<div style="margin-top: 0.45rem; color: var(--text-2);">' +
+      'These 24 unit quaternions form a copy of the binary tetrahedral group 2T ⊂ 2I. ' +
+      'Their convex hull in the ' + shell + ' 4-plane is a regular 24-cell {3,4,3}.' +
+      '</div>';
+    el.style.display = 'block';
+  }
+
+  // Find the nearest root (in canvas coords) to a given point; used for click-to-select.
+  function pickRoot(mx, my) {
+    var best = -1, bd = 16 * 16;
+    for (var i = 0; i < N; i++) {
+      var dx = (CX + pts[i][0] * SCALE) - mx;
+      var dy = (CY - pts[i][1] * SCALE) - my;
+      var d2 = dx * dx + dy * dy;
+      if (d2 < bd) { bd = d2; best = i; }
+    }
+    return best;
   }
 
   function render() {
@@ -5405,14 +5471,22 @@ var ringColors_coxeter = ['#2563eb', '#7c3aed', '#dc2626', '#f59e0b', '#059669',
       ctx.fill();
     }
 
-    // Visible vertices coloured by 24-cell.
+    // Visible vertices coloured by 24-cell. When hovering over a root, ring its 24-cell.
+    var hoverCoset = state.hover >= 0 ? partition[state.hover] : -1;
     for (var v2 = 0; v2 < N; v2++) {
       var cv2 = partition[v2];
       if (!isVisibleCoset(cv2)) continue;
       ctx.fillStyle = colorOf(cv2);
+      var isHoverCell = (hoverCoset === cv2);
+      var rr = state.isolate >= 0 ? 4 : (isHoverCell ? 4.2 : 3.2);
       ctx.beginPath();
-      ctx.arc(CX + pts[v2][0] * SCALE, CY - pts[v2][1] * SCALE, state.isolate >= 0 ? 4 : 3.2, 0, Math.PI * 2);
+      ctx.arc(CX + pts[v2][0] * SCALE, CY - pts[v2][1] * SCALE, rr, 0, Math.PI * 2);
       ctx.fill();
+      if (isHoverCell && state.isolate < 0) {
+        ctx.strokeStyle = '#1a1a2e';
+        ctx.lineWidth = 1.3;
+        ctx.stroke();
+      }
     }
 
     // Legend/label.
@@ -5444,6 +5518,7 @@ var ringColors_coxeter = ['#2563eb', '#7c3aed', '#dc2626', '#f59e0b', '#059669',
     });
     document.getElementById(m === 'all' ? 'tencell-btn-all' : (m === 'inner' ? 'tencell-btn-inner' : 'tencell-btn-outer')).classList.add('active');
     document.querySelectorAll('.tencell-isolate').forEach(function (b) { b.classList.remove('active'); });
+    updateInfoPanel();
     render();
   }
 
@@ -5463,8 +5538,45 @@ var ringColors_coxeter = ['#2563eb', '#7c3aed', '#dc2626', '#f59e0b', '#059669',
       });
       document.querySelectorAll('.tencell-isolate').forEach(function (bb) { bb.classList.remove('active'); });
       this.classList.add('active');
+      updateInfoPanel();
       render();
     });
+  });
+
+  // Canvas-level hover + click interactions: mouse on canvas maps to CSS pixels,
+  // which then map back to internal coords via the canvas aspect ratio.
+  function canvasToLocal(ev) {
+    var rect = canvas.getBoundingClientRect();
+    return {
+      x: (ev.clientX - rect.left) * (VIEW_W / rect.width),
+      y: (ev.clientY - rect.top) * (VIEW_H / rect.height)
+    };
+  }
+  canvas.style.cursor = 'pointer';
+  canvas.addEventListener('mousemove', function (ev) {
+    var p = canvasToLocal(ev);
+    var hit = pickRoot(p.x, p.y);
+    if (hit !== state.hover) { state.hover = hit; render(); }
+  });
+  canvas.addEventListener('mouseleave', function () {
+    if (state.hover !== -1) { state.hover = -1; render(); }
+  });
+  canvas.addEventListener('click', function (ev) {
+    var p = canvasToLocal(ev);
+    var hit = pickRoot(p.x, p.y);
+    if (hit < 0) { setMode('all'); updateInfoPanel(); return; }
+    var c = partition[hit];
+    if (state.isolate === c) { setMode('all'); updateInfoPanel(); return; }
+    state.isolate = c;
+    state.showInner = true; state.showOuter = true;
+    ['tencell-btn-all', 'tencell-btn-inner', 'tencell-btn-outer'].forEach(function (id) {
+      document.getElementById(id).classList.remove('active');
+    });
+    document.querySelectorAll('.tencell-isolate').forEach(function (bb) { bb.classList.remove('active'); });
+    var btn = document.querySelector('.tencell-isolate[data-cell="' + c + '"]');
+    if (btn) btn.classList.add('active');
+    updateInfoPanel();
+    render();
   });
 
   // Render the math identity with KaTeX.

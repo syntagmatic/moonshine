@@ -108,23 +108,68 @@
     },
 
     // Octonions (8D)
-    oct: {
-      mul: function(a, b) { return cdMul(a, b); },
-      conj: function(a) { return conjugate(a); },
-      normSq: function(a) {
-        var s = 0;
-        for(var i=0; i<8; i++) s += a[i]*a[i];
-        return s;
-      },
-      // 7D Cross product of purely imaginary octonions
-      cross: function(a, b) {
-        // Ensure they are 8D and purely imaginary (a0=0, b0=0)
-        var p = cdMul(a, b);
-        var res = p.slice();
-        res[0] = 0; // Purely imaginary part
-        return res;
+    //
+    // The product below uses John Baez's canonical multiplication table from
+    // "The Octonions" (Bull. AMS 2002). The 7 Fano-plane triples
+    //     (e_i, e_{i+1}, e_{i+3}) mod 7  for i = 1..7
+    // i.e., (1,2,4), (2,3,5), (3,4,6), (4,5,7), (5,6,1), (6,7,2), (7,1,3)
+    // each give e_a · e_b = +e_c cyclically (and −e_c in reverse).
+    //
+    // We use a direct signed lookup rather than Cayley-Dickson so the
+    // Fano diagrams in explainers 09 and 10 can be drawn with Baez's
+    // published layout. The generic `OCT.cd` doubling continues to use
+    // Cayley-Dickson for explainer 08's "doubling machine" narrative.
+    oct: (function () {
+      // BAEZ_PROD[i][j] for i, j ∈ {1..7} encodes e_i·e_j:
+      //   positive k ⇒ +e_k, negative k ⇒ −e_k, null ⇒ diagonal (−1).
+      var BAEZ_PROD = [
+        [null,   4,   7,  -2,   6,  -5,  -3],
+        [  -4, null,   5,   1,  -3,   7,  -6],
+        [  -7,  -5, null,   6,   2,  -4,   1],
+        [   2,  -1,  -6, null,   7,   3,  -5],
+        [  -6,   3,  -2,  -7, null,   1,   4],
+        [   5,  -7,   4,  -3,  -1, null,   2],
+        [   3,   6,  -1,   5,  -4,  -2, null]
+      ];
+
+      function octMul(a, b) {
+        var r = [0, 0, 0, 0, 0, 0, 0, 0];
+        for (var i = 0; i < 8; i++) {
+          if (a[i] === 0) continue;
+          for (var j = 0; j < 8; j++) {
+            if (b[j] === 0) continue;
+            var prod = a[i] * b[j];
+            if (i === 0 && j === 0)       r[0] += prod;
+            else if (i === 0)             r[j] += prod;
+            else if (j === 0)             r[i] += prod;
+            else if (i === j)             r[0] -= prod;                // e_i·e_i = −1
+            else {
+              var p = BAEZ_PROD[i - 1][j - 1];
+              var k = Math.abs(p);
+              r[k] += (p < 0) ? -prod : prod;
+            }
+          }
+        }
+        return r;
       }
-    },
+
+      return {
+        mul: octMul,
+        conj: function(a) { return conjugate(a); },
+        normSq: function(a) {
+          var s = 0;
+          for (var i = 0; i < 8; i++) s += a[i] * a[i];
+          return s;
+        },
+        // 7D cross product of purely imaginary octonions.
+        // a × b = Im(a·b) where a, b have a[0]=b[0]=0.
+        cross: function(a, b) {
+          var p = octMul(a, b);
+          p[0] = 0;
+          return p;
+        }
+      };
+    })(),
 
     // Generic Cayley-Dickson
     cd: cdMul,
