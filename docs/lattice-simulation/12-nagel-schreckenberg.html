@@ -1,0 +1,872 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nagel-Schreckenberg Traffic — Simulating on a Lattice</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
+<script src="../lib/motion.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --article-width: 780px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem;
+  --line-height: 1.65;
+  --text: #1a1a2e;
+  --text-2: #4a4a6a;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --bg: #fafafa;
+  --fig-bg: #ffffff;
+  --border: #e2e2e8;
+  --c-v0: #b91c1c;
+  --c-v1: #ea580c;
+  --c-v2: #f59e0b;
+  --c-v3: #84cc16;
+  --c-v4: #22c55e;
+  --c-v5: #059669;
+  --c-free: #059669;
+  --c-jam: #b91c1c;
+  --c-axis: #94a3b8;
+  --c-grid: #e2e8f0;
+  --c-road: #1e293b;
+  --c-crit: #ea580c;
+  --c-trail: #7c3aed;
+}
+
+body { font-family: var(--body-font); font-size: var(--body-size); line-height: var(--line-height); color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased; }
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
+
+h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+h3 { font-size: 1.15rem; margin: 2rem 0 0.75rem; }
+
+p { margin: 0 0 1rem; }
+a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+a:hover { color: #1d4ed8; }
+
+.back-link { font-family: var(--heading-font); font-size: 0.85rem; display: inline-block; margin-bottom: 1rem; color: var(--text-2); text-decoration: none; }
+.back-link:hover { color: var(--accent); }
+
+.header { padding: 3rem 0 2rem; border-bottom: 1px solid var(--border); margin-bottom: 2.5rem; }
+.header .subtitle { font-family: var(--heading-font); font-size: 1.15rem; color: var(--text-2); max-width: 660px; }
+
+.figure { margin: 2rem 0; padding: 1.5rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; line-height: 1.4; }
+.figure-label { font-weight: 600; color: var(--text); }
+
+.btn { font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600; padding: 0.4rem 0.85rem; border-radius: 5px; border: 1px solid var(--border); background: var(--fig-bg); color: var(--text); cursor: pointer; transition: background 0.15s, border-color 0.15s; user-select: none; }
+.btn:hover { border-color: var(--accent); background: var(--accent-light); }
+.btn.active { background: var(--accent); color: white; border-color: var(--accent); }
+
+.btn-row { display: flex; flex-wrap: wrap; gap: 0.45rem; margin-bottom: 1rem; }
+
+.insight { background: var(--accent-light); border-left: 3px solid var(--accent); padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 4px 4px 0; }
+.insight p { margin: 0; }
+.insight p + p { margin-top: 0.5rem; }
+
+.katex-display { margin: 1.5rem 0; }
+
+svg text { font-family: var(--heading-font); }
+
+.sim-layout { display: grid; grid-template-columns: 1fr 260px; gap: 1.25rem; align-items: start; }
+@media (max-width: 760px) { .sim-layout { grid-template-columns: 1fr; } }
+
+.controls-col { display: flex; flex-direction: column; gap: 0.8rem; font-family: var(--heading-font); font-size: 0.9rem; }
+.slider-row { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 0.4rem 0.9rem; }
+.slider-row .lbl { color: var(--text-2); font-weight: 600; }
+.slider-row .val { font-family: var(--mono-font); color: var(--text); min-width: 3rem; text-align: right; font-weight: 600; }
+.slider-row input[type="range"] { width: 100%; }
+
+.info-box {
+  padding: 0.75rem 0.9rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-family: var(--heading-font);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+.info-box .label { font-size: 0.72rem; font-weight: 700; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.25rem; }
+.info-box .row { display: flex; justify-content: space-between; gap: 0.5rem; margin-top: 0.1rem; }
+.info-box .row .k { color: var(--text-2); }
+.info-box .row .v { font-family: var(--mono-font); font-weight: 600; color: var(--text); }
+
+.verdict {
+  padding: 0.7rem 0.85rem;
+  border-radius: 5px;
+  font-family: var(--heading-font);
+  font-weight: 600;
+  font-size: 0.95rem;
+  border-left: 4px solid var(--c-free);
+  background: #ecfdf5;
+  color: #064e3b;
+}
+.verdict.jam { border-left-color: var(--c-jam); background: #fef2f2; color: #7f1d1d; }
+.verdict .detail { font-family: var(--mono-font); font-size: 0.78rem; font-weight: 500; margin-top: 0.3rem; opacity: 0.85; }
+
+.road-wrap { background: var(--fig-bg); border-radius: 4px; }
+.road-wrap canvas { display: block; width: 100%; height: auto; image-rendering: pixelated; image-rendering: crisp-edges; border-radius: 4px; }
+
+.vel-legend { display: flex; gap: 0.35rem; align-items: center; margin-top: 0.3rem; font-family: var(--heading-font); font-size: 0.78rem; color: var(--text-2); }
+.vel-legend .sw { width: 14px; height: 14px; border-radius: 3px; display: inline-block; }
+
+.rule-list {
+  list-style: none;
+  counter-reset: rule;
+  padding: 0;
+  margin: 0.5rem 0 0;
+}
+.rule-list li {
+  counter-increment: rule;
+  position: relative;
+  padding: 0.5rem 0.5rem 0.5rem 2.2rem;
+  font-family: var(--heading-font);
+  font-size: 0.92rem;
+  color: var(--text);
+  border-left: 2px solid var(--border);
+  margin-bottom: 0.35rem;
+}
+.rule-list li::before {
+  content: counter(rule);
+  position: absolute;
+  left: 0.5rem;
+  top: 0.45rem;
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 50%;
+  background: var(--accent);
+  color: white;
+  font-family: var(--mono-font);
+  font-size: 0.8rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.rule-list li .rname { font-weight: 700; }
+.rule-list li .rdesc { color: var(--text-2); font-size: 0.88rem; display: block; margin-top: 0.15rem; }
+
+.nav-footer { margin-top: 5rem; padding-top: 2rem; border-top: 1px solid var(--border); display: flex; justify-content: space-between; font-family: var(--heading-font); font-size: 0.9rem; }
+.nav-footer a { color: var(--accent); text-decoration: none; }
+.nav-footer a:hover { text-decoration: underline; }
+.nav-footer .spacer { flex: 1; }
+
+@media (prefers-reduced-motion: reduce) { html:not([data-motion="full"]) * { transition-duration: 0s !important; animation-duration: 0s !important; } }
+@media (max-width: 680px) {
+  h1 { font-size: 1.75rem; }
+  .article { padding: 1.5rem 1rem 4rem; }
+}
+</style>
+</head>
+<body>
+<div class="article">
+
+<a href="index.html" class="back-link">← Simulating on a Lattice</a>
+
+<div class="header">
+  <h1>Nagel-Schreckenberg Traffic</h1>
+  <p class="subtitle">Part 12 of 15. Four rules, one integer per car, a one-dimensional lattice &mdash; and a phase transition from smooth flow to self-organising jams that propagate backwards at a fixed speed. The 1992 model that showed a desktop computer could produce traffic dynamics no continuum equation could.</p>
+</div>
+
+<p>Every simulation so far in this series has leaned on a two- or three-dimensional lattice to do its work. For our last stop before Act V switches to the lattice-as-tool, we drop down to the minimum possible dimension. A single line of cells, each either empty or holding one car. An integer velocity per car. Four update rules, executed in parallel across the whole lattice. That is the entirety of the Nagel-Schreckenberg model, and it is enough to produce a non-equilibrium phase transition with exactly the phenomenology real highway traffic exhibits.</p>
+
+<p>The payoff is a space-time diagram. Plot car positions on the x-axis, with time running downwards, and the dark bands that appear when the density crosses a critical value all tilt the <em>same</em> way, backwards relative to the direction of motion. A jam, on a highway, is not a wave of stuck cars translating with the traffic. It is a density perturbation travelling the <em>wrong</em> way down the road at a fixed speed &mdash; roughly one cell per time step in the classical model. You can watch it happen on your screen.</p>
+
+<h2>The lattice and the state</h2>
+
+<p>The road is a one-dimensional lattice of <i>L</i> cells, indexed <i>x</i> = 0, 1, &hellip;, <i>L</i> - 1, with periodic boundaries so we can run indefinitely without worrying about inflow and outflow. Each cell holds at most one car. If a car sits at cell <i>x</i>, it carries an integer velocity <i>v</i>(<i>x</i>) chosen from</p>
+
+<div id="math-velocity-set"></div>
+
+<p>The state of the simulation is therefore a function <i>s</i>: &#8484;<sub><i>L</i></sub> &rarr; {&empty;, 0, 1, &hellip;, <i>v</i><sub>max</sub>} &mdash; for each cell, either empty or the velocity of the car currently there. The density &rho; = <i>N</i>/<i>L</i> is the fraction of cells occupied.</p>
+
+<h2>The four rules</h2>
+
+<p>Every time step, every car looks at the gap <i>d</i> to the next car ahead (number of empty cells between them, so <i>d</i> = 0 if the next car is right in front) and updates its velocity and position according to:</p>
+
+<div class="figure">
+<ol class="rule-list">
+  <li><span class="rname">Accelerate.</span><span class="rdesc">If <i>v</i> &lt; <i>v</i><sub>max</sub>, set <i>v</i> &larr; <i>v</i> + 1. Drivers prefer to go faster.</span></li>
+  <li><span class="rname">Slow down to avoid collision.</span><span class="rdesc">If <i>v</i> &gt; <i>d</i>, set <i>v</i> &larr; <i>d</i>. Never move into an occupied cell.</span></li>
+  <li><span class="rname">Randomise.</span><span class="rdesc">With probability <i>p</i>, and only if <i>v</i> &gt; 0, set <i>v</i> &larr; <i>v</i> - 1. Stochastic noise: the inattentive brake-tap.</span></li>
+  <li><span class="rname">Advance.</span><span class="rdesc">Move the car <i>v</i> cells forward: <i>x</i> &larr; <i>x</i> + <i>v</i> (mod <i>L</i>).</span></li>
+</ol>
+<p class="figure-caption" style="margin-top: 1rem;"><span class="figure-label">Algorithm 1.</span> The canonical Nagel-Schreckenberg update. All four rules are applied to <em>every</em> car simultaneously, using the pre-update state to compute gaps. A parallel update is important: the model becomes a deterministic cellular automaton at <i>p</i> = 0, and the randomisation in rule 3 is the <em>only</em> source of stochasticity.</p>
+</div>
+
+<p>Remove rule 3 and you get a deterministic cellular automaton with two conservation laws (cars and their identity). Leave rule 3 in and the dynamics becomes stochastic, the free-flow phase acquires a shortened mean velocity, and the jammed phase acquires non-trivial life-times. The random term is not cosmetic &mdash; it is what turns the model from a toy into a model of real traffic, because real drivers are not perfect.</p>
+
+<h2>The flow, the density, the fundamental diagram</h2>
+
+<p>Average over all cars and all time steps once the simulation has settled. The flow is the number of cars passing any fixed cell per time step:</p>
+
+<div id="math-flow"></div>
+
+<p>Plot flow against density and you get the <em>fundamental diagram</em> of traffic. Empirically, on any real highway, it is a triangular curve: flow rises linearly from zero at &rho; = 0, peaks at some critical density &rho;<sub>c</sub>, and falls linearly back to zero at &rho; = 1 (bumper-to-bumper). Below the peak, every additional car adds throughput. Above it, every additional car subtracts.</p>
+
+<p>At <i>p</i> = 0 the Nagel-Schreckenberg model reproduces this shape exactly. In the free-flow regime every car reaches <i>v</i><sub>max</sub> and the flow is <i>J</i> = <i>v</i><sub>max</sub> &middot; &rho;. The peak is at</p>
+
+<div id="math-critical"></div>
+
+<p>Above that density the cars are closer together than <i>v</i><sub>max</sub> cells and the available gap becomes the rate-limiting factor; the flow falls as <i>J</i> = 1 - &rho;. For <i>p</i> &gt; 0 both branches bow downward, the peak shifts left, and a hysteresis region opens up &mdash; the same density supports both a free-flowing stationary state and a jammed one depending on history. That bistability is one of the known signatures of a first-order non-equilibrium phase transition.</p>
+
+<h2>The simulator</h2>
+
+<p>Run the model. The top strip is the road. Each car is drawn as a coloured dot, coloured by its current velocity (dark red = stopped, deep green = at <i>v</i><sub>max</sub>). Below the road, the space-time diagram accumulates over many time steps: x is position, y is time going down, and every pixel is black whenever a car occupies that cell at that instant. On the right, a live point on the fundamental-diagram plot shows the current (density, flow) pair; a purple trail records the past ~200 samples.</p>
+
+<div class="figure">
+  <div class="sim-layout">
+    <div>
+      <div class="road-wrap">
+        <canvas id="road-canvas"></canvas>
+      </div>
+      <div class="vel-legend">
+        <span>v =</span>
+        <span class="sw" style="background: var(--c-v0);"></span><span>0</span>
+        <span class="sw" style="background: var(--c-v1);"></span><span>1</span>
+        <span class="sw" style="background: var(--c-v2);"></span><span>2</span>
+        <span class="sw" style="background: var(--c-v3);"></span><span>3</span>
+        <span class="sw" style="background: var(--c-v4);"></span><span>4</span>
+        <span class="sw" style="background: var(--c-v5);"></span><span>5</span>
+      </div>
+      <div class="road-wrap" style="margin-top: 0.6rem;">
+        <canvas id="spacetime-canvas"></canvas>
+      </div>
+      <div class="vel-legend" style="justify-content: space-between;">
+        <span>&larr; position &rarr;</span>
+        <span>time flows downward</span>
+      </div>
+    </div>
+    <div class="controls-col">
+      <div class="btn-row">
+        <button class="btn" id="play-btn">Play</button>
+        <button class="btn" id="step-btn">Step</button>
+        <button class="btn" id="reset-btn">Reset</button>
+      </div>
+      <div class="slider-row">
+        <div class="lbl">&rho;</div>
+        <input type="range" id="density" min="0.05" max="0.9" step="0.01" value="0.25">
+        <div class="val" id="density-val">0.25</div>
+      </div>
+      <div class="slider-row">
+        <div class="lbl"><i>p</i></div>
+        <input type="range" id="pbrake" min="0" max="0.6" step="0.01" value="0.20">
+        <div class="val" id="pbrake-val">0.20</div>
+      </div>
+      <div class="slider-row">
+        <div class="lbl"><i>v</i><sub>max</sub></div>
+        <input type="range" id="vmax" min="1" max="5" step="1" value="5">
+        <div class="val" id="vmax-val">5</div>
+      </div>
+      <div class="info-box">
+        <div class="label">Live measurements</div>
+        <div class="row"><span class="k">cars</span><span class="v" id="info-cars">-</span></div>
+        <div class="row"><span class="k">&langle;<i>v</i>&rangle;</span><span class="v" id="info-vmean">-</span></div>
+        <div class="row"><span class="k">flow <i>J</i></span><span class="v" id="info-flow">-</span></div>
+        <div class="row"><span class="k">time</span><span class="v" id="info-time">-</span></div>
+      </div>
+      <div class="verdict" id="verdict">
+        <div id="verdict-name">Free flow</div>
+        <div class="detail" id="verdict-detail">&rho; &lt; &rho;<sub>c</sub>, no persistent jams</div>
+      </div>
+      <div id="fundamental-plot"></div>
+    </div>
+  </div>
+  <p class="figure-caption"><span class="figure-label">Figure 1.</span> Top: a 200-cell ring road, cars coloured by velocity. Middle: the space-time diagram, with t flowing downward. At low density the cars leave clean diagonal streaks with positive slope &asymp; <i>v</i><sub>max</sub>. Cross the critical density and dark bands appear, all tilting backwards with slope &asymp; -1 &mdash; these are jams, propagating opposite the traffic. Right: the current (&rho;, <i>J</i>) point on the fundamental diagram, a purple trail of past samples, and the theoretical <i>p</i> = 0 envelope drawn in grey for reference.</p>
+</div>
+
+<h2>Reading the space-time diagram</h2>
+
+<p>The space-time diagram is the observation worth remembering. Each horizontal slice is the state of the road at one instant. Stack slices over time and trajectories of individual cars become lines; a car moving at velocity <i>v</i> traces a line with slope d<i>x</i>/d<i>t</i> = <i>v</i>. At low density every trajectory is a steep, clean diagonal &mdash; cars all at their top velocity, widely spaced.</p>
+
+<p>Above &rho;<sub>c</sub>, something qualitatively different happens. Groups of cars collect behind a stopped car; those behind <em>them</em> also have to stop; eventually the stopped car at the front gets a lucky acceleration and pulls away, but the tail of the jam is now one car further back than it was a tick ago. The <em>rear</em> of the jam has propagated one cell <em>backwards</em> in one time step. Do this thousands of times and you see a dark band with slope -1 in the space-time diagram, a macroscopic structure made of microscopic transitions.</p>
+
+<p>The quantity measured from that slope is the jam-wave speed:</p>
+
+<div id="math-jam-speed"></div>
+
+<p>It is a remarkable number. It is independent of <i>v</i><sub>max</sub>. It is nearly independent of <i>p</i>. It comes purely from the cellular-automaton kinematics: one car at the rear of a jam needs exactly one time step to register that the car ahead has moved, shift its own state from occupied-with-<i>v</i> = 0 to empty, and let the jam boundary recede by one lattice spacing. Empirically on real highways it is also constant, measured by induction loops at roughly 15-20 km/h backwards regardless of weather, drivers, speed limit, or lane count.</p>
+
+<div class="insight">
+  <p><strong>The jam-wave is a non-equilibrium collective mode.</strong> No single car is moving backwards. Every car on the road is either stopped or moving forwards. Yet the macroscopic density perturbation moves backwards at a fixed speed, set by the lattice spacing divided by the update period. This is exactly what happens in real traffic, and the fact that a desktop simulation with four one-line rules reproduces it is the reason Nagel &amp; Schreckenberg is the standard introduction to cellular automata in sociophysics.</p>
+</div>
+
+<h2>Mean velocity in the free-flow phase</h2>
+
+<p>For &rho; low enough that cars rarely encounter each other, rule 2 almost never fires. Rule 1 pushes every car towards <i>v</i><sub>max</sub>. Rule 3 knocks <i>v</i> down by one with probability <i>p</i> each step. The stationary mean velocity is therefore the fixed point of &langle;<i>v</i>&rangle; &larr; &langle;<i>v</i>&rangle; + 1 (capped at <i>v</i><sub>max</sub>) minus <i>p</i> every step, giving</p>
+
+<div id="math-vmean-free"></div>
+
+<p>at least in the idealised limit &rho; &rarr; 0. The free-flow branch of the fundamental diagram is then <i>J</i> = &rho; &middot; &langle;<i>v</i>&rangle;<sub>free</sub>, linear with slope <i>v</i><sub>max</sub> - <i>p</i>/(1 - <i>p</i>). Set <i>p</i> = 0.2 and that slope is exactly 4.75 for <i>v</i><sub>max</sub> = 5 &mdash; a 5% penalty from the noise. You can watch it emerge in the plot above by sliding &rho; low and reading &langle;<i>v</i>&rangle; off the info box.</p>
+
+<h2>The phase transition in one dimension</h2>
+
+<p>A stock argument in equilibrium statistical physics says that one-dimensional systems with short-range interactions cannot undergo phase transitions at non-zero temperature. The argument fails for Nagel-Schreckenberg because this is not an equilibrium system. There is no Hamiltonian, no detailed balance, no thermodynamic limit in the Boltzmann sense. What we have is a stochastic Markov chain on a finite state space with an invariant measure that changes its qualitative character as &rho; crosses &rho;<sub>c</sub>.</p>
+
+<p>At <i>p</i> = 0 the transition is sharp and exactly solvable: below &rho;<sub>c</sub> = 1/(<i>v</i><sub>max</sub> + 1), every car can maintain <i>v</i><sub>max</sub>; above it, the steady state is a rigid crystal of cars separated by <i>v</i><sub>max</sub> empty cells with occasional defect lines. At <i>p</i> &gt; 0 the transition broadens into a crossover with a measurable critical density that shifts with <i>p</i>, and numerical evidence suggests it belongs to a non-standard universality class distinct from the ASEP exclusion-process family. The fact that a non-equilibrium 1D lattice model has universal critical content at all is the deeper interest: the discretisation creates phenomena that no mean-field continuous ODE of traffic flow (LWR kinematic-wave theory, Aw-Rascle, etc.) can produce without hand-inserting a jam front.</p>
+
+<h2>Comparing fundamental diagrams at three noise levels</h2>
+
+<p>Run the simulator above at <i>p</i> = 0, 0.25, 0.5 with <i>v</i><sub>max</sub> = 5 and you would see three distinct fundamental-diagram envelopes. Rather than wait for the trails to fill in, we precompute them and overlay them here for comparison:</p>
+
+<div class="figure">
+  <div id="fd-compare"></div>
+  <p class="figure-caption"><span class="figure-label">Figure 2.</span> Fundamental diagrams at three noise levels, computed from 2000-step averages on a 500-cell ring at each of 30 densities. The <i>p</i> = 0 curve is the exact deterministic envelope: linear rise <i>J</i> = <i>v</i><sub>max</sub>&rho; up to &rho;<sub>c</sub> = 1/(<i>v</i><sub>max</sub> + 1), then linear fall <i>J</i> = 1 - &rho;. As noise rises the peak shifts left, the maximum flow drops, and the downward branch bows concave &mdash; the jammed phase becomes stickier because randomisation makes cars slower to accelerate out of a local jam front.</p>
+</div>
+
+<h2>Takeaways</h2>
+
+<ul style="margin-left: 1.5rem;">
+  <li><strong>Four rules on a 1D lattice.</strong> Accelerate, brake-for-safety, randomise, advance. Parallel update. That is the whole Nagel-Schreckenberg model; everything else is emergent.</li>
+  <li><strong>Phase transition at &rho;<sub>c</sub>.</strong> For <i>p</i> = 0 the critical density is exactly 1/(<i>v</i><sub>max</sub> + 1). For <i>p</i> &gt; 0 the peak shifts left and the curve bows downward, the signature of noise-enhanced jamming.</li>
+  <li><strong>Jam waves travel backwards.</strong> The space-time diagram shows dark bands with slope -1 lattice sites per time step, independent of <i>v</i><sub>max</sub> and nearly independent of <i>p</i>. Real highways show the same constant; it is a robust feature of the discrete-lattice kinematics.</li>
+  <li><strong>Free-flow mean velocity.</strong> At low density, &langle;<i>v</i>&rangle; &asymp; <i>v</i><sub>max</sub> - <i>p</i>/(1 - <i>p</i>). The noise directly costs flow even when the road is empty.</li>
+  <li><strong>1D is enough for a non-equilibrium transition.</strong> Equilibrium 1D short-range systems cannot order; this system is not in equilibrium, the argument does not apply, and the lattice discretisation captures structure that continuum kinematic-wave traffic equations cannot produce without an externally inserted shock.</li>
+</ul>
+
+<p>That closes Act IV and with it the study of lattices as models of space and of graphs-as-lattices. Act V pivots from lattice-as-model to lattice-as-machinery: the geometric partitions we use to accelerate proximity queries, the periodic minimal surfaces we print into solid parts, and the point groups we wire into the weight-sharing pattern of equivariant neural networks. On to spatial hashing.</p>
+
+<div class="nav-footer">
+  <a href="11-spatial-lotka-volterra.html">&larr; Part 11: Spatial Lotka-Volterra</a>
+  <span class="spacer"></span>
+  <a href="13-spatial-hashing-vs-octrees.html">Part 13: Spatial Hashing vs Octrees &rarr;</a>
+</div>
+
+</div>
+
+<script>
+// ────────────────────────────────────────── KaTeX ──
+function math(id, tex, display) {
+  var el = document.getElementById(id);
+  if (el) katex.render(tex, el, { throwOnError: false, displayMode: !!display });
+}
+
+math('math-velocity-set',
+  'v(x) \\;\\in\\; \\{0,\\, 1,\\, 2,\\, \\ldots,\\, v_{\\max}\\}, \\qquad v_{\\max} \\in \\mathbb{Z}_{>0}',
+  true);
+
+math('math-flow',
+  'J \\;=\\; \\rho\\,\\langle v \\rangle \\;=\\; \\frac{1}{L}\\sum_{x \\in \\text{cars}} v(x)',
+  true);
+
+math('math-critical',
+  '\\rho_c \\;=\\; \\frac{1}{v_{\\max}+1}, \\qquad J_{\\max} \\;=\\; \\frac{v_{\\max}}{v_{\\max}+1} \\quad (\\text{deterministic,}\\; p = 0)',
+  true);
+
+math('math-jam-speed',
+  'c_{\\text{jam}} \\;=\\; -\\,1\\ \\text{cell} \\,/\\, \\text{time step} \\quad \\text{(slope of dark bands in the space-time diagram)}',
+  true);
+
+math('math-vmean-free',
+  '\\langle v \\rangle_{\\text{free}} \\;\\approx\\; v_{\\max} \\,-\\, \\frac{p}{1-p}',
+  true);
+
+// ────────────────────────────────────────── Shared NS simulator core ──
+function simulateStep(cars, L, vmax, p, rng) {
+  // cars: sorted array of {x, v}. Parallel NS update, returns new (in-place) array.
+  var N = cars.length;
+  if (N === 0) return cars;
+  // Compute gaps (distance to next car in front, modulo L, minus 1).
+  for (var i = 0; i < N; i++) {
+    var j = (i + 1) % N;
+    var gap = cars[j].x - cars[i].x - 1;
+    if (gap < 0) gap += L;
+    cars[i].gap = gap;
+  }
+  // Rule 1 + 2 + 3 applied per-car from the shared gaps.
+  for (var k = 0; k < N; k++) {
+    var c = cars[k];
+    // 1. accelerate
+    if (c.v < vmax) c.v = c.v + 1;
+    // 2. brake for safety
+    if (c.v > c.gap) c.v = c.gap;
+    // 3. randomise
+    if (c.v > 0 && rng() < p) c.v = c.v - 1;
+  }
+  // 4. advance (parallel, using new velocities; no collisions by rule 2)
+  for (var m = 0; m < N; m++) {
+    cars[m].x = (cars[m].x + cars[m].v) % L;
+  }
+  // Re-sort by position for next step's gap computation.
+  cars.sort(function (a, b) { return a.x - b.x; });
+  return cars;
+}
+
+function seedCars(L, rho, vmax) {
+  var N = Math.max(1, Math.round(rho * L));
+  if (N > L) N = L;
+  // Place N cars uniformly at random distinct cells.
+  var cells = new Array(L);
+  for (var i = 0; i < L; i++) cells[i] = i;
+  // Fisher-Yates partial shuffle — take first N.
+  for (var j = 0; j < N; j++) {
+    var k = j + Math.floor(Math.random() * (L - j));
+    var tmp = cells[j]; cells[j] = cells[k]; cells[k] = tmp;
+  }
+  var cars = [];
+  for (var m = 0; m < N; m++) cars.push({ x: cells[m], v: Math.min(vmax, Math.floor(Math.random() * (vmax + 1))) });
+  cars.sort(function (a, b) { return a.x - b.x; });
+  return cars;
+}
+
+function velColor(v, vmax) {
+  // Discrete palette matching legend
+  var palette = ['var(--c-v0)', 'var(--c-v1)', 'var(--c-v2)', 'var(--c-v3)', 'var(--c-v4)', 'var(--c-v5)'];
+  // Interpolate index onto the palette's 6-step range even when vmax < 5.
+  if (vmax <= 0) return palette[0];
+  var idx = Math.round((v / vmax) * (palette.length - 1));
+  if (idx < 0) idx = 0;
+  if (idx >= palette.length) idx = palette.length - 1;
+  return palette[idx];
+}
+
+// Resolve CSS variable to a hex-like string (Canvas needs a real colour).
+function resolveCssVar(name) {
+  var style = getComputedStyle(document.documentElement);
+  return style.getPropertyValue(name).trim();
+}
+
+// ────────────────────────────────────────── Figure 1: live simulator ──
+(function () {
+  var L = 200;
+  var state = {
+    L: L,
+    vmax: 5,
+    p: 0.20,
+    rho: 0.25,
+    cars: [],
+    t: 0,
+    playing: false,
+    flowHistory: [],
+    vSumHistory: [],
+    trail: []
+  };
+
+  // Road canvas setup
+  var roadCanvas = document.getElementById('road-canvas');
+  var roadCtx = roadCanvas.getContext('2d');
+  var roadCellW = 5, roadH = 24;
+  roadCanvas.width = L * roadCellW;
+  roadCanvas.height = roadH;
+  roadCanvas.style.maxWidth = '100%';
+
+  // Space-time canvas
+  var stCanvas = document.getElementById('spacetime-canvas');
+  var stCtx = stCanvas.getContext('2d');
+  var stRows = 240;
+  stCanvas.width = L * roadCellW;
+  stCanvas.height = stRows;
+  stCanvas.style.maxWidth = '100%';
+  var stRow = 0;
+  // Secondary image buffer so we can shift rows up when wrapping.
+  var stImage = stCtx.createImageData(L * roadCellW, 1);
+
+  // Resolve colours once (CSS var strings don't work in canvas fillStyle consistently across browsers)
+  var colourCache = {};
+  function col(v, vmax) {
+    var key = v + '/' + vmax;
+    if (colourCache[key]) return colourCache[key];
+    var palette = ['--c-v0', '--c-v1', '--c-v2', '--c-v3', '--c-v4', '--c-v5'];
+    var idx = Math.round((v / Math.max(1, vmax)) * (palette.length - 1));
+    if (idx < 0) idx = 0;
+    if (idx >= palette.length) idx = palette.length - 1;
+    colourCache[key] = resolveCssVar(palette[idx]) || '#000';
+    return colourCache[key];
+  }
+
+  var roadBg, gridColor, textColour;
+  function refreshCache() {
+    colourCache = {};
+    roadBg = resolveCssVar('--c-road') || '#1e293b';
+    gridColor = resolveCssVar('--c-grid') || '#e2e8f0';
+    textColour = resolveCssVar('--text-2') || '#4a4a6a';
+  }
+  refreshCache();
+
+  function drawRoad() {
+    roadCtx.fillStyle = '#0f172a';
+    roadCtx.fillRect(0, 0, roadCanvas.width, roadCanvas.height);
+    // Lane dashes
+    roadCtx.fillStyle = '#334155';
+    for (var i = 0; i < L; i += 4) {
+      roadCtx.fillRect(i * roadCellW + 1, roadH / 2 - 1, roadCellW - 2, 2);
+    }
+    // Cars
+    for (var c = 0; c < state.cars.length; c++) {
+      var car = state.cars[c];
+      roadCtx.fillStyle = col(car.v, state.vmax);
+      roadCtx.fillRect(car.x * roadCellW + 0.5, 3, roadCellW - 1, roadH - 6);
+    }
+  }
+
+  function pushSpaceTimeRow() {
+    // Shift existing content up by 1 px when we exceed stRows; otherwise append.
+    if (stRow >= stRows) {
+      var imgData = stCtx.getImageData(0, 1, stCanvas.width, stRows - 1);
+      stCtx.putImageData(imgData, 0, 0);
+      stCtx.clearRect(0, stRows - 1, stCanvas.width, 1);
+      stRow = stRows - 1;
+    }
+    // Background for row (faintly tinted to visually separate from road)
+    stCtx.fillStyle = '#ffffff';
+    stCtx.fillRect(0, stRow, stCanvas.width, 1);
+    // Draw cars
+    for (var c = 0; c < state.cars.length; c++) {
+      var car = state.cars[c];
+      stCtx.fillStyle = col(car.v, state.vmax);
+      stCtx.fillRect(car.x * roadCellW, stRow, roadCellW, 1);
+    }
+    stRow++;
+  }
+
+  function clearSpaceTime() {
+    stCtx.fillStyle = '#ffffff';
+    stCtx.fillRect(0, 0, stCanvas.width, stCanvas.height);
+    stRow = 0;
+  }
+
+  // Fundamental-diagram plot (SVG)
+  var fdW = 260, fdH = 200;
+  var fdSvg = d3.select('#fundamental-plot').append('svg')
+    .attr('viewBox', '0 0 ' + fdW + ' ' + fdH)
+    .attr('width', '100%')
+    .style('max-width', fdW + 'px');
+
+  var fdMargin = { l: 38, r: 10, t: 18, b: 32 };
+  var fdInnerW = fdW - fdMargin.l - fdMargin.r;
+  var fdInnerH = fdH - fdMargin.t - fdMargin.b;
+  var fdX = d3.scaleLinear().domain([0, 1]).range([0, fdInnerW]);
+  var fdY = d3.scaleLinear().domain([0, 0.75]).range([fdInnerH, 0]);
+
+  var fdG = fdSvg.append('g').attr('transform', 'translate(' + fdMargin.l + ',' + fdMargin.t + ')');
+
+  // Axes
+  fdG.append('g').attr('transform', 'translate(0,' + fdInnerH + ')')
+    .call(d3.axisBottom(fdX).ticks(5).tickSize(-fdInnerH).tickPadding(4))
+    .call(function (g) {
+      g.selectAll('text').attr('font-size', 9).attr('fill', '#4a4a6a');
+      g.selectAll('line').attr('stroke', 'var(--c-grid)');
+      g.select('.domain').attr('stroke', 'var(--c-axis)');
+    });
+  fdG.append('g')
+    .call(d3.axisLeft(fdY).ticks(4).tickSize(-fdInnerW).tickPadding(4))
+    .call(function (g) {
+      g.selectAll('text').attr('font-size', 9).attr('fill', '#4a4a6a');
+      g.selectAll('line').attr('stroke', 'var(--c-grid)');
+      g.select('.domain').attr('stroke', 'var(--c-axis)');
+    });
+
+  fdG.append('text')
+    .attr('x', fdInnerW / 2).attr('y', fdInnerH + 26)
+    .attr('text-anchor', 'middle').attr('font-size', 10).attr('fill', '#4a4a6a')
+    .text('density ρ');
+  fdG.append('text')
+    .attr('transform', 'rotate(-90)')
+    .attr('x', -fdInnerH / 2).attr('y', -28)
+    .attr('text-anchor', 'middle').attr('font-size', 10).attr('fill', '#4a4a6a')
+    .text('flow J');
+
+  // Envelope (deterministic p = 0 with current vmax)
+  var envelopePath = fdG.append('path')
+    .attr('fill', 'none').attr('stroke', 'var(--c-axis)')
+    .attr('stroke-width', 1).attr('stroke-dasharray', '3,3');
+
+  function updateEnvelope() {
+    var vm = state.vmax;
+    var rhoC = 1 / (vm + 1);
+    var pts = [
+      [0, 0],
+      [rhoC, vm * rhoC],
+      [1, 0]
+    ];
+    envelopePath.attr('d', 'M' + pts.map(function (p) { return fdX(p[0]) + ',' + fdY(p[1]); }).join('L'));
+  }
+
+  var trailPath = fdG.append('path')
+    .attr('fill', 'none').attr('stroke', 'var(--c-trail)').attr('stroke-width', 1).attr('opacity', 0.4);
+  var trailDots = fdG.append('g');
+  var livePoint = fdG.append('circle')
+    .attr('r', 5).attr('fill', 'var(--c-trail)').attr('stroke', 'white').attr('stroke-width', 1.5);
+
+  // Critical-density guide line
+  var critLine = fdG.append('line').attr('stroke', 'var(--c-crit)')
+    .attr('stroke-width', 1).attr('stroke-dasharray', '2,3').attr('opacity', 0.6);
+  var critLabel = fdG.append('text').attr('font-size', 9).attr('fill', 'var(--c-crit)')
+    .attr('text-anchor', 'start');
+
+  function updateCritLine() {
+    var rhoC = 1 / (state.vmax + 1);
+    critLine.attr('x1', fdX(rhoC)).attr('x2', fdX(rhoC)).attr('y1', 0).attr('y2', fdInnerH);
+    critLabel.attr('x', fdX(rhoC) + 3).attr('y', 10).text('ρc');
+  }
+
+  function updateFundamental(rho, J) {
+    state.trail.push({ rho: rho, J: J });
+    if (state.trail.length > 200) state.trail.shift();
+    trailPath.attr('d', d3.line()
+      .x(function (d) { return fdX(d.rho); })
+      .y(function (d) { return fdY(d.J); })(state.trail));
+    var dots = trailDots.selectAll('circle').data(state.trail.slice(-40));
+    dots.enter().append('circle').attr('r', 1.4).attr('fill', 'var(--c-trail)').attr('opacity', 0.5)
+      .merge(dots)
+      .attr('cx', function (d) { return fdX(d.rho); })
+      .attr('cy', function (d) { return fdY(d.J); });
+    dots.exit().remove();
+    livePoint.attr('cx', fdX(rho)).attr('cy', fdY(J));
+  }
+
+  // UI controls
+  var playBtn = document.getElementById('play-btn');
+  var stepBtn = document.getElementById('step-btn');
+  var resetBtn = document.getElementById('reset-btn');
+  var densitySlider = document.getElementById('density');
+  var densityVal = document.getElementById('density-val');
+  var pSlider = document.getElementById('pbrake');
+  var pVal = document.getElementById('pbrake-val');
+  var vSlider = document.getElementById('vmax');
+  var vVal = document.getElementById('vmax-val');
+  var infoCars = document.getElementById('info-cars');
+  var infoV = document.getElementById('info-vmean');
+  var infoJ = document.getElementById('info-flow');
+  var infoT = document.getElementById('info-time');
+  var verdictEl = document.getElementById('verdict');
+  var verdictName = document.getElementById('verdict-name');
+  var verdictDetail = document.getElementById('verdict-detail');
+
+  function reset(keepTrail) {
+    state.cars = seedCars(state.L, state.rho, state.vmax);
+    state.t = 0;
+    state.flowHistory = [];
+    state.vSumHistory = [];
+    if (!keepTrail) state.trail = [];
+    clearSpaceTime();
+    drawRoad();
+    updateInfo();
+  }
+
+  function stepOnce() {
+    simulateStep(state.cars, state.L, state.vmax, state.p, Math.random);
+    state.t++;
+    // Current flow = sum of velocities / L.
+    var vSum = 0;
+    for (var i = 0; i < state.cars.length; i++) vSum += state.cars[i].v;
+    state.vSumHistory.push(vSum);
+    if (state.vSumHistory.length > 100) state.vSumHistory.shift();
+    drawRoad();
+    pushSpaceTimeRow();
+    updateInfo();
+  }
+
+  function updateInfo() {
+    var N = state.cars.length;
+    var vSum = 0;
+    for (var i = 0; i < N; i++) vSum += state.cars[i].v;
+    var vMean = N > 0 ? vSum / N : 0;
+    var J = vSum / state.L;
+    // Smooth slightly using the recent history.
+    var histAvg = 0, histN = state.vSumHistory.length;
+    if (histN > 0) {
+      for (var j = 0; j < histN; j++) histAvg += state.vSumHistory[j];
+      histAvg /= histN;
+    }
+    var Jsmooth = histN > 0 ? histAvg / state.L : J;
+    infoCars.textContent = N.toString();
+    infoV.textContent = vMean.toFixed(2);
+    infoJ.textContent = Jsmooth.toFixed(3);
+    infoT.textContent = state.t.toString();
+
+    updateFundamental(state.rho, Jsmooth);
+
+    // Verdict
+    var rhoC = 1 / (state.vmax + 1);
+    var jammed;
+    if (state.p < 0.001) {
+      jammed = state.rho > rhoC + 0.005;
+    } else {
+      // Heuristic: the mean velocity has dropped well below the free-flow prediction.
+      var vFree = state.vmax - state.p / Math.max(0.0001, 1 - state.p);
+      jammed = vMean < 0.7 * vFree && state.t > 20;
+    }
+    if (jammed) {
+      verdictEl.classList.add('jam');
+      verdictName.textContent = 'Jammed';
+      verdictDetail.innerHTML = 'ρ > ρc, backward jam bands forming';
+    } else {
+      verdictEl.classList.remove('jam');
+      verdictName.textContent = 'Free flow';
+      verdictDetail.innerHTML = 'ρ &lt; ρc, cars near v<sub>max</sub>';
+    }
+  }
+
+  // Slider events
+  densitySlider.addEventListener('input', function () {
+    state.rho = +densitySlider.value;
+    densityVal.textContent = state.rho.toFixed(2);
+    reset(true);
+  });
+  pSlider.addEventListener('input', function () {
+    state.p = +pSlider.value;
+    pVal.textContent = state.p.toFixed(2);
+  });
+  vSlider.addEventListener('input', function () {
+    state.vmax = +vSlider.value;
+    vVal.textContent = state.vmax.toString();
+    updateEnvelope();
+    updateCritLine();
+    reset(false);
+  });
+  playBtn.addEventListener('click', function () {
+    state.playing = !state.playing;
+    playBtn.textContent = state.playing ? 'Pause' : 'Play';
+    playBtn.classList.toggle('active', state.playing);
+  });
+  stepBtn.addEventListener('click', function () { stepOnce(); });
+  resetBtn.addEventListener('click', function () { reset(false); });
+
+  updateEnvelope();
+  updateCritLine();
+  reset(false);
+
+  // Run loop
+  var lastFrame = 0;
+  function tick(now) {
+    if (state.playing && now - lastFrame > 50) {
+      stepOnce();
+      lastFrame = now;
+    }
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+})();
+
+// ────────────────────────────────────────── Figure 2: fundamental-diagram comparison ──
+(function () {
+  var W = 640, H = 320;
+  var margin = { l: 52, r: 20, t: 20, b: 42 };
+  var iW = W - margin.l - margin.r;
+  var iH = H - margin.t - margin.b;
+
+  var svg = d3.select('#fd-compare').append('svg')
+    .attr('viewBox', '0 0 ' + W + ' ' + H)
+    .attr('width', '100%').style('max-width', W + 'px');
+
+  var x = d3.scaleLinear().domain([0, 1]).range([0, iW]);
+  var y = d3.scaleLinear().domain([0, 0.75]).range([iH, 0]);
+
+  var g = svg.append('g').attr('transform', 'translate(' + margin.l + ',' + margin.t + ')');
+
+  g.append('g').attr('transform', 'translate(0,' + iH + ')')
+    .call(d3.axisBottom(x).ticks(10).tickSize(-iH).tickPadding(5))
+    .call(function (sel) {
+      sel.selectAll('text').attr('font-size', 10).attr('fill', '#4a4a6a');
+      sel.selectAll('line').attr('stroke', 'var(--c-grid)');
+      sel.select('.domain').attr('stroke', 'var(--c-axis)');
+    });
+  g.append('g')
+    .call(d3.axisLeft(y).ticks(6).tickSize(-iW).tickPadding(5))
+    .call(function (sel) {
+      sel.selectAll('text').attr('font-size', 10).attr('fill', '#4a4a6a');
+      sel.selectAll('line').attr('stroke', 'var(--c-grid)');
+      sel.select('.domain').attr('stroke', 'var(--c-axis)');
+    });
+
+  g.append('text').attr('x', iW / 2).attr('y', iH + 32)
+    .attr('text-anchor', 'middle').attr('font-size', 11).attr('fill', '#4a4a6a').text('density  ρ  =  N / L');
+  g.append('text').attr('transform', 'rotate(-90)')
+    .attr('x', -iH / 2).attr('y', -38)
+    .attr('text-anchor', 'middle').attr('font-size', 11).attr('fill', '#4a4a6a').text('flow  J  =  ρ ⟨v⟩');
+
+  // Compute three fundamental diagrams by running the simulation across densities.
+  var vmax = 5;
+  var L = 500;
+  var warmup = 400;
+  var measure = 600;
+  var rhoValues = d3.range(0.02, 1.0, 0.03);
+
+  function computeFD(p) {
+    var out = [];
+    rhoValues.forEach(function (rho) {
+      var cars = seedCars(L, rho, vmax);
+      for (var w = 0; w < warmup; w++) simulateStep(cars, L, vmax, p, Math.random);
+      var sumV = 0, samples = 0;
+      for (var m = 0; m < measure; m++) {
+        simulateStep(cars, L, vmax, p, Math.random);
+        for (var i = 0; i < cars.length; i++) sumV += cars[i].v;
+        samples += cars.length;
+      }
+      var vMean = samples > 0 ? sumV / samples : 0;
+      out.push({ rho: rho, J: rho * vMean });
+    });
+    return out;
+  }
+
+  var line = d3.line().x(function (d) { return x(d.rho); }).y(function (d) { return y(d.J); });
+
+  // p = 0 exact curve (no need to simulate)
+  var rhoC0 = 1 / (vmax + 1);
+  var p0Curve = [{ rho: 0, J: 0 }, { rho: rhoC0, J: vmax * rhoC0 }, { rho: 1, J: 0 }];
+  g.append('path').datum(p0Curve).attr('d', line)
+    .attr('fill', 'none').attr('stroke', '#1e293b').attr('stroke-width', 2);
+
+  // Simulated p = 0.25 and p = 0.5
+  var p25 = computeFD(0.25);
+  var p50 = computeFD(0.5);
+  g.append('path').datum(p25).attr('d', line)
+    .attr('fill', 'none').attr('stroke', '#ea580c').attr('stroke-width', 1.8);
+  g.append('path').datum(p50).attr('d', line)
+    .attr('fill', 'none').attr('stroke', '#b91c1c').attr('stroke-width', 1.8);
+
+  // Critical-density marker for p = 0
+  g.append('line').attr('x1', x(rhoC0)).attr('x2', x(rhoC0))
+    .attr('y1', 0).attr('y2', iH)
+    .attr('stroke', '#94a3b8').attr('stroke-width', 1).attr('stroke-dasharray', '3,3');
+  g.append('text').attr('x', x(rhoC0) + 4).attr('y', 14)
+    .attr('font-size', 10).attr('fill', '#64748b')
+    .text('ρc = 1/(vmax + 1)');
+
+  // Legend
+  var legendG = g.append('g').attr('transform', 'translate(' + (iW - 120) + ', 10)');
+  var entries = [
+    { label: 'p = 0 (exact)', colour: '#1e293b' },
+    { label: 'p = 0.25', colour: '#ea580c' },
+    { label: 'p = 0.50', colour: '#b91c1c' }
+  ];
+  entries.forEach(function (e, i) {
+    var row = legendG.append('g').attr('transform', 'translate(0,' + (i * 18) + ')');
+    row.append('line').attr('x1', 0).attr('x2', 22).attr('y1', 6).attr('y2', 6)
+      .attr('stroke', e.colour).attr('stroke-width', 2);
+    row.append('text').attr('x', 28).attr('y', 9).attr('font-size', 10).attr('fill', '#1a1a2e').text(e.label);
+  });
+
+  // Peak annotations
+  function peakOf(arr) {
+    var best = arr[0];
+    arr.forEach(function (d) { if (d.J > best.J) best = d; });
+    return best;
+  }
+  var peak25 = peakOf(p25);
+  var peak50 = peakOf(p50);
+
+  g.append('circle').attr('cx', x(peak25.rho)).attr('cy', y(peak25.J)).attr('r', 3).attr('fill', '#ea580c');
+  g.append('circle').attr('cx', x(peak50.rho)).attr('cy', y(peak50.J)).attr('r', 3).attr('fill', '#b91c1c');
+  g.append('text').attr('x', x(peak25.rho) + 5).attr('y', y(peak25.J) - 4)
+    .attr('font-size', 9).attr('fill', '#ea580c')
+    .text('peak at ρ ≈ ' + peak25.rho.toFixed(2));
+  g.append('text').attr('x', x(peak50.rho) + 5).attr('y', y(peak50.J) - 4)
+    .attr('font-size', 9).attr('fill', '#b91c1c')
+    .text('peak at ρ ≈ ' + peak50.rho.toFixed(2));
+})();
+</script>
+
+</body>
+</html>

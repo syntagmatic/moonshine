@@ -2,7 +2,7 @@
 
 Twelve interactive explorations arguing *programs have geometry*. Types as a design language for simulation, with every signature rendered as an animated diagram and the state space of a well-typed simulation revealed, in the end, as a root system whose Weyl group is shared by simulations scattered throughout the series.
 
-A second throughline runs under the first: **formal verification of physical symmetry**. The Curry-Howard correspondence reads every signature as a proposition and every implementation as a proof; the Calculus of Inductive Constructions (the kernel shared by Lean / Coq / Agda) mechanically verifies that a well-typed <code>step</code> respects the physics. The central equation the series builds toward is the equivariance square — <code>step · apply_sym w ≡ apply_sym w · step</code> — which turns a physical symmetry into a checkable property of the code. L4/L5 Trojan stability, rock-paper-scissors biodiversity, isotropy of Turing patterns, flock-heading invariance: each of these is the same commuting diagram, instanced against a different group.
+A second throughline runs under the first: **a simulation is a lattice and a group**. The lattice is the discrete substrate on which state evolves — a hexagonal Bravais lattice, a contact graph, a 1D track, a quadtree over continuous positions, a hypercubic spacetime. The group is the structure that acts on it — a point group like <em>C₆ᵥ</em>, a graph automorphism group, a cyclic species permutation <em>Z₃</em>, a Lie group action <em>SO(2)</em>, a finite reflection (Weyl) group. Together they determine what the simulation can express, what invariants survive discretization, and which macroscopic phenomena — isotropic hydrodynamics, universality classes, conservation laws, spontaneous symmetry breaking — are available to it. The type of a well-posed simulation names both. The Curry-Howard reading of the type as a proposition and the Calculus of Inductive Constructions' mechanical check of equivariance (the commuting square <code>step · apply_sym w ≡ apply_sym w · step</code>) remain the verification mechanism, but the structure the series makes visible is the lattice and the group.
 
 ## Context
 
@@ -153,6 +153,7 @@ User feedback 2026-04-18: "the first visualization in both 1 and 2 is unnecessar
 - [x] **Phase 7** — types-carry-data retrofit on #1 and #2 §2
 - [x] **Phase 8** — drop bare §1 cold sim on #1 and #2
 - [x] **Phase 9** — formal-verification / equivariance pass (2026-04-18)
+- [x] **Phase 10** — lattice / group-theory reframe relaxing the focus on quantitative invariants (2026-04-19)
 
 ## Phase 9 — formal-verification / equivariance pass (what was added)
 
@@ -177,6 +178,41 @@ Prose enrichment across all 12 explainers and new structural figures in six. The
 - Curry-Howard and the Calculus of Inductive Constructions as the machinery.
 
 **Research not yet used.** The F-conjugacy exact sequence `1 → G° → G → C → 1` is referenced in prose but not illustrated. Could become a §5 side figure in a later pass if wanted.
+
+## Phase 10 — lattice / group-theory reframe (what was added)
+
+Second deep-research brief (Kai, 2026-04-19) on group theory and lattice structures across simulation paradigms. The brief spans Bravais lattices, HPP/FHP lattice gases, spatial partitioning structures (quadtree/octree/spatial hash), graph-automorphism controllability, directed-percolation universality, renormalization-group fixed points, and equivariant neural networks on continuous groups.
+
+The move: relax the emphasis on **quantitative invariants** (ΔH, population counts, stripe angle) that Phase 9 concentrated on, and lean into **structural / group-theoretic** statements about the lattice itself, its symmetry group, its RG attractor, or its cluster morphology. The central reframe: the simulation's *type* should name the lattice's symmetry group and the topological / universality class its dynamics flow into, not just check a pointwise equivariance equation.
+
+**Five themes, distributed across nine explainers:**
+
+- **Theme A — lattice-as-type.** The spatial substrate is itself a type construct.
+  - **#9** — Gray-Scott anisotropy comparison reframed as the HPP (square, D₄ — too small) vs FHP (hex, C₆ᵥ — correct 4th-order isotropic tensor) story. Prose grounds it in lattice gas hydrodynamics and adds a `Stencil k (PointGroup g)` type parameter.
+  - **#6** — new topology-comparison figure: three SIR simulations (spatial 7×7 lattice, regular ring k=4, Barabási-Albert scale-free) with identical β, γ, patient zero. Cluster morphologies diverge — circular front, wave, hub burst — without any numerical extinction-rate plot.
+  - **#11** — new Bravais-classification figure: the 5 2D lattice classes (square p4m, hex p6m, rhombic cmm, rectangular pmm, oblique p2) rendered as point tiles with their crystallographic point groups labeled. Prose frames the 9-axis signature parcoords as a projection of this canonical finite classification.
+
+- **Theme B — algorithmic lattices.** Quadtree / octree / spatial hash as the data-structure analog of physical lattices.
+  - **#1** — new §4 "Spatial index as type": side-by-side quadtree vs spatial-hash figure on the live §1 force layout. Type: `SpatialIndex a = Quadtree (BBox a) [a] | Hash (GridCell a) (CellSize s) | None [a]`. Prose ties the O(N²) → O(N log N) → O(1) collapse to translational symmetry of the underlying lattice.
+
+- **Theme C — graph automorphism & controllability.** Phase 9's square/hex-snap figure in #2 was itself a quantitative comparison (heading-bin histograms). Replaced with a leader-follower controllability figure — two networks (symmetric hex-wheel |Aut|=12 with 2 orbits, vs perturbed with a single chord F₀-F₃, |Aut|=4 with 3 orbits). A consensus-dynamics broadcast from the leader shows orbit-equivalent followers evolving in lockstep; perturbation separates them. Type: `Graph (Aut g)`.
+
+- **Theme D — universality classes / RG flow.** Replacing "sim conserves X to Y%" with "sim flows under coarse-graining to a universal fixed point."
+  - **#5** — new RG figure: a 243-site 1D traffic lattice coarse-grained four times by block-of-3 majority (243 → 81 → 27 → 9 → 3). The attractive fixed points at ρ*=0 (free flow) and ρ*=1 (gridlock) bracket an unstable ρ_c = ½. Slider over ρ₀ shows basin reversal. Critical exponent ν ≈ 1.62 → 1.00 flow mentioned in prose.
+  - **#4** — new directed-percolation phase-diagram figure: schematic (σ, λ) plane with a critical curve λ_c(σ), active and absorbing phase regions labeled. Two live 60×60 contact-process lattices (on either side of the critical curve) show cluster morphology per phase. A/B/C percentage readouts in the earlier RPS tiles replaced with qualitative regime badges (coexisting / dominance emerging / monoculture).
+
+- **Theme E — continuous symmetry / equivariant architectures.**
+  - **#10** — new §4b equivariant-GA figure: 4-panel commuting diagram for SO(2) instead of a finite Weyl group. Top row: input x and its rotation R_θ(x). Bottom row: ga(x) and ga(R_θ(x)). The lower-right panel overlays both ga(R_θ(x)) (teal dot) and R_θ(ga(x)) (violet cross). They coincide because mutation/fitness/crossover are SO(2)-invariant. Slider over θ; shared RNG seed makes the equality pointwise rather than distributional.
+
+**Phase 9 quantitative readouts relaxed (not removed):**
+
+- **#7** — the ΔH/|H₀| numeric readout receded: its value is still printed but small, muted, and subordinate to a new qualitative regime badge ("BOUNDED" / "DRIFTING" / "DIVERGING") that leads visually.
+- **#4** — RPS count percentages removed; replaced by a single qualitative regime label per tile.
+- **#9** — the 5pt-vs-9pt caption narrative shifted from "stripes align to axes" to "HPP failure mode" / "FHP recovery"; the morphology carries the story.
+
+**Files touched in Phase 10:** #1, #2, #4, #5, #6, #7, #9, #10, #11 (code + prose); plans/type-systems.md and project memory updated. All nine files pass HTML parse and JS syntax validation. `docs/type-systems/` remains untracked in the repo.
+
+**Themes carried forward.** The Bravais / crystallographic type lattice in #11 is the new destination the series points at; the #12 A₂ root system remains the smallest non-trivial instance of that classification. F-conjugacy classes at E₈ remain prose-only.
 
 ## Remaining polish (low priority)
 

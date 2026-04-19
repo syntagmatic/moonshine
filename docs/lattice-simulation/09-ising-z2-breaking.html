@@ -1,0 +1,949 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ising &amp; the Z₂ Break — Simulating on a Lattice</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
+<script src="../lib/motion.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --article-width: 760px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem;
+  --line-height: 1.65;
+  --text: #1a1a2e;
+  --text-2: #4a4a6a;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --bg: #fafafa;
+  --fig-bg: #ffffff;
+  --border: #e2e2e8;
+  --c-up: #dc2626;
+  --c-down: #1e3a8a;
+  --c-hot: #ea580c;
+  --c-cold: #0369a1;
+  --c-crit: #7c3aed;
+  --c-onsager: #059669;
+  --c-grid: #e9e9ef;
+}
+
+body { font-family: var(--body-font); font-size: var(--body-size); line-height: var(--line-height); color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased; }
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
+
+h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+h3 { font-size: 1.15rem; margin: 2rem 0 0.75rem; }
+
+p { margin: 0 0 1rem; }
+a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+a:hover { color: #1d4ed8; }
+
+.back-link { font-family: var(--heading-font); font-size: 0.85rem; display: inline-block; margin-bottom: 1rem; color: var(--text-2); text-decoration: none; }
+.back-link:hover { color: var(--accent); }
+
+.header { padding: 3rem 0 2rem; border-bottom: 1px solid var(--border); margin-bottom: 2.5rem; }
+.header .subtitle { font-family: var(--heading-font); font-size: 1.15rem; color: var(--text-2); max-width: 640px; }
+
+.figure { margin: 2rem 0; padding: 1.5rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; line-height: 1.4; }
+.figure-label { font-weight: 600; color: var(--text); }
+
+.btn { font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600; padding: 0.4rem 0.85rem; border-radius: 5px; border: 1px solid var(--border); background: var(--fig-bg); color: var(--text); cursor: pointer; transition: background 0.15s, border-color 0.15s; user-select: none; }
+.btn:hover { border-color: var(--accent); background: var(--accent-light); }
+.btn.active { background: var(--accent); color: white; border-color: var(--accent); }
+.btn.primary { border-color: var(--accent); color: var(--accent); }
+.btn.primary.active { background: var(--accent); color: white; }
+
+.btn-row { display: flex; flex-wrap: wrap; gap: 0.45rem; margin-bottom: 0.75rem; }
+
+.insight { background: var(--accent-light); border-left: 3px solid var(--accent); padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 4px 4px 0; }
+.insight p { margin: 0; }
+.insight p + p { margin-top: 0.5rem; }
+
+.katex-display { margin: 1.5rem 0; }
+
+svg text { font-family: var(--heading-font); }
+
+.panel {
+  display: grid;
+  grid-template-columns: 1fr 260px;
+  gap: 1.25rem;
+  align-items: start;
+}
+@media (max-width: 720px) { .panel { grid-template-columns: 1fr; } }
+
+.controls-col { display: flex; flex-direction: column; gap: 0.7rem; font-family: var(--heading-font); font-size: 0.88rem; }
+.slider-row { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 0.4rem 0.8rem; }
+.slider-row .lbl { color: var(--text-2); font-weight: 600; font-size: 0.82rem; }
+.slider-row .val { font-family: var(--mono-font); color: var(--text); min-width: 3rem; text-align: right; font-weight: 600; font-size: 0.82rem; }
+.slider-row input[type="range"] { width: 100%; accent-color: var(--c-crit); }
+
+.canvas-wrap { background: #fff; border: 1px solid var(--border); border-radius: 4px; display: block; width: 100%; position: relative; }
+canvas.ising-grid { display: block; width: 100%; image-rendering: pixelated; image-rendering: crisp-edges; }
+canvas.trace-canvas { display: block; width: 100%; background: #fff; }
+
+.info-box {
+  padding: 0.7rem 0.9rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-family: var(--heading-font);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+.info-box .label { font-size: 0.72rem; font-weight: 700; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.35rem; }
+.info-box .row { display: flex; justify-content: space-between; gap: 0.5rem; margin-top: 0.2rem; }
+.info-box .row .k { color: var(--text-2); }
+.info-box .row .v { font-family: var(--mono-font); font-weight: 600; color: var(--text); }
+
+.phase-badge { padding: 0.75rem 0.9rem; border-radius: 5px; font-family: var(--heading-font); font-weight: 700; font-size: 1rem; border-left: 4px solid var(--c-hot); background: #fff7ed; color: #9a3412; transition: border-color 0.25s, background 0.25s, color 0.25s; }
+.phase-badge .detail { font-family: var(--mono-font); font-size: 0.76rem; font-weight: 500; margin-top: 0.25rem; opacity: 0.85; }
+.phase-badge.cold { border-left-color: var(--c-cold); background: #e0f2fe; color: #075985; }
+.phase-badge.crit { border-left-color: var(--c-crit); background: #f5f3ff; color: #5b21b6; }
+
+.temp-presets { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.3rem; }
+.temp-presets .btn { padding: 0.3rem 0.3rem; font-size: 0.76rem; }
+
+.toggle-row { display: flex; align-items: center; gap: 0.5rem; font-size: 0.84rem; color: var(--text-2); }
+.toggle-row input { accent-color: var(--accent); }
+
+.legend { display: flex; flex-wrap: wrap; gap: 0.4rem 0.9rem; margin-top: 0.7rem; font-family: var(--heading-font); font-size: 0.78rem; color: var(--text-2); }
+.legend .sw { display: inline-flex; align-items: center; gap: 0.3rem; }
+.legend .sw::before { content: ""; width: 10px; height: 10px; border-radius: 2px; background: currentColor; }
+.legend .g-up { color: var(--c-up); }
+.legend .g-down { color: var(--c-down); }
+.legend .g-crit { color: var(--c-crit); }
+
+.nav-footer { margin-top: 5rem; padding-top: 2rem; border-top: 1px solid var(--border); display: flex; justify-content: space-between; font-family: var(--heading-font); font-size: 0.9rem; }
+.nav-footer a { color: var(--accent); text-decoration: none; }
+.nav-footer a:hover { text-decoration: underline; }
+.nav-footer .spacer { flex: 1; }
+
+@media (prefers-reduced-motion: reduce) { html:not([data-motion="full"]) * { transition-duration: 0s !important; animation-duration: 0s !important; } }
+@media (max-width: 680px) {
+  h1 { font-size: 1.75rem; }
+  .article { padding: 1.5rem 1rem 4rem; }
+  .temp-presets { grid-template-columns: repeat(2, 1fr); }
+}
+</style>
+</head>
+<body>
+<div class="article">
+
+<a href="index.html" class="back-link">← Simulating on a Lattice</a>
+
+<div class="header">
+  <h1>Ising &amp; the Z₂ Break</h1>
+  <p class="subtitle">Part 9 of 15. Every spin can flip. The Hamiltonian is unchanged if all of them do — a global ℤ₂ symmetry. Above the critical temperature the magnetisation averages to zero and ℤ₂ is intact; below it, the system picks one of two broken-symmetry states and stays there.</p>
+</div>
+
+<p>The previous two explainers treated the lattice as a stage for a deterministic fluid rule. Now we put thermal noise on the stage. A spin at each site, two allowed values, an energy that prefers neighbours to agree: that is the Ising model, written down by Wilhelm Lenz in 1920 and solved in one dimension by his student Ernst Ising in 1924 (who wrongly concluded that the model had no phase transition in any dimension). Onsager's 1944 exact solution in two dimensions made it the canonical lattice model of a continuous phase transition, and its universality class is shared by real magnets, binary alloys, the liquid–gas transition, and any other system whose order parameter is a scalar with ℤ₂ symmetry.</p>
+
+<p>The point of this explainer is not to rederive Onsager. It is to watch the symmetry break. Below the critical temperature, the infinite system develops a non-zero magnetisation — every spin leans the same way. Which way it leans is not determined by the Hamiltonian (the Hamiltonian is perfectly symmetric under the global flip σ → −σ). It is determined by whichever direction the system happened to slip into as it cooled. That is what spontaneous symmetry breaking means, in its starkest lattice form.</p>
+
+<h2>The model</h2>
+
+<p>Put a classical spin <i>σ<sub>i</sub></i> ∈ {−1, +1} on every site of the 2D square lattice. The Ising Hamiltonian is</p>
+
+<div id="math-hamiltonian"></div>
+
+<p>where the first sum runs over nearest-neighbour pairs ⟨<i>i</i>, <i>j</i>⟩, <i>J</i> > 0 is the ferromagnetic coupling (neighbours want to agree), and <i>h</i> is an external magnetic field. A bond between two aligned spins contributes −<i>J</i>; a bond between two opposed spins contributes +<i>J</i>. The energy is minimised when every spin is the same.</p>
+
+<p>The observable we care about is the magnetisation per site:</p>
+
+<div id="math-magnetisation"></div>
+
+<p>where <i>N</i> is the number of sites. At the ferromagnetic ground state <i>M</i> = ±1 (every spin up, or every spin down). At infinite temperature, spins are independent Bernoulli ± variables, so <i>M</i> averages to 0 with fluctuations of order 1/√<i>N</i>.</p>
+
+<h2>The ℤ₂ symmetry</h2>
+
+<p>Flip every spin at once: σ<sub><i>i</i></sub> → −σ<sub><i>i</i></sub> for every <i>i</i>. Each product σ<sub><i>i</i></sub>σ<sub><i>j</i></sub> picks up (−1)(−1) = +1. So when <i>h</i> = 0, the Hamiltonian is unchanged:</p>
+
+<div id="math-z2-sym"></div>
+
+<p>The symmetry group generated by this single flip is the cyclic group of order two, ℤ₂ = {id, flip}. The magnetic field <i>h</i> breaks it explicitly — flipping every spin sends <i>H</i> to <i>H</i> + 2<i>h</i> Σ σ<sub><i>i</i></sub>, not back to <i>H</i>. We will mostly work at <i>h</i> = 0 and come back to the infinitesimal-field trick at the end.</p>
+
+<p>The partition function <i>Z</i> = Σ<sub>{σ}</sub> exp(−<i>H</i>/<i>kT</i>) and the free energy <i>F</i> = −<i>kT</i> log <i>Z</i> are automatically ℤ₂-symmetric when <i>h</i> = 0. So is the ensemble-averaged magnetisation ⟨<i>M</i>⟩, which has to satisfy ⟨<i>M</i>⟩ = ⟨−<i>M</i>⟩ = 0 by a term-by-term pairing of configurations. In finite volume at finite temperature this is always true. The interesting thing is what happens in the infinite-volume limit: ⟨<i>M</i>⟩ jumps discontinuously from zero to ±<i>M</i><sub>0</sub>(<i>T</i>) as the limit is taken, for <i>T</i> below a critical value.</p>
+
+<h2>Monte Carlo Metropolis</h2>
+
+<p>We cannot enumerate 2<sup>N</sup> configurations of a 64×64 grid — that is 2<sup>4096</sup>, roughly 10<sup>1233</sup>. Instead we generate a Markov chain whose stationary distribution is the Boltzmann distribution π(σ) ∝ exp(−<i>H</i>(σ)/<i>kT</i>). The 1953 Metropolis algorithm does exactly this. Pick a site <i>i</i> at random, propose flipping σ<sub><i>i</i></sub>, compute the energy change</p>
+
+<div id="math-deltaE"></div>
+
+<p>where <i>s<sub>i</sub></i> = Σ<sub>j∈nbrs(i)</sub> σ<sub>j</sub> is the sum of the four nearest-neighbour spins. Accept the flip with probability min(1, exp(−Δ<i>E</i>/<i>kT</i>)). If Δ<i>E</i> ≤ 0, always accept; if Δ<i>E</i> > 0, accept with exponentially suppressed probability.</p>
+
+<div id="math-metropolis-prob"></div>
+
+<p>This satisfies <em>detailed balance</em>: π(σ) <i>P</i>(σ → σ′) = π(σ′) <i>P</i>(σ′ → σ) for every pair of configurations differing by one spin flip. Detailed balance plus ergodicity guarantees the chain converges to π. One <em>sweep</em> is <i>N</i> proposed flips — enough that each site is visited once on average. Thermodynamic observables are time-averages along the chain after it has equilibrated.</p>
+
+<div class="insight">
+  <p><strong>Why this is cheap.</strong> A single-spin flip changes only four bond energies, and the change depends only on σ<sub><i>i</i></sub> and its four neighbours. Δ<i>E</i> ∈ {−8<i>J</i>, −4<i>J</i>, 0, +4<i>J</i>, +8<i>J</i>}, five possible values. Precompute exp(−Δ<i>E</i>/<i>kT</i>) once per temperature and the inner loop is a table lookup and one PRNG call. On a modern machine this runs at ten million spin-flips per second in a browser — comfortable for interactive sweeping.</p>
+</div>
+
+<h2>The critical temperature</h2>
+
+<p>Onsager's 1944 tour-de-force gave the exact 2D square-lattice critical point in closed form. In units where <i>J</i> = <i>k<sub>B</sub></i> = 1,</p>
+
+<div id="math-tc"></div>
+
+<p>Below <i>T<sub>c</sub></i> the magnetisation per site follows</p>
+
+<div id="math-onsager-m"></div>
+
+<p>and above <i>T<sub>c</sub></i> it is identically zero in the thermodynamic limit. The exponent on the outside, 1/8, is the first of three critical exponents we will meet. It describes how the order parameter <em>M</em> vanishes as the system is warmed from below:</p>
+
+<div id="math-beta"></div>
+
+<p>Correspondingly the susceptibility χ = <i>dM</i>/<i>dh</i> diverges on approach from either side with exponent γ = 7/4, and the correlation length ξ (the typical size of an aligned domain) diverges with exponent ν = 1. These three exponents are not independent — they are linked by scaling relations that fall out of the renormalisation group — and they are shared across every system in the "2D Ising universality class". A binary alloy on a square lattice has the same exponents as this spin model.</p>
+
+<h2>Live simulation</h2>
+
+<p>Below is a Metropolis Monte Carlo run on an 80×80 lattice, periodic boundaries. Drag the temperature slider and watch the system reorganise. Above <i>T<sub>c</sub></i> you see salt-and-pepper noise on all length scales; near <i>T<sub>c</sub></i> fractal-looking domains appear and grow without a characteristic size (this is the diverging correlation length); below <i>T<sub>c</sub></i> the system chooses a majority phase and fills the box with it. Cool slowly from <i>T</i> = 3 to <i>T</i> = 2 and watch the transition happen on-screen.</p>
+
+<div class="figure">
+  <div class="panel">
+    <div>
+      <div class="canvas-wrap">
+        <canvas class="ising-grid" id="ising-canvas" width="480" height="480"></canvas>
+      </div>
+      <div class="btn-row" style="margin-top: 0.75rem;">
+        <button class="btn primary" id="play-btn">Play</button>
+        <button class="btn" id="step-btn">Sweep</button>
+        <button class="btn" id="reset-random-btn">Random</button>
+        <button class="btn" id="reset-up-btn">All up</button>
+        <button class="btn" id="reset-down-btn">All down</button>
+      </div>
+      <div class="slider-row">
+        <div class="lbl">T</div>
+        <input type="range" id="temp-slider" min="0.5" max="5.0" step="0.01" value="2.269">
+        <div class="val" id="temp-val">2.269</div>
+      </div>
+      <div class="slider-row">
+        <div class="lbl">h</div>
+        <input type="range" id="field-slider" min="-0.4" max="0.4" step="0.005" value="0">
+        <div class="val" id="field-val">0.00</div>
+      </div>
+      <div class="slider-row">
+        <div class="lbl">speed</div>
+        <input type="range" id="speed-slider" min="1" max="8" step="1" value="4">
+        <div class="val" id="speed-val">4× N²</div>
+      </div>
+      <div class="legend">
+        <span class="sw g-up">σ = +1</span>
+        <span class="sw g-down">σ = −1</span>
+        <span class="sw g-crit">T<sub>c</sub> ≈ 2.269</span>
+      </div>
+    </div>
+    <div class="controls-col">
+      <div class="phase-badge" id="phase-badge">
+        <div id="phase-name">Above T<sub>c</sub></div>
+        <div class="detail" id="phase-detail">T / T<sub>c</sub> = 1.00</div>
+      </div>
+      <div class="info-box">
+        <div class="label">Live state</div>
+        <div class="row"><span class="k">M</span><span class="v" id="m-val">0.000</span></div>
+        <div class="row"><span class="k">|M| avg</span><span class="v" id="mavg-val">0.000</span></div>
+        <div class="row"><span class="k">E / N</span><span class="v" id="e-val">0.000</span></div>
+        <div class="row"><span class="k">sweeps</span><span class="v" id="sweep-val">0</span></div>
+      </div>
+      <div class="info-box">
+        <div class="label">Temperature presets</div>
+        <div class="temp-presets">
+          <button class="btn" data-temp="1.5">T = 1.5</button>
+          <button class="btn" data-temp="2.0">T = 2.0</button>
+          <button class="btn" data-temp="2.269">T<sub>c</sub></button>
+          <button class="btn" data-temp="2.5">T = 2.5</button>
+          <button class="btn" data-temp="3.0">T = 3.0</button>
+          <button class="btn" data-temp="4.0">T = 4.0</button>
+        </div>
+      </div>
+      <div class="info-box">
+        <div class="label">Options</div>
+        <label class="toggle-row"><input type="checkbox" id="cluster-toggle">Wolff cluster update</label>
+        <label class="toggle-row"><input type="checkbox" id="slow-cool-toggle">Slow-cool 3.0 → 2.0</label>
+      </div>
+    </div>
+  </div>
+  <p class="figure-caption"><span class="figure-label">Figure 1.</span> Metropolis Monte Carlo on an 80×80 Ising lattice with periodic boundaries. The side panel reports the instantaneous magnetisation <i>M</i>, its running time average |<i>M</i>|, the energy per site, and the sweep count (one sweep = <i>N</i> = 6400 proposed flips). Each rendered frame is several sweeps to keep the dynamics feeling alive even deep in the critical-slowdown regime. Toggle "Wolff cluster update" near <i>T<sub>c</sub></i> and the equilibration speedup is visible immediately: Metropolis gets stuck in slow domain-growth, Wolff flips entire correlated clusters in one move.</p>
+</div>
+
+<h2>Magnetisation trajectory</h2>
+
+<p>The companion plot shows <i>M</i>(<i>t</i>) for the last several hundred sweeps. Three regimes look qualitatively different. At <i>T</i> = 4 the trace bounces around zero with amplitude 1/√<i>N</i> — the ℤ₂ symmetry is intact and both signs are equally likely. At <i>T</i> = 1.5 the trace is trapped near +1 or −1; the barrier between the two ordered phases is of order <i>J</i> × (domain wall area), and at these low temperatures it is crossed only on exponentially long timescales. At <i>T</i> = 2.269 (exactly <i>T<sub>c</sub></i>) the trace shows huge fluctuations across all timescales — critical slowing down — and frequent excursions between positive and negative values. This last behaviour is finite-size; in the true thermodynamic limit the magnetisation just below <i>T<sub>c</sub></i> would pick one sign and stay there forever.</p>
+
+<div class="figure">
+  <div>
+    <canvas class="trace-canvas" id="trace-canvas" width="900" height="220"></canvas>
+  </div>
+  <p class="figure-caption"><span class="figure-label">Figure 2.</span> Live magnetisation <i>M</i>(<i>t</i>) versus Monte Carlo time. Dashed lines mark the Onsager spontaneous magnetisation ±<i>M</i><sub>0</sub>(<i>T</i>) at the current temperature (drawn only when <i>T</i> &lt; <i>T<sub>c</sub></i>). At high <i>T</i> the trace hugs zero. Near <i>T<sub>c</sub></i> it fluctuates violently. Below <i>T<sub>c</sub></i> it locks to one of the two Onsager plateaus — which one depends on how the simulation initialised or on the sign of any residual magnetic field.</p>
+</div>
+
+<h2>Magnetisation versus temperature</h2>
+
+<p>Sweeping the temperature slider by hand gives an intuition for the transition, but the phase diagram is clearer if we compute the <em>equilibrium</em> |<i>M</i>| at every <i>T</i> and plot it. Figure 3 does this: a short warm-up at each temperature, then a time average of |<i>M</i>| over several hundred sweeps. The finite-system curve is a smoothed version of the Onsager step. The sharpness of the transition is controlled by the correlation length; on an 80×80 grid ξ is limited to ≲ 40 near <i>T<sub>c</sub></i>, so the discontinuity at the infinite-system transition is rounded into a rapid but continuous crossover.</p>
+
+<div class="figure">
+  <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; margin-bottom: 0.5rem;">
+    <button class="btn primary" id="mt-run-btn">Run temperature sweep</button>
+    <button class="btn" id="mt-clear-btn">Clear</button>
+    <div class="toggle-row"><input type="checkbox" id="mt-onsager-toggle" checked><label for="mt-onsager-toggle">overlay Onsager M₀(T)</label></div>
+    <span class="val" id="mt-progress" style="margin-left: auto; font-family: var(--mono-font); font-size: 0.82rem; color: var(--text-2);">—</span>
+  </div>
+  <div>
+    <svg id="mt-plot" viewBox="0 0 700 340" width="100%" style="max-width: 700px; display: block;"></svg>
+  </div>
+  <p class="figure-caption"><span class="figure-label">Figure 3.</span> Equilibrium |<i>M</i>|(<i>T</i>) built from independent Monte Carlo runs at 25 temperatures from 1.0 to 3.5. Each point is the average of |<i>M</i>| over 400 sweeps after a 200-sweep warm-up on a 32×32 lattice (smaller than Figure 1, to keep the full sweep under a few seconds in a browser). The dashed vertical line is <i>T<sub>c</sub></i>. The green curve overlays the exact Onsager spontaneous magnetisation <i>M</i><sub>0</sub>(<i>T</i>) = (1 − sinh(2/<i>T</i>)<sup>−4</sup>)<sup>1/8</sup> for <i>T</i> &lt; <i>T<sub>c</sub></i>. The simulated points undershoot the Onsager curve near <i>T<sub>c</sub></i> because the finite-size correlation length cannot grow beyond the box.</p>
+</div>
+
+<h2>Spontaneous symmetry breaking</h2>
+
+<p>Here is the subtle part. Every finite-<i>N</i> Ising system at <i>h</i> = 0 has ⟨<i>M</i>⟩ = 0 identically, because the partition sum pairs each configuration σ with its flipped partner −σ. So in what sense is there a broken phase?</p>
+
+<p>The cleanest answer uses the <em>thermodynamic limit</em>. Turn on an infinitesimal field <i>h</i> = 0<sup>+</sup>, take the magnetisation ⟨<i>M</i>⟩<sub><i>h</i>,<i>N</i></sub>, then send <i>N</i> → ∞ first and <i>h</i> → 0 afterwards. Below <i>T<sub>c</sub></i>, the two limits do not commute. Taking <i>N</i> → ∞ first makes the barrier between the +<i>M</i><sub>0</sub> and −<i>M</i><sub>0</sub> basins infinitely high; the <i>h</i> = 0<sup>+</sup> field then selects the + basin and ⟨<i>M</i>⟩ = +<i>M</i><sub>0</sub>(<i>T</i>). Send <i>h</i> → 0<sup>+</sup> instead and the infinite-<i>N</i> limit gives a non-zero result:</p>
+
+<div id="math-ssb"></div>
+
+<p>Equivalently, the free energy per site <i>f</i>(<i>T</i>, <i>h</i>) is analytic in <i>h</i> for <i>T</i> > <i>T<sub>c</sub></i> but has a kink at <i>h</i> = 0 for <i>T</i> &lt; <i>T<sub>c</sub></i>; the magnetisation −∂<i>f</i>/∂<i>h</i> jumps across that kink. The ℤ₂ symmetry is still there in the Hamiltonian — the <em>state</em> fails to preserve it. The simulation demonstrates this by making the basin-crossing time explode as the lattice grows. At <i>T</i> = 1.5 on a 10×10 grid, sign flips of <i>M</i> happen every few hundred sweeps; on an 80×80 grid you can run for hours without seeing one.</p>
+
+<h2>Universality</h2>
+
+<p>The exponents β = 1/8, γ = 7/4, ν = 1 are not properties of this particular Hamiltonian. They are properties of a <em>universality class</em> — the set of physical systems that flow to the same fixed point under the renormalisation-group transformation (successive coarse-graining of the lattice). Any system with</p>
+
+<ul style="margin-left: 1.5rem; margin-bottom: 1rem;">
+  <li>a scalar order parameter,</li>
+  <li>a ℤ₂ symmetry acting by negation,</li>
+  <li>short-range interactions,</li>
+  <li>on a two-dimensional lattice (or any lattice that coarse-grains to a 2D fluctuating surface),</li>
+</ul>
+
+<p>sits in the 2D Ising class and has the same critical exponents. Binary alloys Cu–Zn, vapour–liquid transitions in fluids confined to 2D films, the onset of ferromagnetism in atomically thin materials: all share the 1/8, 7/4, 1 triple. Change to an <i>n</i>-component order parameter with O(<i>n</i>) symmetry and the exponents shift — the XY model (<i>n</i> = 2) and Heisenberg model (<i>n</i> = 3) are different classes. Change from 2D to 3D and the exponents shift again to β ≈ 0.326, γ ≈ 1.237, ν ≈ 0.630 — still Ising universality, but a different fixed point. Change to 1D and the phase transition disappears entirely: Peierls' argument says a single domain wall in 1D costs finite energy but gains extensive entropy, so at any non-zero temperature domain walls proliferate and long-range order is destroyed.</p>
+
+<div class="insight">
+  <p><strong>Why lattice details mostly do not matter.</strong> Swap the square lattice for a triangular one and the critical temperature changes (<i>T<sub>c</sub></i><sup>tri</sup> = 4/log 3 ≈ 3.64) but the exponents do not. Add weak next-nearest-neighbour couplings and the exponents do not. Put the spins on a disordered graph with the same average coordination and — provided the disorder is not too strong — the exponents still do not change. The exponents are controlled by the symmetry and the dimensionality of space, with lattice geometry irrelevant in the RG sense. This is the most important fact in critical phenomena.</p>
+</div>
+
+<h2>What the simulation is actually doing</h2>
+
+<p>The Metropolis update is a single-flip chain: it explores state space by proposing local moves. Near <i>T<sub>c</sub></i> this is terrible. A correlated domain of size ξ has to be flipped one spin at a time, and the autocorrelation time of <i>M</i> grows as ξ<sup><i>z</i></sup> with <i>z</i> ≈ 2.165 for 2D Ising Metropolis. On an 80×80 grid at <i>T</i> = 2.27 you can watch individual domains wobble for thousands of sweeps and barely make progress. This is <em>critical slowing down</em>, and it is why equilibrium measurements near <i>T<sub>c</sub></i> need patience or cleverer algorithms.</p>
+
+<p>The Wolff algorithm (1989) fixes this. Instead of proposing one spin flip, it builds a cluster of like-aligned neighbours — starting from a random seed and adding each same-sign neighbour with probability 1 − exp(−2<i>J</i>/<i>kT</i>) — and flips the whole cluster at once. The cluster has the right distribution to satisfy detailed balance for the Ising measure. Near <i>T<sub>c</sub></i> the cluster is a typical domain, and one cluster flip achieves what hundreds of Metropolis sweeps cannot. The toggle in Figure 1 switches between the two updates; run both at <i>T</i> = 2.27 and watch how much faster Wolff equilibrates.</p>
+
+<h2>Back to the theme</h2>
+
+<p>This is Act III's last word on what the lattice costs and what it buys. A lattice plus a local symmetric rule gives you a finite-site Hamiltonian with a discrete global symmetry. The symmetry is preserved by the dynamics (Metropolis, Glauber, Wolff — all respect ℤ₂). The <em>state</em> in the infinite-volume limit, below a critical temperature, does not. Spontaneous symmetry breaking is an emergent phenomenon of the infinite-site limit, invisible to any finite simulation except as an exponentially slow basin crossover; and its universality class — the exponents β, γ, ν — is controlled by the symmetry of the order parameter and the dimensionality, not by the lattice itself.</p>
+
+<p>The remaining explainers move away from regular lattices toward graphs (Act IV) and toward lattices as tools rather than as stages (Act V). Symmetry and breaking come back in different clothing — a graph's automorphism group in place of the lattice's point group — but the algebraic skeleton is the same.</p>
+
+<h2>Takeaways</h2>
+
+<ul style="margin-left: 1.5rem;">
+  <li><strong>ℤ₂ global flip symmetry.</strong> The Ising Hamiltonian at <i>h</i> = 0 is invariant under σ → −σ applied simultaneously to every site. The finite-volume Gibbs measure is also ℤ₂-symmetric.</li>
+  <li><strong>Metropolis samples the Boltzmann distribution.</strong> Propose one spin flip, accept with min(1, exp(−Δ<i>E</i>/<i>kT</i>)). Detailed balance makes the chain's stationary distribution exactly π ∝ exp(−<i>H</i>/<i>kT</i>).</li>
+  <li><strong>Onsager's <i>T<sub>c</sub></i> = 2 / log(1 + √2).</strong> The 2D square-lattice Ising model has an exactly soluble second-order transition at this temperature (in <i>J</i> = <i>k</i> = 1 units). Below it the magnetisation is non-zero; above, zero.</li>
+  <li><strong>Exponents β = 1/8, γ = 7/4, ν = 1.</strong> The order parameter, susceptibility, and correlation length diverge with these exponents on approach to <i>T<sub>c</sub></i>. They are shared by every system in the 2D Ising universality class.</li>
+  <li><strong>Spontaneous symmetry breaking is an infinite-volume phenomenon.</strong> Finite lattices have ⟨<i>M</i>⟩ = 0 at <i>h</i> = 0 identically; the ordered phase emerges in the limit <i>N</i> → ∞, <i>h</i> → 0<sup>+</sup> taken in that order, where the two limits do not commute.</li>
+  <li><strong>Universality hides lattice details.</strong> Change the lattice geometry or add short-range perturbations and <i>T<sub>c</sub></i> moves but the exponents do not. Change the dimensionality or the order-parameter symmetry and they do.</li>
+</ul>
+
+<p>Next, Act IV: when the lattice is replaced by a graph with non-trivial automorphism group, the same algebraic machinery applies — symmetry-protected twins, obstructions to controllability, and phase transitions in network-valued order parameters.</p>
+
+<div class="nav-footer">
+  <a href="08-lattice-boltzmann.html">← Part 8: Lattice Boltzmann</a>
+  <span class="spacer"></span>
+  <a href="10-graph-automorphisms.html">Part 10: Graph Automorphisms →</a>
+</div>
+
+</div>
+
+<script>
+// ────────────────────────────────────────── KaTeX ──
+function math(id, tex, display) {
+  var el = document.getElementById(id);
+  if (el) katex.render(tex, el, { throwOnError: false, displayMode: !!display });
+}
+
+math('math-hamiltonian',
+  'H(\\sigma) \\;=\\; -J \\sum_{\\langle i,j \\rangle} \\color{#dc2626}{\\sigma_i}\\,\\color{#1e3a8a}{\\sigma_j} \\;-\\; h \\sum_i \\sigma_i, \\qquad \\sigma_i \\in \\{-1, +1\\}',
+  true);
+
+math('math-magnetisation',
+  'M \\;=\\; \\frac{1}{N}\\sum_{i=1}^{N} \\sigma_i \\;\\in\\; [-1,\\, 1]',
+  true);
+
+math('math-z2-sym',
+  '\\sigma_i \\,\\to\\, -\\sigma_i \\;\\;\\forall i \\quad\\Longrightarrow\\quad H(\\sigma) \\,\\to\\, H(\\sigma) \\quad (\\text{when } h = 0)',
+  true);
+
+math('math-deltaE',
+  '\\Delta E \\;=\\; H(\\sigma^{\\text{flip } i}) - H(\\sigma) \\;=\\; 2 \\sigma_i \\left( J\\, \\color{#7c3aed}{s_i} + h \\right), \\qquad s_i = \\sum_{j \\in \\text{nbrs}(i)} \\sigma_j',
+  true);
+
+math('math-metropolis-prob',
+  'P(\\sigma \\to \\sigma^{\\text{flip } i}) \\;=\\; \\min\\!\\left(1,\\; e^{-\\Delta E / k_B T}\\right)',
+  true);
+
+math('math-tc',
+  'T_c \\;=\\; \\frac{2 J}{k_B \\log(1 + \\sqrt{2})} \\;\\approx\\; 2.269\\; J/k_B',
+  true);
+
+math('math-onsager-m',
+  '|M_0(T)| \\;=\\; \\Bigl[\\, 1 - \\sinh\\!\\bigl(2J/k_B T\\bigr)^{-4} \\,\\Bigr]^{1/8} \\qquad (T < T_c)',
+  true);
+
+math('math-beta',
+  '|M_0(T)| \\;\\sim\\; (T_c - T)^{\\beta}, \\quad \\beta = \\tfrac{1}{8} \\qquad \\text{(2D Ising, Onsager)}',
+  true);
+
+math('math-ssb',
+  '\\lim_{h \\to 0^{+}} \\lim_{N \\to \\infty} \\langle M \\rangle_{h,N} \\;=\\; +M_0(T) \\;\\neq\\; 0 \\qquad (T < T_c)',
+  true);
+
+// ────────────────────────────────────────── Ising simulator (Figure 1 & 2) ──
+(function () {
+  var L = 80;                // lattice side length
+  var N = L * L;             // number of sites
+  var Tc = 2.0 / Math.log(1 + Math.sqrt(2));   // ≈ 2.269
+
+  var canvas = document.getElementById('ising-canvas');
+  var ctx = canvas.getContext('2d');
+  var cellPx = canvas.width / L;   // 6px per cell at 480/80
+
+  // Flat Int8Array of spins in {-1, +1}
+  var spins = new Int8Array(N);
+  var T = 2.269;
+  var h = 0;
+  var running = false;
+  var sweeps = 0;
+  var sumM = 0;
+  var countM = 0;
+  var speedMult = 4;       // frames do speedMult * N flips
+  var useCluster = false;  // Wolff toggle
+  var slowCool = false;
+  var slowCoolStart = 0;   // sweep count at which cool started
+
+  // exp(-ΔE/T) lookup for ΔE ∈ {4, 8}J (h = 0). For ΔE ≤ 0 we always accept.
+  var expTable = { 4: 1, 8: 1 };
+  function rebuildTable() {
+    expTable[4] = Math.exp(-4 / T);
+    expTable[8] = Math.exp(-8 / T);
+  }
+  rebuildTable();
+
+  // Offscreen 1-pixel-per-cell ImageData, blitted to the visible canvas.
+  var imgCanvas = document.createElement('canvas');
+  imgCanvas.width = L; imgCanvas.height = L;
+  var imgCtx = imgCanvas.getContext('2d');
+  var imgData = imgCtx.createImageData(L, L);
+  var COL_UP = [220, 38, 38];      // #dc2626
+  var COL_DOWN = [30, 58, 138];    // #1e3a8a
+
+  function render() {
+    var data = imgData.data;
+    for (var k = 0; k < N; k++) {
+      var c = spins[k] === 1 ? COL_UP : COL_DOWN;
+      var p = k * 4;
+      data[p    ] = c[0];
+      data[p + 1] = c[1];
+      data[p + 2] = c[2];
+      data[p + 3] = 255;
+    }
+    imgCtx.putImageData(imgData, 0, 0);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(imgCanvas, 0, 0, canvas.width, canvas.height);
+  }
+
+  // ──────────────── Initialisation ────────────────
+  function initRandom() {
+    for (var k = 0; k < N; k++) spins[k] = Math.random() < 0.5 ? 1 : -1;
+    sweeps = 0; sumM = 0; countM = 0; traceBuf.length = 0;
+    render(); readout();
+  }
+  function initUp()   { spins.fill(1);  sweeps = 0; sumM = 0; countM = 0; traceBuf.length = 0; render(); readout(); }
+  function initDown() { spins.fill(-1); sweeps = 0; sumM = 0; countM = 0; traceBuf.length = 0; render(); readout(); }
+
+  // ──────────────── Metropolis sweep ──── N = L² proposed flips ────
+  function metropolisSweep() {
+    for (var n = 0; n < N; n++) {
+      var i = (Math.random() * L) | 0;
+      var j = (Math.random() * L) | 0;
+      var k = i * L + j;
+      var s = spins[k];
+      var iU = i === 0 ? L - 1 : i - 1;
+      var iD = i === L - 1 ? 0 : i + 1;
+      var jL = j === 0 ? L - 1 : j - 1;
+      var jR = j === L - 1 ? 0 : j + 1;
+      var sNei = spins[iU * L + j] + spins[iD * L + j] + spins[i * L + jL] + spins[i * L + jR];
+      var dE = 2 * s * sNei + 2 * s * h;   // units J = k_B = 1
+      if (dE <= 0) { spins[k] = -s; }
+      else {
+        var accept = (h === 0 && (dE === 4 || dE === 8)) ? expTable[dE] : Math.exp(-dE / T);
+        if (Math.random() < accept) spins[k] = -s;
+      }
+    }
+    sweeps++;
+  }
+
+  // ──────────────── Wolff cluster update ────────────────
+  // Seed a spin, grow a same-sign cluster (each neighbour added with prob
+  // 1 - exp(-2J/kT)), flip the whole cluster. Beats Metropolis near T_c.
+  var stack = new Int32Array(N);
+  var visited = new Uint8Array(N);
+  function wolffStep() {
+    visited.fill(0);
+    var seed = (Math.random() * N) | 0;
+    var s0 = spins[seed];
+    var pAdd = 1 - Math.exp(-2 / T);
+    var sp = 0;
+    stack[sp++] = seed; visited[seed] = 1;
+    var clusterSize = 0;
+    while (sp > 0) {
+      var k = stack[--sp];
+      spins[k] = -s0;
+      clusterSize++;
+      var i = (k / L) | 0, j = k - i * L;
+      var iU = i === 0 ? L - 1 : i - 1;
+      var iD = i === L - 1 ? 0 : i + 1;
+      var jL = j === 0 ? L - 1 : j - 1;
+      var jR = j === L - 1 ? 0 : j + 1;
+      var nbrs = [iU * L + j, iD * L + j, i * L + jL, i * L + jR];
+      for (var m = 0; m < 4; m++) {
+        var nk = nbrs[m];
+        // Unvisited neighbours still hold the original sign s0; flipped ones
+        // are already marked visited, so this picks out same-sign untouched.
+        if (!visited[nk] && spins[nk] === s0 && Math.random() < pAdd) {
+          visited[nk] = 1;
+          stack[sp++] = nk;
+        }
+      }
+    }
+    sweeps += clusterSize / N;
+    return clusterSize;
+  }
+
+  // ──────────────── Readout ────────────────
+  var mVal = document.getElementById('m-val');
+  var mavgVal = document.getElementById('mavg-val');
+  var eVal = document.getElementById('e-val');
+  var sweepVal = document.getElementById('sweep-val');
+  var phaseBadge = document.getElementById('phase-badge');
+  var phaseName = document.getElementById('phase-name');
+  var phaseDetail = document.getElementById('phase-detail');
+
+  var traceBuf = [];     // rolling M(t)
+  var TRACE_MAX = 1500;
+
+  function computeObservables() {
+    var sumS = 0, sumBond = 0;
+    for (var i = 0; i < L; i++) {
+      for (var j = 0; j < L; j++) {
+        var s = spins[i * L + j];
+        sumS += s;
+        var iD = i === L - 1 ? 0 : i + 1;
+        var jR = j === L - 1 ? 0 : j + 1;
+        sumBond += s * (spins[iD * L + j] + spins[i * L + jR]);
+      }
+    }
+    var M = sumS / N;
+    // Each bond counted once (iD, jR directions only). Energy per site
+    // E/N = (-J * sumBond - h * sumS) / N
+    var ENorm = (-sumBond - h * sumS) / N;
+    return { M: M, E: ENorm };
+  }
+
+  function readout() {
+    var obs = computeObservables();
+    mVal.textContent = (obs.M >= 0 ? '+' : '') + obs.M.toFixed(3);
+    sumM += Math.abs(obs.M);
+    countM++;
+    mavgVal.textContent = (sumM / countM).toFixed(3);
+    eVal.textContent = obs.E.toFixed(3);
+    sweepVal.textContent = sweeps.toFixed(0);
+
+    // Phase badge
+    var ratio = T / Tc;
+    if (Math.abs(T - Tc) < 0.06) {
+      phaseBadge.className = 'phase-badge crit';
+      phaseName.innerHTML = 'Near T<sub>c</sub>';
+    } else if (T < Tc) {
+      phaseBadge.className = 'phase-badge cold';
+      phaseName.innerHTML = 'Below T<sub>c</sub> — ordered';
+    } else {
+      phaseBadge.className = 'phase-badge';
+      phaseName.innerHTML = 'Above T<sub>c</sub> — disordered';
+    }
+    phaseDetail.innerHTML = 'T / T<sub>c</sub> = ' + ratio.toFixed(3) + (h !== 0 ? '  ·  h = ' + h.toFixed(2) : '');
+
+    traceBuf.push({ t: sweeps, M: obs.M });
+    if (traceBuf.length > TRACE_MAX) traceBuf.shift();
+    drawTrace();
+  }
+
+  // ──────────────── Trace plot (Figure 2) ────────────────
+  var traceCanvas = document.getElementById('trace-canvas');
+  var tCtx = traceCanvas.getContext('2d');
+  // Size the backing store for sharpness on HiDPI
+  (function setupTrace() {
+    var w = traceCanvas.clientWidth || 900;
+    var dpr = window.devicePixelRatio || 1;
+    traceCanvas.width = Math.round(w * dpr);
+    traceCanvas.height = Math.round(220 * dpr);
+    traceCanvas.style.height = '220px';
+    tCtx.scale(dpr, dpr);
+  })();
+
+  function onsagerM(Tv) {
+    if (Tv >= Tc) return 0;
+    var s = Math.sinh(2 / Tv);
+    return Math.pow(1 - Math.pow(s, -4), 1 / 8);
+  }
+
+  function drawTrace() {
+    var w = traceCanvas.clientWidth || 900;
+    var hPx = 220;
+    tCtx.clearRect(0, 0, w, hPx);
+    tCtx.fillStyle = '#ffffff';
+    tCtx.fillRect(0, 0, w, hPx);
+
+    var padL = 40, padR = 8, padT = 12, padB = 26;
+    var pw = w - padL - padR, ph = hPx - padT - padB;
+    var xForT = function (t, minT, maxT) { return padL + (t - minT) / Math.max(maxT - minT, 1e-9) * pw; };
+    var yForM = function (m) { return padT + (1 - (m + 1) / 2) * ph; };
+
+    // Zero axis
+    tCtx.strokeStyle = '#e2e2e8';
+    tCtx.lineWidth = 1;
+    tCtx.beginPath(); tCtx.moveTo(padL, yForM(0)); tCtx.lineTo(padL + pw, yForM(0)); tCtx.stroke();
+
+    // ±M_0 Onsager plateaus
+    var m0 = onsagerM(T);
+    if (m0 > 0) {
+      tCtx.strokeStyle = 'rgba(5, 150, 105, 0.65)';
+      tCtx.setLineDash([4, 3]);
+      tCtx.beginPath(); tCtx.moveTo(padL, yForM(m0)); tCtx.lineTo(padL + pw, yForM(m0)); tCtx.stroke();
+      tCtx.beginPath(); tCtx.moveTo(padL, yForM(-m0)); tCtx.lineTo(padL + pw, yForM(-m0)); tCtx.stroke();
+      tCtx.setLineDash([]);
+      tCtx.fillStyle = '#059669';
+      tCtx.font = '10px "Source Sans 3", sans-serif';
+      tCtx.fillText('+M₀(T) = ' + m0.toFixed(3), padL + pw - 92, yForM(m0) - 3);
+      tCtx.fillText('−M₀(T)', padL + pw - 44, yForM(-m0) + 11);
+    }
+
+    // Y ticks
+    tCtx.fillStyle = '#4a4a6a';
+    tCtx.font = '10px "Source Sans 3", sans-serif';
+    tCtx.textAlign = 'right';
+    [-1, -0.5, 0, 0.5, 1].forEach(function (mv) {
+      tCtx.fillText(mv.toString(), padL - 4, yForM(mv) + 3);
+      tCtx.strokeStyle = '#f1f1f4';
+      tCtx.beginPath(); tCtx.moveTo(padL, yForM(mv)); tCtx.lineTo(padL + pw, yForM(mv)); tCtx.stroke();
+    });
+
+    // Axis labels
+    tCtx.textAlign = 'left';
+    tCtx.fillStyle = '#4a4a6a';
+    tCtx.fillText('M(t)', 6, 14);
+    tCtx.textAlign = 'right';
+    tCtx.fillText('MC sweeps', padL + pw, hPx - 6);
+
+      // Trace
+    if (traceBuf.length < 2) return;
+    var minT = traceBuf[0].t, maxT = traceBuf[traceBuf.length - 1].t;
+    tCtx.strokeStyle = T < Tc ? '#0369a1' : (Math.abs(T - Tc) < 0.06 ? '#7c3aed' : '#ea580c');
+    tCtx.lineWidth = 1.25;
+    tCtx.beginPath();
+    for (var k = 0; k < traceBuf.length; k++) {
+      var p = traceBuf[k];
+      if (k === 0) tCtx.moveTo(xForT(p.t, minT, maxT), yForM(p.M));
+      else tCtx.lineTo(xForT(p.t, minT, maxT), yForM(p.M));
+    }
+    tCtx.stroke();
+  }
+
+  // ──────────────── Main loop ────────────────
+  function frame() {
+    if (running) {
+      if (useCluster) {
+        // Do ~20 cluster moves per frame
+        for (var c = 0; c < 20; c++) wolffStep();
+      } else {
+        // speedMult sweeps per frame — so speed=4 means 4 * 80 * 80 = 25600 flips per frame.
+        for (var s = 0; s < speedMult; s++) metropolisSweep();
+      }
+      // Slow-cool mode
+      if (slowCool) {
+        var sweepsSince = sweeps - slowCoolStart;
+        var frac = Math.min(sweepsSince / 600, 1);
+        var newT = 3.0 - 1.0 * frac;
+        if (newT !== T) {
+          T = newT;
+          rebuildTable();
+          tempSlider.value = T;
+          tempVal.textContent = T.toFixed(3);
+        }
+        if (frac >= 1) {
+          slowCool = false;
+          slowCoolToggle.checked = false;
+        }
+      }
+      render();
+      readout();
+    }
+    requestAnimationFrame(frame);
+  }
+
+  // ──────────────── Controls ────────────────
+  var playBtn = document.getElementById('play-btn');
+  var stepBtn = document.getElementById('step-btn');
+  var resetRandomBtn = document.getElementById('reset-random-btn');
+  var resetUpBtn = document.getElementById('reset-up-btn');
+  var resetDownBtn = document.getElementById('reset-down-btn');
+  var tempSlider = document.getElementById('temp-slider');
+  var tempVal = document.getElementById('temp-val');
+  var fieldSlider = document.getElementById('field-slider');
+  var fieldVal = document.getElementById('field-val');
+  var speedSlider = document.getElementById('speed-slider');
+  var speedVal = document.getElementById('speed-val');
+  var clusterToggle = document.getElementById('cluster-toggle');
+  var slowCoolToggle = document.getElementById('slow-cool-toggle');
+
+  playBtn.addEventListener('click', function () {
+    running = !running;
+    playBtn.textContent = running ? 'Pause' : 'Play';
+    playBtn.classList.toggle('active', running);
+  });
+  stepBtn.addEventListener('click', function () {
+    if (useCluster) wolffStep(); else metropolisSweep();
+    render(); readout();
+  });
+  resetRandomBtn.addEventListener('click', initRandom);
+  resetUpBtn.addEventListener('click', initUp);
+  resetDownBtn.addEventListener('click', initDown);
+
+  tempSlider.addEventListener('input', function () {
+    T = +tempSlider.value; tempVal.textContent = T.toFixed(3);
+    rebuildTable(); readout();
+  });
+  fieldSlider.addEventListener('input', function () {
+    h = +fieldSlider.value; fieldVal.textContent = (h >= 0 ? '+' : '') + h.toFixed(2); readout();
+  });
+  speedSlider.addEventListener('input', function () {
+    speedMult = +speedSlider.value; speedVal.textContent = speedMult + '× N²';
+  });
+  clusterToggle.addEventListener('change', function () { useCluster = clusterToggle.checked; });
+  slowCoolToggle.addEventListener('change', function () {
+    slowCool = slowCoolToggle.checked;
+    if (slowCool) {
+      T = 3.0;
+      tempSlider.value = 3.0;
+      tempVal.textContent = '3.000';
+      rebuildTable();
+      slowCoolStart = sweeps;
+      initRandom();
+      running = true;
+      playBtn.textContent = 'Pause';
+      playBtn.classList.add('active');
+    }
+  });
+
+  d3.selectAll('[data-temp]').on('click', function () {
+    var t = +d3.select(this).attr('data-temp');
+    T = t;
+    tempSlider.value = t;
+    tempVal.textContent = t.toFixed(3);
+    rebuildTable();
+    readout();
+  });
+
+  // Boot
+  initRandom();
+  requestAnimationFrame(frame);
+})();
+
+// ────────────────────────────────────────── Figure 3: M vs T sweep ──
+(function () {
+  var L = 32;
+  var N = L * L;
+  var Tc = 2.0 / Math.log(1 + Math.sqrt(2));
+
+  var svg = d3.select('#mt-plot');
+  var W = 700, H = 340;
+  var m = { top: 20, right: 18, bottom: 46, left: 54 };
+  var pw = W - m.left - m.right;
+  var ph = H - m.top - m.bottom;
+  var g = svg.append('g').attr('transform', 'translate(' + m.left + ',' + m.top + ')');
+
+  var xScale = d3.scaleLinear().domain([1.0, 3.5]).range([0, pw]);
+  var yScale = d3.scaleLinear().domain([0, 1.02]).range([ph, 0]);
+
+  // Axes
+  var xTicks = [1.0, 1.5, 2.0, 2.5, 3.0, 3.5];
+  xTicks.forEach(function (v) {
+    g.append('line').attr('x1', xScale(v)).attr('x2', xScale(v))
+      .attr('y1', 0).attr('y2', ph)
+      .attr('stroke', '#f1f1f4').attr('stroke-width', 1);
+    g.append('text').attr('x', xScale(v)).attr('y', ph + 16)
+      .attr('text-anchor', 'middle').attr('font-size', 11)
+      .attr('fill', '#4a4a6a').text(v.toFixed(1));
+  });
+  var yTicks = [0, 0.25, 0.5, 0.75, 1.0];
+  yTicks.forEach(function (v) {
+    g.append('line').attr('x1', 0).attr('x2', pw)
+      .attr('y1', yScale(v)).attr('y2', yScale(v))
+      .attr('stroke', '#f1f1f4').attr('stroke-width', 1);
+    g.append('text').attr('x', -8).attr('y', yScale(v) + 4)
+      .attr('text-anchor', 'end').attr('font-size', 11)
+      .attr('fill', '#4a4a6a').text(v.toFixed(2));
+  });
+  g.append('text').attr('x', pw / 2).attr('y', ph + 34)
+    .attr('text-anchor', 'middle').attr('font-size', 12)
+    .attr('font-weight', 700).attr('fill', '#4a4a6a')
+    .text('temperature T  (J = k_B = 1)');
+  g.append('text').attr('transform', 'translate(-40,' + (ph / 2) + ') rotate(-90)')
+    .attr('text-anchor', 'middle').attr('font-size', 12)
+    .attr('font-weight', 700).attr('fill', '#4a4a6a')
+    .text('|M|  (equilibrium average)');
+
+  // Tc line
+  g.append('line').attr('x1', xScale(Tc)).attr('x2', xScale(Tc))
+    .attr('y1', 0).attr('y2', ph)
+    .attr('stroke', '#7c3aed').attr('stroke-width', 1.3)
+    .attr('stroke-dasharray', '4,3');
+  g.append('text').attr('x', xScale(Tc) + 4).attr('y', 14)
+    .attr('fill', '#7c3aed').attr('font-size', 11).attr('font-weight', 700)
+    .text('T_c ≈ 2.269');
+
+  // Onsager curve
+  var onsagerData = [];
+  for (var t = 1.0; t <= Tc - 0.001; t += 0.01) {
+    var s = Math.sinh(2 / t);
+    onsagerData.push({ t: t, M: Math.pow(1 - Math.pow(s, -4), 1 / 8) });
+  }
+  for (var t2 = Tc; t2 <= 3.51; t2 += 0.02) {
+    onsagerData.push({ t: t2, M: 0 });
+  }
+  var onsagerLine = d3.line()
+    .x(function (d) { return xScale(d.t); })
+    .y(function (d) { return yScale(d.M); });
+  var onsagerPath = g.append('path').attr('d', onsagerLine(onsagerData))
+    .attr('fill', 'none').attr('stroke', '#059669').attr('stroke-width', 2)
+    .attr('opacity', 0.85);
+  g.append('text').attr('x', xScale(1.35)).attr('y', yScale(0.98) - 4)
+    .attr('fill', '#059669').attr('font-size', 11).attr('font-weight', 700)
+    .text('Onsager M₀(T)');
+
+  var pointsG = g.append('g');
+
+  // Simulation ---------------------------------------------------------------
+  var spins = new Int8Array(N);
+  var data = [];
+  var running = false;
+  var cancelFlag = false;
+
+  function initAll() {
+    for (var k = 0; k < N; k++) spins[k] = Math.random() < 0.5 ? 1 : -1;
+  }
+  function sweepAt(T) {
+    for (var n = 0; n < N; n++) {
+      var i = (Math.random() * L) | 0;
+      var j = (Math.random() * L) | 0;
+      var k = i * L + j;
+      var s = spins[k];
+      var iU = i === 0 ? L - 1 : i - 1;
+      var iD = i === L - 1 ? 0 : i + 1;
+      var jL = j === 0 ? L - 1 : j - 1;
+      var jR = j === L - 1 ? 0 : j + 1;
+      var sNei = spins[iU * L + j] + spins[iD * L + j] + spins[i * L + jL] + spins[i * L + jR];
+      var dE = 2 * s * sNei;
+      if (dE <= 0 || Math.random() < Math.exp(-dE / T)) spins[k] = -s;
+    }
+  }
+  function computeM() {
+    var sum = 0;
+    for (var k = 0; k < N; k++) sum += spins[k];
+    return sum / N;
+  }
+
+  function runSweep() {
+    if (running) return;
+    running = true; cancelFlag = false;
+    data = [];
+    pointsG.selectAll('*').remove();
+    var temps = [];
+    for (var k = 0; k < 25; k++) temps.push(1.0 + k * (2.5 / 24));
+
+    var warmup = 200;
+    var samples = 400;
+
+    // Start from an ordered configuration so the low-T end equilibrates fast.
+    initAll();
+    for (var k2 = 0; k2 < N; k2++) spins[k2] = 1;
+
+    var idx = 0;
+    function next() {
+      if (cancelFlag || idx >= temps.length) {
+        running = false;
+        mtProgress.textContent = cancelFlag ? 'cleared' : 'done — ' + temps.length + ' points';
+        return;
+      }
+      var T = temps[idx];
+      mtProgress.textContent = 'T = ' + T.toFixed(2) + '  (' + (idx + 1) + '/' + temps.length + ')';
+      // Async yielding so the browser can paint between temperatures.
+      setTimeout(function () {
+        for (var w = 0; w < warmup; w++) sweepAt(T);
+        var Msum = 0;
+        for (var s = 0; s < samples; s++) { sweepAt(T); Msum += Math.abs(computeM()); }
+        var Mavg = Msum / samples;
+        data.push({ T: T, M: Mavg });
+        pointsG.append('circle')
+          .attr('cx', xScale(T)).attr('cy', yScale(Mavg))
+          .attr('r', 3.5).attr('fill', '#7c3aed')
+          .attr('stroke', '#fff').attr('stroke-width', 1);
+        // Connect points with a faint line
+        pointsG.selectAll('path.data-line').remove();
+        if (data.length > 1) {
+          var line = d3.line()
+            .x(function (d) { return xScale(d.T); })
+            .y(function (d) { return yScale(d.M); });
+          pointsG.append('path').attr('class', 'data-line')
+            .attr('d', line(data))
+            .attr('fill', 'none').attr('stroke', '#7c3aed')
+            .attr('stroke-width', 1).attr('opacity', 0.35);
+        }
+        idx++;
+        next();
+      }, 0);
+    }
+    next();
+  }
+
+  var mtRunBtn = document.getElementById('mt-run-btn');
+  var mtClearBtn = document.getElementById('mt-clear-btn');
+  var mtProgress = document.getElementById('mt-progress');
+  var mtOnsagerToggle = document.getElementById('mt-onsager-toggle');
+
+  mtRunBtn.addEventListener('click', runSweep);
+  mtClearBtn.addEventListener('click', function () {
+    cancelFlag = true;
+    data = [];
+    pointsG.selectAll('*').remove();
+    mtProgress.textContent = '—';
+  });
+  mtOnsagerToggle.addEventListener('change', function () {
+    onsagerPath.attr('opacity', mtOnsagerToggle.checked ? 0.85 : 0);
+  });
+})();
+</script>
+
+</body>
+</html>

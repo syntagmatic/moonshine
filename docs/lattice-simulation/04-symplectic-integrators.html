@@ -1,0 +1,1053 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Symplectic Integrators — Simulating on a Lattice</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
+<script src="../lib/motion.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --article-width: 820px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem;
+  --line-height: 1.65;
+  --text: #1a1a2e;
+  --text-2: #4a4a6a;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --bg: #fafafa;
+  --fig-bg: #ffffff;
+  --border: #e2e2e8;
+  --c-euler: #dc2626;
+  --c-rk4: #ea580c;
+  --c-verlet: #059669;
+  --c-true: #7c3aed;
+  --c-axis: #94a3b8;
+  --c-grid: #e2e8f0;
+}
+
+body { font-family: var(--body-font); font-size: var(--body-size); line-height: var(--line-height); color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased; }
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
+
+h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+h3 { font-size: 1.15rem; margin: 2rem 0 0.75rem; }
+
+p { margin: 0 0 1rem; }
+a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+a:hover { color: #1d4ed8; }
+
+.back-link { font-family: var(--heading-font); font-size: 0.85rem; display: inline-block; margin-bottom: 1rem; color: var(--text-2); text-decoration: none; }
+.back-link:hover { color: var(--accent); }
+
+.header { padding: 3rem 0 2rem; border-bottom: 1px solid var(--border); margin-bottom: 2.5rem; }
+.header .subtitle { font-family: var(--heading-font); font-size: 1.15rem; color: var(--text-2); max-width: 680px; }
+
+.figure { margin: 2rem 0; padding: 1.5rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; line-height: 1.45; }
+.figure-label { font-weight: 600; color: var(--text); }
+
+.btn { font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600; padding: 0.4rem 0.9rem; border-radius: 5px; border: 1px solid var(--border); background: var(--fig-bg); color: var(--text); cursor: pointer; transition: background 0.15s, border-color 0.15s; user-select: none; }
+.btn:hover { border-color: var(--accent); background: var(--accent-light); }
+.btn.active { background: var(--accent); color: white; border-color: var(--accent); }
+.btn.primary { background: var(--accent); color: white; border-color: var(--accent); }
+.btn.primary:hover { background: #1d4ed8; border-color: #1d4ed8; }
+
+.btn-row { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem; align-items: center; }
+
+.insight { background: var(--accent-light); border-left: 3px solid var(--accent); padding: 1rem 1.25rem; margin: 1.75rem 0; border-radius: 0 4px 4px 0; }
+.insight p { margin: 0; }
+.insight p + p { margin-top: 0.5rem; }
+
+.katex-display { margin: 1.4rem 0; overflow-x: auto; overflow-y: hidden; }
+
+svg text { font-family: var(--heading-font); }
+
+.controls-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 1rem 1.25rem;
+  align-items: center;
+  padding: 1rem 1.25rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  margin-bottom: 1rem;
+  font-family: var(--heading-font);
+  font-size: 0.9rem;
+}
+@media (max-width: 640px) { .controls-row { grid-template-columns: 1fr; } }
+.slider-cell { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 0.5rem 0.8rem; }
+.slider-cell .lbl { color: var(--text-2); font-weight: 600; white-space: nowrap; }
+.slider-cell .val { font-family: var(--mono-font); color: var(--text); min-width: 3.3rem; text-align: right; font-weight: 600; }
+.slider-cell input[type="range"] { width: 100%; }
+
+.button-cell { display: flex; gap: 0.5rem; justify-self: end; }
+
+.triptych {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+@media (max-width: 780px) { .triptych { grid-template-columns: 1fr; } }
+
+.method-panel {
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 0.5rem 0.6rem 0.6rem;
+  background: var(--fig-bg);
+}
+.method-panel .mhead {
+  font-family: var(--heading-font);
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-bottom: 0.35rem;
+}
+.method-panel .mhead .swatch {
+  display: inline-block;
+  width: 10px; height: 10px; border-radius: 2px;
+}
+.method-panel.euler .mhead { color: var(--c-euler); }
+.method-panel.rk4 .mhead { color: var(--c-rk4); }
+.method-panel.verlet .mhead { color: var(--c-verlet); }
+.method-panel svg { display: block; width: 100%; height: auto; }
+
+.energy-row { margin-top: 0.5rem; border-top: 1px solid var(--border); padding-top: 0.35rem; font-family: var(--mono-font); font-size: 0.72rem; color: var(--text-2); display: flex; justify-content: space-between; }
+.energy-row .k { color: var(--text-2); }
+.energy-row .v { color: var(--text); font-weight: 600; }
+
+.legend-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.85rem;
+  font-family: var(--heading-font);
+  font-size: 0.78rem;
+  color: var(--text-2);
+  margin-top: 0.5rem;
+}
+.legend-row .item { display: inline-flex; align-items: center; gap: 0.35rem; }
+.legend-row .swatch { width: 14px; height: 3px; border-radius: 2px; display: inline-block; }
+.legend-row .swatch.dot { width: 8px; height: 8px; border-radius: 50%; }
+
+.algo-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 0.75rem;
+  margin: 1.25rem 0;
+}
+@media (max-width: 780px) { .algo-grid { grid-template-columns: 1fr; } }
+.algo-tile {
+  background: var(--fig-bg);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border);
+  border-radius: 5px;
+  padding: 0.85rem 1rem;
+  font-family: var(--mono-font);
+  font-size: 0.78rem;
+  color: var(--text);
+  line-height: 1.55;
+}
+.algo-tile.euler { border-left-color: var(--c-euler); }
+.algo-tile.rk4 { border-left-color: var(--c-rk4); }
+.algo-tile.verlet { border-left-color: var(--c-verlet); }
+.algo-tile .atitle {
+  font-family: var(--heading-font);
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-2);
+  margin-bottom: 0.5rem;
+  display: flex;
+  justify-content: space-between;
+}
+.algo-tile.euler .atitle .tag { color: var(--c-euler); }
+.algo-tile.rk4 .atitle .tag { color: var(--c-rk4); }
+.algo-tile.verlet .atitle .tag { color: var(--c-verlet); }
+.algo-tile pre { font-family: var(--mono-font); white-space: pre-wrap; font-size: 0.76rem; }
+
+.area-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  align-items: start;
+}
+@media (max-width: 640px) { .area-grid { grid-template-columns: 1fr; } }
+.area-panel {
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 0.6rem 0.7rem 0.7rem;
+  background: var(--fig-bg);
+}
+.area-panel .mhead {
+  font-family: var(--heading-font);
+  font-size: 0.82rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.3rem;
+}
+.area-panel.euler .mhead { color: var(--c-euler); }
+.area-panel.verlet .mhead { color: var(--c-verlet); }
+.area-panel svg { width: 100%; height: auto; display: block; }
+.area-readout { font-family: var(--mono-font); font-size: 0.75rem; color: var(--text-2); margin-top: 0.3rem; display: flex; justify-content: space-between; }
+.area-readout .v { color: var(--text); font-weight: 600; }
+
+.sys-picker { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+
+.nav-footer { margin-top: 5rem; padding-top: 2rem; border-top: 1px solid var(--border); display: flex; justify-content: space-between; font-family: var(--heading-font); font-size: 0.9rem; }
+.nav-footer a { color: var(--accent); text-decoration: none; }
+.nav-footer a:hover { text-decoration: underline; }
+
+@media (prefers-reduced-motion: reduce) { html:not([data-motion="full"]) * { transition-duration: 0s !important; animation-duration: 0s !important; } }
+@media (max-width: 680px) {
+  h1 { font-size: 1.75rem; }
+  .article { padding: 1.5rem 1rem 4rem; }
+}
+</style>
+</head>
+<body>
+<div class="article">
+
+<a href="index.html" class="back-link">← Simulating on a Lattice</a>
+
+<div class="header">
+  <h1>Symplectic Integrators</h1>
+  <p class="subtitle">Part 4 of 15. A Hamiltonian flow preserves a 2-form on phase space; a good integrator must preserve a discrete cousin of that 2-form or it will hemorrhage energy. Forward Euler loses, RK4 loses slowly, Verlet wins — and the reason is a three-line algorithm whose Jacobian is a product of shears.</p>
+</div>
+
+<p>A molecular-dynamics run simulates Newton's laws for millions of particles over billions of time steps. Run it for long enough and something has to give. If the integrator does not respect the geometric structure of the underlying equations, what gives is the thing the physics was trying to say: energy drifts, orbits unwind, the numerical system describes a world that is heating up or cooling down for no physical reason at all.</p>
+
+<p>The discipline that fixes this is called <em>geometric integration</em>. Its central insight is that Hamilton's equations do not merely describe how points move in phase space — they describe a flow that preserves a particular antisymmetric 2-form. Any numerical scheme that preserves a discrete analogue of that form will conserve a slightly-shifted energy exactly, and will therefore have bounded energy error for all time. Any scheme that does not will have energy error that grows without bound.</p>
+
+<p>This is the cleanest illustration in the series of the principle the title advertises: <em>choose a discretisation that honours the symmetry, and Noether's theorem survives in discrete form</em>. A careless discretisation breaks time-translation symmetry of the discrete flow and energy drifts. A careful one does not.</p>
+
+<h2>Hamilton's equations, in one line</h2>
+
+<p>Fix a smooth function <i>H</i>(<i>q</i>, <i>p</i>) on phase space ℝ<sup>2<i>n</i></sup>, with coordinates <i>q</i> (position) and <i>p</i> (momentum). Hamilton's equations of motion are</p>
+
+<div id="math-hamilton"></div>
+
+<p>For a particle of mass <i>m</i> in a potential <i>V</i>(<i>q</i>), take <i>H</i> = <i>p</i><sup>2</sup>/(2<i>m</i>) + <i>V</i>(<i>q</i>); then d<i>q</i>/d<i>t</i> = <i>p</i>/<i>m</i> and d<i>p</i>/d<i>t</i> = −<i>V</i>′(<i>q</i>), which is Newton's <i>F</i> = <i>ma</i>. The Hamiltonian formulation is exactly equivalent, but it exposes a structure that the Newtonian form does not: the flow on phase space preserves an antisymmetric bilinear form, the <em>symplectic 2-form</em></p>
+
+<div id="math-symplectic-form"></div>
+
+<p>Preserving ω means: for any two infinitesimal displacements δ<sub>1</sub> and δ<sub>2</sub> in phase space, the oriented area ω(δ<sub>1</sub>, δ<sub>2</sub>) = δ<sub>1</sub><i>q</i> · δ<sub>2</sub><i>p</i> − δ<sub>1</sub><i>p</i> · δ<sub>2</sub><i>q</i> is the same before and after the flow. Equivalently, the Jacobian <i>M</i> of the flow satisfies <i>M</i><sup>T</sup> <i>J</i> <i>M</i> = <i>J</i>, where <i>J</i> is the standard symplectic matrix with +<i>I</i> and −<i>I</i> off the diagonal. In one degree of freedom ω is just signed area in the (<i>q</i>, <i>p</i>) plane, and preservation is Liouville's theorem: <em>phase-space volume is conserved</em>.</p>
+
+<p>Any symplectic map has Jacobian determinant 1 (because det <i>M</i><sup>T</sup><i>J</i><i>M</i> = (det <i>M</i>)<sup>2</sup> det <i>J</i>). But determinant 1 is strictly weaker than symplectic: volume-preservation allows shearing, twisting, all manner of deformation. Symplecticity is a stronger, more geometric constraint that kills exactly the failure modes we want to rule out.</p>
+
+<h2>Three integrators on one pendulum</h2>
+
+<p>Pick the simplest non-trivial Hamiltonian system: the pendulum, with <i>H</i>(<i>q</i>, <i>p</i>) = <i>p</i><sup>2</sup>/2 − cos <i>q</i>. Its level sets are the closed curves that any physics textbook shows — small oscillations near (0, 0), separatrices at energy 1, rotations for energy &gt; 1. The true flow preserves every one of those level sets <em>exactly</em>, because <i>H</i> is the first integral.</p>
+
+<p>Three candidate integrators, each with a single time step <i>h</i>.</p>
+
+<div class="algo-grid">
+  <div class="algo-tile euler">
+    <div class="atitle"><span>Forward Euler</span><span class="tag">O(h), non-symplectic</span></div>
+<pre>q ← q + h · p
+p ← p − h · sin(q)</pre>
+  </div>
+  <div class="algo-tile rk4">
+    <div class="atitle"><span>RK4</span><span class="tag">O(h⁴), non-symplectic</span></div>
+<pre>k1 = f(y)
+k2 = f(y + h·k1/2)
+k3 = f(y + h·k2/2)
+k4 = f(y + h·k3)
+y ← y + h/6·(k1+2k2+2k3+k4)</pre>
+  </div>
+  <div class="algo-tile verlet">
+    <div class="atitle"><span>Velocity Verlet</span><span class="tag">O(h²), symplectic</span></div>
+<pre>p ← p − (h/2) · sin(q)
+q ← q + h · p
+p ← p − (h/2) · sin(q)</pre>
+  </div>
+</div>
+
+<p>Forward Euler is the textbook first try. Two lines. Obviously first-order accurate. Easy to differentiate: the Jacobian is</p>
+
+<div id="math-euler-jacobian"></div>
+
+<p>whose determinant is 1 + <i>h</i><sup>2</sup> cos <i>q</i>. At a stable equilibrium (small <i>q</i>, cos <i>q</i> ≈ 1) the determinant is <i>strictly greater than 1</i>, so phase-space volume inflates on every step. Liouville's theorem is violated by a factor that compounds geometrically. The orbits spiral outward.</p>
+
+<p>RK4 is the workhorse of scientific computing. Fourth-order accurate per step, so the per-step error is <i>O</i>(<i>h</i><sup>5</sup>) and global error is <i>O</i>(<i>h</i><sup>4</sup>). But its Jacobian is not symplectic either — the order-4 accuracy buys you very small coefficients in the energy drift, but the drift is still there, and on long runs it accumulates.</p>
+
+<p>Velocity Verlet is three lines. A half-kick to momentum, a drift to position using the new momentum, another half-kick. It is only second-order accurate, so short-term it is <em>worse</em> than RK4. But its Jacobian is a product of three shears:</p>
+
+<div id="math-verlet-jacobian"></div>
+
+<p>Each factor is a shear matrix — a linear map of the form <i>I</i> + nilpotent, whose determinant is exactly 1 and which preserves ω exactly. A product of symplectic maps is symplectic. So Verlet's update map is <em>exactly</em> symplectic, not approximately, not to leading order in <i>h</i>: exactly, for any <i>h</i>, as a rational function of <i>h</i>. That is the thing that matters.</p>
+
+<div class="insight">
+  <p><strong>Simplicity is the point.</strong> Verlet is three lines. It has no free parameters. It uses only one force evaluation per step (reusing the end-of-step force as the start-of-next-step force). It is time-reversible. It is explicit — no nonlinear solve. And it preserves the symplectic 2-form exactly because each of its three sub-steps is a shear, and shears are area-preserving in the most elementary way imaginable.</p>
+  <p>RK4 has four force evaluations per step, higher per-step accuracy, and yet on long runs it loses to a scheme that throws away everything except the right geometric structure. The moral: for Hamiltonian dynamics, the <em>form</em> of the update matters more than its order of accuracy.</p>
+</div>
+
+<h2>Watch the phase portrait close — or not</h2>
+
+<p>The figure below runs the same pendulum with all three integrators in parallel. Each column shows the trajectory in the (<i>q</i>, <i>p</i>) plane, with the true level set of <i>H</i> drawn in purple for comparison. Below each phase portrait is the energy error <i>H</i>(<i>t</i>) − <i>H</i>(0). Run for a few hundred steps and the differences become dramatic.</p>
+
+<div class="figure">
+  <div class="controls-row">
+    <div class="slider-cell">
+      <div class="lbl">step h</div>
+      <input type="range" id="h-slider" min="0.02" max="0.4" step="0.005" value="0.2">
+      <div class="val" id="h-val">0.200</div>
+    </div>
+    <div class="slider-cell">
+      <div class="lbl">initial θ₀</div>
+      <input type="range" id="theta0-slider" min="0.3" max="2.4" step="0.05" value="1.3">
+      <div class="val" id="theta0-val">1.30</div>
+    </div>
+    <div class="button-cell">
+      <button class="btn primary" id="run-btn">Run</button>
+      <button class="btn" id="step-btn">Step 20</button>
+      <button class="btn" id="reset-btn">Reset</button>
+    </div>
+  </div>
+
+  <div class="btn-row">
+    <span style="color: var(--text-2); font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600;">System:</span>
+    <div class="sys-picker">
+      <button class="btn sys-btn active" data-sys="pendulum">Pendulum</button>
+      <button class="btn sys-btn" data-sys="ho">Harmonic oscillator</button>
+      <button class="btn sys-btn" data-sys="anharmonic">Quartic well</button>
+    </div>
+  </div>
+
+  <div class="triptych">
+    <div class="method-panel euler">
+      <div class="mhead"><span class="swatch" style="background: var(--c-euler);"></span>Forward Euler</div>
+      <svg id="phase-euler" viewBox="0 0 260 200"></svg>
+      <svg id="energy-euler" viewBox="0 0 260 70"></svg>
+      <div class="energy-row"><span class="k">ΔH(t)</span><span class="v" id="de-euler">0.0000</span></div>
+    </div>
+    <div class="method-panel rk4">
+      <div class="mhead"><span class="swatch" style="background: var(--c-rk4);"></span>RK4</div>
+      <svg id="phase-rk4" viewBox="0 0 260 200"></svg>
+      <svg id="energy-rk4" viewBox="0 0 260 70"></svg>
+      <div class="energy-row"><span class="k">ΔH(t)</span><span class="v" id="de-rk4">0.0000</span></div>
+    </div>
+    <div class="method-panel verlet">
+      <div class="mhead"><span class="swatch" style="background: var(--c-verlet);"></span>Velocity Verlet</div>
+      <svg id="phase-verlet" viewBox="0 0 260 200"></svg>
+      <svg id="energy-verlet" viewBox="0 0 260 70"></svg>
+      <div class="energy-row"><span class="k">ΔH(t)</span><span class="v" id="de-verlet">0.0000</span></div>
+    </div>
+  </div>
+
+  <div class="legend-row">
+    <span class="item"><span class="swatch" style="background: var(--c-true);"></span> true level set of H</span>
+    <span class="item"><span class="swatch dot" style="background: var(--c-euler);"></span> Euler trajectory</span>
+    <span class="item"><span class="swatch dot" style="background: var(--c-rk4);"></span> RK4 trajectory</span>
+    <span class="item"><span class="swatch dot" style="background: var(--c-verlet);"></span> Verlet trajectory</span>
+  </div>
+
+  <p class="figure-caption"><span class="figure-label">Figure 1.</span> Three integrators on the same Hamiltonian, starting from the same (<i>q</i><sub>0</sub>, 0) and stepped in parallel. Purple: the true energy contour. Coloured dots: the numerical trajectory. The energy strip under each portrait plots <i>H</i>(<i>t</i>) − <i>H</i>(0) over time. For the default <i>h</i> = 0.2 and θ₀ = 1.3 rad: Euler spirals outward monotonically, its energy climbing without bound. RK4 tracks the true orbit for many periods but eventually drifts. Verlet's orbit is a closed curve indistinguishable from the true one by eye, and its energy oscillates inside a bounded envelope that never grows. Increase <i>h</i> to see all three errors amplify — but Verlet's stays bounded where the others do not.</p>
+</div>
+
+<h2>Why Euler inflates, why Verlet does not</h2>
+
+<p>The difference is not about accuracy per step. For small <i>h</i> and short runs, RK4 is strictly more accurate than Verlet. The difference is structural.</p>
+
+<p>Forward Euler's one-step map <i>q</i>, <i>p</i> ↦ <i>q</i> + <i>h</i><i>p</i>, <i>p</i> − <i>h</i> sin <i>q</i> has Jacobian</p>
+
+<div id="math-euler-jac-again"></div>
+
+<p>with det = 1 + <i>h</i><sup>2</sup> cos <i>q</i>. Near the stable equilibrium cos <i>q</i> &gt; 0, so det &gt; 1 and the map stretches the plane. A small cloud of initial conditions of area <i>A</i><sub>0</sub> becomes a cloud of area <i>A</i><sub>0</sub>(1 + <i>h</i><sup>2</sup>)<sup><i>n</i></sup> ≈ <i>A</i><sub>0</sub> · exp(<i>n</i> <i>h</i><sup>2</sup>) after <i>n</i> steps. The orbit itself, which is a closed curve in the true flow, unwinds into an outward spiral. Energy, which is roughly quadratic near equilibrium, grows exponentially.</p>
+
+<p>Velocity Verlet's one-step map is the composition of three shears. Writing <i>K</i>(<i>p</i>) = (<i>h</i>/2)(−sin <i>q</i>) for the half-kick and <i>D</i>(<i>q</i>) = <i>h</i><i>p</i> for the drift, the update is<br>
+<i>p</i> ← <i>p</i> + <i>K</i>; <i>q</i> ← <i>q</i> + <i>D</i>(<i>p</i>); <i>p</i> ← <i>p</i> + <i>K</i>. Each sub-step leaves one coordinate alone and shifts the other, so each sub-step has Jacobian determinant 1 and is symplectic. Their composition is symplectic. The Jacobian of the full step <i>Verlet</i>(<i>q</i>, <i>p</i>) has det = 1 exactly, not just to leading order in <i>h</i>. Phase-space area is preserved step by step, period.</p>
+
+<h2>The small square that won't inflate</h2>
+
+<p>The cleanest way to see this is not to look at a trajectory but to look at a <em>cloud</em>. Drop a small square of initial conditions into phase space; integrate every corner forward; watch what the square becomes. Under the true flow it deforms smoothly but keeps its area. Under Euler it inflates. Under Verlet it deforms — sometimes into a long thin strip — but its area is unchanged to machine precision.</p>
+
+<div class="figure">
+  <div class="controls-row" style="grid-template-columns: 1fr auto;">
+    <div class="slider-cell">
+      <div class="lbl">steps</div>
+      <input type="range" id="area-steps-slider" min="0" max="400" step="5" value="0">
+      <div class="val" id="area-steps-val">0</div>
+    </div>
+    <div class="button-cell">
+      <button class="btn" id="area-play-btn">Play</button>
+      <button class="btn" id="area-reset-btn">Reset</button>
+    </div>
+  </div>
+  <div class="area-grid">
+    <div class="area-panel euler">
+      <div class="mhead">Forward Euler</div>
+      <svg id="area-euler" viewBox="0 0 320 240"></svg>
+      <div class="area-readout"><span class="k">area / area₀</span><span class="v" id="area-euler-val">1.0000</span></div>
+    </div>
+    <div class="area-panel verlet">
+      <div class="mhead">Velocity Verlet</div>
+      <svg id="area-verlet" viewBox="0 0 320 240"></svg>
+      <div class="area-readout"><span class="k">area / area₀</span><span class="v" id="area-verlet-val">1.0000</span></div>
+    </div>
+  </div>
+  <p class="figure-caption"><span class="figure-label">Figure 2.</span> A small square of 64 initial conditions flowing through the harmonic oscillator phase space. The true flow rotates the square rigidly, preserving both shape and area. Euler inflates it — the readout climbs above 1 and does not come back. Verlet deforms it into thin filaments as time goes on (Hamiltonian flow is generally not rigid) but its oriented area stays <em>exactly</em> 1 step by step. Drag the slider past 200 steps and read Euler's area grow to 2× or 3×; Verlet's stays pinned at 1.0000.</p>
+</div>
+
+<div class="insight">
+  <p><strong>Liouville's theorem, in miniature.</strong> The statement "a Hamiltonian flow preserves phase-space volume" is not a suggestion or an asymptotic claim; it is a theorem about the continuous-time equations. A numerical integrator either preserves the discrete analogue or it does not. The moment you use a non-volume-preserving method, you are no longer simulating a Hamiltonian system — you are simulating some other dynamical system that happens to agree with the Hamiltonian one to order <i>h</i><sup><i>k</i></sup> for a few steps.</p>
+  <p>This is why symplectic integrators are non-negotiable in molecular dynamics, orbital mechanics, accelerator physics, and lattice gauge theory. Over a 10-billion-step Hamiltonian Monte Carlo run, "non-symplectic but high-order" is a losing bet to "low-order but symplectic".</p>
+</div>
+
+<h2>The shadow Hamiltonian</h2>
+
+<p>Now the punchline. Verlet does not conserve <i>H</i> exactly — it can't, because it is only a second-order approximation to the true flow. What it conserves is a slightly-shifted Hamiltonian Ĥ, the <em>shadow</em> Hamiltonian, whose series expansion in the time step is</p>
+
+<div id="math-shadow"></div>
+
+<p>The first correction <i>H</i><sub>2</sub> is computable in closed form; for the pendulum it is</p>
+
+<div id="math-shadow-pendulum"></div>
+
+<p>This is not an approximation claim. It is a theorem due to Benettin, Giorgilli, Hairer and others: a symplectic integrator with step <i>h</i> exactly conserves some smooth function Ĥ (strictly: conserves it up to exponentially small terms that depend on the analyticity radius of <i>H</i>). Since Ĥ differs from <i>H</i> by <i>O</i>(<i>h</i><sup>2</sup>), and since Verlet conserves Ĥ, the apparent energy error <i>H</i>(<i>q</i><sub><i>n</i></sub>, <i>p</i><sub><i>n</i></sub>) − <i>H</i>(<i>q</i><sub>0</sub>, <i>p</i><sub>0</sub>) oscillates inside a band of width <i>O</i>(<i>h</i><sup>2</sup>) <em>for all time</em>, not just for the first few steps.</p>
+
+<p>This is the bounded-vs-unbounded picture. Under Euler, <i>H</i> drifts because the integrator does not preserve any nearby Hamiltonian at all — it is simulating a dissipative system, not a Hamiltonian one. Under RK4, there is no exactly-conserved shadow Hamiltonian because RK4 is not symplectic; the energy error is <i>O</i>(<i>h</i><sup>4</sup>) per step but it still drifts over long runs. Under Verlet, the shadow Ĥ pins the trajectory to one of its level sets, and those level sets are everywhere close to the level sets of <i>H</i>.</p>
+
+<div class="insight">
+  <p><strong>Discrete Noether, in one slogan.</strong> Continuous time-translation symmetry of a continuous Hamiltonian implies conservation of <i>H</i>. Discrete time-translation symmetry of a <em>symplectic</em> discrete flow implies conservation of a shadow Ĥ that is close to <i>H</i>. The symmetry is preserved under discretisation if and only if the discretisation is symplectic, and the conserved quantity is then a slight deformation of the continuous one.</p>
+  <p>Fail to use a symplectic scheme and you have broken the discrete time-translation symmetry — your update map is different from the map you would get by stepping in two half-steps, then re-stepping, then composing. Noether gives you nothing in return.</p>
+</div>
+
+<h2>Why not just use RK4 with a smaller step?</h2>
+
+<p>A natural reaction is: if RK4 has <i>O</i>(<i>h</i><sup>4</sup>) per-step error and Verlet has <i>O</i>(<i>h</i><sup>2</sup>), surely we could take <i>h</i> so small in RK4 that the accumulated drift over the run we care about is negligible.</p>
+
+<p>The trouble is that "the run we care about" in modern molecular dynamics, Hamiltonian Monte Carlo, and gravitational N-body simulation is <em>very long</em>. Think 10<sup>9</sup> to 10<sup>12</sup> steps. The RK4 drift per step is <i>O</i>(<i>h</i><sup>5</sup>), but it accumulates without cancellation, so the total drift after <i>N</i> steps is <i>O</i>(<i>N</i> <i>h</i><sup>5</sup>). For that quantity to be small when <i>N</i> = 10<sup>10</sup> you need <i>h</i> smaller than any practical value. Verlet's drift is zero no matter how many steps you take; its apparent error is a bounded oscillation of amplitude <i>O</i>(<i>h</i><sup>2</sup>), regardless of <i>N</i>.</p>
+
+<p>Put differently: RK4 gives you better accuracy <em>per step</em> and worse conservation <em>over the run</em>. Which one matters depends entirely on how long you run. Above a few thousand steps Verlet already wins on almost any Hamiltonian problem; above a million, the question is not close.</p>
+
+<p>There are higher-order symplectic integrators too: Forest–Ruth (fourth-order), Yoshida's explicit families of arbitrary even order, McLachlan's optimised fourth-order schemes. They are all compositions of Verlet-like building blocks with carefully chosen coefficients. All of them conserve some Ĥ; all of them have bounded energy error; all of them inherit the shadow-Hamiltonian theorem. Second-order Verlet is the simplest representative and the one that runs in production.</p>
+
+<h2>What this means for the rest of the series</h2>
+
+<p>The same pattern recurs. In the next explainer, <em>Symmetry Reduction</em>, we use the point group of a molecule to collapse a force calculation onto a small asymmetric unit — the group acts, the Hamiltonian is invariant, and so its representation-theoretic structure can be exploited. In Act III, lattice Boltzmann chooses a discrete velocity set precisely because it is the smallest stencil whose symmetry group contains enough isotropic tensors to recover Navier–Stokes. In Act V, equivariant neural networks hard-code the group into the weight tensor so that the learned function inherits the data's symmetry by construction.</p>
+
+<p>The rule is the same every time: <em>figure out what group the continuous problem is invariant under, then demand that the discretisation respect that group exactly, not approximately</em>. Where the group is time-translation and the invariant is the symplectic 2-form, the payoff is what this explainer built. Where the group is a finite point group and the invariant is isotropy, the payoff is Navier–Stokes on a hexagonal lattice. Where the group is <i>SO</i>(3) and the invariant is rotational equivariance, the payoff is a neural network that generalises from one orientation of the training data to all others.</p>
+
+<p>The technical content differs. The algebraic shape is identical.</p>
+
+<h2>Takeaways</h2>
+
+<ul style="margin-left: 1.5rem;">
+  <li><strong>Hamilton's flow preserves a 2-form.</strong> ω = d<i>q</i> ∧ d<i>p</i>. Phase-space volume is conserved (Liouville); level sets of <i>H</i> are invariant.</li>
+  <li><strong>Forward Euler inflates volume.</strong> Jacobian determinant 1 + <i>h</i><sup>2</sup> cos <i>q</i> &gt; 1 near equilibrium. Orbits spiral outward; energy drifts without bound.</li>
+  <li><strong>RK4 is accurate per step but not symplectic.</strong> Energy drift per step is tiny but accumulates. Over long runs, a first-order symplectic scheme beats it.</li>
+  <li><strong>Verlet is three lines and exactly symplectic.</strong> Half-kick, drift, half-kick. Each sub-step is a shear; the product is symplectic; the Jacobian determinant is exactly 1.</li>
+  <li><strong>Shadow Hamiltonian theorem.</strong> A symplectic integrator with step <i>h</i> exactly conserves some Ĥ = <i>H</i> + <i>h</i><sup>2</sup><i>H</i><sub>2</sub> + …. The apparent energy error <i>H</i>(<i>t</i>) − <i>H</i>(0) is bounded for all time, not just for short time.</li>
+  <li><strong>Discrete Noether.</strong> Time-translation symmetry of the discrete flow, encoded as symplecticity, yields exact conservation of Ĥ — the discrete cousin of Noether's theorem that an un-symmetric discretisation throws away.</li>
+  <li><strong>Simplicity is the point.</strong> The scheme that wins is not the most accurate per step; it is the one that respects the geometry. The rest of the series is variations on that theme for different groups.</li>
+</ul>
+
+<p>Next: how a molecule's point group lets you compute forces on only the asymmetric unit and reconstruct the rest by representation theory — the spatial analogue of what we just did in time.</p>
+
+<div class="nav-footer">
+  <a href="03-periodic-boundaries.html">← Part 3: Periodic Boundaries</a>
+  <a href="05-symmetry-reduction.html">Part 5: Symmetry Reduction →</a>
+</div>
+
+</div>
+
+<script>
+// ────────────────────────────────────────── KaTeX ──
+function math(id, tex, display) {
+  var el = document.getElementById(id);
+  if (el) katex.render(tex, el, { throwOnError: false, displayMode: !!display });
+}
+
+math('math-hamilton',
+  '\\frac{dq}{dt} \\;=\\; \\frac{\\partial H}{\\partial p}, \\qquad \\frac{dp}{dt} \\;=\\; -\\frac{\\partial H}{\\partial q}.',
+  true);
+
+math('math-symplectic-form',
+  '\\omega \\;=\\; dq \\wedge dp, \\qquad \\omega(\\delta_1, \\delta_2) \\;=\\; \\delta_1 q \\cdot \\delta_2 p - \\delta_1 p \\cdot \\delta_2 q.',
+  true);
+
+math('math-euler-jacobian',
+  'J_{\\text{Euler}} \\;=\\; \\begin{pmatrix} 1 & h \\\\ -h\\cos q & 1 \\end{pmatrix}, \\qquad \\det J \\;=\\; 1 + h^2 \\cos q.',
+  true);
+
+math('math-verlet-jacobian',
+  'J_{\\text{Verlet}} \\;=\\; \\underbrace{\\begin{pmatrix} 1 & 0 \\\\ -\\tfrac{h}{2}\\cos q_+ & 1 \\end{pmatrix}}_{\\text{half-kick}} \\underbrace{\\begin{pmatrix} 1 & h \\\\ 0 & 1 \\end{pmatrix}}_{\\text{drift}} \\underbrace{\\begin{pmatrix} 1 & 0 \\\\ -\\tfrac{h}{2}\\cos q & 1 \\end{pmatrix}}_{\\text{half-kick}}.',
+  true);
+
+math('math-euler-jac-again',
+  'J_{\\text{Euler}} \\;=\\; I + h \\begin{pmatrix} 0 & 1 \\\\ -\\cos q & 0 \\end{pmatrix}, \\qquad \\det J = 1 + h^2 \\cos q.',
+  true);
+
+math('math-shadow',
+  '\\hat{H}(q, p) \\;=\\; H(q, p) \\;+\\; h^2\\, H_2(q, p) \\;+\\; h^4\\, H_4(q, p) \\;+\\; \\cdots',
+  true);
+
+math('math-shadow-pendulum',
+  'H_2(q, p) \\;=\\; -\\tfrac{1}{12}\\, p^2 \\cos q \\;+\\; \\tfrac{1}{24}\\, \\sin^2 q.',
+  true);
+
+// ────────────────────────────────────────── System definitions ──
+// Each system: f(q, p) = [dq/dt, dp/dt]; H(q, p); qRange, pRange for plotting
+var SYSTEMS = {
+  pendulum: {
+    name: 'pendulum',
+    dq: function (q, p) { return p; },
+    dp: function (q, p) { return -Math.sin(q); },
+    H: function (q, p) { return 0.5 * p * p - Math.cos(q); },
+    qRange: [-Math.PI, Math.PI],
+    pRange: [-2.5, 2.5]
+  },
+  ho: {
+    name: 'ho',
+    dq: function (q, p) { return p; },
+    dp: function (q, p) { return -q; },
+    H: function (q, p) { return 0.5 * (p * p + q * q); },
+    qRange: [-2.2, 2.2],
+    pRange: [-2.2, 2.2]
+  },
+  anharmonic: {
+    name: 'anharmonic',
+    dq: function (q, p) { return p; },
+    dp: function (q, p) { return -q * q * q; },
+    H: function (q, p) { return 0.5 * p * p + 0.25 * q * q * q * q; },
+    qRange: [-2.4, 2.4],
+    pRange: [-2.4, 2.4]
+  }
+};
+
+// Integrator steps: each returns [q, p] after one step
+function stepEuler(sys, q, p, h) {
+  var qn = q + h * sys.dq(q, p);
+  var pn = p + h * sys.dp(q, p);
+  return [qn, pn];
+}
+
+function stepRK4(sys, q, p, h) {
+  var k1q = sys.dq(q, p), k1p = sys.dp(q, p);
+  var k2q = sys.dq(q + 0.5 * h * k1q, p + 0.5 * h * k1p);
+  var k2p = sys.dp(q + 0.5 * h * k1q, p + 0.5 * h * k1p);
+  var k3q = sys.dq(q + 0.5 * h * k2q, p + 0.5 * h * k2p);
+  var k3p = sys.dp(q + 0.5 * h * k2q, p + 0.5 * h * k2p);
+  var k4q = sys.dq(q + h * k3q, p + h * k3p);
+  var k4p = sys.dp(q + h * k3q, p + h * k3p);
+  var qn = q + h / 6 * (k1q + 2 * k2q + 2 * k3q + k4q);
+  var pn = p + h / 6 * (k1p + 2 * k2p + 2 * k3p + k4p);
+  return [qn, pn];
+}
+
+function stepVerlet(sys, q, p, h) {
+  // half-kick using current q
+  var p1 = p + 0.5 * h * sys.dp(q, p);
+  // drift using new p
+  var q1 = q + h * sys.dq(q, p1);
+  // half-kick using new q
+  var p2 = p1 + 0.5 * h * sys.dp(q1, p1);
+  return [q1, p2];
+}
+
+// ────────────────────────────────────────── Figure 1: three-column comparator ──
+(function () {
+  var state = {
+    sys: SYSTEMS.pendulum,
+    h: 0.2,
+    theta0: 1.3,
+    running: false,
+    rafId: null,
+    trajectories: { euler: [], rk4: [], verlet: [] },
+    energies: { euler: [], rk4: [], verlet: [] },
+    maxSteps: 1500,
+    H0: 0
+  };
+
+  var hSlider = document.getElementById('h-slider');
+  var hVal = document.getElementById('h-val');
+  var theta0Slider = document.getElementById('theta0-slider');
+  var theta0Val = document.getElementById('theta0-val');
+  var runBtn = document.getElementById('run-btn');
+  var stepBtn = document.getElementById('step-btn');
+  var resetBtn = document.getElementById('reset-btn');
+
+  hSlider.addEventListener('input', function () {
+    state.h = +hSlider.value;
+    hVal.textContent = state.h.toFixed(3);
+    reset();
+  });
+  theta0Slider.addEventListener('input', function () {
+    state.theta0 = +theta0Slider.value;
+    theta0Val.textContent = state.theta0.toFixed(2);
+    reset();
+  });
+
+  d3.selectAll('.sys-btn').on('click', function () {
+    d3.selectAll('.sys-btn').classed('active', false);
+    d3.select(this).classed('active', true);
+    var key = d3.select(this).attr('data-sys');
+    state.sys = SYSTEMS[key];
+    // sensible theta0 default per system
+    if (key === 'ho') { state.theta0 = 1.5; }
+    else if (key === 'anharmonic') { state.theta0 = 1.5; }
+    else { state.theta0 = 1.3; }
+    theta0Slider.value = state.theta0;
+    theta0Val.textContent = state.theta0.toFixed(2);
+    reset();
+  });
+
+  runBtn.addEventListener('click', function () {
+    if (state.running) { stopRun(); }
+    else { startRun(); }
+  });
+  stepBtn.addEventListener('click', function () { stepMany(20); });
+  resetBtn.addEventListener('click', reset);
+
+  function reset() {
+    stopRun();
+    var q0 = state.theta0, p0 = 0;
+    state.trajectories.euler = [[q0, p0]];
+    state.trajectories.rk4 = [[q0, p0]];
+    state.trajectories.verlet = [[q0, p0]];
+    state.H0 = state.sys.H(q0, p0);
+    state.energies.euler = [0];
+    state.energies.rk4 = [0];
+    state.energies.verlet = [0];
+    draw();
+  }
+
+  function startRun() {
+    state.running = true;
+    runBtn.textContent = 'Pause';
+    runBtn.classList.remove('primary');
+    tick();
+  }
+
+  function stopRun() {
+    state.running = false;
+    runBtn.textContent = 'Run';
+    runBtn.classList.add('primary');
+    if (state.rafId) { cancelAnimationFrame(state.rafId); state.rafId = null; }
+  }
+
+  function tick() {
+    if (!state.running) return;
+    stepMany(4);
+    if (state.trajectories.euler.length >= state.maxSteps) {
+      stopRun();
+      return;
+    }
+    state.rafId = requestAnimationFrame(tick);
+  }
+
+  function stepMany(n) {
+    var sys = state.sys, h = state.h;
+    for (var i = 0; i < n; i++) {
+      if (state.trajectories.euler.length >= state.maxSteps) break;
+      var e = state.trajectories.euler[state.trajectories.euler.length - 1];
+      var r = state.trajectories.rk4[state.trajectories.rk4.length - 1];
+      var v = state.trajectories.verlet[state.trajectories.verlet.length - 1];
+      var en = stepEuler(sys, e[0], e[1], h);
+      var rn = stepRK4(sys, r[0], r[1], h);
+      var vn = stepVerlet(sys, v[0], v[1], h);
+      // clamp runaway Euler to keep plots readable
+      if (!isFinite(en[0]) || Math.abs(en[1]) > 50 || Math.abs(en[0]) > 50) {
+        en = [e[0], e[1]]; // freeze
+      }
+      state.trajectories.euler.push(en);
+      state.trajectories.rk4.push(rn);
+      state.trajectories.verlet.push(vn);
+      state.energies.euler.push(sys.H(en[0], en[1]) - state.H0);
+      state.energies.rk4.push(sys.H(rn[0], rn[1]) - state.H0);
+      state.energies.verlet.push(sys.H(vn[0], vn[1]) - state.H0);
+    }
+    draw();
+  }
+
+  // Drawing
+  var W = 260, H = 200, EH = 70;
+  var methods = [
+    { key: 'euler', color: 'var(--c-euler)', phaseSvg: 'phase-euler', energySvg: 'energy-euler', readout: 'de-euler' },
+    { key: 'rk4', color: 'var(--c-rk4)', phaseSvg: 'phase-rk4', energySvg: 'energy-rk4', readout: 'de-rk4' },
+    { key: 'verlet', color: 'var(--c-verlet)', phaseSvg: 'phase-verlet', energySvg: 'energy-verlet', readout: 'de-verlet' }
+  ];
+
+  // Initialize SVG structures
+  var svgs = {};
+  methods.forEach(function (m) {
+    var phase = d3.select('#' + m.phaseSvg);
+    var energy = d3.select('#' + m.energySvg);
+    phase.append('g').attr('class', 'grid');
+    phase.append('g').attr('class', 'axes');
+    phase.append('g').attr('class', 'true-level');
+    phase.append('path').attr('class', 'traj').attr('fill', 'none').attr('stroke', m.color).attr('stroke-width', 1.2).attr('opacity', 0.85);
+    phase.append('circle').attr('class', 'head').attr('r', 3).attr('fill', m.color);
+    phase.append('text').attr('class', 'phase-label')
+      .attr('x', W - 6).attr('y', 12)
+      .attr('text-anchor', 'end').attr('font-size', 9).attr('fill', 'var(--text-2)')
+      .text('q (horizontal) · p (vertical)');
+    energy.append('g').attr('class', 'egrid');
+    energy.append('line').attr('class', 'ezero').attr('stroke', 'var(--c-axis)').attr('stroke-width', 0.6).attr('stroke-dasharray', '2,3');
+    energy.append('path').attr('class', 'epath').attr('fill', 'none').attr('stroke', m.color).attr('stroke-width', 1.2);
+    energy.append('text').attr('class', 'elabel').attr('x', 4).attr('y', 10).attr('font-size', 9).attr('fill', 'var(--text-2)').text('ΔH');
+    svgs[m.key] = { phase: phase, energy: energy };
+  });
+
+  function draw() {
+    var sys = state.sys;
+    var qR = sys.qRange, pR = sys.pRange;
+    var xs = d3.scaleLinear().domain(qR).range([20, W - 10]);
+    var ys = d3.scaleLinear().domain(pR).range([H - 12, 10]);
+
+    // Determine energy scale: symmetric around 0, fit to data across all three methods
+    var allDE = [].concat(state.energies.euler, state.energies.rk4, state.energies.verlet);
+    var maxAbs = d3.max(allDE, function (d) { return Math.abs(d); }) || 0.05;
+    // Give some breathing room; clamp to a minimum so verlet oscillation is visible
+    var eLim = Math.max(maxAbs * 1.15, 0.02);
+    var eScale = d3.scaleLinear().domain([-eLim, eLim]).range([EH - 8, 6]);
+
+    methods.forEach(function (m) {
+      var group = svgs[m.key];
+      var phase = group.phase;
+      var energy = group.energy;
+
+      // Grid
+      var grid = phase.select('.grid');
+      grid.selectAll('*').remove();
+      for (var i = 0; i <= 4; i++) {
+        var x = xs.range()[0] + i * (xs.range()[1] - xs.range()[0]) / 4;
+        var y = ys.range()[1] + i * (ys.range()[0] - ys.range()[1]) / 4;
+        grid.append('line').attr('x1', x).attr('y1', ys.range()[1]).attr('x2', x).attr('y2', ys.range()[0])
+          .attr('stroke', 'var(--c-grid)').attr('stroke-width', 0.5);
+        grid.append('line').attr('x1', xs.range()[0]).attr('y1', y).attr('x2', xs.range()[1]).attr('y2', y)
+          .attr('stroke', 'var(--c-grid)').attr('stroke-width', 0.5);
+      }
+
+      // Axes
+      var axes = phase.select('.axes');
+      axes.selectAll('*').remove();
+      axes.append('line').attr('x1', xs.range()[0]).attr('y1', ys(0)).attr('x2', xs.range()[1]).attr('y2', ys(0))
+        .attr('stroke', 'var(--c-axis)').attr('stroke-width', 0.8);
+      axes.append('line').attr('x1', xs(0)).attr('y1', ys.range()[0]).attr('x2', xs(0)).attr('y2', ys.range()[1])
+        .attr('stroke', 'var(--c-axis)').attr('stroke-width', 0.8);
+
+      // True level set through (theta0, 0)
+      var tl = phase.select('.true-level');
+      tl.selectAll('*').remove();
+      drawTrueLevelSet(tl, sys, state.H0, xs, ys);
+
+      // Trajectory
+      var traj = state.trajectories[m.key];
+      var line = d3.line()
+        .x(function (d) { return xs(clip(d[0], qR)); })
+        .y(function (d) { return ys(clip(d[1], pR)); })
+        .defined(function (d) { return isFinite(d[0]) && isFinite(d[1]); });
+      phase.select('.traj').attr('d', line(traj));
+      var head = traj[traj.length - 1];
+      phase.select('.head').attr('cx', xs(clip(head[0], qR))).attr('cy', ys(clip(head[1], pR)));
+
+      // Energy plot
+      var egrid = energy.select('.egrid');
+      egrid.selectAll('*').remove();
+      energy.select('.ezero').attr('x1', 4).attr('y1', eScale(0)).attr('x2', W - 4).attr('y2', eScale(0));
+      var nSteps = state.energies[m.key].length;
+      var tScale = d3.scaleLinear().domain([0, Math.max(state.maxSteps, 50)]).range([4, W - 4]);
+      var eLine = d3.line()
+        .x(function (d, i) { return tScale(i); })
+        .y(function (d) { return eScale(clip(d, [-eLim, eLim])); });
+      energy.select('.epath').attr('d', eLine(state.energies[m.key]));
+
+      // Readout
+      var last = state.energies[m.key][state.energies[m.key].length - 1];
+      d3.select('#' + m.readout).text(last.toFixed(4));
+    });
+  }
+
+  function clip(v, range) {
+    return Math.max(range[0], Math.min(range[1], v));
+  }
+
+  function drawTrueLevelSet(g, sys, H0, xs, ys) {
+    // Marching-squares on a grid to draw level set H(q,p) = H0
+    var qR = sys.qRange, pR = sys.pRange;
+    var nx = 80, ny = 64;
+    var dq = (qR[1] - qR[0]) / nx;
+    var dp = (pR[1] - pR[0]) / ny;
+    var segs = [];
+    for (var i = 0; i < nx; i++) {
+      for (var j = 0; j < ny; j++) {
+        var q0 = qR[0] + i * dq, q1 = q0 + dq;
+        var p0 = pR[0] + j * dp, p1 = p0 + dp;
+        var v00 = sys.H(q0, p0) - H0;
+        var v10 = sys.H(q1, p0) - H0;
+        var v11 = sys.H(q1, p1) - H0;
+        var v01 = sys.H(q0, p1) - H0;
+        // Compute case index
+        var c = 0;
+        if (v00 > 0) c |= 1;
+        if (v10 > 0) c |= 2;
+        if (v11 > 0) c |= 4;
+        if (v01 > 0) c |= 8;
+        if (c === 0 || c === 15) continue;
+        // Linear interpolation on edges
+        function interp(va, vb, a, b) {
+          var t = va / (va - vb);
+          return a + t * (b - a);
+        }
+        var eT = [q0 + (v00 === v10 ? 0.5 * dq : interp(v00, v10, 0, dq)), p0]; // bottom
+        var eR = [q1, p0 + (v10 === v11 ? 0.5 * dp : interp(v10, v11, 0, dp))]; // right
+        var eB = [q0 + (v01 === v11 ? 0.5 * dq : interp(v01, v11, 0, dq)), p1]; // top
+        var eL = [q0, p0 + (v00 === v01 ? 0.5 * dp : interp(v00, v01, 0, dp))]; // left
+        var pair;
+        switch (c) {
+          case 1: case 14: pair = [eL, eT]; break;
+          case 2: case 13: pair = [eT, eR]; break;
+          case 4: case 11: pair = [eR, eB]; break;
+          case 8: case 7: pair = [eB, eL]; break;
+          case 3: case 12: pair = [eL, eR]; break;
+          case 6: case 9: pair = [eT, eB]; break;
+          case 5: pair = null; break; // saddle — draw both
+          case 10: pair = null; break;
+        }
+        if (pair) {
+          segs.push([pair[0], pair[1]]);
+        } else if (c === 5) {
+          segs.push([eL, eT]);
+          segs.push([eR, eB]);
+        } else if (c === 10) {
+          segs.push([eT, eR]);
+          segs.push([eB, eL]);
+        }
+      }
+    }
+    segs.forEach(function (s) {
+      g.append('line')
+        .attr('x1', xs(s[0][0])).attr('y1', ys(s[0][1]))
+        .attr('x2', xs(s[1][0])).attr('y2', ys(s[1][1]))
+        .attr('stroke', 'var(--c-true)').attr('stroke-width', 1.2).attr('opacity', 0.7);
+    });
+  }
+
+  // Init
+  hVal.textContent = state.h.toFixed(3);
+  theta0Val.textContent = state.theta0.toFixed(2);
+  reset();
+})();
+
+// ────────────────────────────────────────── Figure 2: area preservation ──
+(function () {
+  var state = {
+    sys: SYSTEMS.ho,
+    h: 0.15,
+    steps: 0,
+    playing: false,
+    rafId: null,
+    // 8x8 grid of corners = 64 points
+    square0: null,
+    eulerPts: null,
+    verletPts: null
+  };
+
+  var stepsSlider = document.getElementById('area-steps-slider');
+  var stepsVal = document.getElementById('area-steps-val');
+  var playBtn = document.getElementById('area-play-btn');
+  var resetBtn = document.getElementById('area-reset-btn');
+
+  function makeSquare() {
+    var pts = [];
+    // Place a small 0.3 x 0.3 square centered at (1.2, 0)
+    var cx = 1.2, cy = 0;
+    var s = 0.3;
+    var N = 8;
+    // Walk the perimeter in order so polygon drawing works
+    // top edge
+    for (var i = 0; i < N; i++) pts.push([cx - s / 2 + i * s / N, cy + s / 2]);
+    for (var i = 0; i < N; i++) pts.push([cx + s / 2, cy + s / 2 - i * s / N]);
+    for (var i = 0; i < N; i++) pts.push([cx + s / 2 - i * s / N, cy - s / 2]);
+    for (var i = 0; i < N; i++) pts.push([cx - s / 2, cy - s / 2 + i * s / N]);
+    return pts;
+  }
+
+  function reset() {
+    stop();
+    state.steps = 0;
+    stepsSlider.value = 0;
+    stepsVal.textContent = '0';
+    state.square0 = makeSquare();
+    state.eulerPts = state.square0.map(function (p) { return p.slice(); });
+    state.verletPts = state.square0.map(function (p) { return p.slice(); });
+    draw();
+  }
+
+  function stepTo(target) {
+    if (target < state.steps) { // step backward: reset and run
+      state.eulerPts = state.square0.map(function (p) { return p.slice(); });
+      state.verletPts = state.square0.map(function (p) { return p.slice(); });
+      state.steps = 0;
+    }
+    var h = state.h;
+    var sys = state.sys;
+    while (state.steps < target) {
+      for (var i = 0; i < state.eulerPts.length; i++) {
+        var e = state.eulerPts[i];
+        var en = stepEuler(sys, e[0], e[1], h);
+        if (isFinite(en[0]) && isFinite(en[1]) && Math.abs(en[0]) < 20 && Math.abs(en[1]) < 20) {
+          state.eulerPts[i] = en;
+        }
+        var v = state.verletPts[i];
+        var vn = stepVerlet(sys, v[0], v[1], h);
+        state.verletPts[i] = vn;
+      }
+      state.steps++;
+    }
+    stepsVal.textContent = state.steps;
+    draw();
+  }
+
+  stepsSlider.addEventListener('input', function () {
+    stop();
+    stepTo(+stepsSlider.value);
+  });
+
+  playBtn.addEventListener('click', function () {
+    if (state.playing) { stop(); }
+    else { play(); }
+  });
+
+  resetBtn.addEventListener('click', reset);
+
+  function play() {
+    state.playing = true;
+    playBtn.textContent = 'Pause';
+    tickPlay();
+  }
+
+  function stop() {
+    state.playing = false;
+    playBtn.textContent = 'Play';
+    if (state.rafId) { cancelAnimationFrame(state.rafId); state.rafId = null; }
+  }
+
+  function tickPlay() {
+    if (!state.playing) return;
+    var target = state.steps + 3;
+    if (target > 400) { stop(); return; }
+    stepsSlider.value = target;
+    stepTo(target);
+    state.rafId = requestAnimationFrame(tickPlay);
+  }
+
+  // SVG setup
+  var W2 = 320, H2 = 240;
+  var xs = d3.scaleLinear().domain([-2.5, 2.5]).range([14, W2 - 14]);
+  var ys = d3.scaleLinear().domain([-2.5, 2.5]).range([H2 - 14, 14]);
+
+  function setupSvg(id, color) {
+    var svg = d3.select('#' + id);
+    // axes and grid
+    var grid = svg.append('g');
+    for (var i = -2; i <= 2; i++) {
+      grid.append('line').attr('x1', xs(i)).attr('y1', ys(-2.5)).attr('x2', xs(i)).attr('y2', ys(2.5))
+        .attr('stroke', 'var(--c-grid)').attr('stroke-width', 0.5);
+      grid.append('line').attr('x1', xs(-2.5)).attr('y1', ys(i)).attr('x2', xs(2.5)).attr('y2', ys(i))
+        .attr('stroke', 'var(--c-grid)').attr('stroke-width', 0.5);
+    }
+    svg.append('line').attr('x1', xs(-2.5)).attr('y1', ys(0)).attr('x2', xs(2.5)).attr('y2', ys(0))
+      .attr('stroke', 'var(--c-axis)').attr('stroke-width', 0.8);
+    svg.append('line').attr('x1', xs(0)).attr('y1', ys(-2.5)).attr('x2', xs(0)).attr('y2', ys(2.5))
+      .attr('stroke', 'var(--c-axis)').attr('stroke-width', 0.8);
+    // reference level set for H = H0 of center
+    var H0 = state.sys.H(1.2, 0);
+    var cg = svg.append('g').attr('opacity', 0.5);
+    for (var t = 0; t < 360; t += 2) {
+      var r = Math.sqrt(2 * H0);
+      var x = r * Math.cos(t * Math.PI / 180);
+      var y = r * Math.sin(t * Math.PI / 180);
+      if (t === 0) var prev = [x, y];
+      else {
+        cg.append('line').attr('x1', xs(prev[0])).attr('y1', ys(prev[1]))
+          .attr('x2', xs(x)).attr('y2', ys(y))
+          .attr('stroke', 'var(--c-true)').attr('stroke-width', 0.6).attr('opacity', 0.5);
+        prev = [x, y];
+      }
+    }
+    svg.append('path').attr('class', 'square0')
+      .attr('fill', 'var(--c-true)').attr('fill-opacity', 0.08)
+      .attr('stroke', 'var(--c-true)').attr('stroke-width', 0.8).attr('stroke-dasharray', '2,3');
+    svg.append('path').attr('class', 'cloud')
+      .attr('fill', color).attr('fill-opacity', 0.2)
+      .attr('stroke', color).attr('stroke-width', 1.2);
+    svg.append('g').attr('class', 'dots');
+    // label
+    svg.append('text').attr('x', W2 - 8).attr('y', 14)
+      .attr('text-anchor', 'end').attr('font-size', 9).attr('fill', 'var(--text-2)')
+      .text('q horizontal · p vertical');
+    return svg;
+  }
+
+  setupSvg('area-euler', 'var(--c-euler)');
+  setupSvg('area-verlet', 'var(--c-verlet)');
+
+  function polygonArea(pts) {
+    var a = 0;
+    for (var i = 0; i < pts.length; i++) {
+      var j = (i + 1) % pts.length;
+      a += pts[i][0] * pts[j][1];
+      a -= pts[j][0] * pts[i][1];
+    }
+    return Math.abs(a / 2);
+  }
+
+  function draw() {
+    // initial-square path (same on both)
+    var sq0path = state.square0.map(function (p, i) { return (i === 0 ? 'M' : 'L') + xs(p[0]) + ',' + ys(p[1]); }).join('') + 'Z';
+    d3.select('#area-euler').select('.square0').attr('d', sq0path);
+    d3.select('#area-verlet').select('.square0').attr('d', sq0path);
+
+    function drawCloud(svgId, pts) {
+      var svg = d3.select('#' + svgId);
+      // clamp points to view
+      var path = pts.map(function (p, i) {
+        var x = xs(Math.max(-2.5, Math.min(2.5, p[0])));
+        var y = ys(Math.max(-2.5, Math.min(2.5, p[1])));
+        return (i === 0 ? 'M' : 'L') + x + ',' + y;
+      }).join('') + 'Z';
+      svg.select('.cloud').attr('d', path);
+      var dots = svg.select('.dots').selectAll('circle').data(pts);
+      dots.enter().append('circle').attr('r', 1.2).attr('fill', svgId === 'area-euler' ? 'var(--c-euler)' : 'var(--c-verlet)')
+        .merge(dots)
+        .attr('cx', function (d) { return xs(Math.max(-2.5, Math.min(2.5, d[0]))); })
+        .attr('cy', function (d) { return ys(Math.max(-2.5, Math.min(2.5, d[1]))); });
+      dots.exit().remove();
+    }
+
+    drawCloud('area-euler', state.eulerPts);
+    drawCloud('area-verlet', state.verletPts);
+
+    var a0 = polygonArea(state.square0);
+    var ae = polygonArea(state.eulerPts);
+    var av = polygonArea(state.verletPts);
+    d3.select('#area-euler-val').text((ae / a0).toFixed(4));
+    d3.select('#area-verlet-val').text((av / a0).toFixed(4));
+  }
+
+  reset();
+})();
+</script>
+
+</body>
+</html>

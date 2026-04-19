@@ -11,6 +11,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
 <script src="lib/typeviz.js"></script>
 <script src="lib/simcore.js"></script>
+<script src="../lib/motion.js"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -188,31 +189,33 @@ step     :: ReactionParams -> Field w h -> Field w h  -- built on convolve</div>
       <div class="figure-caption">Every tile runs the same <code>convolve :: Stencil k -> Field 64 64 -> Field 64 64</code>, differing only in which <code>Stencil k</code> they pass. Swap a <code>Stencil 3</code> for a <code>Stencil 5</code>, the buffer layout changes but the signature still type-checks. Swap a <code>[2×3]</code> shape in, and the line wouldn't compile.</div>
     </div>
     <p>The gallery is the expressiveness payoff. You can ship a library of named stencils, each with its own type, and combine them via well-typed combinators — <code>transpose :: Stencil k -> Stencil k</code>, <code>compose :: Stencil k -> Stencil k -> Stencil k</code> — knowing the dimensions will always line up.</p>
-    <p>Shape is the easy guarantee. The harder one — and the reason #12 ends the series — is <em>symmetry</em>. A 5-point Laplacian on a square grid doesn't commute with 60° rotation; if you run Gray-Scott long enough the Turing stripes line up with the grid axes, and the pattern you publish is half the chemistry and half the memory layout. A hex stencil that commutes with the lattice's six-fold Weyl action removes that artefact. Shape indices prove the dimensions line up; equivariance proofs prove the physics does.</p>
+    <p>Shape is the easy guarantee. The harder one — and the reason #12 ends the series — is the <em>symmetry group of the lattice itself</em>. Lattice-gas automata confronted this head-on in the 1980s. The original Hardy–Pomeau–de Pazzis (<strong>HPP</strong>) model restricted fluid particles to four cardinal directions on a square grid. It failed to reproduce the Navier–Stokes equations at the continuum limit, and the reason was purely group-theoretic: the point symmetry group of a square lattice is too small to guarantee a 4th-order isotropic tensor. Frisch, Hasslacher and Pomeau (<strong>FHP</strong>) replaced the square with a hexagonal lattice — <code>C₆ᵥ</code> is large enough — and the macroscopic hydrodynamics fell out. No parameter tuning changed things. The lattice's group did.</p>
 
     <div class="figure">
       <div class="aniso-wrap">
         <div class="aniso-tile">
-          <h4>5-point star  ·  Stencil 3</h4>
-          <div class="aniso-sub">only the four grid-axis neighbours contribute</div>
+          <h4>HPP-style square  ·  Stencil 3</h4>
+          <div class="aniso-sub">only the four grid-axis neighbours contribute — the point group <code>D₄</code> is not rich enough</div>
           <div class="stencil-mini" id="mini-5pt"></div>
           <canvas id="rd-5pt" width="128" height="128"></canvas>
-          <div class="aniso-note">Stripes align with the <em>x</em> and <em>y</em> axes because the stencil itself does. The dihedral group of this operator is <em>D₄</em>, not <em>SO(2)</em> — 90° is a symmetry, 60° is not.</div>
+          <div class="aniso-note">The stencil's dihedral group is <em>D₄</em>, not <em>SO(2)</em>. 90° is a symmetry, 60° is not. No matter how you tune <em>F</em>, <em>k</em>, or dt, the long-wavelength limit of this step function is not isotropic Navier-Stokes — it is the HPP failure mode rendered at reaction-diffusion scale.</div>
         </div>
         <div class="aniso-tile">
-          <h4>9-point isotropic  ·  Stencil 3</h4>
-          <div class="aniso-sub">diagonal neighbours included with weights that recover rotational invariance to second order</div>
+          <h4>FHP-style hex-isotropic  ·  Stencil 3</h4>
+          <div class="aniso-sub">diagonal neighbours included with weights that recover the isotropic 4th-order tensor</div>
           <div class="stencil-mini" id="mini-9pt"></div>
           <canvas id="rd-9pt" width="128" height="128"></canvas>
-          <div class="aniso-note">Same <code>Stencil 3</code> type, different entries. The weights <code>¼ · 1 · ¼ / 1 · −3 · 1 / ¼ · 1 · ¼</code> make the Laplacian approximate any direction equally; the stripes curl and branch like the chemistry says they should.</div>
+          <div class="aniso-note">Same <code>Stencil 3</code> type, different entries. The weights <code>¼ · 1 · ¼ / 1 · −3 · 1 / ¼ · 1 · ¼</code> stand in for the <em>C₆ᵥ</em> invariance that FHP achieved literally. The pattern curls and branches as the chemistry demands.</div>
         </div>
       </div>
       <div class="aniso-controls">
         <button id="rd-aniso-reseed">re-seed both</button>
         <button id="rd-aniso-pause">pause</button>
       </div>
-      <div class="figure-caption">Both panels run Gray-Scott with identical parameters (<code>F=0.0367, k=0.0649</code> "spots" preset), identical seed, identical dt. The only difference is the Laplacian stencil. The left panel's <code>step</code> function does not commute with 60° rotation; the right one's approximately does. #12 §5d specializes this to a true 7-point hex stencil where the commuting is exact.</div>
+      <div class="figure-caption">Both panels run Gray-Scott with identical parameters, identical seed, identical dt. The only difference is the Laplacian stencil — which is to say, the <em>lattice symmetry group</em> that the <code>step</code> function inherits. This is the same argument FHP made for Navier–Stokes, transplanted to Turing patterns. #12 §5d specializes this to a true 7-point hex stencil where the group action is exact, closing the loop.</div>
     </div>
+
+    <p>The type-system move here is to promote the lattice's point group from a lurking runtime assumption to a type parameter: <code>Stencil k (PointGroup g)</code>. A diffusion written against <code>PointGroup C₆ᵥ</code> cannot be implemented on a <code>Lattice D₄</code>; the shape index caught the buffer size, and now the group tag catches the physics. Lattice gauge theory makes exactly this move when it discretizes SU(3) onto a hypercubic lattice — the group lives on the links, not as an afterthought.</p>
   </div>
 
   <!-- ────────────── §5 Carry-forward ────────────── -->

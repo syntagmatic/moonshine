@@ -11,6 +11,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
 <script src="lib/typeviz.js"></script>
 <script src="lib/simcore.js"></script>
+<script src="../lib/motion.js"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -92,6 +93,13 @@ code, .haskell { font-family: var(--mono-font); font-size: 0.85em; background: #
 .phantom-tile h4 { font-family: var(--heading-font); font-size: 0.75rem; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.35rem; font-weight: 600; }
 .phantom-tile svg { display: block; width: 100%; }
 .phantom-refuse { stroke-dasharray: 4 3; opacity: 0.6; }
+
+.idx-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+.idx-tile { background: #fbfbfd; border-radius: 4px; padding: 0.5rem; }
+.idx-tile h4 { font-family: var(--heading-font); font-size: 0.75rem; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.35rem; font-weight: 600; }
+.idx-tile svg { display: block; width: 100%; background: #ffffff; border-radius: 3px; }
+.idx-meta { display: flex; justify-content: space-between; font-family: var(--mono-font); font-size: 0.7rem; color: var(--text-2); margin-top: 0.35rem; }
+.idx-meta .count { color: var(--text); font-weight: 600; }
 </style>
 </head>
 <body>
@@ -171,15 +179,52 @@ integrate :: Delta Time -> Node Free -> Node Free
       </div>
       <div class="figure-caption">Same <code>integrate</code> function, two candidate inputs. The <code>Free</code> pipe socket-connects; the <code>Fixed</code> pipe approaches but is refused — no runtime guard, no conditional, just the type.</div>
     </div>
-    <p>Read the refusal as the first rung of a formal-verification ladder the series climbs. The typing judgment <code>Γ ⊢ integrate fixedNode : ⊥</code> — under any context, applying the integrator to a fixed node has no type — is the same shape of argument that, eleven explainers from now, protects an orbital configuration from drifting off a Lagrange point. The proposition is smaller here. The mechanism is identical.</p>
+    <p>Phantom tags are the simplest lattice the series will meet: a discrete classification of nodes into kinds, where the kind controls what can act on the value. Two-element <code>{Fixed, Free}</code> here, three-element <code>{S, I, R}</code> in #6, six-element <code>{Moving(Speed), Braking(Decel), Stopped}</code> in #5, 240-element root system in #12 — the same pattern at increasing symmetry. Every one of those lattices comes with a group that acts on it (here the trivial group — there is nothing interesting to rotate — but later the S₃ that permutes SIR compartments, the <em>C₆ᵥ</em> of a hex stencil, the Weyl group of A₂), and the type of the <code>step</code> function has to be invariant under that action. The refusal above is the seed of that invariance check.</p>
+  </div>
+
+  <!-- ────────────── §4 Algorithmic lattices ────────────── -->
+  <div class="section">
+    <div class="section-tag">§4 · Spatial index as type</div>
+    <h2>The lattice <em>under</em> the simulation</h2>
+    <p>Every force tick asks "which nodes are near this one?" and the naïve answer costs <code>O(N²)</code> distance checks. The two standard fixes — quadtree and spatial hash — are the same idea refracted through different lattices. The quadtree is a hierarchical lattice that refines where particles cluster; the spatial hash is a flat, uniform lattice whose translational symmetry collapses a 3-D coordinate into a 1-D bucket index with a cheap hash. A type can name the choice, and the index becomes part of the scene graph rather than a side effect of how the neighbor loop happens to be written.</p>
+    <div class="haskell-block">data SpatialIndex a = Quadtree (BBox a) [a]
+                    | Hash (GridCell a) (CellSize s)
+                    | None [a]
+
+neighbors :: SpatialIndex a -&gt; Position -&gt; [a]
+-- None     → O(N)   per query · full scan
+-- Quadtree → O(log N) per query · tree descent
+-- Hash     → O(1)   per query · hash lookup</div>
+    <div class="figure">
+      <div class="idx-pair">
+        <div class="idx-tile">
+          <h4>Quadtree · hierarchical lattice</h4>
+          <svg id="idx-quadtree" viewBox="0 0 300 200" height="200"></svg>
+          <div class="idx-meta">
+            <span>cells: <span id="idx-qt-cells" class="count">—</span></span>
+            <span>max depth: <span id="idx-qt-depth" class="count">—</span></span>
+          </div>
+        </div>
+        <div class="idx-tile">
+          <h4>Spatial hash · flat lattice</h4>
+          <svg id="idx-hash" viewBox="0 0 300 200" height="200"></svg>
+          <div class="idx-meta">
+            <span>buckets used: <span id="idx-hs-used" class="count">—</span></span>
+            <span>cell size: <span id="idx-hs-size" class="count">—</span></span>
+          </div>
+        </div>
+      </div>
+      <div class="figure-caption">Same 30 nodes, two indices. Left subdivides when a cell holds more than two nodes — denser branching follows the crowd. Right stamps a fixed grid across the domain and the hash function sorts positions into buckets by integer coordinates, which is translational symmetry of the lattice doing the algorithmic work.</div>
+    </div>
+    <p>The payoff generalizes: every lattice structure downstream in the series — hexagonal boid neighborhoods, the Gray-Scott stencil, the Ising model's hypercubic grid, the Lattice Boltzmann hex — is the same move. Pick a discrete subgroup of the continuous symmetry you care about, let the type name it, and the algorithm inherits the geometry.</p>
   </div>
 
   <!-- ────────────── §5 Carry-forward ────────────── -->
   <div class="section">
-    <div class="section-tag">§4 · Carry-forward</div>
+    <div class="section-tag">§5 · Carry-forward</div>
     <div class="carry-forward">
-      <p><strong>We added.</strong> The six-color palette. <code>TV.pipe</code>, <code>TV.product</code>, the signature assemblage. <code>SC.loop</code>, <code>SC.integrate.euler</code>, <code>SC.forces</code>.</p>
-      <p><strong>Reused where.</strong> #2 keeps the palette and layers rule combinators on top. #6 respecializes the graph machinery for an SIR simulation. Eleven explainers from now, this function's signature lands on a parcoords chart alongside eleven others — and the shape those signatures trace is the subject of #12.</p>
+      <p><strong>We added.</strong> The six-color palette. <code>TV.pipe</code>, <code>TV.product</code>, the signature assemblage. <code>SC.loop</code>, <code>SC.integrate.euler</code>, <code>SC.forces</code>. A <code>SpatialIndex</code> type whose variants name the lattice (none, quadtree, hash) rather than leaving it implicit in the neighbor loop.</p>
+      <p><strong>Reused where.</strong> #2 keeps the palette and layers rule combinators on top; its hex boid respecializes the <code>Hash</code> variant onto a triangular lattice. #6 respecializes the graph machinery for an SIR simulation. Eleven explainers from now, this function's signature lands on a parcoords chart alongside eleven others — and the shape those signatures trace is the subject of #12.</p>
     </div>
   </div>
 
@@ -611,6 +656,137 @@ var SIM1_STATE = null;
 
   drawSig('#phantom-free', true);
   drawSig('#phantom-fixed', false);
+})();
+
+// ────────────────────────────────────────────────────────────── §4 spatial index ──
+(function () {
+  var qtSvg = d3.select('#idx-quadtree');
+  var hsSvg = d3.select('#idx-hash');
+  var W = 300, H = 200;
+
+  // Scale from §1 simulation coordinates into the tile coordinate space.
+  function scale(node, simW, simH) {
+    return [(node.pos[0] / simW) * W, (node.pos[1] / simH) * H];
+  }
+
+  // Quadtree: recursive subdivision until each cell holds <= CAPACITY nodes.
+  var CAPACITY = 2;
+  function buildQuadtree(nodes, x, y, w, h, depth) {
+    var cells = [{ x: x, y: y, w: w, h: h, depth: 0 }];
+    var maxDepth = 0;
+    function subdivide(cx, cy, cw, ch, ns, d) {
+      if (d > maxDepth) maxDepth = d;
+      if (ns.length <= CAPACITY || d >= 6) return;
+      var hw = cw / 2, hh = ch / 2;
+      var quads = [
+        { x: cx,      y: cy,      w: hw, h: hh, ns: [] },
+        { x: cx + hw, y: cy,      w: hw, h: hh, ns: [] },
+        { x: cx,      y: cy + hh, w: hw, h: hh, ns: [] },
+        { x: cx + hw, y: cy + hh, w: hw, h: hh, ns: [] }
+      ];
+      ns.forEach(function (n) {
+        var qi = (n._x >= cx + hw ? 1 : 0) + (n._y >= cy + hh ? 2 : 0);
+        quads[qi].ns.push(n);
+      });
+      quads.forEach(function (q) {
+        cells.push({ x: q.x, y: q.y, w: q.w, h: q.h, depth: d + 1 });
+        subdivide(q.x, q.y, q.w, q.h, q.ns, d + 1);
+      });
+    }
+    subdivide(x, y, w, h, nodes, 0);
+    return { cells: cells, maxDepth: maxDepth };
+  }
+
+  // Prepare tile layers.
+  var qtCells = qtSvg.append('g').attr('class', 'qt-cells');
+  var qtNodes = qtSvg.append('g').attr('class', 'qt-nodes');
+  var hsCells = hsSvg.append('g').attr('class', 'hs-cells');
+  var hsNodes = hsSvg.append('g').attr('class', 'hs-nodes');
+
+  // Spatial hash: fixed cell size, integer bucket coords.
+  var CELL = 40;
+  var cols = Math.ceil(W / CELL), rows = Math.ceil(H / CELL);
+
+  function hashColor(ix, iy) {
+    // Deterministic pastel per bucket id. Hash the 2D cell index.
+    var h = ((ix * 73856093) ^ (iy * 19349663)) >>> 0;
+    var hue = h % 360;
+    return 'hsl(' + hue + ', 55%, 86%)';
+  }
+
+  function render() {
+    if (!SIM1_STATE) return;
+    var simW = SIM1_STATE.W, simH = SIM1_STATE.H;
+    var nodes = SIM1_STATE.graph.nodes.map(function (n) {
+      var p = scale(n, simW, simH);
+      return { _x: p[0], _y: p[1] };
+    });
+
+    // ─── Quadtree ───
+    var qt = buildQuadtree(nodes, 0, 0, W, H, 0);
+    var sel = qtCells.selectAll('rect').data(qt.cells);
+    sel.exit().remove();
+    sel.enter().append('rect').merge(sel)
+      .attr('x', function (c) { return c.x; })
+      .attr('y', function (c) { return c.y; })
+      .attr('width', function (c) { return c.w; })
+      .attr('height', function (c) { return c.h; })
+      .attr('fill', 'none')
+      .attr('stroke', function (c) {
+        var d = c.depth;
+        return d === 0 ? '#94a3b8' : d === 1 ? '#cbd5e1' : d === 2 ? '#dbeafe' : '#eef2ff';
+      })
+      .attr('stroke-width', function (c) { return c.depth === 0 ? 1.1 : 0.7; });
+
+    var qn = qtNodes.selectAll('circle').data(nodes);
+    qn.exit().remove();
+    qn.enter().append('circle').attr('r', 2.6).attr('fill', '#2563eb').merge(qn)
+      .attr('cx', function (n) { return n._x; })
+      .attr('cy', function (n) { return n._y; });
+
+    d3.select('#idx-qt-cells').text(qt.cells.length);
+    d3.select('#idx-qt-depth').text(qt.maxDepth);
+
+    // ─── Spatial hash ───
+    var buckets = {};
+    nodes.forEach(function (n) {
+      var ix = Math.floor(n._x / CELL);
+      var iy = Math.floor(n._y / CELL);
+      var key = ix + ',' + iy;
+      if (!buckets[key]) buckets[key] = { ix: ix, iy: iy, ns: [] };
+      buckets[key].ns.push(n);
+    });
+    var bucketArr = Object.keys(buckets).map(function (k) { return buckets[k]; });
+
+    // Draw the full grid (light) then fill occupied buckets with color.
+    var gridData = [];
+    for (var ix = 0; ix < cols; ix++) {
+      for (var iy = 0; iy < rows; iy++) {
+        var key = ix + ',' + iy;
+        gridData.push({ ix: ix, iy: iy, occupied: !!buckets[key] });
+      }
+    }
+    var gs = hsCells.selectAll('rect').data(gridData);
+    gs.exit().remove();
+    gs.enter().append('rect').merge(gs)
+      .attr('x', function (c) { return c.ix * CELL; })
+      .attr('y', function (c) { return c.iy * CELL; })
+      .attr('width', CELL).attr('height', CELL)
+      .attr('fill', function (c) { return c.occupied ? hashColor(c.ix, c.iy) : 'none'; })
+      .attr('stroke', '#cbd5e1').attr('stroke-width', 0.6);
+
+    var hn = hsNodes.selectAll('circle').data(nodes);
+    hn.exit().remove();
+    hn.enter().append('circle').attr('r', 2.6).attr('fill', '#2563eb').merge(hn)
+      .attr('cx', function (n) { return n._x; })
+      .attr('cy', function (n) { return n._y; });
+
+    d3.select('#idx-hs-used').text(bucketArr.length);
+    d3.select('#idx-hs-size').text(CELL + 'px');
+  }
+
+  function loop() { render(); requestAnimationFrame(loop); }
+  loop();
 })();
 </script>
 </body>

@@ -1,0 +1,999 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Life &amp; Symmetry Attractors — Simulating on a Lattice</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
+<script src="../lib/motion.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --article-width: 740px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem;
+  --line-height: 1.65;
+  --text: #1a1a2e;
+  --text-2: #4a4a6a;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --bg: #fafafa;
+  --fig-bg: #ffffff;
+  --border: #e2e2e8;
+  --c-cell: #1e293b;
+  --c-cell-new: #dc2626;
+  --c-grid: #e9e9ef;
+  --c-sym-c1: #94a3b8;
+  --c-sym-c2: #2563eb;
+  --c-sym-d1: #0d9488;
+  --c-sym-d2: #ea580c;
+  --c-sym-c4: #a855f7;
+  --c-sym-d4: #dc2626;
+  --c-trace: #7c3aed;
+}
+
+body { font-family: var(--body-font); font-size: var(--body-size); line-height: var(--line-height); color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased; }
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
+
+h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+h3 { font-size: 1.15rem; margin: 2rem 0 0.75rem; }
+
+p { margin: 0 0 1rem; }
+a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+a:hover { color: #1d4ed8; }
+
+.back-link { font-family: var(--heading-font); font-size: 0.85rem; display: inline-block; margin-bottom: 1rem; color: var(--text-2); text-decoration: none; }
+.back-link:hover { color: var(--accent); }
+
+.header { padding: 3rem 0 2rem; border-bottom: 1px solid var(--border); margin-bottom: 2.5rem; }
+.header .subtitle { font-family: var(--heading-font); font-size: 1.15rem; color: var(--text-2); max-width: 620px; }
+
+.figure { margin: 2rem 0; padding: 1.5rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; line-height: 1.4; }
+.figure-label { font-weight: 600; color: var(--text); }
+
+.btn { font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600; padding: 0.4rem 0.85rem; border-radius: 5px; border: 1px solid var(--border); background: var(--fig-bg); color: var(--text); cursor: pointer; transition: background 0.15s, border-color 0.15s; user-select: none; }
+.btn:hover { border-color: var(--accent); background: var(--accent-light); }
+.btn.active { background: var(--accent); color: white; border-color: var(--accent); }
+.btn.danger { border-color: #fca5a5; color: #b91c1c; }
+.btn.danger:hover { background: #fee2e2; border-color: #dc2626; }
+
+.btn-row { display: flex; flex-wrap: wrap; gap: 0.45rem; margin-bottom: 1rem; }
+
+.insight { background: var(--accent-light); border-left: 3px solid var(--accent); padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 4px 4px 0; }
+.insight p { margin: 0; }
+.insight p + p { margin-top: 0.5rem; }
+
+.katex-display { margin: 1.5rem 0; }
+
+svg text { font-family: var(--heading-font); }
+
+.panel {
+  display: grid;
+  grid-template-columns: 1fr 240px;
+  gap: 1.25rem;
+  align-items: start;
+}
+@media (max-width: 720px) { .panel { grid-template-columns: 1fr; } }
+
+.controls-col { display: flex; flex-direction: column; gap: 0.75rem; font-family: var(--heading-font); font-size: 0.88rem; }
+.slider-row { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 0.4rem 0.8rem; }
+.slider-row .lbl { color: var(--text-2); font-weight: 600; font-size: 0.82rem; }
+.slider-row .val { font-family: var(--mono-font); color: var(--text); min-width: 3rem; text-align: right; font-weight: 600; font-size: 0.82rem; }
+.slider-row input[type="range"] { width: 100%; }
+
+.canvas-wrap { background: #fff; border: 1px solid var(--border); border-radius: 4px; display: block; width: 100%; }
+canvas.life-grid { display: block; width: 100%; image-rendering: pixelated; image-rendering: crisp-edges; cursor: crosshair; }
+
+.info-box {
+  padding: 0.7rem 0.9rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-family: var(--heading-font);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+.info-box .label { font-size: 0.72rem; font-weight: 700; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.3rem; }
+.info-box .row { display: flex; justify-content: space-between; gap: 0.5rem; margin-top: 0.15rem; }
+.info-box .row .k { color: var(--text-2); }
+.info-box .row .v { font-family: var(--mono-font); font-weight: 600; color: var(--text); }
+
+.sym-badge {
+  padding: 0.75rem 0.9rem;
+  border-radius: 5px;
+  font-family: var(--heading-font);
+  font-weight: 700;
+  font-size: 1rem;
+  border-left: 4px solid var(--c-sym-c1);
+  background: #f8fafc;
+  color: var(--text);
+  transition: border-color 0.2s, background 0.2s;
+}
+.sym-badge .order { font-family: var(--mono-font); font-size: 0.78rem; font-weight: 500; margin-top: 0.25rem; color: var(--text-2); }
+.sym-badge.c1 { border-left-color: var(--c-sym-c1); background: #f8fafc; }
+.sym-badge.c2 { border-left-color: var(--c-sym-c2); background: #eff6ff; }
+.sym-badge.d1h, .sym-badge.d1v, .sym-badge.d1d, .sym-badge.d1a { border-left-color: var(--c-sym-d1); background: #ecfdf5; }
+.sym-badge.d2 { border-left-color: var(--c-sym-d2); background: #fff7ed; }
+.sym-badge.c4 { border-left-color: var(--c-sym-c4); background: #faf5ff; }
+.sym-badge.d4 { border-left-color: var(--c-sym-d4); background: #fef2f2; }
+.sym-badge.empty { border-left-color: #d4d4d8; background: #f4f4f5; color: var(--text-2); }
+
+.preset-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.35rem; }
+.preset-grid .btn { padding: 0.35rem 0.4rem; font-size: 0.78rem; }
+
+.toggle-row { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; color: var(--text-2); }
+.toggle-row input { accent-color: var(--accent); }
+
+.legend { display: flex; flex-wrap: wrap; gap: 0.5rem 0.9rem; margin-top: 0.85rem; font-family: var(--heading-font); font-size: 0.78rem; color: var(--text-2); }
+.legend .sw { display: inline-flex; align-items: center; gap: 0.3rem; }
+.legend .sw::before { content: ""; width: 10px; height: 10px; border-radius: 2px; background: currentColor; }
+.legend .g-c1 { color: var(--c-sym-c1); }
+.legend .g-c2 { color: var(--c-sym-c2); }
+.legend .g-d1 { color: var(--c-sym-d1); }
+.legend .g-d2 { color: var(--c-sym-d2); }
+.legend .g-c4 { color: var(--c-sym-c4); }
+.legend .g-d4 { color: var(--c-sym-d4); }
+
+.plot-wrap { margin-top: 1rem; }
+
+.orbit-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.6rem;
+  margin-top: 0.5rem;
+}
+@media (max-width: 560px) { .orbit-grid { grid-template-columns: repeat(2, 1fr); } }
+.orbit-panel {
+  border: 2px solid var(--border);
+  border-radius: 5px;
+  background: var(--fig-bg);
+  padding: 0.35rem 0.35rem 0.4rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  transition: border-color 0.12s, opacity 0.12s;
+}
+.orbit-panel canvas { width: 100%; height: auto; display: block; image-rendering: pixelated; }
+.orbit-panel .lbl {
+  font-family: var(--mono-font);
+  font-size: 0.72rem;
+  color: var(--text-2);
+  font-weight: 600;
+}
+.orbit-panel.fixed {
+  border-color: var(--c-sym-d4);
+  box-shadow: 0 0 0 1px var(--c-sym-d4) inset;
+}
+.orbit-panel.fixed .lbl { color: var(--c-sym-d4); }
+.orbit-panel.differs { opacity: 0.55; }
+
+.orbit-readout {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem 2rem;
+  margin-top: 1rem;
+  padding: 0.75rem 1rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-family: var(--heading-font);
+  font-size: 0.9rem;
+}
+.orbit-readout .orbit-stat { display: flex; flex-direction: column; gap: 0.15rem; min-width: 120px; }
+.orbit-readout .orbit-stat .lbl {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-2);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.orbit-readout .orbit-stat .val {
+  font-family: var(--mono-font);
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.nav-footer { margin-top: 5rem; padding-top: 2rem; border-top: 1px solid var(--border); display: flex; justify-content: space-between; font-family: var(--heading-font); font-size: 0.9rem; }
+.nav-footer a { color: var(--accent); text-decoration: none; }
+.nav-footer a:hover { text-decoration: underline; }
+.nav-footer .spacer { flex: 1; }
+
+@media (prefers-reduced-motion: reduce) { html:not([data-motion="full"]) * { transition-duration: 0s !important; animation-duration: 0s !important; } }
+@media (max-width: 680px) {
+  h1 { font-size: 1.75rem; }
+  .article { padding: 1.5rem 1rem 4rem; }
+  .preset-grid { grid-template-columns: repeat(2, 1fr); }
+}
+</style>
+</head>
+<body>
+<div class="article">
+
+<a href="index.html" class="back-link">← Simulating on a Lattice</a>
+
+<div class="header">
+  <h1>Life &amp; Symmetry Attractors</h1>
+  <p class="subtitle">Part 6 of 15. Conway's update rule is isotropic on the Moore neighbourhood, so the point group D<sub>4</sub> of the square lattice commutes with time evolution. A stabiliser subgroup can only grow, never shrink — so symmetry is an attractor of the Life dynamics.</p>
+</div>
+
+<p>A cellular automaton is a lattice simulation in its starkest form: a grid of cells, a discrete clock, and a local update rule. Conway's Game of Life, published in <em>Scientific American</em> in 1970, lives on the integer lattice ℤ². Each cell has a state in {0, 1} — dead or alive — and the whole configuration advances one tick by applying the same arithmetic rule to every cell in parallel, looking only at the cell itself and its eight Moore neighbours.</p>
+
+<p>The rule is famously short. A dead cell with exactly three live neighbours is born; a live cell with two or three live neighbours survives; everything else dies. The reason Life has stayed interesting for fifty-plus years is that this trivial-looking rule is Turing-complete: any computation a laptop can do, a large enough Life board can do as well.</p>
+
+<p>What interests us here is not Turing completeness but the relationship between the rule and the lattice it lives on. The Moore neighbourhood is invariant under every element of the square lattice's point group D<sub>4</sub>: the eight symmetries of a square, generated by a 90° rotation and a mirror. And Life's rule only looks at the <em>count</em> of live neighbours, not at their positions. Counts are obviously invariant under relabelling, so the rule itself is D<sub>4</sub>-invariant. That invariance has a consequence the simulator will make visible: symmetry is an evolutionary attractor in the state space of Life.</p>
+
+<h2>The rule, in symbols</h2>
+
+<p>Write <i>x<sub>i,j</sub></i> ∈ {0, 1} for the state of cell (<i>i</i>, <i>j</i>) at the current tick. The live-neighbour count is</p>
+
+<div id="math-nbr-count"></div>
+
+<p>and the update rule is</p>
+
+<div id="math-life-rule"></div>
+
+<p>Two facts about this rule matter for what follows. First, it is <em>local</em>: a cell's next state depends only on a 3×3 patch around it. Second, it is <em>isotropic on that patch</em>: the rule sees the neighbour sum <i>N<sub>i,j</sub></i>, which is the same whether we label the eight neighbours clockwise or counterclockwise, starting from the top or the bottom, reflected or not. No direction is special.</p>
+
+<h2>Equivariance under the square's point group</h2>
+
+<p>The point group of ℤ² is D<sub>4</sub>, the dihedral group of order 8: identity, three non-trivial rotations by 90°, 180°, 270°, and four mirrors (horizontal, vertical, and the two diagonals). Any element <i>g</i> ∈ D<sub>4</sub> permutes the lattice sites and, in doing so, permutes the eight Moore-neighbours of any cell among themselves. The count <i>N<sub>i,j</sub></i> is therefore unchanged when we replace the whole configuration <i>x</i> by its transformed version <i>g</i>·<i>x</i>.</p>
+
+<p>Let <i>f</i> be Life's update map — the function that takes a whole grid configuration to the configuration one tick later. The observation above is exactly:</p>
+
+<div id="math-equivariance"></div>
+
+<p>In words: rotating or reflecting the grid and then applying the rule gives the same result as applying the rule first and then rotating or reflecting. The rule <em>commutes</em> with the symmetry. A function with this property is called <em>equivariant</em> under the group. (If the group acts trivially on the output, the weaker property <i>f</i>(<i>g</i>·<i>x</i>) = <i>f</i>(<i>x</i>) is called <em>invariance</em>. Life's rule is the stronger, equivariant kind.)</p>
+
+<div class="insight">
+  <p><strong>Why this is the right form of the law.</strong> The lattice imposes a finite symmetry group on everything that lives on it. If the rule we write down ignores that symmetry — say, by treating the east neighbour differently from the west — the simulation will develop macroscopic anisotropy: particles will drift, waves will refract, statistics will differ along different axes. Equivariance is the minimum discipline that keeps the lattice's symmetry honest. Conway's Life has it for free, because the rule is a function of a count.</p>
+</div>
+
+<h2>Stabilisers can only grow</h2>
+
+<p>The <em>stabiliser</em> of a configuration <i>x</i> is the subgroup of D<sub>4</sub> that fixes it: <i>G<sub>x</sub></i> = {<i>g</i> ∈ D<sub>4</sub> : <i>g</i>·<i>x</i> = <i>x</i>}. A configuration with a vertical mirror line has a D<sub>1</sub> stabiliser (identity plus that one mirror). A pulsar, which repeats with period 3 and has a central 4-fold rotation, has stabiliser C<sub>4</sub> at phases where no mirror is present and D<sub>4</sub> at the symmetric phase.</p>
+
+<p>Equivariance forces the stabiliser of <i>f</i>(<i>x</i>) to <em>contain</em> the stabiliser of <i>x</i>. If <i>g</i>·<i>x</i> = <i>x</i>, apply <i>f</i> to both sides and use equivariance on the left: <i>g</i>·<i>f</i>(<i>x</i>) = <i>f</i>(<i>g</i>·<i>x</i>) = <i>f</i>(<i>x</i>). So every element that stabilised <i>x</i> also stabilises <i>f</i>(<i>x</i>). Unrolling in time:</p>
+
+<div id="math-stab-grows"></div>
+
+<p>Symmetry can only be gained, never spontaneously lost. The rule can discover a mirror that the previous tick did not have (a C<sub>1</sub> configuration can evolve into a D<sub>2</sub> one — a symmetry that emerges by accident as the population shrinks), but once a mirror is there, it stays for every subsequent generation unless an external perturbation destroys it. In the language of dynamical systems, the set of configurations with stabiliser at least <i>H</i> is a <em>forward-invariant</em> subset for every subgroup <i>H</i> ⊆ D<sub>4</sub>.</p>
+
+<h2>What it looks like on a real board</h2>
+
+<p>Below is a Life simulator with a symmetry detector running every frame. Scrub through random starts and planted symmetric patterns; click the grid to paint cells by hand; drop a glider on a symmetric pattern to break its symmetry deliberately. The badge on the right is the current stabiliser subgroup of the live pattern (computed by trying all eight D<sub>4</sub> elements against a bounding-box-normalised view, so a glider's position on the board does not affect the reading — only its intrinsic shape, which for the classical glider is the trivial group C<sub>1</sub>).</p>
+
+<div class="figure">
+  <div class="panel">
+    <div>
+      <div class="canvas-wrap">
+        <canvas class="life-grid" id="life-canvas" width="640" height="640"></canvas>
+      </div>
+      <div class="btn-row" style="margin-top: 0.75rem;">
+        <button class="btn" id="play-btn">Play</button>
+        <button class="btn" id="step-btn">Step</button>
+        <button class="btn" id="clear-btn">Clear</button>
+        <button class="btn" id="random-btn">Random</button>
+        <button class="btn danger" id="glider-hit-btn">Drop glider</button>
+      </div>
+      <div class="slider-row" style="margin-top: 0.25rem;">
+        <div class="lbl">speed</div>
+        <input type="range" id="speed-slider" min="2" max="30" step="1" value="12">
+        <div class="val" id="speed-val">12/s</div>
+      </div>
+      <div class="slider-row">
+        <div class="lbl">density</div>
+        <input type="range" id="density-slider" min="10" max="70" step="1" value="38">
+        <div class="val" id="density-val">0.38</div>
+      </div>
+      <div class="legend">
+        <span class="sw g-c1">C<sub>1</sub> trivial</span>
+        <span class="sw g-c2">C<sub>2</sub> rotation</span>
+        <span class="sw g-d1">D<sub>1</sub> one mirror</span>
+        <span class="sw g-d2">D<sub>2</sub> two mirrors</span>
+        <span class="sw g-c4">C<sub>4</sub> four-fold</span>
+        <span class="sw g-d4">D<sub>4</sub> full square</span>
+      </div>
+    </div>
+    <div class="controls-col">
+      <div class="sym-badge c1" id="sym-badge">
+        <div id="sym-name">C<sub>1</sub> trivial</div>
+        <div class="order" id="sym-order">|G_x| = 1 · order 1 / 8</div>
+      </div>
+      <div class="info-box">
+        <div class="label">State</div>
+        <div class="row"><span class="k">generation</span><span class="v" id="gen-val">0</span></div>
+        <div class="row"><span class="k">live cells</span><span class="v" id="pop-val">0</span></div>
+        <div class="row"><span class="k">bbox</span><span class="v" id="bbox-val">—</span></div>
+      </div>
+      <div class="info-box">
+        <div class="label">Presets</div>
+        <div class="preset-grid">
+          <button class="btn" data-preset="blinker">Blinker</button>
+          <button class="btn" data-preset="beacon">Beacon</button>
+          <button class="btn" data-preset="clock">Clock</button>
+          <button class="btn" data-preset="pulsar">Pulsar</button>
+          <button class="btn" data-preset="glider">Glider</button>
+          <button class="btn" data-preset="rpent">R-pent.</button>
+        </div>
+      </div>
+      <div class="info-box">
+        <div class="label">Detector</div>
+        <label class="toggle-row"><input type="checkbox" id="detect-translate" checked>translation-invariant</label>
+        <label class="toggle-row"><input type="checkbox" id="trail-toggle">highlight births</label>
+      </div>
+    </div>
+  </div>
+  <p class="figure-caption"><span class="figure-label">Figure 1.</span> A 32×32 Life board on a torus (periodic boundaries). The board is square so that all eight D<sub>4</sub> elements — identity, three rotations, four reflections — map the lattice to itself. The symmetry badge is recomputed every frame by testing all eight elements against the pattern's bounding-box-normalised bitmap. Notice: on random starts the badge almost always settles into C<sub>1</sub> or C<sub>2</sub>, because generic random configurations have trivial stabiliser. Load a symmetric preset and the badge locks to the larger group for as long as the pattern survives. Drop a glider into a symmetric configuration to see the badge fall from D<sub>2</sub> to C<sub>1</sub> the instant the glider lands.</p>
+</div>
+
+<h2>The D<sub>4</sub> orbit, live</h2>
+
+<p>The |<i>G<sub>x</sub></i>| reading in the badge is a single number that changes rarely. A picture that moves more — and shows exactly <em>what</em> equivariance means — is the <em>orbit</em> of the current configuration under D<sub>4</sub>. The orbit is the set of distinct images {<i>g</i>·<i>x</i> : <i>g</i> ∈ D<sub>4</sub>}. Its size obeys the orbit-stabiliser theorem:</p>
+
+<div id="math-orbit-stabiliser"></div>
+
+<p>So an orbit of size 1 means every <i>g</i> fixes <i>x</i> (full D<sub>4</sub> symmetry). An orbit of size 8 means no non-identity element fixes <i>x</i> (trivial stabiliser, C<sub>1</sub>). And the orbit-stabiliser theorem is not just counting: because Life's rule is equivariant, the eight panels <i>g</i>·<i>x</i> all evolve in lockstep — applying one Life step to <i>g</i>·<i>x</i> gives <i>g</i>·<i>f</i>(<i>x</i>). So the orbit of <i>f</i>(<i>x</i>) is the image of the orbit of <i>x</i> under the same group action. The eight panels below make that statement visible: they step forward together, always related by the same <i>g</i>.</p>
+
+<div class="figure">
+  <div class="orbit-grid" id="orbit-grid"></div>
+  <div class="orbit-readout">
+    <div class="orbit-stat"><span class="lbl">distinct panels (orbit size)</span><span class="val" id="orbit-size">—</span></div>
+    <div class="orbit-stat"><span class="lbl">panels equal to identity (|G<sub>x</sub>|)</span><span class="val" id="orbit-fixed">—</span></div>
+    <div class="orbit-stat"><span class="lbl">orbit × stabiliser</span><span class="val" id="orbit-product">—</span></div>
+  </div>
+  <p class="figure-caption"><span class="figure-label">Figure 2.</span> The <em>D<sub>4</sub> orbit</em> of the current configuration. The top-left panel is the board itself (identity). The other seven show <i>g</i>·<i>x</i> for each non-identity element — three rotations (90°, 180°, 270°) and four reflections (horizontal, vertical, and the two diagonals). Hit Play and watch: all eight panels advance one Life step in lockstep, because the rule is D<sub>4</sub>-equivariant. Panels identical to the identity are ringed in red — their <i>g</i> is in the stabiliser <i>G<sub>x</sub></i>. Panels that differ from the identity are faded. For random seeds all eight look different (|G<sub>x</sub>| = 1, orbit size 8). Load Pulsar and all eight collapse to the same picture (|G<sub>x</sub>| = 8, orbit size 1). Load Blinker to see a middle case — four pairs of matching panels, orbit size 4.</p>
+</div>
+
+<h2>An attractor census</h2>
+
+<p>If we sample a thousand random seeds at density 0.375 and run each for 300 generations, most have settled into a "debris field" of still-lifes (blocks, beehives, loaves, boats, ships) and oscillators (blinkers, beacons, toads, pulsars). The stabiliser distribution of the endpoint, aggregated over all the surviving live cells, is heavily weighted toward small groups — almost all debris is built out of asymmetric still-lifes (C<sub>1</sub>) and period-2 oscillators whose symmetric phase lifts them to D<sub>2</sub>. A random seed almost never evolves into a pulsar; the pulsar's basin of attraction in state space is vanishingly small. But once a pulsar is planted by hand, the equivariance argument guarantees that no subsequent Life step can destroy its C<sub>4</sub> rotation — only an outside intervention can.</p>
+
+<p>This is the qualitative shape of every lattice-based simulation. The lattice fixes a finite point group. The rule, if it respects the lattice, is equivariant under that group. Equivariance then makes the stabiliser of a configuration a monotone quantity in the absence of perturbations. Coarse-graining over long times, the typical (random) initial condition ends up with a small stabiliser — symmetry is rare — but the dynamics <em>preserve</em> whatever symmetry happens to be present. Hence the phrase "symmetry attractor": not "trajectories rush toward symmetry" (they do not, in a strict-measure sense), but "the subset of symmetric configurations is forward-invariant".</p>
+
+<h2>What breaks this picture</h2>
+
+<p>Three kinds of thing can make the stabiliser drop. First, the board is finite, so a pattern that drifts (glider, lightweight spaceship) can have its bounding box touch the edge of the universe and be chopped — finite-board effects break equivariance trivially. We use periodic boundary conditions to avoid this, which makes the stabiliser analysis exact. Second, explicit external perturbation — the glider-hit button — adds mass to the configuration that was not there before, and the new combined pattern has whatever (usually trivial) stabiliser its new shape has. Third, randomised rules — noisy Life, stochastic cellular automata — give a probability distribution over next configurations, and the equivariance argument still holds in distribution, but individual realisations can drift.</p>
+
+<p>The takeaway for the rest of this series: a lattice rule that is faithful to the lattice's point group protects every non-trivial configurational symmetry against spontaneous breaking. HPP and FHP in the next explainer will make the same structural observation for a lattice <em>gas</em> rather than a lattice automaton — the failure mode when the rule's symmetries do not match the continuum physics is exactly what the square-lattice HPP model demonstrates.</p>
+
+<h2>Takeaways</h2>
+
+<ul style="margin-left: 1.5rem;">
+  <li><strong>Life's rule is D<sub>4</sub>-equivariant.</strong> Rotating or reflecting the board and then updating is identical to updating and then rotating or reflecting. The rule depends only on the live-neighbour count, which is manifestly rotation- and reflection-invariant.</li>
+  <li><strong>Stabilisers are monotone non-decreasing.</strong> If <i>G<sub>x</sub></i> is the subgroup fixing configuration <i>x</i>, then <i>G<sub>x</sub></i> ⊆ <i>G<sub>f(x)</sub></i>. Symmetry can be gained by accident but cannot be lost without an external perturbation.</li>
+  <li><strong>Attractor census.</strong> Random seeds at density ≈ 0.375 almost all land in low-symmetry debris (C<sub>1</sub> still-lifes and D<sub>2</sub>-phase period-2 oscillators). The pulsar's C<sub>4</sub> basin is measure-zero in practice, but once you are in it you stay.</li>
+  <li><strong>Equivariance is the right discipline for discretisation.</strong> A rule that breaks lattice symmetry injects anisotropy into the emergent dynamics. Conway's rule has equivariance for free because it is a function of a count. Most physically motivated rules need to earn it.</li>
+  <li><strong>The symmetry detector is a D<sub>4</sub> scan.</strong> Eight bitmap comparisons per frame, bounding-box normalised so translating shapes are detected by their intrinsic symmetry rather than their position.</li>
+</ul>
+
+<p>Next: HPP on a square lattice fails to be isotropic at the macroscopic scale, and FHP on a hexagonal lattice succeeds. The reason is exactly the point-group count D<sub>4</sub> has too few generators, D<sub>6</sub> has enough — a quantitative statement of the equivariance principle we just used qualitatively.</p>
+
+<div class="nav-footer">
+  <a href="05-symmetry-reduction.html">← Part 5: Symmetry Reduction</a>
+  <span class="spacer"></span>
+  <a href="07-hpp-vs-fhp.html">Part 7: HPP vs FHP →</a>
+</div>
+
+</div>
+
+<script>
+// ────────────────────────────────────────── KaTeX ──
+function math(id, tex, display) {
+  var el = document.getElementById(id);
+  if (el) katex.render(tex, el, { throwOnError: false, displayMode: !!display });
+}
+
+math('math-nbr-count',
+  'N_{i,j} \\;=\\; \\sum_{(di,dj) \\in \\{-1,0,1\\}^2 \\setminus \\{(0,0)\\}} x_{i+di,\\,j+dj}',
+  true);
+
+math('math-life-rule',
+  'x^{\\,t+1}_{i,j} \\;=\\; \\begin{cases} 1 & \\text{if } N_{i,j} = 3, \\\\ x^{\\,t}_{i,j} & \\text{if } N_{i,j} = 2, \\\\ 0 & \\text{otherwise.} \\end{cases}',
+  true);
+
+math('math-equivariance',
+  'f(g \\cdot x) \\;=\\; g \\cdot f(x) \\qquad \\text{for every } g \\in D_4',
+  true);
+
+math('math-stab-grows',
+  'G_x \\;\\subseteq\\; G_{f(x)} \\;\\subseteq\\; G_{f^2(x)} \\;\\subseteq\\; \\cdots \\;\\subseteq\\; D_4',
+  true);
+
+math('math-orbit-stabiliser',
+  '|\\,\\mathrm{orbit}(x)\\,| \\;\\cdot\\; |\\,G_x\\,| \\;=\\; |\\,D_4\\,| \\;=\\; 8',
+  true);
+
+// ────────────────────────────────────────── Life simulation ──
+(function () {
+  var COLS = 32, ROWS = 32;
+  var canvas = document.getElementById('life-canvas');
+  var ctx = canvas.getContext('2d');
+  // Logical size chosen so the canvas renders sharply on 2x displays.
+  var CELL_PX = canvas.width / COLS; // 20
+  var ctxH = canvas.height;          // 600
+
+  // Two buffers for ping-pong updates. Each is a flat Uint8Array of length COLS*ROWS.
+  var gridA = new Uint8Array(COLS * ROWS);
+  var gridB = new Uint8Array(COLS * ROWS);
+  var grid = gridA, nextGrid = gridB;
+  // Births from the previous step, for optional highlighting.
+  var births = new Uint8Array(COLS * ROWS);
+
+  var generation = 0;
+  var playing = false;
+  var speed = 12;   // steps per second
+  var lastStep = 0;
+  var density = 0.38;
+  var showBirths = false;
+  var useTranslateInvariant = true;
+
+  // ──────────────── Indexing helpers (torus, so modular) ────────────────
+  function idx(i, j) {
+    // Wrap both coordinates modulo grid size (torus).
+    i = ((i % ROWS) + ROWS) % ROWS;
+    j = ((j % COLS) + COLS) % COLS;
+    return i * COLS + j;
+  }
+  function getCell(g, i, j) { return g[idx(i, j)]; }
+  function setCell(g, i, j, v) { g[idx(i, j)] = v; }
+
+  // ──────────────── Update step ────────────────
+  function step() {
+    for (var i = 0; i < ROWS; i++) {
+      for (var j = 0; j < COLS; j++) {
+        var n = 0;
+        for (var di = -1; di <= 1; di++) {
+          for (var dj = -1; dj <= 1; dj++) {
+            if (di === 0 && dj === 0) continue;
+            n += grid[idx(i + di, j + dj)];
+          }
+        }
+        var alive = grid[i * COLS + j];
+        var nxt = (n === 3) ? 1 : (n === 2 ? alive : 0);
+        nextGrid[i * COLS + j] = nxt;
+        births[i * COLS + j] = (!alive && nxt) ? 1 : 0;
+      }
+    }
+    var tmp = grid; grid = nextGrid; nextGrid = tmp;
+    generation++;
+  }
+
+  // ──────────────── D₄ symmetry detector ────────────────
+  // Normalise: extract the tightest toroidal bounding box around live cells
+  // as an (h, w, bits) triple. A pattern straddling the seam is shifted so
+  // the bbox becomes contiguous by finding the longest empty run of rows
+  // (cols) modulo the universe; the bbox is the complement of that run.
+  function normalise(g) {
+    var rowOcc = new Uint8Array(ROWS);
+    var colOcc = new Uint8Array(COLS);
+    var pop = 0;
+    for (var i = 0; i < ROWS; i++) {
+      for (var j = 0; j < COLS; j++) {
+        if (g[i * COLS + j]) { rowOcc[i] = 1; colOcc[j] = 1; pop++; }
+      }
+    }
+    if (pop === 0) return { h: 0, w: 0, bits: new Uint8Array(0), pop: 0 };
+
+    function longestGap(occ) {
+      var L = occ.length, best = 0, bestStart = 0, cur = 0, curStart = 0;
+      for (var t = 0; t < 2 * L; t++) {
+        if (!occ[t % L]) {
+          if (cur === 0) curStart = t;
+          cur++;
+          if (cur > best) { best = cur; bestStart = curStart; }
+        } else { cur = 0; }
+      }
+      if (best > L) { best = L; bestStart = 0; }
+      return { len: best, end: (bestStart + best) % L };
+    }
+
+    var rGap = longestGap(rowOcc), cGap = longestGap(colOcc);
+    var rowShift = rGap.end, colShift = cGap.end;
+    var bboxH = ROWS - rGap.len, bboxW = COLS - cGap.len;
+    var bits = new Uint8Array(bboxH * bboxW);
+    for (var a = 0; a < bboxH; a++) {
+      for (var b = 0; b < bboxW; b++) {
+        bits[a * bboxW + b] = g[((rowShift + a) % ROWS) * COLS + ((colShift + b) % COLS)];
+      }
+    }
+    return { h: bboxH, w: bboxW, bits: bits, pop: pop };
+  }
+
+  // Apply one D₄ element to a bitmap. Elements:
+  //   0 id · 1 r90 · 2 r180 · 3 r270 · 4 mirH · 5 mirV · 6 diag y=x · 7 antidiag.
+  // Odd elements (rotations by 90/270 and the two diagonal mirrors) swap h↔w.
+  function transformBits(src, h, w, elt) {
+    var swap = (elt === 1 || elt === 3 || elt === 6 || elt === 7);
+    var tH = swap ? w : h, tW = swap ? h : w;
+    var out = new Uint8Array(tH * tW);
+    for (var a = 0; a < h; a++) {
+      for (var b = 0; b < w; b++) {
+        if (!src[a * w + b]) continue;
+        var na, nb;
+        switch (elt) {
+          case 0: na = a;               nb = b;               break;
+          case 1: na = b;               nb = (h - 1 - a);     break;
+          case 2: na = (h - 1 - a);     nb = (w - 1 - b);     break;
+          case 3: na = (w - 1 - b);     nb = a;               break;
+          case 4: na = (h - 1 - a);     nb = b;               break;
+          case 5: na = a;               nb = (w - 1 - b);     break;
+          case 6: na = b;               nb = a;               break;
+          case 7: na = (w - 1 - b);     nb = (h - 1 - a);     break;
+        }
+        out[na * tW + nb] = 1;
+      }
+    }
+    return { h: tH, w: tW, bits: out };
+  }
+
+  function bitsEqualArr(a, b) {
+    if (a.length !== b.length) return false;
+    for (var k = 0; k < a.length; k++) if (a[k] !== b[k]) return false;
+    return true;
+  }
+
+  // Translation-invariant mode: compare the normalised bitmap against each of
+  // its eight D₄ transforms. Position-sensitive mode: compare the full board
+  // (as a toroidal bitmap) against its transforms; 90/270 rotations are only
+  // lattice symmetries of the rectangular universe when ROWS === COLS, so
+  // they're suppressed otherwise.
+  function detectSymmetry() {
+    if (useTranslateInvariant) {
+      var norm = normalise(grid);
+      if (norm.pop === 0) return { order: 8, name: 'D₄ (empty)', cls: 'empty' };
+      var keep = [];
+      for (var elt = 0; elt < 8; elt++) {
+        var t = transformBits(norm.bits, norm.h, norm.w, elt);
+        if (t.h === norm.h && t.w === norm.w && bitsEqualArr(t.bits, norm.bits)) {
+          keep.push(elt);
+        }
+      }
+      return classifySubgroup(keep);
+    }
+    var keep2 = [];
+    for (var elt2 = 0; elt2 < 8; elt2++) {
+      if ((elt2 === 1 || elt2 === 3 || elt2 === 6 || elt2 === 7) && ROWS !== COLS) continue;
+      var tg = transformBits(grid, ROWS, COLS, elt2);
+      if (tg.h === ROWS && tg.w === COLS && bitsEqualArr(tg.bits, grid)) keep2.push(elt2);
+    }
+    return classifySubgroup(keep2);
+  }
+
+  // ──────────────── Connected-component detector ────────────────
+  // The global stabiliser G_grid is monotone under the update, but for a random
+  // seed it stays at |G| = 1 forever because the whole multi-object board is
+  // almost never globally symmetric. The *interesting* signal lives at the
+  // level of each connected attractor: a block is D_4, a blinker is D_2, a
+  // glider is C_1. Flood-fill the live cells with toroidal 8-neighbour
+  // adjacency to split the board into components, then run the D_4 check on
+  // each component's own bitmap.
+  function findComponents(g) {
+    var visited = new Uint8Array(g.length);
+    var comps = [];
+    for (var k0 = 0; k0 < g.length; k0++) {
+      if (!g[k0] || visited[k0]) continue;
+      var stack = [k0];
+      var cells = [];
+      var minR = ROWS, maxR = -1, minC = COLS, maxC = -1;
+      // Toroidal wrapping makes "min/max" meaningless at the seam, so we
+      // instead record the coordinates of the first cell as an anchor and
+      // accumulate signed offsets relative to it (kept small by walking via
+      // adjacency).
+      var anchor = null;
+      while (stack.length) {
+        var kc = stack.pop();
+        if (visited[kc]) continue;
+        visited[kc] = 1;
+        var r = Math.floor(kc / COLS), c = kc % COLS;
+        if (!anchor) { anchor = { r: r, c: c, offR: 0, offC: 0 }; }
+        for (var di = -1; di <= 1; di++) {
+          for (var dj = -1; dj <= 1; dj++) {
+            if (di === 0 && dj === 0) continue;
+            var nr = ((r + di) % ROWS + ROWS) % ROWS;
+            var nc = ((c + dj) % COLS + COLS) % COLS;
+            var nk = nr * COLS + nc;
+            if (g[nk] && !visited[nk]) stack.push(nk);
+          }
+        }
+      }
+      // Second pass: collect cells and track signed offsets from the anchor
+      // by walking the component again and resolving toroidal distance.
+      // (We redo because we need consistent offsets; cheap for small comps.)
+      var seen = {};
+      seen[anchor.r * COLS + anchor.c] = { dr: 0, dc: 0 };
+      var q = [[anchor.r, anchor.c, 0, 0]];
+      while (q.length) {
+        var item = q.pop();
+        var r2 = item[0], c2 = item[1], dr = item[2], dc = item[3];
+        if (dr < minR) minR = dr; if (dr > maxR) maxR = dr;
+        if (dc < minC) minC = dc; if (dc > maxC) maxC = dc;
+        cells.push({ r: r2, c: c2, dr: dr, dc: dc });
+        for (var di2 = -1; di2 <= 1; di2++) {
+          for (var dj2 = -1; dj2 <= 1; dj2++) {
+            if (di2 === 0 && dj2 === 0) continue;
+            var nr2 = ((r2 + di2) % ROWS + ROWS) % ROWS;
+            var nc2 = ((c2 + dj2) % COLS + COLS) % COLS;
+            var nk2 = nr2 * COLS + nc2;
+            if (g[nk2] && !seen[nk2]) {
+              seen[nk2] = { dr: dr + di2, dc: dc + dj2 };
+              q.push([nr2, nc2, dr + di2, dc + dj2]);
+            }
+          }
+        }
+      }
+      var h = (maxR - minR + 1), w = (maxC - minC + 1);
+      var bits = new Uint8Array(h * w);
+      cells.forEach(function (cell) {
+        bits[(cell.dr - minR) * w + (cell.dc - minC)] = 1;
+      });
+      comps.push({ pop: cells.length, h: h, w: w, bits: bits });
+    }
+    return comps;
+  }
+
+  function detectComponentStabilisers(g) {
+    var comps = findComponents(g);
+    return comps.map(function (c) {
+      var keep = [];
+      for (var elt = 0; elt < 8; elt++) {
+        var t = transformBits(c.bits, c.h, c.w, elt);
+        if (t.h === c.h && t.w === c.w && bitsEqualArr(t.bits, c.bits)) keep.push(elt);
+      }
+      var sym = classifySubgroup(keep);
+      return { pop: c.pop, order: sym.order, name: sym.name, cls: sym.cls };
+    });
+  }
+
+  // Identify which subgroup of D₄ the collected elements constitute.
+  function classifySubgroup(elts) {
+    var set = elts.slice().sort(function (a, b) { return a - b; }).join(',');
+    // Canonical subgroup signatures.
+    // Numeric key order: 0=id, 1=r90, 2=r180, 3=r270, 4=mirH, 5=mirV, 6=diag, 7=anti
+    var sigs = {
+      '0':         { name: 'C<sub>1</sub> trivial',     cls: 'c1',  order: 1 },
+      '0,2':       { name: 'C<sub>2</sub> rotation',     cls: 'c2',  order: 2 },
+      '0,4':       { name: 'D<sub>1</sub> h-mirror',     cls: 'd1h', order: 2 },
+      '0,5':       { name: 'D<sub>1</sub> v-mirror',     cls: 'd1v', order: 2 },
+      '0,6':       { name: 'D<sub>1</sub> diagonal',     cls: 'd1d', order: 2 },
+      '0,7':       { name: 'D<sub>1</sub> antidiag',     cls: 'd1a', order: 2 },
+      '0,2,4,5':   { name: 'D<sub>2</sub> axis-aligned', cls: 'd2',  order: 4 },
+      '0,2,6,7':   { name: 'D<sub>2</sub> diagonal',     cls: 'd2',  order: 4 },
+      '0,1,2,3':   { name: 'C<sub>4</sub> rotation',     cls: 'c4',  order: 4 },
+      '0,1,2,3,4,5,6,7': { name: 'D<sub>4</sub> full square', cls: 'd4', order: 8 }
+    };
+    if (sigs[set]) return { name: sigs[set].name, cls: sigs[set].cls, order: sigs[set].order, elts: elts };
+    // Fallback: report as the cyclic closure of whatever we found.
+    return { name: 'subgroup (order ' + elts.length + ')', cls: 'c1', order: elts.length, elts: elts };
+  }
+
+  // ──────────────── Rendering ────────────────
+  function render() {
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    // Faint grid lines at every 5th cell for orientation.
+    ctx.strokeStyle = '#f1f1f4';
+    ctx.lineWidth = 1;
+    for (var j = 0; j <= COLS; j++) {
+      var x = j * CELL_PX;
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, ctxH); ctx.stroke();
+    }
+    for (var i = 0; i <= ROWS; i++) {
+      var y = i * CELL_PX;
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+    }
+    // Live cells.
+    for (var ii = 0; ii < ROWS; ii++) {
+      for (var jj = 0; jj < COLS; jj++) {
+        var k = ii * COLS + jj;
+        if (grid[k]) {
+          ctx.fillStyle = (showBirths && births[k]) ? '#dc2626' : '#1e293b';
+          ctx.fillRect(jj * CELL_PX + 1, ii * CELL_PX + 1, CELL_PX - 2, CELL_PX - 2);
+        }
+      }
+    }
+  }
+
+  // ──────────────── State readout & traces ────────────────
+  var genVal = document.getElementById('gen-val');
+  var popVal = document.getElementById('pop-val');
+  var bboxVal = document.getElementById('bbox-val');
+  var symBadge = document.getElementById('sym-badge');
+  var symName = document.getElementById('sym-name');
+  var symOrder = document.getElementById('sym-order');
+
+  function readout() {
+    var sym = detectSymmetry();
+    var norm = normalise(grid);
+
+    genVal.textContent = generation;
+    popVal.textContent = norm.pop;
+    bboxVal.textContent = norm.pop === 0 ? '—' : (norm.h + '×' + norm.w);
+    symBadge.className = 'sym-badge ' + (norm.pop === 0 ? 'empty' : sym.cls);
+    symName.innerHTML = norm.pop === 0 ? 'empty' : sym.name;
+    symOrder.innerHTML = norm.pop === 0
+      ? '|G_x| = 8 (convention)  ·  all of D<sub>4</sub>'
+      : '|G_x| = ' + sym.order + '  ·  order ' + sym.order + ' / 8';
+    drawOrbit();
+  }
+
+  // ──────────────── Animation loop ────────────────
+  function loop(ts) {
+    if (playing) {
+      if (ts - lastStep >= 1000 / speed) {
+        step();
+        render();
+        readout();
+        lastStep = ts;
+      }
+    }
+    requestAnimationFrame(loop);
+  }
+
+  // ──────────────── User interaction ────────────────
+  canvas.addEventListener('click', function (e) {
+    var rect = canvas.getBoundingClientRect();
+    var sx = canvas.width / rect.width;
+    var sy = canvas.height / rect.height;
+    var x = (e.clientX - rect.left) * sx;
+    var y = (e.clientY - rect.top) * sy;
+    var j = Math.floor(x / CELL_PX);
+    var i = Math.floor(y / CELL_PX);
+    if (i >= 0 && i < ROWS && j >= 0 && j < COLS) {
+      grid[i * COLS + j] = grid[i * COLS + j] ? 0 : 1;
+      render();
+      readout();
+    }
+  });
+
+  var playBtn = document.getElementById('play-btn');
+  var stepBtn = document.getElementById('step-btn');
+  var clearBtn = document.getElementById('clear-btn');
+  var randomBtn = document.getElementById('random-btn');
+  var gliderBtn = document.getElementById('glider-hit-btn');
+  var speedSlider = document.getElementById('speed-slider');
+  var speedVal = document.getElementById('speed-val');
+  var densSlider = document.getElementById('density-slider');
+  var densVal = document.getElementById('density-val');
+  var detectTranslateCb = document.getElementById('detect-translate');
+  var trailCb = document.getElementById('trail-toggle');
+
+  playBtn.addEventListener('click', function () {
+    playing = !playing;
+    playBtn.textContent = playing ? 'Pause' : 'Play';
+    playBtn.classList.toggle('active', playing);
+  });
+  stepBtn.addEventListener('click', function () { step(); render(); readout(); });
+  clearBtn.addEventListener('click', function () {
+    grid.fill(0); nextGrid.fill(0); births.fill(0);
+    generation = 0;
+    render(); readout();
+  });
+  randomBtn.addEventListener('click', function () {
+    seedRandom(density);
+  });
+  gliderBtn.addEventListener('click', function () {
+    dropGlider();
+  });
+  speedSlider.addEventListener('input', function () {
+    speed = +speedSlider.value;
+    speedVal.textContent = speed + '/s';
+  });
+  densSlider.addEventListener('input', function () {
+    density = (+densSlider.value) / 100;
+    densVal.textContent = density.toFixed(2);
+  });
+  detectTranslateCb.addEventListener('change', function () {
+    useTranslateInvariant = detectTranslateCb.checked;
+    readout();
+  });
+  trailCb.addEventListener('change', function () {
+    showBirths = trailCb.checked;
+    render();
+  });
+
+  function seedRandom(dens) {
+    grid.fill(0); nextGrid.fill(0); births.fill(0);
+    for (var k = 0; k < grid.length; k++) grid[k] = (Math.random() < dens) ? 1 : 0;
+    generation = 0;
+    render(); readout();
+  }
+
+  // Drop a glider at a random empty-ish spot, oriented pointing NE. Breaks
+  // symmetry in any configuration that has some.
+  function dropGlider() {
+    var i0 = Math.floor(Math.random() * (ROWS - 4)) + 1;
+    var j0 = Math.floor(Math.random() * (COLS - 4)) + 1;
+    // Classic glider pattern (5 cells, D₁-diagonal shape).
+    var pat = [[0, 1], [1, 2], [2, 0], [2, 1], [2, 2]];
+    for (var p = 0; p < pat.length; p++) {
+      grid[idx(i0 + pat[p][0], j0 + pat[p][1])] = 1;
+    }
+    render(); readout();
+  }
+
+  // ──────────────── Presets ────────────────
+  // Each preset clears the grid and plants a known pattern near centre.
+  function loadPreset(name) {
+    grid.fill(0); nextGrid.fill(0); births.fill(0);
+    generation = 0;
+    var ci = Math.floor(ROWS / 2), cj = Math.floor(COLS / 2);
+    function put(pat, ci0, cj0) {
+      for (var p = 0; p < pat.length; p++) {
+        grid[idx(ci0 + pat[p][0], cj0 + pat[p][1])] = 1;
+      }
+    }
+    if (name === 'blinker') {
+      // Horizontal 3-cell line — D₂ at rest, D₂ rotated at next tick.
+      put([[0, -1], [0, 0], [0, 1]], ci, cj);
+    } else if (name === 'beacon') {
+      // Two 2×2 blocks touching at corner — D₂ diagonal stabiliser.
+      put([[-1, -2], [-1, -1], [0, -2], [0, -1], [1, 0], [1, 1], [2, 0], [2, 1]], ci, cj);
+    } else if (name === 'clock') {
+      // "Clock" period-2 oscillator — D₂ diagonal.
+      put([[-1, 0], [0, -1], [0, 1], [1, 0],
+           [-2, 1], [2, -1]], ci, cj);
+    } else if (name === 'pulsar') {
+      // Pulsar period-3 oscillator — D₄ at symmetric phase, C₄ otherwise.
+      // Quarter pattern, then mirrored into the other three quadrants.
+      var q = [[2, 4], [2, 5], [2, 6], [4, 2], [5, 2], [6, 2], [6, 4], [6, 5], [6, 6], [4, 6], [5, 6]];
+      // Plant the pulsar's full 13×13 body.
+      var pulsar = [];
+      q.forEach(function (p) { pulsar.push([p[0] - 4, p[1] - 4]); });        // NW
+      q.forEach(function (p) { pulsar.push([p[0] - 4, 4 - p[1]]); });         // NE
+      q.forEach(function (p) { pulsar.push([4 - p[0], p[1] - 4]); });         // SW
+      q.forEach(function (p) { pulsar.push([4 - p[0], 4 - p[1]]); });         // SE
+      put(pulsar, ci, cj);
+    } else if (name === 'glider') {
+      // Classical glider — translating diagonally; chiral, so stabiliser is trivial C₁.
+      put([[-1, 0], [0, 1], [1, -1], [1, 0], [1, 1]], ci - 5, cj - 8);
+    } else if (name === 'rpent') {
+      // R-pentomino — chaotic long-lived seed with only C₁ stabiliser.
+      put([[-1, 0], [-1, 1], [0, -1], [0, 0], [1, 0]], ci, cj);
+    }
+    render(); readout();
+  }
+
+  d3.selectAll('[data-preset]').on('click', function () {
+    loadPreset(d3.select(this).attr('data-preset'));
+  });
+
+  // ──────────────── D₄ orbit viz (Figure 2) ────────────────
+  // Eight mini-canvases, one per D₄ element. Each panel shows the current
+  // grid transformed by its element. Because the grid is square (ROWS=COLS),
+  // all eight transforms produce bitmaps of the same shape, and we can render
+  // them into canvases of the same aspect. Equivariance of the Life rule
+  // means the eight panels all advance in lockstep, and the number of
+  // distinct panels equals the orbit size |orbit(x)| = |D_4| / |G_x|.
+  var orbitElements = [
+    { g: 0, label: 'identity' },
+    { g: 1, label: 'rot 90°' },
+    { g: 2, label: 'rot 180°' },
+    { g: 3, label: 'rot 270°' },
+    { g: 4, label: 'mirror h' },
+    { g: 5, label: 'mirror v' },
+    { g: 6, label: 'diagonal' },
+    { g: 7, label: 'antidiag' }
+  ];
+  var orbitGrid = document.getElementById('orbit-grid');
+  var orbitCanvases = [];
+  var orbitPanels = [];
+  orbitElements.forEach(function (e) {
+    var panel = document.createElement('div');
+    panel.className = 'orbit-panel';
+    var c = document.createElement('canvas');
+    c.width = 128; c.height = 128;
+    panel.appendChild(c);
+    var lbl = document.createElement('div');
+    lbl.className = 'lbl';
+    lbl.textContent = e.label;
+    panel.appendChild(lbl);
+    orbitGrid.appendChild(panel);
+    orbitCanvases.push(c);
+    orbitPanels.push(panel);
+  });
+
+  var orbitSizeEl = document.getElementById('orbit-size');
+  var orbitFixedEl = document.getElementById('orbit-fixed');
+  var orbitProductEl = document.getElementById('orbit-product');
+
+  // Compare two normalised bitmaps (shape-identical under exact match).
+  function bitmapsEqual(a, b) {
+    if (a.h !== b.h || a.w !== b.w) return false;
+    for (var k = 0; k < a.bits.length; k++) if (a.bits[k] !== b.bits[k]) return false;
+    return true;
+  }
+
+  // Render a transformed bitmap onto a mini-canvas, centered within a
+  // conceptual 32×32 viewport so the rendering scale matches the main grid.
+  function renderPatternPanel(canvas, t) {
+    var cctx = canvas.getContext('2d');
+    var W = canvas.width, H = canvas.height;
+    cctx.fillStyle = '#ffffff';
+    cctx.fillRect(0, 0, W, H);
+    if (t.h === 0 || t.w === 0) return;
+    // Cell size: make the 32×32 conceptual grid fit the mini-canvas.
+    var cellW = W / COLS, cellH = H / ROWS;
+    var rowOffset = Math.floor((ROWS - t.h) / 2);
+    var colOffset = Math.floor((COLS - t.w) / 2);
+    cctx.fillStyle = '#1e293b';
+    for (var a = 0; a < t.h; a++) {
+      for (var b = 0; b < t.w; b++) {
+        if (t.bits[a * t.w + b]) {
+          cctx.fillRect((colOffset + b) * cellW, (rowOffset + a) * cellH, cellW, cellH);
+        }
+      }
+    }
+  }
+
+  function drawOrbit() {
+    // Use the bbox-normalised bitmap of the live pattern, then apply each
+    // D_4 element to the bitmap. Comparing the transformed bitmaps against
+    // the identity bitmap tells us which g ∈ D_4 fix the pattern shape. This
+    // matches the symmetry-badge detector (which also uses the normalised
+    // view) and isolates the pattern's intrinsic symmetry from whatever
+    // translation the grid happens to impose.
+    var norm = normalise(grid);
+    if (norm.pop === 0) {
+      // Empty board: everything trivially symmetric. Clear panels, show 1×8.
+      orbitElements.forEach(function (e, i) {
+        var cctx = orbitCanvases[i].getContext('2d');
+        cctx.fillStyle = '#ffffff';
+        cctx.fillRect(0, 0, orbitCanvases[i].width, orbitCanvases[i].height);
+        orbitPanels[i].classList.remove('differs');
+        orbitPanels[i].classList.add('fixed');
+      });
+      orbitSizeEl.textContent = '1';
+      orbitFixedEl.textContent = '8';
+      orbitProductEl.textContent = '1 × 8 = 8';
+      return;
+    }
+    var transformed = orbitElements.map(function (e) {
+      return transformBits(norm.bits, norm.h, norm.w, e.g);
+    });
+    transformed.forEach(function (t, i) {
+      renderPatternPanel(orbitCanvases[i], t);
+    });
+    // Compare against identity. Matches ⇔ g ∈ G_x.
+    var identity = transformed[0];
+    var stabiliserCount = 0;
+    transformed.forEach(function (t, i) {
+      var matches = bitmapsEqual(t, identity);
+      orbitPanels[i].classList.toggle('fixed', matches);
+      orbitPanels[i].classList.toggle('differs', !matches && i !== 0);
+      if (matches) stabiliserCount++;
+    });
+    // Orbit size = number of distinct bitmaps among the 8 transforms.
+    var distinct = [];
+    transformed.forEach(function (t) {
+      if (!distinct.some(function (d) { return bitmapsEqual(d, t); })) distinct.push(t);
+    });
+    var orbitSize = distinct.length;
+    orbitSizeEl.textContent = orbitSize;
+    orbitFixedEl.textContent = stabiliserCount;
+    orbitProductEl.textContent = orbitSize + ' × ' + stabiliserCount + ' = ' + (orbitSize * stabiliserCount);
+  }
+
+  // ──────────────── Boot ────────────────
+  // Boot with a random seed at the configured density. The orbit panels will
+  // immediately show an order-8 orbit (generic random start = trivial G_x).
+  // Hitting a symmetric preset shows the orbit collapsing to fewer distinct
+  // panels; loading Pulsar collapses it all the way to one.
+  seedRandom(density);
+  requestAnimationFrame(loop);
+})();
+</script>
+
+</body>
+</html>

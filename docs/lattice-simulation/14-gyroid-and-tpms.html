@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gyroid &amp; TPMS — Simulating on a Lattice</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
+<script src="../lib/motion.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --article-width: 780px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem;
+  --line-height: 1.65;
+  --text: #1a1a2e;
+  --text-2: #4a4a6a;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --bg: #fafafa;
+  --fig-bg: #ffffff;
+  --border: #e2e2e8;
+  --c-solid: #1e293b;
+  --c-void: #ffffff;
+  --c-iso: #7c3aed;
+  --c-surf-p: #2563eb;
+  --c-surf-d: #059669;
+  --c-surf-g: #dc2626;
+  --c-accent-warm: #ea580c;
+}
+
+body { font-family: var(--body-font); font-size: var(--body-size); line-height: var(--line-height); color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased; }
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
+
+h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+h3 { font-size: 1.15rem; margin: 2rem 0 0.75rem; }
+
+p { margin: 0 0 1rem; }
+a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+a:hover { color: #1d4ed8; }
+
+.back-link { font-family: var(--heading-font); font-size: 0.85rem; display: inline-block; margin-bottom: 1rem; color: var(--text-2); text-decoration: none; }
+.back-link:hover { color: var(--accent); }
+
+.header { padding: 3rem 0 2rem; border-bottom: 1px solid var(--border); margin-bottom: 2.5rem; }
+.header .subtitle { font-family: var(--heading-font); font-size: 1.15rem; color: var(--text-2); max-width: 660px; }
+
+.figure { margin: 2rem 0; padding: 1.5rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; line-height: 1.4; }
+.figure-label { font-weight: 600; color: var(--text); }
+
+.btn { font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600; padding: 0.4rem 0.85rem; border-radius: 5px; border: 1px solid var(--border); background: var(--fig-bg); color: var(--text); cursor: pointer; transition: background 0.15s, border-color 0.15s; user-select: none; }
+.btn:hover { border-color: var(--accent); background: var(--accent-light); }
+.btn.active { background: var(--accent); color: white; border-color: var(--accent); }
+.btn.surf-p.active { background: var(--c-surf-p); border-color: var(--c-surf-p); }
+.btn.surf-d.active { background: var(--c-surf-d); border-color: var(--c-surf-d); }
+.btn.surf-g.active { background: var(--c-surf-g); border-color: var(--c-surf-g); }
+
+.btn-row { display: flex; flex-wrap: wrap; gap: 0.45rem; margin-bottom: 1rem; }
+
+.insight { background: var(--accent-light); border-left: 3px solid var(--accent); padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 4px 4px 0; }
+.insight p { margin: 0; }
+.insight p + p { margin-top: 0.5rem; }
+
+.katex-display { margin: 1.5rem 0; }
+
+svg text { font-family: var(--heading-font); }
+
+.panel {
+  display: grid;
+  grid-template-columns: 1fr 260px;
+  gap: 1.5rem;
+  align-items: start;
+}
+@media (max-width: 700px) { .panel { grid-template-columns: 1fr; } }
+
+.controls-col { display: flex; flex-direction: column; gap: 0.85rem; font-family: var(--heading-font); font-size: 0.9rem; }
+.slider-row { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 0.5rem 0.75rem; }
+.slider-row .lbl { color: var(--text-2); font-weight: 600; }
+.slider-row .val { font-family: var(--mono-font); color: var(--text); min-width: 3.2rem; text-align: right; font-weight: 600; font-size: 0.82rem; }
+.slider-row input[type="range"] { width: 100%; }
+
+.info-box {
+  padding: 0.8rem 1rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-family: var(--heading-font);
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+.info-box .label { font-size: 0.75rem; font-weight: 700; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.3rem; }
+.info-box .row { display: flex; justify-content: space-between; gap: 0.5rem; margin-top: 0.2rem; }
+.info-box .row .k { color: var(--text-2); }
+.info-box .row .v { font-family: var(--mono-font); font-weight: 600; color: var(--text); }
+
+.stage {
+  display: block;
+  width: 100%;
+  max-width: 440px;
+  margin: 0 auto;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: #f7f7fb;
+}
+
+.surf-picker {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.4rem;
+}
+.surf-tile {
+  background: var(--fig-bg);
+  border: 1.5px solid var(--border);
+  border-radius: 5px;
+  padding: 0.5rem 0.4rem;
+  cursor: pointer;
+  transition: border-color 0.15s, transform 0.15s;
+  text-align: center;
+  font-family: var(--heading-font);
+}
+.surf-tile:hover { transform: translateY(-1px); }
+.surf-tile.active.p { border-color: var(--c-surf-p); background: #eff6ff; }
+.surf-tile.active.d { border-color: var(--c-surf-d); background: #ecfdf5; }
+.surf-tile.active.g { border-color: var(--c-surf-g); background: #fef2f2; }
+.surf-tile .tname { font-weight: 700; font-size: 0.82rem; color: var(--text); }
+.surf-tile .tdesc { font-family: var(--mono-font); font-size: 0.66rem; color: var(--text-2); margin-top: 0.15rem; }
+
+.mode-row { display: flex; gap: 0.4rem; }
+.mode-row .btn { flex: 1; padding: 0.35rem 0.5rem; font-size: 0.8rem; }
+
+.tile-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+}
+.tile-grid canvas {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
+.legend {
+  display: flex;
+  gap: 1rem;
+  font-family: var(--heading-font);
+  font-size: 0.78rem;
+  color: var(--text-2);
+  margin-top: 0.5rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.legend .sw { display: inline-block; width: 14px; height: 10px; vertical-align: middle; margin-right: 0.3rem; border-radius: 2px; border: 1px solid var(--border); }
+
+.eq-card {
+  padding: 0.7rem 0.9rem;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 4px;
+  background: var(--fig-bg);
+  font-family: var(--heading-font);
+  font-size: 0.85rem;
+  margin: 0.5rem 0;
+}
+.eq-card .title { font-weight: 700; margin-bottom: 0.2rem; }
+.eq-card.p { border-left-color: var(--c-surf-p); }
+.eq-card.d { border-left-color: var(--c-surf-d); }
+.eq-card.g { border-left-color: var(--c-surf-g); }
+.eq-card .eq { font-family: inherit; color: var(--text-2); font-size: 0.85rem; overflow-x: auto; }
+.eq-card .eq .katex { font-size: 0.95em; }
+
+.nav-footer { margin-top: 5rem; padding-top: 2rem; border-top: 1px solid var(--border); display: flex; justify-content: space-between; font-family: var(--heading-font); font-size: 0.9rem; }
+.nav-footer a { color: var(--accent); text-decoration: none; }
+.nav-footer a:hover { text-decoration: underline; }
+.nav-footer .spacer { flex: 1; }
+
+@media (prefers-reduced-motion: reduce) { html:not([data-motion="full"]) * { transition-duration: 0s !important; animation-duration: 0s !important; } }
+@media (max-width: 680px) {
+  h1 { font-size: 1.75rem; }
+  .article { padding: 1.5rem 1rem 4rem; }
+}
+</style>
+</head>
+<body>
+<div class="article">
+
+<a href="index.html" class="back-link">← Simulating on a Lattice</a>
+
+<div class="header">
+  <h1>Gyroid &amp; TPMS</h1>
+  <p class="subtitle">Part 14 of 15. Triply periodic minimal surfaces are the lattice made flesh. A single trigonometric equation cut at level <i>c</i> produces an infinite, zero-mean-curvature sheet that tiles three-space with the translation group <b>Z</b><sup>3</sup>. Aerospace 3D-printers fabricate these surfaces directly; the unit cell <em>is</em> the part.</p>
+</div>
+
+<p>The first thirteen explainers treated the lattice as a <em>stage</em> — the set of sites on which a simulation runs. This one flips the relationship. The lattice is no longer a discretisation of some pre-existing continuum; it is the geometry of a manufactured object. A metal-powder 3D-printer builds a part whose inside is a periodic foam, and the foam is the orbit of a single implicit surface under translation by <b>Z</b><sup>3</sup>. The lattice has become the thing being made.</p>
+
+<p>The mathematical object underneath is a <em>triply periodic minimal surface</em>. A surface in ℝ<sup>3</sup> is <em>minimal</em> when its mean curvature vanishes everywhere: at every point the two principal curvatures cancel, so the surface is locally a saddle of equal but opposite bending. It is <em>triply periodic</em> when it is invariant under three linearly independent translations, so it carries a lattice as part of its definition. A TPMS is to a 3D lattice what a doubly periodic minimal surface (a catenoid array, for instance) is to a 2D lattice — an infinite sheet, perfectly soap-film-balanced in every cell.</p>
+
+<p>Three surfaces dominate. H. A. Schwarz found two of them in 1865: Schwarz P (Primitive) and Schwarz D (Diamond). The third, the gyroid, was discovered more than a century later by Alan Schoen at NASA in 1970 while he was looking for strong, lightweight panels for spacecraft. The gyroid's defining feature is negative: it contains no straight lines and no planar reflection symmetries. That absence turns out to make its mechanical response more isotropic than either of its older siblings, which is why gyroid-infilled parts now show up inside turbine blades, satellite brackets, and heat exchangers.</p>
+
+<h2>The three implicit equations</h2>
+
+<p>All three classical TPMS admit approximate implicit equations built from low-frequency Fourier modes on the cubic lattice. They are not exact — the true Schwarz P surface is a transcendental object — but the zero-level sets of these trigonometric polynomials are visually indistinguishable from the true surfaces at printable resolutions.</p>
+
+<div class="eq-card p">
+  <div class="title" style="color: var(--c-surf-p);">Schwarz P (Primitive) — simple-cubic topology</div>
+  <div class="eq" id="eq-p"></div>
+</div>
+
+<div class="eq-card d">
+  <div class="title" style="color: var(--c-surf-d);">Schwarz D (Diamond) — diamond-cubic topology</div>
+  <div class="eq" id="eq-d"></div>
+</div>
+
+<div class="eq-card g">
+  <div class="title" style="color: var(--c-surf-g);">Gyroid (Schoen, 1970) — chiral, no mirror planes</div>
+  <div class="eq" id="eq-g"></div>
+</div>
+
+<p>In each case <i>x</i>, <i>y</i>, <i>z</i> are measured in units of 2π divided by the lattice constant <i>a</i>, so the equation is automatically (2π)-periodic in all three directions. The Fourier support of the P surface sits on the six reciprocal-lattice vectors of length one (the {100}-family). The D surface uses the eight {111} vectors. The gyroid uses twelve {110} vectors. The <em>smaller</em> the reciprocal-lattice set, the smoother the real-space surface.</p>
+
+<h3>Level-set offset and the one-parameter family</h3>
+
+<p>Replacing the right-hand side 0 with a constant <i>c</i> generalises each equation to a one-parameter family of isosurfaces. At <i>c</i> = 0 the zero-mean-curvature minimal surface appears. For <i>c</i> ≠ 0 the surface is no longer minimal but is still periodic, still smooth away from a small number of critical <i>c</i>-values, and still divides space into two disjoint regions with a well-defined volume fraction. Printed gyroid parts almost never use <i>c</i> = 0 directly. Instead, they use the pair of offsets ±<i>t</i> and fill the slab</p>
+
+<div id="math-slab"></div>
+
+<p>with solid material. The result is a connected skin of thickness 2<i>t</i> centred on the minimal surface — a <em>sheet-based</em> TPMS lattice. Alternatively, one can fill an entire half-space <i>f</i>(<b>r</b>) &gt; <i>c</i> and leave the other half empty — a <em>graph-based</em> TPMS lattice. The sheet variant looks like a honeycomb; the graph variant looks like two interpenetrating tree networks separated by the surface. Both variants are used; the choice depends on which mechanical property — stiffness, energy absorption, permeability — the part needs to optimise.</p>
+
+<h2>Pick a surface and look at a slice</h2>
+
+<p>The key figure below cuts each TPMS with a plane at constant <i>z</i> and shows the value of <i>f</i>(<i>x</i>, <i>y</i>, <i>z</i>) on that plane as a heatmap. Where the heatmap crosses a threshold <i>c</i>, you have cut through the sheet-TPMS solid. Scrubbing <i>z</i> rotates the cross-section through the unit cell; scrubbing <i>c</i> thickens or thins the solid; scrubbing the unit-cell count shows the lattice repeating.</p>
+
+<div class="figure" id="fig-isosurface">
+  <div class="panel">
+    <div>
+      <canvas id="iso-canvas" class="stage" width="560" height="560"></canvas>
+      <div class="legend">
+        <span><span class="sw" style="background: #1e293b;"></span>solid (|<i>f</i>| &lt; <i>t</i>)</span>
+        <span><span class="sw" style="background: #bfdbfe;"></span><i>f</i> &gt; 0 (network A)</span>
+        <span><span class="sw" style="background: #fecaca;"></span><i>f</i> &lt; 0 (network B)</span>
+        <span><span class="sw" style="background: var(--c-iso); border-color: var(--c-iso);"></span>zero level set</span>
+      </div>
+    </div>
+    <div class="controls-col">
+      <div class="surf-picker">
+        <div class="surf-tile p active" data-surf="p">
+          <div class="tname" style="color: var(--c-surf-p);">Schwarz P</div>
+          <div class="tdesc">simple cubic</div>
+        </div>
+        <div class="surf-tile d" data-surf="d">
+          <div class="tname" style="color: var(--c-surf-d);">Schwarz D</div>
+          <div class="tdesc">diamond</div>
+        </div>
+        <div class="surf-tile g" data-surf="g">
+          <div class="tname" style="color: var(--c-surf-g);">Gyroid</div>
+          <div class="tdesc">chiral {110}</div>
+        </div>
+      </div>
+      <div class="mode-row">
+        <button class="btn active" id="mode-solid">Solid skin</button>
+        <button class="btn" id="mode-field">Field</button>
+      </div>
+      <div class="slider-row">
+        <div class="lbl"><i>z</i></div>
+        <input type="range" id="z-slider" min="0" max="200" step="1" value="0">
+        <div class="val" id="z-val">0.00</div>
+      </div>
+      <div class="slider-row">
+        <div class="lbl">thickness <i>t</i></div>
+        <input type="range" id="t-slider" min="5" max="100" step="1" value="35">
+        <div class="val" id="t-val">0.35</div>
+      </div>
+      <div class="slider-row">
+        <div class="lbl">cells</div>
+        <input type="range" id="n-slider" min="1" max="4" step="1" value="2">
+        <div class="val" id="n-val">2×2</div>
+      </div>
+      <div class="slider-row">
+        <div class="lbl">auto scrub</div>
+        <input type="range" id="auto-speed" min="0" max="5" step="1" value="0">
+        <div class="val" id="auto-val">off</div>
+      </div>
+      <div class="info-box">
+        <div class="label">Unit cell</div>
+        <div class="row"><span class="k">surface</span><span class="v" id="info-name">Schwarz P</span></div>
+        <div class="row"><span class="k">lattice</span><span class="v">Pm3m</span></div>
+        <div class="row"><span class="k">Fourier</span><span class="v" id="info-fourier">{100}</span></div>
+        <div class="row"><span class="k">vol. frac.</span><span class="v" id="info-vf">—</span></div>
+      </div>
+    </div>
+  </div>
+  <p class="figure-caption"><span class="figure-label">Figure 1.</span> A single <i>z</i>-slice of the implicit field. In <em>Solid skin</em> mode the band |<i>f</i>| &lt; <i>t</i> is filled with material — this is the cross-section a saw would expose if it sliced the printed lattice. In <em>Field</em> mode the continuous value of <i>f</i> is shown, with the zero level set drawn in purple. Scrub <i>z</i> to walk through the unit cell; scrub <i>t</i> to tune the volume fraction; the cell counter stacks the same pattern into a 2×2 or 3×3 wallpaper. Volume fraction is estimated by sampling the 3D field on a 40<sup>3</sup> grid — it obeys <i>φ</i> ≈ 0.5 at <i>t</i> = 0 for every TPMS and grows with <i>t</i>.</p>
+</div>
+
+<h2>How a TPMS lives on the lattice</h2>
+
+<p>All three surfaces are invariant under integer translations of the cubic lattice <b>Z</b><sup>3</sup>. The <em>space group</em> that fixes the minimal surface is larger than translation alone: Schwarz P belongs to <i>Pm</i>3̄<i>m</i> (the full symmetry of the cube), Schwarz D to <i>Pn</i>3̄<i>m</i>, and the gyroid to <i>Ia</i>3̄<i>d</i>. The gyroid's space group is <em>chiral</em>: it contains 4-fold screw axes and threefold inversion points but no mirror planes. A left-handed gyroid is topologically distinct from a right-handed one — the two are mirror images that cannot be superimposed by any rigid motion.</p>
+
+<p>This is where the lattice and group pillars of the series meet one more time. The gyroid is the orbit of a small surface patch — a fundamental domain of the space group, occupying 1/96 of a unit cell for <i>Ia</i>3̄<i>d</i> — under the action of that space group. Each of the 96 copies tiles one cell; each of ℤ<sup>3</sup>'s infinitely many translations tiles a different cell. Everything else is combinatorics.</p>
+
+<div class="insight">
+  <p><strong>Why a Fourier polynomial can be a minimal surface.</strong> The true Schwarz P surface satisfies the mean-curvature equation exactly, which is a non-linear PDE with no closed-form solution. But it has an expansion in plane waves whose wavevectors lie on the reciprocal lattice. Truncate that expansion at the lowest non-zero frequency — six waves for P, twelve for the gyroid — and the zero level set of the truncation is already within a fraction of a percent of the true surface. The approximation is good because minimal surfaces are extremely smooth: the mean-curvature operator is elliptic, so high-frequency components decay fast. The implicit equation is therefore the surface's <em>lowest-order Fourier fingerprint on the reciprocal lattice</em>.</p>
+</div>
+
+<h2>Tiling a 3×3 wallpaper</h2>
+
+<p>A printed part is many unit cells thick. Because each TPMS passes through its cell boundaries in a specific, periodic pattern — faces match faces, edges match edges — neighbouring cells join seamlessly. The secondary figure below renders a 3×3 array of gyroid cross-sections at the same <i>z</i>. The lattice periodicity is visible directly: each tile is identical, translated by one lattice vector.</p>
+
+<div class="figure" id="fig-tiling">
+  <div id="tile-array"></div>
+  <div class="mode-row" style="max-width: 340px; margin: 0.75rem auto 0;">
+    <button class="btn tile-btn active" data-tile-surf="g">Gyroid</button>
+    <button class="btn tile-btn" data-tile-surf="p">Schwarz P</button>
+    <button class="btn tile-btn" data-tile-surf="d">Schwarz D</button>
+  </div>
+  <p class="figure-caption"><span class="figure-label">Figure 2.</span> A 3×3 array of unit cells at <i>z</i> = 0, with <i>t</i> = 0.3. Each sub-tile is an independent render of the same implicit equation over one cubic unit cell. Lines cross the borders continuously, which is not a rendering trick — it is the content of the statement that the surface is invariant under the cubic translation group. Toggle the surface to see how the gyroid's chirality (visible as a consistent swirl direction) vanishes in the P and D tiles, which have full mirror symmetry.</p>
+</div>
+
+<h2>Why gyroid in practice</h2>
+
+<p>Of the three classical TPMS, the gyroid gets most of the engineering attention. Four properties make it dominant:</p>
+
+<p><strong>1. Low bending energy.</strong> Zero mean curvature means the surface is locally a balanced saddle. Applied stress redistributes as membrane tension rather than bending, which is mechanically expensive for thin-walled structures. The gyroid's solid skin deforms primarily in stretching, which is why its stiffness-to-weight ratio beats strut-based lattices of the same mass.</p>
+
+<p><strong>2. Near-isotropic response.</strong> The gyroid's space group is <i>Ia</i>3̄<i>d</i>, whose rotation subgroup contains the full 24-element rotation group of the cube. By the same tensor argument from Act III, that point group is large enough to force the macroscopic elastic tensor to be nearly isotropic — only two independent elastic moduli, like an amorphous solid. Strut-based lattices with cubic symmetry show roughly 2× Young's-modulus variation with loading direction; gyroid foams show less than 10%.</p>
+
+<p><strong>3. Manufacturable.</strong> The gyroid contains no overhangs steeper than 45° in typical build orientations, so a metal powder-bed printer can print the whole structure without support material. Strut lattices usually need sacrificial supports that waste material and leave surface roughness where they are broken off.</p>
+
+<p><strong>4. Enormous surface-to-volume ratio.</strong> For the same mass of material, a gyroid exposes 2–3× more surface area than a foam of randomly-packed struts. Heat exchangers and catalyst beds want that ratio maximised; the gyroid is at or near the mathematical optimum.</p>
+
+<h2>Volume fraction, tuned continuously</h2>
+
+<p>Two knobs control the printed geometry. The lattice constant <i>a</i> sets the <em>feature size</em> — the typical channel width and wall thickness both scale linearly with <i>a</i>. The level-set offset <i>t</i> sets the <em>volume fraction</em> <i>φ</i> — the fraction of each cell that is solid. For a sheet-based gyroid, <i>φ</i> is approximately 0.5 at <i>t</i> = 0 (the minimal surface itself is infinitely thin, but dilating it by any <i>t</i> &gt; 0 immediately claims half the cell volume), rising to 1 as <i>t</i> saturates the cell. The first-order approximation</p>
+
+<div id="math-vf"></div>
+
+<p>is accurate to a few percent over the useful printing range. Aerospace designers use a spatial field <i>t</i>(<b>r</b>) that varies slowly across the part, giving thin walls where stress is low and thick walls in load paths — a <em>functionally graded lattice</em>. The feature size <i>a</i>(<b>r</b>) can vary too, but more carefully, because abrupt <i>a</i>-changes create seams between non-matching cells.</p>
+
+<h3>Cross-sections and the minimal-surface signature</h3>
+
+<p>A specific feature is worth looking for in Figure 1. For the P surface at <i>z</i> = 0, the zero level set is a single closed curve — one connected component per cell. For the gyroid at the same <i>z</i>, the zero level set is a pair of interlocking wavy curves that do not touch. This is the signature of the two interpenetrating channel networks: network A and network B are disconnected inside each cell but individually connected through the whole lattice. Walk <i>z</i> from 0 to 1 and the two curves twist around each other, which is the chirality of the space group showing up as a visible rotation of the cross-section with depth.</p>
+
+<h2>Where this closes the series</h2>
+
+<p>Most of the explainers before this one treated the lattice as a computational scaffold: a way to approximate a continuous problem with a finite one. The gyroid turns that relationship around. Here the lattice is physical — the unit cell is built, not sampled — and the continuous object (a minimal surface) is approximated by its Fourier expansion on the reciprocal lattice. The algebra is the same either way. A periodic function is a sum of plane waves whose wavevectors live on the reciprocal lattice, and the symmetry group of the surface selects which wavevectors appear.</p>
+
+<p>Act I introduced the lattice as a free abelian group of rank <i>n</i>. Act V's closing explainer — group-equivariant neural networks — will take the same group and bake it into the weight tensor of a learning machine. The gyroid sits between the two: the lattice as object, printed in metal, used in flight.</p>
+
+<h2>Takeaways</h2>
+
+<ul style="margin-left: 1.5rem;">
+  <li><strong>TPMS = triply-periodic minimal surface.</strong> Zero mean curvature, invariant under three independent translations, cut from a single implicit equation whose Fourier support lies on the reciprocal lattice.</li>
+  <li><strong>Three classical surfaces.</strong> Schwarz P (1865, Fourier {100}), Schwarz D (1865, {111}), gyroid (Schoen 1970, {110}). The gyroid was discovered last and has no straight lines, no planar mirrors, and the best mechanical isotropy.</li>
+  <li><strong>Level sets tune volume fraction.</strong> <i>f</i>(<b>r</b>) = ±<i>t</i> gives a sheet-TPMS solid of thickness 2<i>t</i>; <i>f</i>(<b>r</b>) &gt; <i>c</i> gives a graph-TPMS filling one side of the surface. Volume fraction scales linearly with <i>t</i> near the minimal surface.</li>
+  <li><strong>Lattice tiles seamlessly.</strong> The surface is an orbit of a fundamental patch under the space group; translations by <b>Z</b><sup>3</sup> tile the full infinite structure with no discontinuities at cell boundaries.</li>
+  <li><strong>Why the gyroid ships.</strong> Low bending energy, near-isotropic stiffness (inherited from the cubic rotation group), support-free printability, and the highest surface-to-volume ratio of any known regular cellular solid.</li>
+  <li><strong>The lattice <em>is</em> the part.</strong> A 3D-printed aerospace bracket in-filled with a gyroid is a physical realisation of the translation group <b>Z</b><sup>3</sup> acting on a minimal surface patch — crystallography turned into load-bearing metal.</li>
+</ul>
+
+<p>Next and last: group-equivariant neural networks, where the lattice's symmetry is compiled directly into the layer weights.</p>
+
+<div class="nav-footer">
+  <a href="13-spatial-hashing-vs-octrees.html">← Part 13: Spatial Hashing vs Octrees</a>
+  <span class="spacer"></span>
+  <a href="15-equivariant-networks.html">Part 15: Equivariant Networks →</a>
+</div>
+
+</div>
+
+<script>
+// ────────────────────────────────────────── KaTeX ──
+function math(id, tex, display) {
+  var el = document.getElementById(id);
+  if (el) katex.render(tex, el, { throwOnError: false, displayMode: !!display });
+}
+
+math('eq-p',
+  'f_P(x,y,z) \\;=\\; \\cos x + \\cos y + \\cos z \\;=\\; 0',
+  true);
+
+math('eq-d',
+  'f_D(x,y,z) \\;=\\; \\sin x\\,\\sin y\\,\\sin z \\,+\\, \\sin x\\,\\cos y\\,\\cos z \\,+\\, \\cos x\\,\\sin y\\,\\cos z \\,+\\, \\cos x\\,\\cos y\\,\\sin z \\;=\\; 0',
+  true);
+
+math('eq-g',
+  'f_G(x,y,z) \\;=\\; \\sin x\\,\\cos y \\,+\\, \\sin y\\,\\cos z \\,+\\, \\sin z\\,\\cos x \\;=\\; 0',
+  true);
+
+math('math-slab',
+  '\\bigl\\{\\, (x,y,z) \\in \\mathbb{R}^3 \\;:\\; |f(x,y,z)| \\;\\leq\\; t \\,\\bigr\\}',
+  true);
+
+math('math-vf',
+  '\\varphi(t) \\;\\approx\\; \\tfrac{1}{2} \\,+\\, \\kappa\\, t \\qquad (\\text{small } t)',
+  true);
+
+// ────────────────────────────────────────── TPMS field functions ──
+// All equations live in rescaled coordinates where one unit cell is [0, 2π]³.
+var FIELD = {
+  p: function (x, y, z) {
+    return Math.cos(x) + Math.cos(y) + Math.cos(z);
+  },
+  d: function (x, y, z) {
+    var sx = Math.sin(x), sy = Math.sin(y), sz = Math.sin(z);
+    var cx = Math.cos(x), cy = Math.cos(y), cz = Math.cos(z);
+    return sx * sy * sz + sx * cy * cz + cx * sy * cz + cx * cy * sz;
+  },
+  g: function (x, y, z) {
+    return Math.sin(x) * Math.cos(y) +
+           Math.sin(y) * Math.cos(z) +
+           Math.sin(z) * Math.cos(x);
+  }
+};
+
+// Each surface's natural range (max absolute value the field can take).
+// Used to normalise the threshold t so the slider maps uniformly across types.
+var FIELD_SCALE = { p: 3.0, d: 2.0, g: 1.5 };
+var FIELD_NAME = { p: 'Schwarz P', d: 'Schwarz D', g: 'Gyroid' };
+var FIELD_FOURIER = { p: '{100}', d: '{111}', g: '{110}' };
+
+// ────────────────────────────────────────── Colour ramp for field mode ──
+// Diverging red→white→blue where negative = red, positive = blue.
+function fieldColour(v, vmax) {
+  var s = Math.max(-1, Math.min(1, v / vmax));
+  if (s >= 0) {
+    // 0 → white (#ffffff), 1 → blue (#2563eb)
+    var t = s;
+    var r = Math.round(255 + t * (37 - 255));
+    var g = Math.round(255 + t * (99 - 255));
+    var b = Math.round(255 + t * (235 - 255));
+    return 'rgb(' + r + ',' + g + ',' + b + ')';
+  } else {
+    var t2 = -s;
+    var r = Math.round(255 + t2 * (220 - 255));
+    var g = Math.round(255 + t2 * (38 - 255));
+    var b = Math.round(255 + t2 * (38 - 255));
+    return 'rgb(' + r + ',' + g + ',' + b + ')';
+  }
+}
+
+// Solid skin mode: three-colour flat palette (no gradient).
+// |f| < t   -> dark (solid)
+// f > 0     -> pale blue (network A)
+// f < 0     -> pale red  (network B)
+function solidColour(v, t) {
+  if (Math.abs(v) < t) return [30, 41, 59];   // var(--c-solid)
+  if (v > 0) return [219, 234, 254];          // pale blue
+  return [254, 202, 202];                     // pale red
+}
+
+// ────────────────────────────────────────── Main isosurface figure ──
+(function () {
+  var canvas = document.getElementById('iso-canvas');
+  var ctx = canvas.getContext('2d');
+  var W = canvas.width, H = canvas.height;
+
+  var state = {
+    surf: 'p',
+    mode: 'solid',         // 'solid' or 'field'
+    z: 0,                  // range [0, 2π]
+    t: 0.35,               // relative threshold (0 to 1 of field scale)
+    n: 2,                  // cells per side
+    autoSpeed: 0
+  };
+
+  var zSlider = document.getElementById('z-slider');
+  var tSlider = document.getElementById('t-slider');
+  var nSlider = document.getElementById('n-slider');
+  var autoSlider = document.getElementById('auto-speed');
+  var zVal = document.getElementById('z-val');
+  var tVal = document.getElementById('t-val');
+  var nVal = document.getElementById('n-val');
+  var autoVal = document.getElementById('auto-val');
+  var infoName = document.getElementById('info-name');
+  var infoFourier = document.getElementById('info-fourier');
+  var infoVf = document.getElementById('info-vf');
+
+  zSlider.addEventListener('input', function () {
+    state.z = (+zSlider.value / 200) * 2 * Math.PI;
+    updateLabels();
+    render();
+  });
+  tSlider.addEventListener('input', function () {
+    state.t = +tSlider.value / 100;
+    updateLabels();
+    render();
+    updateVolumeFraction();
+  });
+  nSlider.addEventListener('input', function () {
+    state.n = +nSlider.value;
+    updateLabels();
+    render();
+  });
+  autoSlider.addEventListener('input', function () {
+    state.autoSpeed = +autoSlider.value;
+    updateLabels();
+  });
+
+  document.getElementById('mode-solid').addEventListener('click', function () {
+    state.mode = 'solid';
+    d3.select('#mode-solid').classed('active', true);
+    d3.select('#mode-field').classed('active', false);
+    render();
+  });
+  document.getElementById('mode-field').addEventListener('click', function () {
+    state.mode = 'field';
+    d3.select('#mode-field').classed('active', true);
+    d3.select('#mode-solid').classed('active', false);
+    render();
+  });
+
+  d3.selectAll('.surf-tile').on('click', function () {
+    var k = d3.select(this).attr('data-surf');
+    state.surf = k;
+    d3.selectAll('.surf-tile').classed('active', false);
+    d3.select(this).classed('active', true);
+    updateLabels();
+    updateVolumeFraction();
+    render();
+  });
+
+  function updateLabels() {
+    zVal.textContent = (state.z / (2 * Math.PI)).toFixed(2);
+    tVal.textContent = state.t.toFixed(2);
+    nVal.textContent = state.n + '×' + state.n;
+    autoVal.textContent = state.autoSpeed === 0 ? 'off' : (state.autoSpeed + '×');
+    infoName.textContent = FIELD_NAME[state.surf];
+    infoFourier.textContent = FIELD_FOURIER[state.surf];
+  }
+
+  // Estimate 3D volume fraction by sampling a 40^3 grid.
+  var VF_CACHE = {};
+  function updateVolumeFraction() {
+    var key = state.surf + '_' + state.t.toFixed(2);
+    if (VF_CACHE[key] != null) {
+      infoVf.textContent = (VF_CACHE[key] * 100).toFixed(1) + '%';
+      return;
+    }
+    var f = FIELD[state.surf];
+    var scale = FIELD_SCALE[state.surf];
+    var thresh = state.t * scale;
+    var N = 40;
+    var step = 2 * Math.PI / N;
+    var solid = 0, total = 0;
+    for (var i = 0; i < N; i++) {
+      for (var j = 0; j < N; j++) {
+        for (var k = 0; k < N; k++) {
+          var v = f(i * step, j * step, k * step);
+          if (Math.abs(v) < thresh) solid++;
+          total++;
+        }
+      }
+    }
+    var vf = solid / total;
+    VF_CACHE[key] = vf;
+    infoVf.textContent = (vf * 100).toFixed(1) + '%';
+  }
+
+  function render() {
+    var f = FIELD[state.surf];
+    var scale = FIELD_SCALE[state.surf];
+    var thresh = state.t * scale;
+    var n = state.n;
+
+    // Each pixel is a sample at (x, y, state.z).
+    // We span n cells per axis, so x in [0, n*2π].
+    var img = ctx.createImageData(W, H);
+    var data = img.data;
+
+    var totalRange = n * 2 * Math.PI;
+    // Render in downsampled blocks for speed, then upsample.
+    var block = 2; // 2px per sample -> 280×280 evaluations
+    for (var py = 0; py < H; py += block) {
+      var y = (py / H) * totalRange;
+      for (var px = 0; px < W; px += block) {
+        var x = (px / W) * totalRange;
+        var v = f(x, y, state.z);
+
+        var r, g, b;
+        if (state.mode === 'solid') {
+          var c = solidColour(v, thresh);
+          r = c[0]; g = c[1]; b = c[2];
+        } else {
+          // Field mode: diverging colour + highlight zero crossing.
+          var vrel = v / scale;
+          var clamped = Math.max(-1, Math.min(1, vrel));
+          if (clamped >= 0) {
+            var tt = clamped;
+            r = Math.round(255 + tt * (37 - 255));
+            g = Math.round(255 + tt * (99 - 255));
+            b = Math.round(255 + tt * (235 - 255));
+          } else {
+            var tt2 = -clamped;
+            r = Math.round(255 + tt2 * (220 - 255));
+            g = Math.round(255 + tt2 * (38 - 255));
+            b = Math.round(255 + tt2 * (38 - 255));
+          }
+          // Mark near-zero crossing with purple outline.
+          if (Math.abs(v) < scale * 0.03) {
+            r = 124; g = 58; b = 237;
+          }
+        }
+
+        // Fill the block.
+        for (var dy = 0; dy < block && py + dy < H; dy++) {
+          for (var dx = 0; dx < block && px + dx < W; dx++) {
+            var idx = ((py + dy) * W + (px + dx)) * 4;
+            data[idx] = r;
+            data[idx + 1] = g;
+            data[idx + 2] = b;
+            data[idx + 3] = 255;
+          }
+        }
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+
+    // Draw cell boundaries on top.
+    ctx.save();
+    ctx.strokeStyle = 'rgba(30, 41, 59, 0.35)';
+    ctx.lineWidth = 1;
+    for (var i = 1; i < n; i++) {
+      var p = (i / n) * W;
+      ctx.beginPath();
+      ctx.moveTo(p, 0);
+      ctx.lineTo(p, H);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(0, p);
+      ctx.lineTo(W, p);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // z-scrub indicator in the corner.
+    ctx.save();
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+    ctx.fillRect(8, 8, 86, 20);
+    ctx.strokeStyle = '#e2e2e8';
+    ctx.strokeRect(8, 8, 86, 20);
+    ctx.fillStyle = '#4a4a6a';
+    ctx.font = '11px "Source Sans 3", sans-serif';
+    ctx.fillText('z = ' + (state.z / (2 * Math.PI)).toFixed(2) + '·2π', 13, 22);
+    ctx.restore();
+  }
+
+  // Animation loop for auto-scrub.
+  var lastTime = null;
+  function frame(t) {
+    if (lastTime == null) lastTime = t;
+    var dt = (t - lastTime) / 1000;
+    lastTime = t;
+    if (state.autoSpeed > 0) {
+      var dz = state.autoSpeed * dt * 0.5;
+      state.z = (state.z + dz * 2 * Math.PI) % (2 * Math.PI);
+      zSlider.value = (state.z / (2 * Math.PI)) * 200;
+      updateLabels();
+      render();
+    }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  updateLabels();
+  updateVolumeFraction();
+  render();
+})();
+
+// ────────────────────────────────────────── Secondary figure: 3×3 tiling ──
+(function () {
+  var container = d3.select('#tile-array');
+  var grid = container.append('div').attr('class', 'tile-grid')
+    .style('max-width', '340px').style('margin', '0 auto');
+
+  var TILE_PX = 110;
+  var canvases = [];
+  for (var i = 0; i < 9; i++) {
+    var cnv = grid.append('canvas')
+      .attr('width', TILE_PX).attr('height', TILE_PX).node();
+    canvases.push(cnv);
+  }
+
+  var currentSurf = 'g';
+  var THRESH_REL = 0.3;
+
+  function renderTile(cnv, surf) {
+    var ctx = cnv.getContext('2d');
+    var W = cnv.width, H = cnv.height;
+    var f = FIELD[surf];
+    var scale = FIELD_SCALE[surf];
+    var thresh = THRESH_REL * scale;
+
+    var img = ctx.createImageData(W, H);
+    var data = img.data;
+    for (var py = 0; py < H; py++) {
+      var y = (py / H) * 2 * Math.PI;
+      for (var px = 0; px < W; px++) {
+        var x = (px / W) * 2 * Math.PI;
+        var v = f(x, y, 0);
+        var r, g, b;
+        if (Math.abs(v) < thresh) {
+          r = 30; g = 41; b = 59;
+        } else if (v > 0) {
+          r = 219; g = 234; b = 254;
+        } else {
+          r = 254; g = 202; b = 202;
+        }
+        var idx = (py * W + px) * 4;
+        data[idx] = r; data[idx + 1] = g; data[idx + 2] = b; data[idx + 3] = 255;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+  }
+
+  function renderAll() {
+    canvases.forEach(function (cnv) { renderTile(cnv, currentSurf); });
+  }
+
+  d3.selectAll('.tile-btn').on('click', function () {
+    var k = d3.select(this).attr('data-tile-surf');
+    currentSurf = k;
+    d3.selectAll('.tile-btn').classed('active', false);
+    d3.select(this).classed('active', true);
+    renderAll();
+  });
+
+  renderAll();
+})();
+</script>
+
+</body>
+</html>

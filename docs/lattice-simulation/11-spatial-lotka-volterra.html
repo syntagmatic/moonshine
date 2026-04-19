@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Spatial Lotka-Volterra — Simulating on a Lattice</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
+<script src="../lib/motion.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --article-width: 780px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem;
+  --line-height: 1.65;
+  --text: #1a1a2e;
+  --text-2: #4a4a6a;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --bg: #fafafa;
+  --fig-bg: #ffffff;
+  --border: #e2e2e8;
+  --c-prey: #16a34a;
+  --c-pred: #dc2626;
+  --c-empty: #ffffff;
+  --c-ode: #2563eb;
+  --c-lat: #7c3aed;
+  --c-axis: #94a3b8;
+  --c-grid: #e2e8f0;
+  --c-critical: #ea580c;
+}
+
+body { font-family: var(--body-font); font-size: var(--body-size); line-height: var(--line-height); color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased; }
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
+
+h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+h3 { font-size: 1.15rem; margin: 2rem 0 0.75rem; }
+
+p { margin: 0 0 1rem; }
+a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+a:hover { color: #1d4ed8; }
+
+.back-link { font-family: var(--heading-font); font-size: 0.85rem; display: inline-block; margin-bottom: 1rem; color: var(--text-2); text-decoration: none; }
+.back-link:hover { color: var(--accent); }
+
+.header { padding: 3rem 0 2rem; border-bottom: 1px solid var(--border); margin-bottom: 2.5rem; }
+.header .subtitle { font-family: var(--heading-font); font-size: 1.15rem; color: var(--text-2); max-width: 660px; }
+
+.figure { margin: 2rem 0; padding: 1.5rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; line-height: 1.4; }
+.figure-label { font-weight: 600; color: var(--text); }
+
+.btn { font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600; padding: 0.4rem 0.85rem; border-radius: 5px; border: 1px solid var(--border); background: var(--fig-bg); color: var(--text); cursor: pointer; transition: background 0.15s, border-color 0.15s; user-select: none; }
+.btn:hover { border-color: var(--accent); background: var(--accent-light); }
+.btn.active { background: var(--accent); color: white; border-color: var(--accent); }
+
+.btn-row { display: flex; flex-wrap: wrap; gap: 0.45rem; margin-bottom: 1rem; }
+
+.insight { background: var(--accent-light); border-left: 3px solid var(--accent); padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 4px 4px 0; }
+.insight p { margin: 0; }
+.insight p + p { margin-top: 0.5rem; }
+
+.katex-display { margin: 1.5rem 0; }
+
+svg text { font-family: var(--heading-font); }
+
+.sim-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  align-items: start;
+}
+@media (max-width: 780px) { .sim-grid { grid-template-columns: 1fr; } }
+
+.sim-panel {
+  background: var(--fig-bg);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 0.75rem;
+}
+.sim-panel .ptitle {
+  font-family: var(--heading-font);
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-2);
+  margin-bottom: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.sim-panel .ptag {
+  font-family: var(--mono-font);
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.15rem 0.45rem;
+  border-radius: 3px;
+}
+.sim-panel .ptag.ode { background: #dbeafe; color: #1e3a8a; }
+.sim-panel .ptag.lat { background: #ede9fe; color: #5b21b6; }
+
+.lattice-canvas {
+  display: block;
+  width: 100%;
+  max-width: 340px;
+  margin: 0 auto;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--c-empty);
+}
+
+.controls-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 0.5rem 1rem;
+  margin-top: 1rem;
+  font-family: var(--heading-font);
+  font-size: 0.88rem;
+}
+@media (max-width: 560px) { .controls-row { grid-template-columns: 1fr; } }
+
+.slider-row { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 0.45rem; }
+.slider-row .lbl { color: var(--text-2); font-weight: 600; min-width: 1.6rem; }
+.slider-row .val { font-family: var(--mono-font); color: var(--text); min-width: 2.4rem; text-align: right; font-weight: 600; font-size: 0.82rem; }
+.slider-row input[type="range"] { width: 100%; }
+
+.run-row { display: flex; gap: 0.5rem; margin-top: 0.85rem; align-items: center; flex-wrap: wrap; }
+.run-row .status {
+  font-family: var(--mono-font);
+  font-size: 0.78rem;
+  color: var(--text-2);
+  margin-left: auto;
+}
+
+.legend-row {
+  display: flex;
+  gap: 1rem;
+  font-family: var(--heading-font);
+  font-size: 0.8rem;
+  color: var(--text-2);
+  margin: 0.6rem 0 0;
+  flex-wrap: wrap;
+}
+.legend-row .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 0.35rem; vertical-align: middle; border: 1px solid var(--border); }
+
+.stat-strip {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.6rem;
+  margin-top: 0.85rem;
+  font-family: var(--heading-font);
+  font-size: 0.8rem;
+}
+@media (max-width: 560px) { .stat-strip { grid-template-columns: repeat(2, 1fr); } }
+.stat-tile {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.45rem 0.6rem;
+}
+.stat-tile .k { font-size: 0.7rem; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; }
+.stat-tile .v { font-family: var(--mono-font); font-weight: 600; font-size: 0.95rem; color: var(--text); }
+
+.nav-footer { margin-top: 5rem; padding-top: 2rem; border-top: 1px solid var(--border); display: flex; justify-content: space-between; font-family: var(--heading-font); font-size: 0.9rem; gap: 1rem; }
+.nav-footer a { color: var(--accent); text-decoration: none; }
+.nav-footer a:hover { text-decoration: underline; }
+.nav-footer .spacer { flex: 1; }
+
+@media (prefers-reduced-motion: reduce) { html:not([data-motion="full"]) * { transition-duration: 0s !important; animation-duration: 0s !important; } }
+@media (max-width: 680px) {
+  h1 { font-size: 1.75rem; }
+  .article { padding: 1.5rem 1rem 4rem; }
+}
+</style>
+</head>
+<body>
+<div class="article">
+
+<a href="index.html" class="back-link">← Simulating on a Lattice</a>
+
+<div class="header">
+  <h1>Spatial Lotka-Volterra</h1>
+  <p class="subtitle">Part 11 of 15. The mean-field predator-prey ODE predicts neutrally stable population cycles that never end. Put exactly the same rules on a 2D lattice and the cycles damp, pursuit waves appear, and above a critical predation rate the predator goes extinct through a directed-percolation phase transition that the ODE cannot see.</p>
+</div>
+
+<p>Few pieces of mathematical biology are as famous, or as misleading, as the Lotka-Volterra equations. Two coupled ODEs for prey density <i>N</i> and predator density <i>P</i> give cyclic oscillations around a centre, an equilibrium point the system orbits forever without ever settling. The picture is clean, the mathematics is tidy, and generations of undergraduates learn it as an archetype of nonlinear dynamics.</p>
+
+<p>Then someone puts the same rules on a lattice — every cell is empty, prey, or predator, predators eat only their immediate neighbours — and the picture breaks. Oscillations damp. Fronts appear. Prey form clusters; predators form halos around them; the two populations chase each other in travelling pursuit waves. And at a critical predation rate, the predator population suffers an extinction transition whose critical exponents belong to a universality class the mean-field ODE has no way to know about: directed percolation.</p>
+
+<h2>The mean-field equations</h2>
+
+<p>Write <i>N</i>(<i>t</i>) for the prey density and <i>P</i>(<i>t</i>) for the predator density. The Lotka-Volterra ODEs encode three processes: prey reproduce at rate <i>σ</i>, predators consume prey at rate <i>λ</i> (proportional to the product <i>NP</i>, on the assumption that every predator meets every prey with uniform probability), and predators die at rate <i>μ</i>:</p>
+
+<div id="math-lv-ode"></div>
+
+<p>These equations have a single non-trivial fixed point, easy to compute by setting both derivatives to zero:</p>
+
+<div id="math-lv-fixed"></div>
+
+<p>Linearising around the fixed point gives a Jacobian whose eigenvalues are purely imaginary: <i>±i</i>√(<i>σμ</i>). The fixed point is a <em>centre</em>, and the ODE orbits are closed curves, neutrally stable: small perturbations neither grow nor decay, they just shift to a neighbouring closed orbit. The period of oscillation is 2π/√(<i>σμ</i>).</p>
+
+<p>That neutral stability is a red flag. Physical systems with neutrally stable cycles are rare, because the slightest noise pushes them onto a new orbit, and real ecologies are noisy. The ODE is telling us something is wrong with its own assumptions.</p>
+
+<div class="insight">
+  <p><strong>The uniform-mixing fiction.</strong> The Lotka-Volterra predation term <i>λNP</i> assumes every predator meets prey at a rate proportional to the <em>global</em> prey density. That is the mean-field assumption: space has been averaged away. In any real spatial system, predators only see the prey in their immediate neighbourhood, and when prey form clusters, most predators are either drowning in prey (cluster interior, feast) or starving (cluster exterior, famine). Locality creates correlations the ODE cannot represent.</p>
+</div>
+
+<h2>Putting the rules on a lattice</h2>
+
+<p>The stochastic lattice Lotka-Volterra model (SLLVM) replaces the ODE's two real numbers with an <i>L</i> × <i>L</i> array of cells. Each cell is in one of three states: empty (0), prey (1), or predator (2). Per unit time, with rates <i>σ</i>, <i>λ</i>, <i>μ</i>:</p>
+
+<ul style="margin-left: 1.5rem;">
+  <li><strong>Prey reproduction (<i>σ</i>).</strong> A prey cell, with rate <i>σ</i>, picks a random neighbour. If that neighbour is empty, a new prey appears there.</li>
+  <li><strong>Predation (<i>λ</i>).</strong> A predator cell, with rate <i>λ</i>, picks a random neighbour. If that neighbour is prey, the prey is consumed and becomes a new predator.</li>
+  <li><strong>Predator death (<i>μ</i>).</strong> A predator cell, with rate <i>μ</i>, dies and becomes empty.</li>
+</ul>
+
+<p>The neighbourhood is the four von Neumann neighbours on a 2D square lattice with periodic boundaries. All three rules are strictly local: no cell ever interacts with more than its four nearest neighbours. The stochastic time evolution is exactly the Markov process the mean-field ODE claims to approximate — but only in the limit of infinite-range interactions, which the lattice does not provide.</p>
+
+<p>In code, a time step picks a random cell, rolls a random number against the appropriate rate, and applies the rule. A few thousand such single-cell updates make up one "sweep" that is comparable in time to one unit of ODE integration. Nothing fancier is needed.</p>
+
+<h2>Side-by-side: ODE vs lattice</h2>
+
+<p>The two simulations below run from the same initial condition and the same rate parameters. The ODE integrates the mean-field equations with a fourth-order Runge-Kutta step; the lattice runs the SLLVM on a 100×100 grid. Both are real-time. They disagree from the first second.</p>
+
+<div class="figure" id="fig-main">
+  <div class="sim-grid">
+    <div class="sim-panel">
+      <div class="ptitle"><span>Mean-field ODE</span><span class="ptag ode">perfect mixing</span></div>
+      <div id="ode-phase"></div>
+      <div id="ode-time"></div>
+      <div class="legend-row">
+        <span><span class="swatch" style="background:var(--c-prey)"></span>prey N</span>
+        <span><span class="swatch" style="background:var(--c-pred)"></span>predator P</span>
+        <span><span class="swatch" style="background:var(--c-ode); opacity:0.5"></span>orbit</span>
+      </div>
+    </div>
+    <div class="sim-panel">
+      <div class="ptitle"><span>SLLVM lattice (100×100)</span><span class="ptag lat">local rules</span></div>
+      <canvas class="lattice-canvas" id="lattice-canvas" width="100" height="100"></canvas>
+      <div id="lattice-time"></div>
+      <div class="legend-row">
+        <span><span class="swatch" style="background:var(--c-empty)"></span>empty</span>
+        <span><span class="swatch" style="background:var(--c-prey)"></span>prey</span>
+        <span><span class="swatch" style="background:var(--c-pred)"></span>predator</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="controls-row">
+    <div class="slider-row">
+      <div class="lbl">σ</div>
+      <input type="range" id="sigma-slider" min="0.05" max="1" step="0.01" value="0.4">
+      <div class="val" id="sigma-val">0.40</div>
+    </div>
+    <div class="slider-row">
+      <div class="lbl">λ</div>
+      <input type="range" id="lambda-slider" min="0.1" max="1.5" step="0.01" value="0.6">
+      <div class="val" id="lambda-val">0.60</div>
+    </div>
+    <div class="slider-row">
+      <div class="lbl">μ</div>
+      <input type="range" id="mu-slider" min="0.05" max="1" step="0.01" value="0.3">
+      <div class="val" id="mu-val">0.30</div>
+    </div>
+  </div>
+
+  <div class="run-row">
+    <button class="btn" id="play-btn">Pause</button>
+    <button class="btn" id="reset-btn">Reset</button>
+    <button class="btn" id="preset-normal">σ=0.4 λ=0.6 μ=0.3</button>
+    <button class="btn" id="preset-critical">push to critical λ</button>
+    <div class="status" id="sim-status">t = 0.0</div>
+  </div>
+
+  <div class="stat-strip">
+    <div class="stat-tile">
+      <div class="k">ODE period</div>
+      <div class="v" id="stat-period">—</div>
+    </div>
+    <div class="stat-tile">
+      <div class="k">fixed point (N*, P*)</div>
+      <div class="v" id="stat-fp">—</div>
+    </div>
+    <div class="stat-tile">
+      <div class="k">lattice prey %</div>
+      <div class="v" id="stat-prey">—</div>
+    </div>
+    <div class="stat-tile">
+      <div class="k">lattice pred %</div>
+      <div class="v" id="stat-pred">—</div>
+    </div>
+  </div>
+
+  <p class="figure-caption"><span class="figure-label">Figure 1.</span> Same rates, same dynamics, two simulators. The ODE traces the same closed orbit forever, a neutrally stable centre. The lattice, starting from a random mix, self-organises into green prey clusters surrounded by thin red predator halos, with the halos chasing retreating prey fronts. The time series overlaid on each panel shows the lattice oscillations damping to a noisy steady state, while the ODE does not damp at all. Push λ high (the "critical" preset) and the lattice predator goes extinct while the ODE keeps cycling.</p>
+</div>
+
+<h2>What the lattice produces that the ODE cannot</h2>
+
+<p>Three phenomena stand out, none of them present in the ODE.</p>
+
+<p><strong>Spatial clustering.</strong> Prey, left alone, reproduce into empty neighbours — a contact process, which at high enough reproduction rate produces spreading green regions. Predators, consuming at the edges of those regions, cannot keep up with the interior reproduction, so the prey form dense clusters with a characteristic correlation length set by the ratio <i>σ</i>/<i>λ</i>. The ODE, which has no space, cannot represent any correlation length at all.</p>
+
+<p><strong>Pursuit-evasion waves.</strong> A predator cell at the boundary of a prey cluster converts an adjacent prey into another predator, which then has its own boundary to advance on. The predator front sweeps into the cluster at a finite speed, leaving behind a depleted region that prey, from distant surviving clusters, eventually repopulate. Repeated across the grid, this produces travelling waves of red chasing green, sometimes in spiral patterns reminiscent of excitable media. The ODE's <em>λNP</em> term lumps every such wavefront interaction into a single scalar rate.</p>
+
+<p><strong>Damped oscillations.</strong> Global population counts, on the lattice, oscillate with a period close to the ODE's 2π/√(<i>σμ</i>), but the amplitude decays. Different regions of the lattice go through their local cycles out of phase; when you average across all regions, the cycles partially cancel, and the global signal relaxes to a fluctuating steady state. The ODE does not see this because it has only one "region".</p>
+
+<h2>The extinction transition</h2>
+
+<p>Raise <i>λ</i>. The ODE responds by shrinking its orbit — the fixed point <i>N</i>* = <i>μ</i>/<i>λ</i> moves toward the origin, and the cycles happen at smaller and smaller prey densities. But the ODE never predicts extinction, because for any finite <i>λ</i> the fixed point is strictly positive and the orbits stay in the interior.</p>
+
+<p>On the lattice, something very different happens. As <i>λ</i> increases, predators eat prey faster than the prey cluster can regenerate at its interior. Beyond a critical value <i>λ<sub>c</sub></i>, the predators eat themselves out of existence: every predator cluster exhausts its local prey and dies, and the whole predator population goes to zero, permanently. The prey then fill the lattice, and the system is stuck in an absorbing state. This is a non-equilibrium phase transition with a well-defined critical point, known as the <em>active-to-absorbing</em> transition.</p>
+
+<p>The stationary predator density <i>ρ</i><sub>P</sub> just below <i>λ<sub>c</sub></i> vanishes as a power law:</p>
+
+<div id="math-dp-beta"></div>
+
+<p>and the critical exponent <i>β</i> has been measured numerically (and argued for theoretically) to take the value:</p>
+
+<div id="math-dp-beta-value"></div>
+
+<p>This exponent is the signature of the <em>directed-percolation</em> (DP) universality class. The DP conjecture (Janssen 1981, Grassberger 1982) says that any continuous active-to-absorbing transition with a scalar order parameter, local dynamics, and no extra symmetry, belongs to this class. The SLLVM transition is one of the cleanest realisations.</p>
+
+<div class="figure">
+  <div id="dp-phase-diagram"></div>
+  <p class="figure-caption"><span class="figure-label">Figure 2.</span> The directed-percolation phase diagram for the predator extinction transition. Below <i>λ<sub>c</sub></i>, the stationary predator density is non-zero and the predator population persists indefinitely ("active phase"). Above <i>λ<sub>c</sub></i>, predators go extinct ("absorbing phase"). Near the critical point, the density vanishes as (<i>λ<sub>c</sub></i> − <i>λ</i>)<sup>β</sup> with <i>β</i> ≈ 0.584 in two dimensions. This is a different universality class from the Ising transition (β = 1/8) and is completely invisible to the mean-field ODE.</p>
+</div>
+
+<h2>Why β is different from Ising</h2>
+
+<p>The Ising model's order parameter (the magnetisation) can take positive <em>or</em> negative values: the broken-symmetry state has a ℤ<sub>2</sub> choice. The DP order parameter (the predator density) cannot go negative; the absorbing state is unique, and once reached it cannot be left. That asymmetry changes the fluctuation structure, and the renormalisation group flow for DP has a different fixed point from Ising.</p>
+
+<p>Concretely, above the upper critical dimension <i>d<sub>c</sub></i> = 4 for DP, mean-field theory gets <i>β</i> = 1 exactly. Below <i>d<sub>c</sub></i> the Wilson-Fisher expansion gives corrections, and in two dimensions the value settles at <i>β</i> ≈ 0.584. For Ising the upper critical dimension is <i>d<sub>c</sub></i> = 4 as well, but the mean-field value is 1/2 and the 2D exact value is 1/8. Different universality classes, different physics, different exponents.</p>
+
+<p>The mean-field ODE is oblivious to any of this. It has no notion of an absorbing state — its <i>λNP</i> term goes to zero smoothly as <i>P</i> does, and the population can recover from arbitrarily small values. On a finite lattice, extinction is an irreversible event: once the last predator dies, there is no mechanism to bring one back.</p>
+
+<div class="insight">
+  <p><strong>Two layers of failure.</strong> The mean-field picture fails qualitatively (damped vs undamped oscillations, clusters vs uniform mixing, waves vs no waves) and quantitatively (a whole phase transition with non-trivial critical exponents, completely absent from the ODE). Both failures come from the same root: the assumption that every predator sees the average prey density. Once space and locality are admitted, the physics reorganises itself around correlations, and a new universality class emerges from rules that looked identical to the mean-field ones.</p>
+</div>
+
+<h2>Takeaways</h2>
+
+<ul style="margin-left: 1.5rem;">
+  <li><strong>Mean-field predicts neutrally stable cycles.</strong> The Lotka-Volterra ODEs orbit a centre at (<i>μ</i>/<i>λ</i>, <i>σ</i>/<i>λ</i>) forever, with period 2π/√(<i>σμ</i>). This is a fiction that only survives in the infinite-mixing limit.</li>
+  <li><strong>The lattice damps the oscillations.</strong> Local regions of the lattice cycle out of phase; averaging produces a noisy steady state, not a perpetual oscillation.</li>
+  <li><strong>Space produces structure.</strong> Prey clusters, predator halos, and travelling pursuit waves all emerge from the same local rules the ODE is meant to describe.</li>
+  <li><strong>A new universality class appears.</strong> At high <i>λ</i>, the predator population undergoes an active-to-absorbing phase transition in the directed-percolation class, with <i>β</i> ≈ 0.584 in two dimensions. The ODE never predicts extinction for any finite <i>λ</i>.</li>
+  <li><strong>Locality matters.</strong> The difference between the ODE and the SLLVM is not small numerical correction — it is qualitatively new physics, a different dynamical regime, and a different phase diagram.</li>
+</ul>
+
+<p>Next: a one-dimensional lattice of cars. Nagel-Schreckenberg is the traffic equivalent of Lotka-Volterra on a lattice — simple local rules, a non-equilibrium phase transition, and emergent behaviour that is hard to guess from the rules alone.</p>
+
+<div class="nav-footer">
+  <a href="10-graph-automorphisms.html">← Part 10: Graph Automorphisms</a>
+  <span class="spacer"></span>
+  <a href="12-nagel-schreckenberg.html">Part 12: Nagel-Schreckenberg Traffic →</a>
+</div>
+
+</div>
+
+<script>
+// ────────────────────────────────────────── KaTeX ──
+function math(id, tex, display) {
+  var el = document.getElementById(id);
+  if (el) katex.render(tex, el, { throwOnError: false, displayMode: !!display });
+}
+
+math('math-lv-ode',
+  '\\frac{dN}{dt} \\;=\\; \\color{#16a34a}{\\sigma\\, N} \\;-\\; \\color{#dc2626}{\\lambda\\, N P}, \\qquad \\frac{dP}{dt} \\;=\\; \\color{#16a34a}{\\lambda\\, N P} \\;-\\; \\color{#dc2626}{\\mu\\, P}',
+  true);
+math('math-lv-fixed',
+  'N^{*} \\;=\\; \\frac{\\mu}{\\lambda}, \\qquad P^{*} \\;=\\; \\frac{\\sigma}{\\lambda}, \\qquad \\text{period} \\;=\\; \\frac{2\\pi}{\\sqrt{\\sigma \\mu}}',
+  true);
+math('math-dp-beta',
+  '\\rho_{P}(\\lambda) \\;\\sim\\; (\\lambda_{c} - \\lambda)^{\\beta} \\quad \\text{as } \\lambda \\to \\lambda_{c}^{-}',
+  true);
+math('math-dp-beta-value',
+  '\\beta_{\\text{DP, 2D}} \\;\\approx\\; 0.584 \\qquad \\text{vs} \\qquad \\beta_{\\text{Ising, 2D}} \\;=\\; \\tfrac{1}{8}',
+  true);
+
+// ────────────────────────────────────────── ODE integrator (RK4) ──
+function lvStep(N, P, sigma, lam, mu, dt) {
+  function f(n, p) { return [sigma * n - lam * n * p, lam * n * p - mu * p]; }
+  var k1 = f(N, P);
+  var k2 = f(N + 0.5 * dt * k1[0], P + 0.5 * dt * k1[1]);
+  var k3 = f(N + 0.5 * dt * k2[0], P + 0.5 * dt * k2[1]);
+  var k4 = f(N + dt * k3[0], P + dt * k3[1]);
+  var nn = N + (dt / 6) * (k1[0] + 2 * k2[0] + 2 * k3[0] + k4[0]);
+  var pp = P + (dt / 6) * (k1[1] + 2 * k2[1] + 2 * k3[1] + k4[1]);
+  return [Math.max(0, nn), Math.max(0, pp)];
+}
+
+// ────────────────────────────────────────── SLLVM lattice ──
+// 0 = empty, 1 = prey, 2 = predator
+function makeLattice(L) {
+  var arr = new Uint8Array(L * L);
+  for (var i = 0; i < L * L; i++) {
+    var r = Math.random();
+    if (r < 0.35) arr[i] = 1;
+    else if (r < 0.5) arr[i] = 2;
+    else arr[i] = 0;
+  }
+  return arr;
+}
+
+function sllvmStep(grid, L, sigma, lam, mu, nUpdates) {
+  // Rate-based single-site update. Pick a random site; depending on its
+  // state, apply the corresponding rule with probability = rate.
+  var total = sigma + lam + mu;  // for normalisation
+  for (var k = 0; k < nUpdates; k++) {
+    var i = (Math.random() * L) | 0;
+    var j = (Math.random() * L) | 0;
+    var idx = i * L + j;
+    var s = grid[idx];
+    if (s === 0) continue;
+    // Pick a random neighbour (von Neumann)
+    var dir = (Math.random() * 4) | 0;
+    var ni = i, nj = j;
+    if (dir === 0) ni = (i + L - 1) % L;
+    else if (dir === 1) ni = (i + 1) % L;
+    else if (dir === 2) nj = (j + L - 1) % L;
+    else nj = (j + 1) % L;
+    var nIdx = ni * L + nj;
+    var ns = grid[nIdx];
+    if (s === 1) {
+      // Prey: reproduce at rate sigma into empty neighbour
+      if (ns === 0 && Math.random() < sigma) grid[nIdx] = 1;
+    } else if (s === 2) {
+      // Predator: consume prey at rate lambda, or die at rate mu
+      var r = Math.random();
+      if (r < mu) {
+        grid[idx] = 0;
+      } else if (ns === 1 && Math.random() < lam) {
+        grid[nIdx] = 2;
+      }
+    }
+  }
+}
+
+function countGrid(grid) {
+  var nP = 0, nQ = 0;
+  for (var i = 0; i < grid.length; i++) {
+    if (grid[i] === 1) nP++;
+    else if (grid[i] === 2) nQ++;
+  }
+  return { prey: nP, pred: nQ };
+}
+
+// ────────────────────────────────────────── Figure 1: side-by-side ──
+(function () {
+  var L = 100;
+  var state = {
+    sigma: 0.4, lambda: 0.6, mu: 0.3,
+    grid: makeLattice(L),
+    N: 0.35, P: 0.15,
+    t: 0,
+    odeHistory: [],  // [{t, N, P}]
+    latHistory: [],  // [{t, prey, pred}]
+    playing: true
+  };
+
+  // Sliders
+  var sigmaSl = document.getElementById('sigma-slider');
+  var lambdaSl = document.getElementById('lambda-slider');
+  var muSl = document.getElementById('mu-slider');
+  var sigmaVal = document.getElementById('sigma-val');
+  var lambdaVal = document.getElementById('lambda-val');
+  var muVal = document.getElementById('mu-val');
+
+  function updateLabels() {
+    sigmaVal.textContent = state.sigma.toFixed(2);
+    lambdaVal.textContent = state.lambda.toFixed(2);
+    muVal.textContent = state.mu.toFixed(2);
+  }
+
+  sigmaSl.addEventListener('input', function () { state.sigma = +sigmaSl.value; updateLabels(); updateStats(); });
+  lambdaSl.addEventListener('input', function () { state.lambda = +lambdaSl.value; updateLabels(); updateStats(); });
+  muSl.addEventListener('input', function () { state.mu = +muSl.value; updateLabels(); updateStats(); });
+
+  // Play / Reset / Presets
+  var playBtn = document.getElementById('play-btn');
+  var resetBtn = document.getElementById('reset-btn');
+  playBtn.addEventListener('click', function () {
+    state.playing = !state.playing;
+    playBtn.textContent = state.playing ? 'Pause' : 'Play';
+  });
+  resetBtn.addEventListener('click', function () { doReset(); });
+  document.getElementById('preset-normal').addEventListener('click', function () {
+    state.sigma = 0.4; state.lambda = 0.6; state.mu = 0.3;
+    sigmaSl.value = 0.4; lambdaSl.value = 0.6; muSl.value = 0.3;
+    updateLabels(); doReset();
+  });
+  document.getElementById('preset-critical').addEventListener('click', function () {
+    // push lambda high so the lattice predator goes extinct while the ODE cycles
+    state.sigma = 0.3; state.lambda = 1.35; state.mu = 0.15;
+    sigmaSl.value = 0.3; lambdaSl.value = 1.35; muSl.value = 0.15;
+    updateLabels(); doReset();
+  });
+
+  function doReset() {
+    state.grid = makeLattice(L);
+    state.N = 0.35; state.P = 0.15;
+    state.t = 0;
+    state.odeHistory = [];
+    state.latHistory = [];
+  }
+
+  // ---------- ODE phase portrait ----------
+  var pw = 320, ph = 170;
+  var phaseSvg = d3.select('#ode-phase').append('svg')
+    .attr('viewBox', '0 0 ' + pw + ' ' + ph)
+    .attr('width', '100%').style('max-width', pw + 'px');
+
+  var phaseMargin = { l: 32, r: 8, t: 8, b: 22 };
+  var pxScale = d3.scaleLinear().domain([0, 2]).range([phaseMargin.l, pw - phaseMargin.r]);
+  var pyScale = d3.scaleLinear().domain([0, 1.5]).range([ph - phaseMargin.b, phaseMargin.t]);
+
+  // Axes
+  phaseSvg.append('line').attr('x1', phaseMargin.l).attr('y1', ph - phaseMargin.b)
+    .attr('x2', pw - phaseMargin.r).attr('y2', ph - phaseMargin.b)
+    .attr('stroke', 'var(--c-axis)').attr('stroke-width', 1);
+  phaseSvg.append('line').attr('x1', phaseMargin.l).attr('y1', phaseMargin.t)
+    .attr('x2', phaseMargin.l).attr('y2', ph - phaseMargin.b)
+    .attr('stroke', 'var(--c-axis)').attr('stroke-width', 1);
+
+  phaseSvg.append('text').attr('x', pw - phaseMargin.r).attr('y', ph - 6)
+    .attr('text-anchor', 'end').attr('font-size', 10).attr('fill', 'var(--text-2)').text('prey N');
+  phaseSvg.append('text').attr('x', 4).attr('y', phaseMargin.t + 8)
+    .attr('font-size', 10).attr('fill', 'var(--text-2)').text('predator P');
+
+  // Tick marks
+  [0.5, 1, 1.5].forEach(function (v) {
+    phaseSvg.append('line').attr('x1', pxScale(v)).attr('y1', ph - phaseMargin.b)
+      .attr('x2', pxScale(v)).attr('y2', ph - phaseMargin.b + 3)
+      .attr('stroke', 'var(--c-axis)');
+    phaseSvg.append('text').attr('x', pxScale(v)).attr('y', ph - phaseMargin.b + 13)
+      .attr('text-anchor', 'middle').attr('font-size', 9).attr('fill', 'var(--text-2)').text(v);
+  });
+  [0.5, 1].forEach(function (v) {
+    phaseSvg.append('line').attr('x1', phaseMargin.l).attr('y1', pyScale(v))
+      .attr('x2', phaseMargin.l - 3).attr('y2', pyScale(v))
+      .attr('stroke', 'var(--c-axis)');
+    phaseSvg.append('text').attr('x', phaseMargin.l - 5).attr('y', pyScale(v) + 3)
+      .attr('text-anchor', 'end').attr('font-size', 9).attr('fill', 'var(--text-2)').text(v);
+  });
+
+  var fpDot = phaseSvg.append('circle').attr('r', 3).attr('fill', 'var(--c-critical)').attr('stroke', 'white').attr('stroke-width', 1);
+  var orbitPath = phaseSvg.append('path').attr('fill', 'none').attr('stroke', 'var(--c-ode)').attr('stroke-width', 1).attr('opacity', 0.55);
+  var currentDot = phaseSvg.append('circle').attr('r', 3.5).attr('fill', 'var(--c-ode)').attr('stroke', 'white').attr('stroke-width', 1);
+
+  // Fixed-point legend
+  phaseSvg.append('text').attr('x', pw - phaseMargin.r - 6).attr('y', phaseMargin.t + 10)
+    .attr('text-anchor', 'end').attr('font-size', 9).attr('fill', 'var(--c-critical)')
+    .attr('font-weight', 700).text('• fixed pt (μ/λ, σ/λ)');
+
+  // ---------- ODE time series ----------
+  var tsW = 320, tsH = 90;
+  var tsSvg = d3.select('#ode-time').append('svg')
+    .attr('viewBox', '0 0 ' + tsW + ' ' + tsH)
+    .attr('width', '100%').style('max-width', tsW + 'px');
+  var tsMargin = { l: 28, r: 6, t: 8, b: 18 };
+  var tsX = d3.scaleLinear().domain([0, 50]).range([tsMargin.l, tsW - tsMargin.r]);
+  var tsY = d3.scaleLinear().domain([0, 1.8]).range([tsH - tsMargin.b, tsMargin.t]);
+
+  tsSvg.append('line').attr('x1', tsMargin.l).attr('y1', tsH - tsMargin.b)
+    .attr('x2', tsW - tsMargin.r).attr('y2', tsH - tsMargin.b)
+    .attr('stroke', 'var(--c-axis)').attr('stroke-width', 1);
+  tsSvg.append('line').attr('x1', tsMargin.l).attr('y1', tsMargin.t)
+    .attr('x2', tsMargin.l).attr('y2', tsH - tsMargin.b)
+    .attr('stroke', 'var(--c-axis)').attr('stroke-width', 1);
+  tsSvg.append('text').attr('x', tsW - tsMargin.r).attr('y', tsH - 4)
+    .attr('text-anchor', 'end').attr('font-size', 9).attr('fill', 'var(--text-2)').text('time');
+
+  var tsNLine = tsSvg.append('path').attr('fill', 'none').attr('stroke', 'var(--c-prey)').attr('stroke-width', 1.4);
+  var tsPLine = tsSvg.append('path').attr('fill', 'none').attr('stroke', 'var(--c-pred)').attr('stroke-width', 1.4);
+
+  // ---------- Lattice time series ----------
+  var ltW = 320, ltH = 90;
+  var ltSvg = d3.select('#lattice-time').append('svg')
+    .attr('viewBox', '0 0 ' + ltW + ' ' + ltH)
+    .attr('width', '100%').style('max-width', ltW + 'px');
+  var ltMargin = { l: 28, r: 6, t: 8, b: 18 };
+  var ltX = d3.scaleLinear().domain([0, 50]).range([ltMargin.l, ltW - ltMargin.r]);
+  var ltY = d3.scaleLinear().domain([0, 1]).range([ltH - ltMargin.b, ltMargin.t]);
+
+  ltSvg.append('line').attr('x1', ltMargin.l).attr('y1', ltH - ltMargin.b)
+    .attr('x2', ltW - ltMargin.r).attr('y2', ltH - ltMargin.b)
+    .attr('stroke', 'var(--c-axis)').attr('stroke-width', 1);
+  ltSvg.append('line').attr('x1', ltMargin.l).attr('y1', ltMargin.t)
+    .attr('x2', ltMargin.l).attr('y2', ltH - ltMargin.b)
+    .attr('stroke', 'var(--c-axis)').attr('stroke-width', 1);
+  ltSvg.append('text').attr('x', ltW - ltMargin.r).attr('y', ltH - 4)
+    .attr('text-anchor', 'end').attr('font-size', 9).attr('fill', 'var(--text-2)').text('time (lattice density)');
+
+  var ltPreyLine = ltSvg.append('path').attr('fill', 'none').attr('stroke', 'var(--c-prey)').attr('stroke-width', 1.4);
+  var ltPredLine = ltSvg.append('path').attr('fill', 'none').attr('stroke', 'var(--c-pred)').attr('stroke-width', 1.4);
+
+  // ---------- Canvas lattice rendering ----------
+  var canvas = document.getElementById('lattice-canvas');
+  var ctx = canvas.getContext('2d');
+  var imgData = ctx.createImageData(L, L);
+
+  function renderLattice() {
+    var data = imgData.data;
+    for (var i = 0; i < L * L; i++) {
+      var s = state.grid[i];
+      var j = i * 4;
+      if (s === 0) { data[j] = 255; data[j + 1] = 255; data[j + 2] = 255; }
+      else if (s === 1) { data[j] = 22; data[j + 1] = 163; data[j + 2] = 74; }
+      else { data[j] = 220; data[j + 1] = 38; data[j + 2] = 38; }
+      data[j + 3] = 255;
+    }
+    ctx.putImageData(imgData, 0, 0);
+  }
+
+  // ---------- Stats strip ----------
+  var statPeriod = document.getElementById('stat-period');
+  var statFp = document.getElementById('stat-fp');
+  var statPrey = document.getElementById('stat-prey');
+  var statPred = document.getElementById('stat-pred');
+
+  function updateStats() {
+    var T = 2 * Math.PI / Math.sqrt(state.sigma * state.mu);
+    statPeriod.textContent = T.toFixed(1);
+    statFp.textContent = (state.mu / state.lambda).toFixed(2) + ', ' + (state.sigma / state.lambda).toFixed(2);
+    var counts = countGrid(state.grid);
+    var LL = L * L;
+    statPrey.textContent = (100 * counts.prey / LL).toFixed(1) + '%';
+    statPred.textContent = (100 * counts.pred / LL).toFixed(1) + '%';
+  }
+
+  // ---------- Animation loop ----------
+  var simStatus = document.getElementById('sim-status');
+  var dt = 0.15;
+  var updatesPerFrame = 4000;
+  var maxHistory = 400;
+
+  function tick() {
+    if (state.playing) {
+      // ODE step
+      var ode = lvStep(state.N, state.P, state.sigma, state.lambda, state.mu, dt);
+      state.N = ode[0];
+      state.P = ode[1];
+      state.t += dt;
+      state.odeHistory.push({ t: state.t, N: state.N, P: state.P });
+      if (state.odeHistory.length > maxHistory) state.odeHistory.shift();
+
+      // Lattice step
+      sllvmStep(state.grid, L, state.sigma, state.lambda, state.mu, updatesPerFrame);
+      var c = countGrid(state.grid);
+      state.latHistory.push({ t: state.t, prey: c.prey / (L * L), pred: c.pred / (L * L) });
+      if (state.latHistory.length > maxHistory) state.latHistory.shift();
+
+      renderLattice();
+
+      // Phase portrait: ODE orbit
+      var line = d3.line().x(function (d) { return pxScale(d.N); }).y(function (d) { return pyScale(d.P); });
+      orbitPath.datum(state.odeHistory).attr('d', line);
+      currentDot.attr('cx', pxScale(Math.min(state.N, 2))).attr('cy', pyScale(Math.min(state.P, 1.5)));
+      fpDot.attr('cx', pxScale(Math.min(state.mu / state.lambda, 2)))
+           .attr('cy', pyScale(Math.min(state.sigma / state.lambda, 1.5)));
+
+      // Time series — ODE
+      var tWindow = 50;
+      var tMin = Math.max(0, state.t - tWindow);
+      tsX.domain([tMin, tMin + tWindow]);
+      var tsLineN = d3.line().x(function (d) { return tsX(d.t); }).y(function (d) { return tsY(d.N); });
+      var tsLineP = d3.line().x(function (d) { return tsX(d.t); }).y(function (d) { return tsY(d.P); });
+      tsNLine.datum(state.odeHistory).attr('d', tsLineN);
+      tsPLine.datum(state.odeHistory).attr('d', tsLineP);
+
+      // Time series — lattice
+      ltX.domain([tMin, tMin + tWindow]);
+      var ltLineP = d3.line().x(function (d) { return ltX(d.t); }).y(function (d) { return ltY(d.prey); });
+      var ltLinePr = d3.line().x(function (d) { return ltX(d.t); }).y(function (d) { return ltY(d.pred); });
+      ltPreyLine.datum(state.latHistory).attr('d', ltLineP);
+      ltPredLine.datum(state.latHistory).attr('d', ltLinePr);
+
+      simStatus.textContent = 't = ' + state.t.toFixed(1);
+      updateStats();
+    }
+    requestAnimationFrame(tick);
+  }
+
+  // Initial render
+  updateLabels();
+  renderLattice();
+  updateStats();
+  tick();
+})();
+
+// ────────────────────────────────────────── Figure 2: DP phase diagram ──
+(function () {
+  var W = 640, H = 280;
+  var margin = { l: 50, r: 20, t: 20, b: 42 };
+  var svg = d3.select('#dp-phase-diagram').append('svg')
+    .attr('viewBox', '0 0 ' + W + ' ' + H)
+    .attr('width', '100%').style('max-width', W + 'px');
+
+  var lamMin = 0, lamMax = 1.5;
+  var rhoMax = 0.25;
+  var lamC = 1.0;
+  var beta = 0.584;
+
+  var x = d3.scaleLinear().domain([lamMin, lamMax]).range([margin.l, W - margin.r]);
+  var y = d3.scaleLinear().domain([0, rhoMax]).range([H - margin.b, margin.t]);
+
+  // Background shading: active phase (left) and absorbing phase (right)
+  svg.append('rect').attr('x', x(lamMin)).attr('y', margin.t)
+    .attr('width', x(lamC) - x(lamMin)).attr('height', H - margin.b - margin.t)
+    .attr('fill', '#ede9fe').attr('opacity', 0.5);
+  svg.append('rect').attr('x', x(lamC)).attr('y', margin.t)
+    .attr('width', x(lamMax) - x(lamC)).attr('height', H - margin.b - margin.t)
+    .attr('fill', '#fef3c7').attr('opacity', 0.5);
+
+  // Axes
+  svg.append('line').attr('x1', margin.l).attr('y1', H - margin.b)
+    .attr('x2', W - margin.r).attr('y2', H - margin.b)
+    .attr('stroke', 'var(--c-axis)').attr('stroke-width', 1);
+  svg.append('line').attr('x1', margin.l).attr('y1', margin.t)
+    .attr('x2', margin.l).attr('y2', H - margin.b)
+    .attr('stroke', 'var(--c-axis)').attr('stroke-width', 1);
+
+  // Ticks
+  [0, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5].forEach(function (v) {
+    svg.append('line').attr('x1', x(v)).attr('y1', H - margin.b)
+      .attr('x2', x(v)).attr('y2', H - margin.b + 4)
+      .attr('stroke', 'var(--c-axis)');
+    svg.append('text').attr('x', x(v)).attr('y', H - margin.b + 16)
+      .attr('text-anchor', 'middle').attr('font-size', 10).attr('fill', 'var(--text-2)').text(v.toFixed(2));
+  });
+  [0, 0.05, 0.1, 0.15, 0.2, 0.25].forEach(function (v) {
+    svg.append('line').attr('x1', margin.l).attr('y1', y(v))
+      .attr('x2', margin.l - 4).attr('y2', y(v))
+      .attr('stroke', 'var(--c-axis)');
+    svg.append('text').attr('x', margin.l - 6).attr('y', y(v) + 3)
+      .attr('text-anchor', 'end').attr('font-size', 10).attr('fill', 'var(--text-2)').text(v.toFixed(2));
+  });
+
+  // Axis labels
+  svg.append('text').attr('x', (margin.l + W - margin.r) / 2).attr('y', H - 8)
+    .attr('text-anchor', 'middle').attr('font-size', 12).attr('fill', 'var(--text-2)').text('predation rate λ');
+  svg.append('text').attr('transform', 'translate(14,' + (margin.t + (H - margin.b - margin.t) / 2) + ') rotate(-90)')
+    .attr('text-anchor', 'middle').attr('font-size', 12).attr('fill', 'var(--text-2)').text('stationary predator density ρ_P');
+
+  // DP scaling curve: rho_P ~ A (lam_c - lam)^beta for lam < lam_c, 0 otherwise
+  var curve = [];
+  for (var l = lamMin; l <= lamMax; l += 0.005) {
+    var r = l < lamC ? 0.22 * Math.pow(lamC - l, beta) : 0;
+    curve.push({ l: l, r: r });
+  }
+  var line = d3.line().x(function (d) { return x(d.l); }).y(function (d) { return y(d.r); });
+  svg.append('path').datum(curve).attr('d', line)
+    .attr('fill', 'none').attr('stroke', 'var(--c-lat)').attr('stroke-width', 2);
+
+  // Mean-field naive prediction: ODE says fixed point P* = sigma/lam = c/lam for lam > 0, never hits zero
+  // For illustration we plot a dashed curve ~ 0.12 / lam, shown as "what the ODE would say"
+  var mf = [];
+  for (var lm = 0.2; lm <= lamMax; lm += 0.005) {
+    mf.push({ l: lm, r: Math.min(rhoMax - 0.01, 0.12 / lm) });
+  }
+  svg.append('path').datum(mf).attr('d', line)
+    .attr('fill', 'none').attr('stroke', 'var(--c-ode)').attr('stroke-width', 1.4).attr('stroke-dasharray', '4,3');
+
+  // Critical line
+  svg.append('line').attr('x1', x(lamC)).attr('y1', margin.t)
+    .attr('x2', x(lamC)).attr('y2', H - margin.b)
+    .attr('stroke', 'var(--c-critical)').attr('stroke-width', 1.2).attr('stroke-dasharray', '3,3');
+  svg.append('text').attr('x', x(lamC) + 5).attr('y', margin.t + 12)
+    .attr('font-size', 11).attr('fill', 'var(--c-critical)').attr('font-weight', 700).text('λ_c');
+
+  // Phase labels
+  svg.append('text').attr('x', x(0.4)).attr('y', margin.t + 22)
+    .attr('font-size', 11).attr('font-weight', 700).attr('fill', '#5b21b6').text('ACTIVE PHASE');
+  svg.append('text').attr('x', x(0.4)).attr('y', margin.t + 36)
+    .attr('font-size', 10).attr('fill', 'var(--text-2)').text('predators persist, ρ_P > 0');
+  svg.append('text').attr('x', x(1.25)).attr('y', margin.t + 22)
+    .attr('font-size', 11).attr('font-weight', 700).attr('fill', '#92400e').text('ABSORBING');
+  svg.append('text').attr('x', x(1.25)).attr('y', margin.t + 36)
+    .attr('font-size', 10).attr('fill', 'var(--text-2)').text('extinct, ρ_P = 0');
+
+  // Annotation for scaling law
+  var annX = x(0.78), annY = y(0.08);
+  svg.append('path').attr('d', 'M' + (annX - 40) + ',' + (annY - 30) + ' L' + (annX - 3) + ',' + (annY - 3))
+    .attr('fill', 'none').attr('stroke', 'var(--text-2)').attr('stroke-width', 1);
+  svg.append('text').attr('x', annX - 140).attr('y', annY - 40)
+    .attr('font-size', 10).attr('fill', 'var(--c-lat)').attr('font-weight', 700)
+    .text('ρ_P ∼ (λ_c − λ)^β');
+  svg.append('text').attr('x', annX - 140).attr('y', annY - 27)
+    .attr('font-size', 10).attr('fill', 'var(--text-2)')
+    .text('β ≈ 0.584 (DP class)');
+
+  // ODE annotation
+  svg.append('text').attr('x', x(1.35)).attr('y', y(0.095))
+    .attr('font-size', 10).attr('fill', 'var(--c-ode)').attr('font-weight', 700)
+    .text('mean-field ODE');
+  svg.append('text').attr('x', x(1.35)).attr('y', y(0.075))
+    .attr('font-size', 10).attr('fill', 'var(--text-2)')
+    .text('(never vanishes)');
+
+  // Legend
+  var lg = svg.append('g').attr('transform', 'translate(' + (W - margin.r - 170) + ',' + (H - margin.b - 44) + ')');
+  lg.append('rect').attr('x', -6).attr('y', -12).attr('width', 172).attr('height', 38)
+    .attr('fill', 'white').attr('stroke', 'var(--border)').attr('rx', 3);
+  lg.append('line').attr('x1', 4).attr('y1', 0).attr('x2', 24).attr('y2', 0)
+    .attr('stroke', 'var(--c-lat)').attr('stroke-width', 2);
+  lg.append('text').attr('x', 30).attr('y', 3).attr('font-size', 10).attr('fill', 'var(--text-2)')
+    .text('SLLVM lattice');
+  lg.append('line').attr('x1', 4).attr('y1', 16).attr('x2', 24).attr('y2', 16)
+    .attr('stroke', 'var(--c-ode)').attr('stroke-width', 1.4).attr('stroke-dasharray', '4,3');
+  lg.append('text').attr('x', 30).attr('y', 19).attr('font-size', 10).attr('fill', 'var(--text-2)')
+    .text('mean-field ODE');
+})();
+</script>
+
+</body>
+</html>

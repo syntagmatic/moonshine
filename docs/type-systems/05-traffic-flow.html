@@ -11,6 +11,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
 <script src="lib/typeviz.js"></script>
 <script src="lib/simcore.js"></script>
+<script src="../lib/motion.js"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -78,6 +79,12 @@ code { font-family: var(--mono-font); font-size: 0.85em; background: #f3f4f6; pa
 .constraint-swatches { display: flex; gap: 0.75rem; margin-top: 0.75rem; font-family: var(--mono-font); font-size: 0.75rem; flex-wrap: wrap; }
 .constraint-swatches .sw { display: flex; align-items: center; gap: 0.35rem; }
 .constraint-swatches .dot { width: 10px; height: 10px; border-radius: 50%; }
+
+/* RG coarse-graining figure */
+.rg-wrap { display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: 0.75rem; align-items: start; }
+@media (max-width: 620px) { .rg-wrap { grid-template-columns: 1fr; } }
+.rg-wrap svg { display: block; width: 100%; }
+.rg-rho-v { font-family: var(--mono-font); font-size: 0.78rem; color: var(--text-2); margin-left: 0.5rem; }
 </style>
 </head>
 <body>
@@ -161,6 +168,21 @@ transition :: CarState -> Input -> CarState</div>
     <div class="figure">
       <svg id="phase-sig" viewBox="0 0 680 260" width="100%" height="260" style="display:block"></svg>
       <div class="figure-caption">Two regimes as two distinct types. The green operators are closed within the Free-flow regime; the red operators are closed within the Jammed regime. <code>nucleate</code> is the only legal crossing — the phase transition lifted into the type system. The dashed refused arrow underneath shows the typing judgment <code>Γ ⊢ accelerate j : ⊥</code>: no derivation exists for applying a free-flow operator to a jammed state. It is the same refusal #1 used for <code>Node Fixed</code> and #7 used for <code>Integrator Euler</code> in a <code>Symp</code>-expecting slot, re-framed as a thermodynamic boundary.</div>
+    </div>
+
+    <p>The same pair of regimes has an older name in statistical physics: an <em>RG flow</em> with two attractive fixed points. Block three adjacent sites on a 1D traffic lattice by majority (≥ 2 jammed → the block is jammed, otherwise free). The lattice's effective density <code>ρ</code> at each coarser scale flows toward one of the attractive fixed points <code>ρ* = 0</code> (universal free flow) or <code>ρ* = 1</code> (universal gridlock), diverging at an unstable critical fixed point <code>ρ<sub>c</sub> = ½</code>. The Nagel-Schreckenberg dynamical-driven renormalization calculation locates the same two basins, and — for the deterministic variant — the correlation-length exponent <code>ν</code> flows from 1.62 toward 1.00 as maximum velocity grows. A simulation's type need not carry the exact density; it needs to carry the basin the density flows into. That is a two-element sum.</p>
+
+    <div class="figure">
+      <div class="controls">
+        <label>initial density&nbsp;ρ₀ <input type="range" id="rg-rho" min="0.05" max="0.95" step="0.01" value="0.55"></label>
+        <button id="rg-reseed">reseed</button>
+        <span class="rg-rho-v" id="rg-rho-v">ρ₀ = 0.55</span>
+      </div>
+      <div class="rg-wrap">
+        <svg id="rg-stack" viewBox="0 0 460 260"></svg>
+        <svg id="rg-flow" viewBox="0 0 220 260"></svg>
+      </div>
+      <div class="figure-caption">Left: a 243-site lattice with random <code>Moving</code>/<code>Stopped</code> seeding at density ρ₀, then four successive block-by-3 majority coarse-grainings (243 → 81 → 27 → 9 → 3). Each coarse row is the type-theoretic "forget the details, keep the regime" operation applied to the one above. Right: the density trajectory <code>ρ₀ → ρ₁ → …</code> over the flow, with dashed lines at the attractive fixed points <code>0</code> and <code>1</code>. Slide ρ₀ across ½ and the trajectory reverses basin.</div>
     </div>
   </div>
 
@@ -616,6 +638,158 @@ transition :: CarState -> Input -> CarState</div>
     .attr('font-family', 'Source Code Pro, monospace').attr('font-size', '0.68rem')
     .attr('fill', '#ef4444')
     .text('Γ ⊢ accelerate j : ⊥   — no derivation; the regimes do not share this operator');
+})();
+
+// ────────────────────────────────────────────────────────────── §4c renormalization-group flow ──
+// A 243-site 1D lattice of Free (green) / Jammed (red) sites, coarse-grained by block-of-3 majority
+// for 4 iterations: 243 → 81 → 27 → 9 → 3. The majority-of-3 rule has a non-trivial unstable fixed
+// point at ρ = 1/2: p' = p²(3 - 2p), so p < ½ flows to 0 (free), p > ½ flows to 1 (jammed).
+(function () {
+  var stackSvg = d3.select('#rg-stack');
+  var flowSvg = d3.select('#rg-flow');
+  var L0 = 243;
+  var LEVELS = 5;
+
+  function mulberry32(seed) {
+    var a = seed >>> 0;
+    return function () {
+      a = (a + 0x6D2B79F5) >>> 0;
+      var t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  var rho = 0.55;
+  var seed = 0x314159;
+
+  function seedLevel0(p, s) {
+    var rng = mulberry32(s);
+    var a = new Uint8Array(L0);
+    for (var i = 0; i < L0; i++) a[i] = rng() < p ? 1 : 0;
+    return a;
+  }
+
+  // Majority of a block of 3: jammed iff ≥ 2 of the 3 are jammed.
+  function coarseGrain(arr) {
+    var n3 = (arr.length / 3) | 0;
+    var out = new Uint8Array(n3);
+    for (var i = 0; i < n3; i++) {
+      var s = arr[3 * i] + arr[3 * i + 1] + arr[3 * i + 2];
+      out[i] = s >= 2 ? 1 : 0;
+    }
+    return out;
+  }
+
+  function density(arr) {
+    var s = 0;
+    for (var i = 0; i < arr.length; i++) s += arr[i];
+    return s / arr.length;
+  }
+
+  function render() {
+    stackSvg.selectAll('*').remove();
+    flowSvg.selectAll('*').remove();
+
+    var levels = [seedLevel0(rho, seed)];
+    for (var k = 1; k < LEVELS; k++) levels.push(coarseGrain(levels[k - 1]));
+    var densities = levels.map(density);
+
+    // ── Left: stacked lattices ──
+    var X0 = 36, LAT_W = 380, ROW_H = 34, GAP = 12;
+    levels.forEach(function (arr, k) {
+      var y = 12 + k * (ROW_H + GAP);
+      var cellW = LAT_W / arr.length;
+      // Level label
+      stackSvg.append('text').attr('x', X0 - 8).attr('y', y + ROW_H * 0.7)
+        .attr('text-anchor', 'end').attr('font-family', 'Source Code Pro, monospace')
+        .attr('font-size', '0.7rem').attr('fill', '#64748b')
+        .text('k=' + k);
+      // Lattice cells
+      for (var i = 0; i < arr.length; i++) {
+        var fill = arr[i] === 1 ? '#ef4444' : '#10b981';
+        stackSvg.append('rect')
+          .attr('x', X0 + i * cellW).attr('y', y)
+          .attr('width', Math.max(1, cellW - (arr.length < 60 ? 1.5 : 0.5)))
+          .attr('height', ROW_H)
+          .attr('fill', fill).attr('opacity', 0.88);
+      }
+      // Density on the right
+      stackSvg.append('text').attr('x', X0 + LAT_W + 8).attr('y', y + ROW_H * 0.7)
+        .attr('font-family', 'Source Code Pro, monospace')
+        .attr('font-size', '0.7rem').attr('fill', '#1a1a2e')
+        .text('ρ=' + densities[k].toFixed(2));
+    });
+
+    // ── Right: density-flow plot ──
+    var fW = 220, fH = 260;
+    var fMargin = { top: 18, right: 10, bottom: 32, left: 36 };
+    var fx = d3.scaleLinear().domain([0, LEVELS - 1]).range([fMargin.left, fW - fMargin.right]);
+    var fy = d3.scaleLinear().domain([0, 1]).range([fH - fMargin.bottom, fMargin.top]);
+
+    flowSvg.append('g').attr('transform', 'translate(0,' + (fH - fMargin.bottom) + ')')
+      .call(d3.axisBottom(fx).ticks(LEVELS))
+      .call(function (g) {
+        g.selectAll('path,line').attr('stroke', '#94a3b8');
+        g.selectAll('text').attr('font-family', 'Source Code Pro, monospace').attr('font-size', '0.65rem').attr('fill', '#64748b');
+      });
+    flowSvg.append('g').attr('transform', 'translate(' + fMargin.left + ',0)')
+      .call(d3.axisLeft(fy).ticks(5))
+      .call(function (g) {
+        g.selectAll('path,line').attr('stroke', '#94a3b8');
+        g.selectAll('text').attr('font-family', 'Source Code Pro, monospace').attr('font-size', '0.65rem').attr('fill', '#64748b');
+      });
+    flowSvg.append('text').attr('x', fW - fMargin.right).attr('y', fH - 12)
+      .attr('text-anchor', 'end').attr('font-family', 'Source Code Pro, monospace')
+      .attr('font-size', '0.68rem').attr('fill', '#64748b').text('RG iteration  k →');
+    flowSvg.append('text').attr('x', 6).attr('y', fMargin.top - 4)
+      .attr('font-family', 'Source Code Pro, monospace')
+      .attr('font-size', '0.68rem').attr('fill', '#64748b').text('↑ ρ');
+
+    // Attractive fixed-point lines
+    [0, 1].forEach(function (rs) {
+      flowSvg.append('line')
+        .attr('x1', fMargin.left).attr('x2', fW - fMargin.right)
+        .attr('y1', fy(rs)).attr('y2', fy(rs))
+        .attr('stroke', '#7c3aed').attr('stroke-width', 1.5)
+        .attr('stroke-dasharray', '4 3').attr('opacity', 0.75);
+      flowSvg.append('text').attr('x', fW - fMargin.right - 4).attr('y', fy(rs) + (rs === 0 ? -4 : 12))
+        .attr('text-anchor', 'end').attr('font-family', 'Source Code Pro, monospace')
+        .attr('font-size', '0.62rem').attr('fill', '#7c3aed').attr('font-weight', 600)
+        .text('ρ* = ' + rs);
+    });
+    // Unstable fixed point at ρ = 1/2
+    flowSvg.append('line')
+      .attr('x1', fMargin.left).attr('x2', fW - fMargin.right)
+      .attr('y1', fy(0.5)).attr('y2', fy(0.5))
+      .attr('stroke', '#64748b').attr('stroke-width', 1).attr('stroke-dasharray', '2 4').attr('opacity', 0.55);
+    flowSvg.append('text').attr('x', fMargin.left + 6).attr('y', fy(0.5) - 4)
+      .attr('font-family', 'Source Code Pro, monospace').attr('font-size', '0.6rem')
+      .attr('fill', '#64748b').text('ρ_c = ½  (unstable)');
+
+    var line = d3.line().x(function (d, i) { return fx(i); }).y(function (d) { return fy(d); });
+    flowSvg.append('path').datum(densities)
+      .attr('d', line).attr('fill', 'none')
+      .attr('stroke', '#1a1a2e').attr('stroke-width', 1.6);
+
+    densities.forEach(function (d, i) {
+      flowSvg.append('circle').attr('cx', fx(i)).attr('cy', fy(d))
+        .attr('r', 4).attr('fill', d >= 0.5 ? '#ef4444' : '#10b981')
+        .attr('stroke', '#fff').attr('stroke-width', 1.5);
+    });
+  }
+
+  render();
+  d3.select('#rg-rho').on('input', function () {
+    rho = +this.value;
+    d3.select('#rg-rho-v').text('ρ₀ = ' + rho.toFixed(2));
+    render();
+  });
+  d3.select('#rg-reseed').on('click', function () {
+    seed = (Math.random() * 0xffffffff) >>> 0;
+    render();
+  });
 })();
 </script>
 </body>

@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Spatial Hashing vs Octrees — Simulating on a Lattice</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
+<script src="../lib/motion.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --article-width: 820px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem; --line-height: 1.65;
+  --text: #1a1a2e; --text-2: #4a4a6a;
+  --accent: #2563eb; --accent-light: #dbeafe;
+  --bg: #fafafa; --fig-bg: #ffffff; --border: #e2e2e8;
+  --c-hash: #2563eb; --c-hash-light: #dbeafe;
+  --c-tree: #7c3aed; --c-tree-light: #ede9fe;
+  --c-point: #1e293b;
+  --c-query: #dc2626; --c-query-light: #fee2e2;
+  --c-cell: #cbd5e1; --c-axis: #94a3b8;
+}
+body { font-family: var(--body-font); font-size: var(--body-size); line-height: var(--line-height); color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased; }
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
+h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+h3 { font-size: 1.15rem; margin: 2rem 0 0.75rem; }
+p { margin: 0 0 1rem; }
+a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+a:hover { color: #1d4ed8; }
+.back-link { font-family: var(--heading-font); font-size: 0.85rem; display: inline-block; margin-bottom: 1rem; color: var(--text-2); text-decoration: none; }
+.back-link:hover { color: var(--accent); }
+.header { padding: 3rem 0 2rem; border-bottom: 1px solid var(--border); margin-bottom: 2.5rem; }
+.header .subtitle { font-family: var(--heading-font); font-size: 1.15rem; color: var(--text-2); max-width: 660px; }
+.figure { margin: 2rem 0; padding: 1.5rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; line-height: 1.4; }
+.figure-label { font-weight: 600; color: var(--text); }
+.btn { font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600; padding: 0.4rem 0.85rem; border-radius: 5px; border: 1px solid var(--border); background: var(--fig-bg); color: var(--text); cursor: pointer; transition: background 0.15s, border-color 0.15s; user-select: none; }
+.btn:hover { border-color: var(--accent); background: var(--accent-light); }
+.btn.active { background: var(--accent); color: white; border-color: var(--accent); }
+.btn-row { display: flex; flex-wrap: wrap; gap: 0.45rem; margin-bottom: 0.5rem; }
+.insight { background: var(--accent-light); border-left: 3px solid var(--accent); padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 4px 4px 0; }
+.insight p { margin: 0; } .insight p + p { margin-top: 0.5rem; }
+.katex-display { margin: 1.25rem 0; }
+svg text { font-family: var(--heading-font); }
+.dual-panel { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; align-items: start; }
+@media (max-width: 720px) { .dual-panel { grid-template-columns: 1fr; } }
+.panel-card { border: 1.5px solid var(--border); border-radius: 6px; padding: 0.4rem 0.4rem 0.6rem; background: var(--fig-bg); position: relative; }
+.panel-card.hash { border-color: var(--c-hash); }
+.panel-card.tree { border-color: var(--c-tree); }
+.panel-title { font-family: var(--heading-font); font-size: 0.82rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; padding: 0.3rem 0.5rem 0.2rem; }
+.panel-card.hash .panel-title { color: var(--c-hash); }
+.panel-card.tree .panel-title { color: var(--c-tree); }
+.panel-svg-wrap { position: relative; }
+.panel-svg-wrap svg { display: block; width: 100%; height: auto; }
+.panel-counter { font-family: var(--mono-font); font-size: 0.78rem; color: var(--text-2); padding: 0.35rem 0.55rem 0; display: flex; justify-content: space-between; gap: 0.5rem; }
+.panel-counter .num { color: var(--text); font-weight: 700; }
+.panel-counter .num.hit { color: var(--c-query); }
+.controls-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem 1.25rem; margin-top: 1rem; font-family: var(--heading-font); font-size: 0.9rem; }
+@media (max-width: 600px) { .controls-grid { grid-template-columns: 1fr; } }
+.slider-row { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 0.4rem 0.8rem; }
+.slider-row .lbl { color: var(--text-2); font-weight: 600; font-size: 0.83rem; }
+.slider-row .val { font-family: var(--mono-font); color: var(--text); min-width: 2.8rem; text-align: right; font-weight: 600; font-size: 0.83rem; }
+.slider-row input[type="range"] { width: 100%; }
+.dist-row { display: flex; flex-wrap: wrap; gap: 0.3rem; align-items: center; grid-column: 1 / -1; margin-top: 0.3rem; }
+.dist-row .lbl { color: var(--text-2); font-weight: 600; font-size: 0.83rem; margin-right: 0.4rem; }
+.legend-row { display: flex; flex-wrap: wrap; gap: 0.9rem; margin-top: 0.9rem; font-family: var(--heading-font); font-size: 0.78rem; color: var(--text-2); align-items: center; }
+.legend-row .sw { display: inline-block; width: 12px; height: 12px; vertical-align: middle; margin-right: 0.3rem; border-radius: 2px; }
+.cost-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 0.5rem; margin-top: 0.9rem; font-family: var(--heading-font); font-size: 0.8rem; }
+@media (max-width: 600px) { .cost-grid { grid-template-columns: 1fr 1fr; } }
+.cost-cell { padding: 0.5rem 0.7rem; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; }
+.cost-cell .k { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-2); margin-bottom: 0.1rem; }
+.cost-cell .v { font-family: var(--mono-font); font-weight: 700; font-size: 1rem; color: var(--text); }
+.cost-cell.hash-cell { border-left: 3px solid var(--c-hash); }
+.cost-cell.tree-cell { border-left: 3px solid var(--c-tree); }
+.compare-table { width: 100%; border-collapse: collapse; font-family: var(--heading-font); font-size: 0.92rem; margin: 1.25rem 0; }
+.compare-table th, .compare-table td { padding: 0.55rem 0.75rem; border-bottom: 1px solid var(--border); vertical-align: top; text-align: left; }
+.compare-table th { font-weight: 700; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-2); background: var(--bg); }
+.compare-table td.th-hash { color: var(--c-hash); font-weight: 700; }
+.compare-table td.th-tree { color: var(--c-tree); font-weight: 700; }
+.compare-table tbody tr:last-child td { border-bottom: 0; }
+.scaling-wrap { display: grid; grid-template-columns: 1fr 220px; gap: 1.25rem; align-items: start; }
+@media (max-width: 680px) { .scaling-wrap { grid-template-columns: 1fr; } }
+.scaling-controls { display: flex; flex-direction: column; gap: 0.6rem; font-family: var(--heading-font); font-size: 0.88rem; }
+.nav-footer { margin-top: 5rem; padding-top: 2rem; border-top: 1px solid var(--border); display: flex; justify-content: space-between; font-family: var(--heading-font); font-size: 0.9rem; }
+.nav-footer a { color: var(--accent); text-decoration: none; }
+.nav-footer a:hover { text-decoration: underline; }
+@media (prefers-reduced-motion: reduce) { html:not([data-motion="full"]) * { transition-duration: 0s !important; animation-duration: 0s !important; } }
+@media (max-width: 680px) { h1 { font-size: 1.75rem; } .article { padding: 1.5rem 1rem 4rem; } }
+</style>
+</head>
+<body>
+<div class="article">
+
+<a href="index.html" class="back-link">← Simulating on a Lattice</a>
+
+<div class="header">
+  <h1>Spatial Hashing vs Octrees</h1>
+  <p class="subtitle">Part 13 of 15. A lattice does not have to represent physical space. It can be a <em>data structure</em> — a bucket grid that collapses quadratic neighbour-search into something sublinear. Uniform (hash) and hierarchical (quad/octree) variants sit on the two ends of the same spectrum.</p>
+</div>
+
+<p>Every physical simulation that got built on an explicit lattice in Acts I–IV paid for the lattice with memory: one entry per site, whether that site contains anything interesting or not. The payoff was that the lattice encoded a symmetry of the continuum — translation, rotation, the point group — and the discretisation inherited it. This final act turns the trade on its head. Here the lattice is not a model of space, it is a <em>trick</em> for finding neighbours fast.</p>
+
+<p>Consider <em>N</em> particles in a box, each with a position, and the question: for every particle, which other particles lie within distance <em>r</em>? Boids, smoothed-particle hydrodynamics, Lennard-Jones molecular dynamics, collision detection in a physics engine, density estimation, k-nearest-neighbour classification — the same kernel appears in all of them. The naive algorithm compares every pair:</p>
+
+<div id="math-naive"></div>
+
+<p>This is <em>O</em>(<em>N</em><sup>2</sup>). At <em>N</em> = 10<sup>4</sup> particles you do 10<sup>8</sup> distance checks per frame; at <em>N</em> = 10<sup>6</sup> you do 10<sup>12</sup>. That is unaffordable for anything that needs to run interactively, and it is the price a simulation pays for having no indexing structure. The fix is to overlay a lattice onto the point set and use the lattice to prune distant pairs before any real distance check happens.</p>
+
+<h2>Spatial hashing: a flat uniform lattice</h2>
+
+<p>Pick a cell size <em>s</em> at least as large as the query radius <em>r</em>. Overlay an infinite uniform grid on the plane. Each particle with position (<em>x</em>, <em>y</em>) sits in the cell with integer index</p>
+
+<div id="math-hash-index"></div>
+
+<p>Store the set of particles in a hash table keyed by (<em>i</em>, <em>j</em>). Insertion is <em>O</em>(1) per particle: compute the index, append to the bucket. Query for a radius-<em>r</em> neighbourhood around a point <em>p</em> is also cheap — at cell size <em>s</em> ≥ <em>r</em> the neighbourhood fits inside <em>p</em>'s own cell plus the eight adjacent cells, so you only need to check those 3×3 = 9 buckets. If particles are distributed uniformly with density ρ, each bucket holds ρ<em>s</em><sup>2</sup> particles in expectation, and total query cost is <em>O</em>(ρ<em>s</em><sup>2</sup>) — <em>constant</em>, independent of <em>N</em>. Sweeping this query over all <em>N</em> particles is <em>O</em>(<em>N</em>).</p>
+
+<div class="insight">
+  <p><strong>The lattice as equivalence relation.</strong> A spatial hash is nothing more than the quotient of ℝ<sup>2</sup> by a uniform lattice: two points are equivalent if they land in the same cell. The fact that the lattice is translation-equivariant — a hallmark of Act I — is what makes queries cheap, because the 3×3 neighbour pattern is the same everywhere. The "group" here is just ℤ<sup>2</sup>, but acting on a data structure instead of a physical state.</p>
+</div>
+
+<h2>Quadtrees: a recursive adaptive lattice</h2>
+
+<p>A quadtree drops the uniformity. Start with a single cell covering the whole domain and a capacity <em>k</em>. Insert points one at a time. When a cell exceeds capacity, subdivide it into four equal quadrants and re-insert the points into whichever child contains them. Recurse as needed. The result is a tree whose leaves are cells each holding at most <em>k</em> points — except in the pathological case of coincident points, which can force arbitrary depth.</p>
+
+<div id="math-quadtree"></div>
+
+<p>Build cost is <em>O</em>(<em>N</em> log <em>N</em>) on reasonable distributions, because each point walks from root to leaf and the depth of the tree grows like log<sub>4</sub> <em>N</em>. Query for a radius-<em>r</em> neighbourhood descends the tree, pruning any subtree whose cell is strictly farther than <em>r</em> from the query point. The expected cost is <em>O</em>(log <em>N</em> + <em>k</em>), where <em>k</em> is the number of reported matches. Sweep over <em>N</em> particles: <em>O</em>(<em>N</em> log <em>N</em>).</p>
+
+<p>The critical difference from the hash is <em>adaptivity</em>. Where points are sparse, a single leaf covers a large region and the tree has few nodes there. Where points are dense, the tree subdivides all the way down until each leaf is at the capacity cut-off. A hash grid with cell size <em>s</em> cannot react to this: if it is sized for the dense region it wastes memory on empty cells in the sparse region, and if it is sized for the sparse region each dense cell overflows and the query degrades to linear in bucket size.</p>
+
+<h2>Interactive comparison</h2>
+
+<p>Identical particle sets, identical query radius, two competing structures. Move the cursor across the figure and both panels highlight the cells they would scan, while the counters report how many particles each ends up examining.</p>
+
+<div class="figure">
+  <div class="dual-panel">
+    <div class="panel-card hash">
+      <div class="panel-title">Spatial hash</div>
+      <div class="panel-svg-wrap" id="hash-panel"></div>
+      <div class="panel-counter">
+        <span>cells scanned <span class="num" id="hash-cells">—</span></span>
+        <span>particles examined <span class="num hit" id="hash-examined">—</span></span>
+      </div>
+    </div>
+    <div class="panel-card tree">
+      <div class="panel-title">Quadtree</div>
+      <div class="panel-svg-wrap" id="tree-panel"></div>
+      <div class="panel-counter">
+        <span>leaves visited <span class="num" id="tree-cells">—</span></span>
+        <span>particles examined <span class="num hit" id="tree-examined">—</span></span>
+      </div>
+    </div>
+  </div>
+  <div class="legend-row">
+    <span><span class="sw" style="background: var(--c-point);"></span>particle</span>
+    <span><span class="sw" style="background: var(--c-query);"></span>query disk</span>
+    <span><span class="sw" style="background: var(--c-hash-light);"></span>scanned hash cell</span>
+    <span><span class="sw" style="background: var(--c-tree-light);"></span>scanned leaf</span>
+  </div>
+  <div class="controls-grid">
+    <div class="slider-row"><div class="lbl">N</div><input type="range" id="ctrl-n" min="100" max="4000" step="50" value="900"><div class="val" id="ctrl-n-val">900</div></div>
+    <div class="slider-row"><div class="lbl">radius r</div><input type="range" id="ctrl-r" min="6" max="40" step="1" value="16"><div class="val" id="ctrl-r-val">16</div></div>
+    <div class="slider-row"><div class="lbl">hash cell s</div><input type="range" id="ctrl-s" min="12" max="60" step="1" value="28"><div class="val" id="ctrl-s-val">28</div></div>
+    <div class="slider-row"><div class="lbl">QT capacity</div><input type="range" id="ctrl-cap" min="1" max="16" step="1" value="4"><div class="val" id="ctrl-cap-val">4</div></div>
+    <div class="dist-row">
+      <span class="lbl">distribution</span>
+      <button class="btn dist active" data-dist="uniform">Uniform</button>
+      <button class="btn dist" data-dist="clustered">Clustered</button>
+      <button class="btn dist" data-dist="powerlaw">Power-law</button>
+      <button class="btn dist" data-dist="line">Linear band</button>
+      <button class="btn" id="ctrl-reseed" style="margin-left: auto;">Reseed</button>
+    </div>
+  </div>
+  <div class="cost-grid">
+    <div class="cost-cell hash-cell"><div class="k">Hash build</div><div class="v" id="stat-hash-build">—</div></div>
+    <div class="cost-cell hash-cell"><div class="k">Hash buckets</div><div class="v" id="stat-hash-buckets">—</div></div>
+    <div class="cost-cell tree-cell"><div class="k">QT build</div><div class="v" id="stat-tree-build">—</div></div>
+    <div class="cost-cell tree-cell"><div class="k">QT leaves</div><div class="v" id="stat-tree-leaves">—</div></div>
+  </div>
+  <p class="figure-caption"><span class="figure-label">Figure 1.</span> Left, a uniform hash grid: every cell is the same size, cells storing many particles show stronger blue fill. Right, a quadtree: leaves subdivide only where particles are dense, so each leaf holds at most <em>capacity</em> points. Drop the distribution to <em>clustered</em> and watch the quadtree's leaves shrink onto the clusters while the hash grid leaves most cells empty and overfills the dense ones. Cell size <em>s</em> must be at least <em>r</em>, otherwise a hash query would miss neighbours straddling cell boundaries — the slider clamps that automatically.</p>
+</div>
+
+<h2>What the picture shows</h2>
+
+<p>Three things to look for. First, turn the distribution to <em>uniform</em> and the hash grid's "particles examined" is nearly identical to the quadtree's — both structures are doing essentially constant work per query, and the hash wins on constants because it skips the pointer chases. Second, switch to <em>clustered</em>. The hash grid's examined-count spikes wherever the cursor enters a cluster cell; the quadtree's stays bounded because its leaves subdivided exactly down to capacity. Third, watch the bottom row: the hash has thousands of uniform-size buckets (most of them empty in the clustered case), while the quadtree has a much smaller number of leaves concentrated where the data is.</p>
+
+<p>Push the query radius <em>r</em> past the hash cell size <em>s</em>. The 3×3 neighbourhood is no longer enough — neighbours can sit two cells away — and the algorithm has to scan a 5×5 or 7×7 block instead. The examined-count scales as (2⌈<em>r</em>/<em>s</em>⌉+1)<sup>2</sup>. This is why one picks <em>s</em> roughly equal to <em>r</em>: smaller <em>s</em> wastes memory on buckets, larger <em>s</em> wastes work on distant particles.</p>
+
+<h2>Memory, updates, and rebuilds</h2>
+
+<p>The comparison is not only about query time. In a dynamic simulation — boids, SPH, a physics engine — particles move every frame, and the indexing structure has to keep up. Here the hash has a decisive advantage: a particle's bucket is a pure function of its position, so moving it is <em>O</em>(1) (remove from old bucket, re-insert into new). A quadtree has no such locality. A moved point may force a leaf split or merge, and naive implementations rebuild the tree from scratch each frame. The rebuild is <em>O</em>(<em>N</em> log <em>N</em>) again, which on modern CPUs often wins anyway because the tree is cache-friendly, but the engineering effort to do it correctly is real.</p>
+
+<p>Memory scales differently as well. A hash grid spanning an <em>L</em> × <em>L</em> domain with cell size <em>s</em> stores <em>O</em>((<em>L</em>/<em>s</em>)<sup>2</sup>) buckets, independent of how many particles occupy them. A quadtree stores <em>O</em>(<em>N</em>) nodes, proportional to the actual data. Large sparse domains favour the tree; small dense domains favour the hash.</p>
+
+<table class="compare-table">
+  <thead><tr><th>Aspect</th><th>Spatial hash</th><th>Quadtree / octree</th></tr></thead>
+  <tbody>
+    <tr><td>Build</td><td class="th-hash"><em>O</em>(<em>N</em>) insert</td><td class="th-tree"><em>O</em>(<em>N</em> log <em>N</em>) amortised</td></tr>
+    <tr><td>Query (radius r)</td><td class="th-hash"><em>O</em>(ρ<em>r</em><sup>2</sup>) per point</td><td class="th-tree"><em>O</em>(log <em>N</em> + <em>k</em>) per point</td></tr>
+    <tr><td>Uniform density</td><td class="th-hash">Best. Fixed points per cell, no pointer chasing.</td><td class="th-tree">Works but pays tree overhead.</td></tr>
+    <tr><td>Clustered density</td><td class="th-hash">Degrades. Dense buckets overflow.</td><td class="th-tree">Adapts. Each leaf at capacity.</td></tr>
+    <tr><td>Dynamic updates</td><td class="th-hash">O(1) re-hash per moving point.</td><td class="th-tree">Needs local repair or rebuild.</td></tr>
+    <tr><td>Memory</td><td class="th-hash"><em>O</em>((<em>L</em>/<em>s</em>)<sup>2</sup>) even if empty</td><td class="th-tree"><em>O</em>(<em>N</em>)</td></tr>
+    <tr><td>Cache behaviour</td><td class="th-hash">Flat array; excellent</td><td class="th-tree">Pointer-chased; mediocre</td></tr>
+  </tbody>
+</table>
+
+<h2>Scaling with N</h2>
+
+<p>Switch from a single query to the full self-join — every particle asks about every other within radius — and watch how the total runtime grows with <em>N</em>. The hash curve should be close to linear, the quadtree close to <em>N</em> log <em>N</em>, and the naive <em>O</em>(<em>N</em><sup>2</sup>) reference curve should dominate both for any <em>N</em> past a few hundred.</p>
+
+<div class="figure">
+  <div class="scaling-wrap">
+    <div id="scaling-svg"></div>
+    <div class="scaling-controls">
+      <div>
+        <div style="font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-2); margin-bottom: 0.3rem;">Distribution</div>
+        <div class="btn-row" id="scaling-dist-row">
+          <button class="btn sdist active" data-dist="uniform">Uniform</button>
+          <button class="btn sdist" data-dist="clustered">Clustered</button>
+        </div>
+      </div>
+      <div>
+        <div style="font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-2); margin-bottom: 0.3rem;">Curves</div>
+        <div style="font-family: var(--mono-font); font-size: 0.76rem; color: var(--text-2); line-height: 1.6;">
+          <div><span style="color: var(--c-hash);">●</span> hash (measured)</div>
+          <div><span style="color: var(--c-tree);">●</span> quadtree (measured)</div>
+          <div><span style="color: var(--c-query);">●</span> naive O(N²)</div>
+          <div style="margin-top: 0.3rem;"><span style="color: var(--c-hash); opacity: 0.5;">— —</span> a·N</div>
+          <div><span style="color: var(--c-tree); opacity: 0.5;">— —</span> b·N log N</div>
+        </div>
+      </div>
+      <button class="btn" id="scaling-run">Re-run</button>
+    </div>
+  </div>
+  <p class="figure-caption"><span class="figure-label">Figure 2.</span> All-pairs-within-<em>r</em> total time (measured in units of distance-check equivalents) versus particle count. Points are measured from a single run on your browser; dashed lines are the theoretical <em>N</em> and <em>N</em> log <em>N</em> reference curves fit to the smallest data point. Switch to <em>clustered</em> and the hash curve climbs faster than linear — dense buckets force it into a locally <em>O</em>(<em>N</em><sup>2</sup>) regime — while the quadtree curve stays on its <em>N</em> log <em>N</em> track because its leaves keep subdividing.</p>
+</div>
+
+<h2>Bounding volume hierarchies</h2>
+
+<p>Collision detection in a physics engine is the same problem with a small twist: the objects are not points but axis-aligned bounding boxes (AABBs), and the query is "which pairs overlap?" rather than "which pairs are within <em>r</em>?" Spatial hashes still work — hash each AABB into every cell it touches — but hierarchical structures outperform them, because boxes vary wildly in size. The industry standard is the <em>bounding volume hierarchy</em> (BVH), a binary tree whose internal nodes each store an AABB containing all the leaf AABBs below them. Query descends the tree, pruning any subtree whose parent AABB does not intersect the query. A BVH is what a ray tracer uses; it is what Box2D, Bullet, and PhysX use for broad-phase collision; it is the same idea as an octree, only the split axis is chosen adaptively instead of always bisecting in the middle.</p>
+
+<h2>Connection to the lattice theme</h2>
+
+<p>The spatial hash is a uniform lattice. Its bucket indices live on ℤ<sup>2</sup>; its cells are the fundamental domain of the translation group ℤ<sup>2</sup> acting on ℝ<sup>2</sup>. Shifting every point by a lattice vector gives back the same hash table, re-indexed — the structure is translation-equivariant in exactly the sense of Act I. The query kernel (3×3 neighbours) is the same at every cell, because the lattice has no preferred origin.</p>
+
+<p>The quadtree is also a lattice, but a non-uniform one. Each leaf is a cell of the 2-adic lattice (ℤ<sub>2</sub>)<sup>2</sup> truncated at some depth, and descending the tree corresponds to refining the 2-adic distance between points. The non-uniformity is the whole point: it lets the lattice react to the data rather than forcing the data into a prescribed grid. A BVH is the same idea with the splits chosen by a cost heuristic rather than by bisection.</p>
+
+<p>Both structures have collapsed an <em>O</em>(<em>N</em><sup>2</sup>) problem — exhaustive pairwise comparison — into sublinear-per-query work, by imposing a lattice on the data and asking questions modulo that lattice. The lattice is no longer a model of physical space; it is a compiler trick. But the mathematics of translation groups, fundamental domains, and cell-wise equivariance that carried Acts I–IV carries this too, and that shared vocabulary is why the trick generalises from 2D billboards to 3D fluid simulation to 6D motion-planning configuration spaces without modification.</p>
+
+<div class="insight">
+  <p><strong>The unifying move.</strong> Every algorithm in this explainer works by replacing "for each pair of points, do something" with "for each <em>cell</em>, do something with the points in it and its neighbours". The cell structure — the lattice — is what makes the outer loop cheap. Whether that lattice is flat (hash) or recursive (tree) is an engineering choice about density and dynamism; the underlying substitution of <em>all pairs</em> with <em>cellwise loop</em> is what buys the speedup.</p>
+</div>
+
+<h2>Takeaways</h2>
+
+<ul style="margin-left: 1.5rem;">
+  <li><strong>All-pairs is unaffordable.</strong> Naive <em>O</em>(<em>N</em><sup>2</sup>) distance checks break past <em>N</em> ≈ 10<sup>4</sup>. Every N-body code uses some spatial index.</li>
+  <li><strong>Spatial hash = uniform lattice.</strong> Cell size <em>s</em> ≥ <em>r</em>; bucket index floor(<em>x</em>/<em>s</em>). Insert <em>O</em>(1), query scans 3×3 cells, total <em>O</em>(<em>N</em>) at uniform density.</li>
+  <li><strong>Quadtree / octree = recursive lattice.</strong> Build <em>O</em>(<em>N</em> log <em>N</em>); query <em>O</em>(log <em>N</em> + <em>k</em>). Adapts to clusters; each leaf at bounded capacity.</li>
+  <li><strong>Hash wins on uniform, dynamic, cache-heavy workloads.</strong> Tree wins on clustered, sparse, large-domain workloads.</li>
+  <li><strong>BVH is the octree of bounding boxes.</strong> Collision detection and ray tracing live here.</li>
+  <li><strong>The lattice is a compiler trick.</strong> The same translation-equivariant machinery from Acts I–IV makes the query cheap, but now the lattice indexes data, not physics.</li>
+</ul>
+
+<p>Next: triply periodic minimal surfaces and the gyroid, a lattice used as engineering object — this time to design a printable porous solid whose unit cell carries a symmetry group directly into the part's mechanical response.</p>
+
+<div class="nav-footer">
+  <a href="12-nagel-schreckenberg.html">← Part 12: Nagel–Schreckenberg Traffic</a>
+  <a href="14-gyroid-and-tpms.html">Part 14: Gyroid &amp; TPMS →</a>
+</div>
+
+</div>
+
+<script>
+function math(id, tex, display) { var el = document.getElementById(id); if (el) katex.render(tex, el, { throwOnError: false, displayMode: !!display }); }
+math('math-naive', '\\text{for all } i<j: \\quad \\|\\mathbf{x}_i - \\mathbf{x}_j\\| \\le r \\quad\\Longrightarrow\\quad \\text{work} = \\binom{N}{2} = \\mathcal{O}(N^2)', true);
+math('math-hash-index', '\\operatorname{cell}(\\mathbf{x}) \\;=\\; \\bigl(\\lfloor x/s \\rfloor,\\; \\lfloor y/s \\rfloor\\bigr) \\;\\in\\; \\mathbb{Z}^2, \\qquad s \\ge r', true);
+math('math-quadtree', '\\text{build: }\\mathcal{O}(N \\log N) \\qquad \\text{query: }\\mathcal{O}(\\log N + k) \\qquad \\text{leaves: at most } \\text{capacity}', true);
+
+// ────────────── Shared state ──────────────
+var DOMAIN = 400;
+var state = { N: 900, r: 16, s: 28, capacity: 4, distribution: 'uniform', cursor: null, particles: [], baseSeed: 0xBEEF };
+var rngSeed = 42;
+function rng() { var t = (rngSeed += 0x6D2B79F5); t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }
+function seedRng(v) { rngSeed = v >>> 0; }
+
+function generateParticles(N, dist) {
+  // Seed from the state's baseSeed so the same (baseSeed, N, dist) always
+  // gives the same particles. The reseed button bumps baseSeed to reshuffle.
+  seedRng(state.baseSeed);
+  var pts = [];
+  if (dist === 'uniform') {
+    for (var i = 0; i < N; i++) pts.push({ x: rng() * DOMAIN, y: rng() * DOMAIN });
+  } else if (dist === 'clustered') {
+    var centres = [];
+    for (var c = 0; c < 6; c++) centres.push({ x: 60 + rng() * (DOMAIN - 120), y: 60 + rng() * (DOMAIN - 120), w: 0.3 + rng() * 1.0 });
+    var wSum = centres.reduce(function (a, b) { return a + b.w; }, 0);
+    for (var ii = 0; ii < N; ii++) {
+      var u = rng() * wSum, acc = 0, pick = centres[0];
+      for (var j = 0; j < centres.length; j++) { acc += centres[j].w; if (u <= acc) { pick = centres[j]; break; } }
+      var r1 = Math.sqrt(-2 * Math.log(Math.max(1e-9, rng())));
+      var r2 = 2 * Math.PI * rng();
+      var x = Math.max(2, Math.min(DOMAIN - 2, pick.x + r1 * Math.cos(r2) * 18));
+      var y = Math.max(2, Math.min(DOMAIN - 2, pick.y + r1 * Math.sin(r2) * 18));
+      pts.push({ x: x, y: y });
+    }
+  } else if (dist === 'powerlaw') {
+    var cx = DOMAIN / 2, cy = DOMAIN / 2;
+    for (var k = 0; k < N; k++) {
+      var angle = rng() * Math.PI * 2;
+      var rad = Math.pow(rng(), 3.5) * (DOMAIN / 2 - 10);
+      pts.push({ x: cx + rad * Math.cos(angle), y: cy + rad * Math.sin(angle) });
+    }
+  } else {
+    for (var m = 0; m < N; m++) {
+      var t = rng();
+      var bx = 20 + t * (DOMAIN - 40);
+      var by = Math.max(2, Math.min(DOMAIN - 2, 20 + t * (DOMAIN - 40) + (rng() - 0.5) * 40));
+      pts.push({ x: bx, y: by });
+    }
+  }
+  return pts;
+}
+
+// ────────────── Spatial hash ──────────────
+function buildHash(pts, s) {
+  var map = new Map();
+  for (var i = 0; i < pts.length; i++) {
+    var key = Math.floor(pts[i].x / s) + '|' + Math.floor(pts[i].y / s);
+    var arr = map.get(key);
+    if (!arr) { arr = []; map.set(key, arr); }
+    arr.push(i);
+  }
+  return { s: s, map: map };
+}
+function hashQuery(hash, qx, qy, r) {
+  var s = hash.s, reach = Math.ceil(r / s);
+  var cx = Math.floor(qx / s), cy = Math.floor(qy / s);
+  var cells = [], examined = 0;
+  for (var dx = -reach; dx <= reach; dx++) for (var dy = -reach; dy <= reach; dy++) {
+    var ix = cx + dx, iy = cy + dy;
+    cells.push([ix, iy]);
+    var arr = hash.map.get(ix + '|' + iy);
+    if (arr) examined += arr.length;
+  }
+  return { cells: cells, examined: examined };
+}
+
+// ────────────── Quadtree ──────────────
+function buildQuadtree(pts, capacity) {
+  var root = { x0: 0, y0: 0, x1: DOMAIN, y1: DOMAIN, points: [], children: null, depth: 0 };
+  function insert(node, i) {
+    if (node.children) {
+      var mx = (node.x0 + node.x1) / 2, my = (node.y0 + node.y1) / 2;
+      insert(node.children[(pts[i].y > my ? 2 : 0) + (pts[i].x > mx ? 1 : 0)], i);
+      return;
+    }
+    node.points.push(i);
+    if (node.points.length > capacity && node.depth < 12) subdivide(node);
+  }
+  function subdivide(node) {
+    var mx = (node.x0 + node.x1) / 2, my = (node.y0 + node.y1) / 2, d = node.depth + 1;
+    node.children = [
+      { x0: node.x0, y0: node.y0, x1: mx, y1: my, points: [], children: null, depth: d },
+      { x0: mx, y0: node.y0, x1: node.x1, y1: my, points: [], children: null, depth: d },
+      { x0: node.x0, y0: my, x1: mx, y1: node.y1, points: [], children: null, depth: d },
+      { x0: mx, y0: my, x1: node.x1, y1: node.y1, points: [], children: null, depth: d }
+    ];
+    var old = node.points;
+    node.points = null;
+    for (var i = 0; i < old.length; i++) insert(node, old[i]);
+  }
+  for (var i = 0; i < pts.length; i++) insert(root, i);
+  return root;
+}
+function collectLeaves(root) {
+  var out = [];
+  (function walk(n) { if (n.children) for (var i = 0; i < 4; i++) walk(n.children[i]); else out.push(n); })(root);
+  return out;
+}
+function aabbDiskOverlap(n, cx, cy, r) {
+  var ddx = Math.max(n.x0, Math.min(cx, n.x1)) - cx;
+  var ddy = Math.max(n.y0, Math.min(cy, n.y1)) - cy;
+  return ddx * ddx + ddy * ddy <= r * r;
+}
+function quadtreeQuery(root, pts, qx, qy, r) {
+  var visited = [], examined = 0;
+  (function walk(n) {
+    if (!aabbDiskOverlap(n, qx, qy, r)) return;
+    if (n.children) { for (var i = 0; i < 4; i++) walk(n.children[i]); }
+    else { visited.push(n); examined += n.points.length; }
+  })(root);
+  return { leaves: visited, examined: examined };
+}
+
+// ────────────── Figure 1 ──────────────
+(function () {
+  var PANEL = 320, scale = PANEL / DOMAIN;
+  var hashSvg = d3.select('#hash-panel').append('svg').attr('viewBox', '0 0 ' + PANEL + ' ' + PANEL).attr('width', '100%').attr('height', PANEL).style('background', 'var(--fig-bg)');
+  var treeSvg = d3.select('#tree-panel').append('svg').attr('viewBox', '0 0 ' + PANEL + ' ' + PANEL).attr('width', '100%').attr('height', PANEL).style('background', 'var(--fig-bg)');
+  var hashGridG = hashSvg.append('g'), hashHighlightG = hashSvg.append('g'), hashPointsG = hashSvg.append('g'), hashQueryG = hashSvg.append('g');
+  var treeHighlightG = treeSvg.append('g'), treeLinesG = treeSvg.append('g'), treePointsG = treeSvg.append('g'), treeQueryG = treeSvg.append('g');
+  [hashSvg, treeSvg].forEach(function (g) { g.append('rect').attr('x', 0.5).attr('y', 0.5).attr('width', PANEL - 1).attr('height', PANEL - 1).attr('fill', 'none').attr('stroke', 'var(--border)'); });
+
+  var hashStruct = null, treeStruct = null, treeLeaves = [];
+
+  function renderStatic() {
+    state.particles = generateParticles(state.N, state.distribution);
+    var t0 = performance.now();
+    hashStruct = buildHash(state.particles, state.s);
+    var t1 = performance.now();
+    treeStruct = buildQuadtree(state.particles, state.capacity);
+    treeLeaves = collectLeaves(treeStruct);
+    var t2 = performance.now();
+    d3.select('#stat-hash-build').text((t1 - t0).toFixed(1) + ' ms');
+    d3.select('#stat-hash-buckets').text(hashStruct.map.size);
+    d3.select('#stat-tree-build').text((t2 - t1).toFixed(1) + ' ms');
+    d3.select('#stat-tree-leaves').text(treeLeaves.length);
+
+    hashGridG.selectAll('*').remove();
+    var s = state.s * scale, nCells = Math.ceil(PANEL / s);
+    var maxCount = 1;
+    hashStruct.map.forEach(function (v) { if (v.length > maxCount) maxCount = v.length; });
+    hashStruct.map.forEach(function (arr, key) {
+      var parts = key.split('|'), ix = +parts[0], iy = +parts[1];
+      if (ix < 0 || iy < 0) return;
+      var x = ix * s, y = iy * s;
+      if (x >= PANEL || y >= PANEL) return;
+      hashGridG.append('rect').attr('x', x).attr('y', y)
+        .attr('width', Math.min(s, PANEL - x)).attr('height', Math.min(s, PANEL - y))
+        .attr('fill', d3.interpolateRgb('#ffffff', '#93c5fd')(Math.min(1, (arr.length / maxCount) * 1.2)))
+        .attr('opacity', 0.5);
+    });
+    for (var i = 0; i <= nCells; i++) {
+      hashGridG.append('line').attr('x1', i * s).attr('y1', 0).attr('x2', i * s).attr('y2', PANEL)
+        .attr('stroke', 'var(--c-cell)').attr('stroke-width', 0.6).attr('opacity', 0.9);
+      hashGridG.append('line').attr('x1', 0).attr('y1', i * s).attr('x2', PANEL).attr('y2', i * s)
+        .attr('stroke', 'var(--c-cell)').attr('stroke-width', 0.6).attr('opacity', 0.9);
+    }
+
+    treeLinesG.selectAll('*').remove();
+    (function drawNode(n) {
+      if (!n.children) return;
+      var mx = (n.x0 + n.x1) / 2, my = (n.y0 + n.y1) / 2;
+      var w = (n.x1 - n.x0) * scale;
+      var thickness = Math.max(0.35, Math.min(1.5, w / 70));
+      treeLinesG.append('line').attr('x1', mx * scale).attr('y1', n.y0 * scale).attr('x2', mx * scale).attr('y2', n.y1 * scale).attr('stroke', 'var(--c-cell)').attr('stroke-width', thickness);
+      treeLinesG.append('line').attr('x1', n.x0 * scale).attr('y1', my * scale).attr('x2', n.x1 * scale).attr('y2', my * scale).attr('stroke', 'var(--c-cell)').attr('stroke-width', thickness);
+      for (var i = 0; i < 4; i++) drawNode(n.children[i]);
+    })(treeStruct);
+
+    renderPoints(hashPointsG);
+    renderPoints(treePointsG);
+  }
+  function renderPoints(g) {
+    g.selectAll('*').remove();
+    var radius = state.N > 2000 ? 1.1 : (state.N > 800 ? 1.5 : 1.9);
+    for (var i = 0; i < state.particles.length; i++) {
+      var p = state.particles[i];
+      g.append('circle').attr('cx', p.x * scale).attr('cy', p.y * scale).attr('r', radius).attr('fill', 'var(--c-point)');
+    }
+  }
+  function renderQuery() {
+    hashHighlightG.selectAll('*').remove(); treeHighlightG.selectAll('*').remove();
+    hashQueryG.selectAll('*').remove(); treeQueryG.selectAll('*').remove();
+    if (!state.cursor) {
+      ['#hash-cells', '#hash-examined', '#tree-cells', '#tree-examined'].forEach(function (i) { d3.select(i).text('—'); });
+      return;
+    }
+    var qx = state.cursor.x, qy = state.cursor.y;
+    var hq = hashQuery(hashStruct, qx, qy, state.r);
+    hq.cells.forEach(function (c) {
+      var x = c[0] * state.s, y = c[1] * state.s;
+      if (x + state.s < 0 || y + state.s < 0 || x > DOMAIN || y > DOMAIN) return;
+      hashHighlightG.append('rect')
+        .attr('x', Math.max(0, x) * scale).attr('y', Math.max(0, y) * scale)
+        .attr('width', (Math.min(DOMAIN, x + state.s) - Math.max(0, x)) * scale)
+        .attr('height', (Math.min(DOMAIN, y + state.s) - Math.max(0, y)) * scale)
+        .attr('fill', 'var(--c-hash-light)').attr('opacity', 0.55);
+    });
+    hashQueryG.append('circle').attr('cx', qx * scale).attr('cy', qy * scale).attr('r', state.r * scale).attr('fill', 'none').attr('stroke', 'var(--c-query)').attr('stroke-width', 1.5);
+    hashQueryG.append('circle').attr('cx', qx * scale).attr('cy', qy * scale).attr('r', 2.5).attr('fill', 'var(--c-query)');
+    d3.select('#hash-cells').text(hq.cells.length);
+    d3.select('#hash-examined').text(hq.examined);
+
+    var tq = quadtreeQuery(treeStruct, state.particles, qx, qy, state.r);
+    tq.leaves.forEach(function (n) {
+      treeHighlightG.append('rect').attr('x', n.x0 * scale).attr('y', n.y0 * scale).attr('width', (n.x1 - n.x0) * scale).attr('height', (n.y1 - n.y0) * scale).attr('fill', 'var(--c-tree-light)').attr('opacity', 0.6);
+    });
+    treeQueryG.append('circle').attr('cx', qx * scale).attr('cy', qy * scale).attr('r', state.r * scale).attr('fill', 'none').attr('stroke', 'var(--c-query)').attr('stroke-width', 1.5);
+    treeQueryG.append('circle').attr('cx', qx * scale).attr('cy', qy * scale).attr('r', 2.5).attr('fill', 'var(--c-query)');
+    d3.select('#tree-cells').text(tq.leaves.length);
+    d3.select('#tree-examined').text(tq.examined);
+  }
+  function setupCursor(svg) {
+    svg.on('mousemove', function (evt) {
+      var rect = svg.node().getBoundingClientRect();
+      state.cursor = { x: (evt.clientX - rect.left) / rect.width * PANEL / scale, y: (evt.clientY - rect.top) / rect.height * PANEL / scale };
+      renderQuery();
+    });
+    svg.on('mouseleave', function () { state.cursor = null; renderQuery(); });
+    svg.on('touchmove', function (evt) {
+      var touch = evt.touches[0]; if (!touch) return; evt.preventDefault();
+      var rect = svg.node().getBoundingClientRect();
+      state.cursor = { x: (touch.clientX - rect.left) / rect.width * PANEL / scale, y: (touch.clientY - rect.top) / rect.height * PANEL / scale };
+      renderQuery();
+    });
+  }
+  setupCursor(hashSvg); setupCursor(treeSvg);
+
+  function bindSlider(id, valId, key) {
+    var el = document.getElementById(id), valEl = document.getElementById(valId);
+    el.addEventListener('input', function () {
+      state[key] = +el.value;
+      valEl.textContent = state[key];
+      if (state.s < state.r) {
+        state.s = state.r;
+        document.getElementById('ctrl-s').value = state.s;
+        document.getElementById('ctrl-s-val').textContent = state.s;
+      }
+      renderStatic(); renderQuery();
+    });
+  }
+  bindSlider('ctrl-n', 'ctrl-n-val', 'N');
+  bindSlider('ctrl-r', 'ctrl-r-val', 'r');
+  bindSlider('ctrl-s', 'ctrl-s-val', 's');
+  bindSlider('ctrl-cap', 'ctrl-cap-val', 'capacity');
+
+  d3.selectAll('.dist').on('click', function () {
+    d3.selectAll('.dist').classed('active', false);
+    d3.select(this).classed('active', true);
+    state.distribution = d3.select(this).attr('data-dist');
+    renderStatic(); renderQuery();
+  });
+  d3.select('#ctrl-reseed').on('click', function () {
+    state.baseSeed = (Math.random() * 1e9) | 0;
+    renderStatic(); renderQuery();
+  });
+
+  renderStatic();
+  state.cursor = { x: DOMAIN * 0.55, y: DOMAIN * 0.45 };
+  renderQuery();
+})();
+
+// ────────────── Figure 2: scaling plot ──────────────
+(function () {
+  var W = 480, H = 300, pad = { top: 16, right: 16, bottom: 36, left: 48 };
+  var innerW = W - pad.left - pad.right, innerH = H - pad.top - pad.bottom;
+  var svg = d3.select('#scaling-svg').append('svg').attr('viewBox', '0 0 ' + W + ' ' + H).attr('width', '100%').style('max-width', W + 'px');
+  var root = svg.append('g').attr('transform', 'translate(' + pad.left + ',' + pad.top + ')');
+  var distSel = 'uniform';
+  var Ns = [200, 400, 800, 1600, 3200, 6400, 12800];
+
+  function measureN(N, distribution) {
+    // Use a fixed base seed so the scaling plot is reproducible regardless
+    // of the main figure's reseed state.
+    var savedBase = state.baseSeed;
+    state.baseSeed = 0xBEEF + N;
+    var pts = generateParticles(N, distribution);
+    state.baseSeed = savedBase;
+    var r = 10;
+    var hash = buildHash(pts, 12), tree = buildQuadtree(pts, 4);
+    var hashChecks = 0, treeChecks = 0;
+    for (var i = 0; i < pts.length; i++) {
+      hashChecks += hashQuery(hash, pts[i].x, pts[i].y, r).examined;
+      treeChecks += quadtreeQuery(tree, pts, pts[i].x, pts[i].y, r).examined;
+    }
+    return { N: N, hash: hashChecks, tree: treeChecks, naive: N * (N - 1) / 2 };
+  }
+
+  function run() {
+    root.selectAll('*').remove();
+    var data = Ns.map(function (N) { return measureN(N, distSel); });
+    var maxCost = d3.max(data, function (d) { return Math.max(d.hash, d.tree, d.naive); });
+    var minCost = Math.max(1, d3.min(data, function (d) { return Math.min(d.hash, d.tree); }));
+    var x = d3.scaleLog().domain([Ns[0] * 0.9, Ns[Ns.length - 1] * 1.1]).range([0, innerW]);
+    var y = d3.scaleLog().domain([Math.max(1, minCost * 0.8), maxCost * 1.2]).range([innerH, 0]);
+    root.append('g').attr('transform', 'translate(0,' + innerH + ')').call(d3.axisBottom(x).tickValues([100, 1000, 10000]).tickFormat(d3.format('~s'))).selectAll('text').style('font-size', '10px').style('fill', 'var(--text-2)');
+    root.append('g').call(d3.axisLeft(y).ticks(5, '~s')).selectAll('text').style('font-size', '10px').style('fill', 'var(--text-2)');
+    root.selectAll('.domain, .tick line').attr('stroke', 'var(--c-axis)');
+    root.append('text').attr('x', innerW / 2).attr('y', innerH + 28).attr('text-anchor', 'middle').attr('font-size', 11).attr('fill', 'var(--text-2)').text('N (particles)');
+    root.append('text').attr('transform', 'rotate(-90)').attr('x', -innerH / 2).attr('y', -34).attr('text-anchor', 'middle').attr('font-size', 11).attr('fill', 'var(--text-2)').text('distance checks (total)');
+
+    var aHash = data[0].hash / data[0].N;
+    var bTree = data[0].tree / (data[0].N * Math.log2(data[0].N));
+    var refNs = d3.range(Math.log10(Ns[0]), Math.log10(Ns[Ns.length - 1]) + 0.02, 0.04).map(function (e) { return Math.pow(10, e); });
+    var line = d3.line().x(function (d) { return x(d.N); }).y(function (d) { return y(d.y); });
+    root.append('path').datum(refNs.map(function (N) { return { N: N, y: aHash * N }; })).attr('d', line).attr('fill', 'none').attr('stroke', 'var(--c-hash)').attr('stroke-width', 1.25).attr('stroke-dasharray', '4,3').attr('opacity', 0.6);
+    root.append('path').datum(refNs.map(function (N) { return { N: N, y: bTree * N * Math.log2(N) }; })).attr('d', line).attr('fill', 'none').attr('stroke', 'var(--c-tree)').attr('stroke-width', 1.25).attr('stroke-dasharray', '4,3').attr('opacity', 0.6);
+    root.append('path').datum(refNs.map(function (N) { return { N: N, y: N * (N - 1) / 2 }; })).attr('d', line).attr('fill', 'none').attr('stroke', 'var(--c-query)').attr('stroke-width', 1.25).attr('opacity', 0.75);
+
+    var hashLine = d3.line().x(function (d) { return x(d.N); }).y(function (d) { return y(Math.max(1, d.hash)); });
+    var treeLine = d3.line().x(function (d) { return x(d.N); }).y(function (d) { return y(Math.max(1, d.tree)); });
+    root.append('path').datum(data).attr('d', hashLine).attr('fill', 'none').attr('stroke', 'var(--c-hash)').attr('stroke-width', 2);
+    root.append('path').datum(data).attr('d', treeLine).attr('fill', 'none').attr('stroke', 'var(--c-tree)').attr('stroke-width', 2);
+    root.selectAll('.dot-h').data(data).enter().append('circle').attr('cx', function (d) { return x(d.N); }).attr('cy', function (d) { return y(Math.max(1, d.hash)); }).attr('r', 3.5).attr('fill', 'var(--c-hash)');
+    root.selectAll('.dot-t').data(data).enter().append('circle').attr('cx', function (d) { return x(d.N); }).attr('cy', function (d) { return y(Math.max(1, d.tree)); }).attr('r', 3.5).attr('fill', 'var(--c-tree)');
+
+    var last = data[data.length - 1];
+    root.append('text').attr('x', x(last.N) - 6).attr('y', y(last.hash) - 8).attr('text-anchor', 'end').attr('font-size', 11).attr('font-weight', 700).attr('fill', 'var(--c-hash)').text('hash');
+    root.append('text').attr('x', x(last.N) - 6).attr('y', y(last.tree) - 8).attr('text-anchor', 'end').attr('font-size', 11).attr('font-weight', 700).attr('fill', 'var(--c-tree)').text('quadtree');
+    root.append('text').attr('x', x(last.N) - 6).attr('y', y(last.N * (last.N - 1) / 2) + 14).attr('text-anchor', 'end').attr('font-size', 11).attr('font-weight', 700).attr('fill', 'var(--c-query)').text('naive');
+  }
+
+  d3.selectAll('.sdist').on('click', function () {
+    d3.selectAll('.sdist').classed('active', false);
+    d3.select(this).classed('active', true);
+    distSel = d3.select(this).attr('data-dist');
+    run();
+  });
+  d3.select('#scaling-run').on('click', run);
+  run();
+})();
+</script>
+
+</body>
+</html>

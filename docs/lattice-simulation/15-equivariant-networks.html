@@ -1,0 +1,857 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Equivariant Networks — Simulating on a Lattice</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
+<script src="../lib/motion.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --article-width: 780px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem;
+  --line-height: 1.65;
+  --text: #1a1a2e;
+  --text-2: #4a4a6a;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --bg: #fafafa;
+  --fig-bg: #ffffff;
+  --border: #e2e2e8;
+  --c-std: #dc2626;
+  --c-equi: #059669;
+  --c-input: #1e293b;
+  --c-filter: #7c3aed;
+  --c-axis: #94a3b8;
+  --c-grid: #e2e8f0;
+  --c-pos: #2563eb;
+  --c-neg: #dc2626;
+}
+
+body { font-family: var(--body-font); font-size: var(--body-size); line-height: var(--line-height); color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased; }
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
+
+h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+h3 { font-size: 1.15rem; margin: 2rem 0 0.75rem; }
+
+p { margin: 0 0 1rem; }
+a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+a:hover { color: #1d4ed8; }
+
+.back-link { font-family: var(--heading-font); font-size: 0.85rem; display: inline-block; margin-bottom: 1rem; color: var(--text-2); text-decoration: none; }
+.back-link:hover { color: var(--accent); }
+
+.header { padding: 3rem 0 2rem; border-bottom: 1px solid var(--border); margin-bottom: 2.5rem; }
+.header .subtitle { font-family: var(--heading-font); font-size: 1.15rem; color: var(--text-2); max-width: 660px; }
+
+.figure { margin: 2rem 0; padding: 1.5rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; line-height: 1.4; }
+.figure-label { font-weight: 600; color: var(--text); }
+
+.btn { font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600; padding: 0.4rem 0.85rem; border-radius: 5px; border: 1px solid var(--border); background: var(--fig-bg); color: var(--text); cursor: pointer; transition: background 0.15s, border-color 0.15s; user-select: none; }
+.btn:hover { border-color: var(--accent); background: var(--accent-light); }
+.btn.active { background: var(--accent); color: white; border-color: var(--accent); }
+
+.btn-row { display: flex; flex-wrap: wrap; gap: 0.45rem; margin-bottom: 1rem; }
+
+.insight { background: var(--accent-light); border-left: 3px solid var(--accent); padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 4px 4px 0; }
+.insight p { margin: 0; }
+.insight p + p { margin-top: 0.5rem; }
+
+.katex-display { margin: 1.5rem 0; }
+
+svg text { font-family: var(--heading-font); }
+
+.comparator {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  align-items: start;
+}
+@media (max-width: 780px) { .comparator { grid-template-columns: 1fr; } }
+
+.sim-panel {
+  background: var(--fig-bg);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 0.75rem;
+}
+.sim-panel .ptitle {
+  font-family: var(--heading-font);
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-2);
+  margin-bottom: 0.6rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.sim-panel.std .ptitle .tag { color: var(--c-std); }
+.sim-panel.equi .ptitle .tag { color: var(--c-equi); }
+.sim-panel .tag { font-family: var(--mono-font); font-size: 0.78rem; }
+
+.canvas-wrap { position: relative; width: 100%; aspect-ratio: 1 / 1; }
+.canvas-wrap canvas, .canvas-wrap svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.canvas-wrap canvas { image-rendering: pixelated; border-radius: 3px; }
+
+.stack-wrap { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.3rem; margin-top: 0.5rem; }
+.stack-wrap .slot { position: relative; aspect-ratio: 1 / 1; }
+.stack-wrap .slot canvas { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; border-radius: 2px; border: 1px solid var(--border); }
+.stack-wrap .slot .slot-label {
+  position: absolute;
+  top: 3px; left: 4px;
+  font-family: var(--mono-font);
+  font-size: 0.65rem;
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.85);
+  padding: 0 3px;
+  border-radius: 2px;
+  pointer-events: none;
+}
+
+.controls-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.85rem 1.25rem;
+  margin-top: 0.9rem;
+  font-family: var(--heading-font);
+  font-size: 0.9rem;
+}
+.controls-row .ctrl { display: flex; align-items: center; gap: 0.5rem; }
+.controls-row .ctrl .lbl { color: var(--text-2); font-weight: 600; font-size: 0.85rem; }
+.controls-row input[type="range"] { width: 150px; }
+.controls-row .val { font-family: var(--mono-font); color: var(--text); font-weight: 600; min-width: 2.8rem; text-align: right; }
+
+.score-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-top: 1rem;
+  font-family: var(--heading-font);
+  font-size: 0.88rem;
+}
+.score-cell {
+  padding: 0.6rem 0.9rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+.score-cell .sc-label { font-size: 0.72rem; font-weight: 700; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.3rem; }
+.score-cell .sc-val { font-family: var(--mono-font); font-size: 1.35rem; font-weight: 600; color: var(--text); }
+.score-cell.std .sc-val { color: var(--c-std); }
+.score-cell.equi .sc-val { color: var(--c-equi); }
+.score-cell .sc-detail { font-size: 0.75rem; color: var(--text-2); margin-top: 0.15rem; }
+
+.filter-swatch {
+  display: inline-grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: var(--border);
+  padding: 1px;
+  border-radius: 2px;
+  vertical-align: middle;
+  margin-right: 0.35rem;
+}
+.filter-swatch span {
+  display: block;
+  width: 10px; height: 10px;
+}
+
+.efficiency-wrap { position: relative; }
+
+.legend-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  font-family: var(--heading-font);
+  font-size: 0.85rem;
+  color: var(--text-2);
+  margin-top: 0.5rem;
+}
+.legend-row .lg { display: inline-flex; align-items: center; gap: 0.4rem; }
+.legend-row .sw { width: 14px; height: 4px; border-radius: 1px; }
+
+.nav-footer { margin-top: 5rem; padding-top: 2rem; border-top: 1px solid var(--border); display: flex; justify-content: space-between; font-family: var(--heading-font); font-size: 0.9rem; }
+.nav-footer a { color: var(--accent); text-decoration: none; }
+.nav-footer a:hover { text-decoration: underline; }
+.nav-footer .spacer { flex: 1; }
+
+.closing {
+  margin-top: 3.5rem;
+  padding: 1.6rem 1.75rem;
+  background: linear-gradient(180deg, #faf5ff 0%, #f3e8ff 100%);
+  border: 1px solid #e9d5ff;
+  border-left: 4px solid #7c3aed;
+  border-radius: 0 6px 6px 0;
+}
+.closing h2 { margin-top: 0; color: #4c1d95; }
+.closing p { color: #3b1f5e; }
+.closing p:last-child { margin-bottom: 0; }
+
+@media (prefers-reduced-motion: reduce) { html:not([data-motion="full"]) * { transition-duration: 0s !important; animation-duration: 0s !important; } }
+@media (max-width: 680px) {
+  h1 { font-size: 1.75rem; }
+  .article { padding: 1.5rem 1rem 4rem; }
+}
+</style>
+</head>
+<body>
+<div class="article">
+
+<a href="index.html" class="back-link">← Simulating on a Lattice</a>
+
+<div class="header">
+  <h1>Equivariant Networks</h1>
+  <p class="subtitle">Part 15 of 15, series finale. A standard convolutional layer is translation-equivariant by construction: shift the input and the feature map shifts with it. Cohen and Welling showed in 2016 how to generalise the construction to any finite group — rotations, reflections, permutations, gauge transformations — by replacing convolution over <b>Z</b><sup>2</sup> with convolution over the group. Symmetry stops being something the network has to learn and starts being part of the computational substrate.</p>
+</div>
+
+<p>A deep learning engineer and a lattice physicist, it turns out, have been worrying about the same problem for decades. The physicist wants a discretisation of Navier–Stokes that preserves rotational isotropy; the engineer wants a classifier that recognises a cat at every orientation. Both are asking: <em>how do I bake a symmetry group into a finite, discrete computation so that it is exactly honoured rather than approximately learned?</em> The answers converge. A lattice gauge theorist keeps gauge invariance by putting link variables on the edges of the lattice and multiplying them in gauge-covariant ways. An equivariant-network designer keeps rotation invariance by putting feature maps on the group itself and convolving over it. Different jargon, same move.</p>
+
+<p>Translation-equivariant convolution is the case everyone already knows. A standard CNN layer convolves an input <i>x</i> with a learned filter <i>ψ</i> by sliding <i>ψ</i> across every position of a 2D grid and taking an inner product. If you shift the input by a vector <b>v</b>, the output shifts by <b>v</b> as well:</p>
+
+<div id="math-translation-equi"></div>
+
+<p>This is why a cat detector trained on cats in the centre of the image still fires on cats in the corner. The detector was never "at the centre" in the first place — it was at every position at once, by construction of the convolution. Translation equivariance is the single property that makes a CNN data-efficient compared to a fully connected network. Translate the training set tenfold by random crops, and a fully connected network has to learn ten times the weights; a CNN has already accounted for it.</p>
+
+<h2>What equivariance means, formally</h2>
+
+<p>Let <i>G</i> be a group acting on a space <i>X</i> (say pixels) and on another space <i>Y</i> (say feature maps). A map <i>φ</i> from <i>X</i> to <i>Y</i> is called <em>G-equivariant</em> if</p>
+
+<div id="math-equivariance"></div>
+
+<p>for every group element <i>g</i> and every input <i>x</i>. In words: acting before and acting after give the same answer. The map commutes with the group action. Equivariance is strictly stronger than invariance: invariance demands <i>φ(g · x) = φ(x)</i>, which throws away the orientation entirely. An equivariant feature map still knows where the orientation is — it just rotates itself to match.</p>
+
+<p>For a vanilla CNN, the group <i>G</i> is the translation group <b>Z</b><sup>2</sup>, acting on input images by shifts and on feature maps by the same shifts. The convolution operation is equivariant by construction. Cohen and Welling (2016) asked the obvious question: what if <i>G</i> is bigger? What if it includes rotations by 90°, so that rotating the input produces a rotation of the feature map as well? This is no longer free. Ordinary convolution is <em>not</em> rotation-equivariant — as you will see below, a rotated input produces a distorted feature map, because the filter was learned at one orientation only.</p>
+
+<h2>Rotate the input</h2>
+
+<p>The comparator below shows the difference in a single picture. On the left: a standard CNN with a single oriented-edge filter. On the right: a <i>C</i><sub>4</sub>-equivariant CNN — that is, a CNN whose feature map is indexed by position <em>and</em> by one of the four 90° rotations. Both see the same input, a letter-F glyph, and both are asked to rotate it with the slider. The standard CNN produces one feature map and the feature map does not rotate cleanly. The equivariant one produces four feature maps, one per rotation of the filter, and when you rotate the input they permute cleanly among themselves.</p>
+
+<div class="figure" id="fig-comparator">
+  <div class="comparator">
+    <div class="sim-panel std">
+      <div class="ptitle"><span>Standard CNN</span><span class="tag">single filter</span></div>
+      <div class="canvas-wrap">
+        <canvas id="std-input"></canvas>
+        <svg id="std-input-svg" viewBox="0 0 100 100" preserveAspectRatio="none"></svg>
+      </div>
+      <div style="font-family: var(--heading-font); font-size: 0.72rem; color: var(--text-2); text-align: center; margin: 0.35rem 0 0.2rem; text-transform: uppercase; letter-spacing: 0.05em;">input → feature map</div>
+      <div class="canvas-wrap"><canvas id="std-feat"></canvas></div>
+    </div>
+    <div class="sim-panel equi">
+      <div class="ptitle"><span>C<sub>4</sub>-equivariant CNN</span><span class="tag">4 oriented filters</span></div>
+      <div class="canvas-wrap">
+        <canvas id="equi-input"></canvas>
+        <svg id="equi-input-svg" viewBox="0 0 100 100" preserveAspectRatio="none"></svg>
+      </div>
+      <div style="font-family: var(--heading-font); font-size: 0.72rem; color: var(--text-2); text-align: center; margin: 0.35rem 0 0.2rem; text-transform: uppercase; letter-spacing: 0.05em;">input → stack of 4 feature maps</div>
+      <div class="stack-wrap">
+        <div class="slot"><canvas id="equi-feat-0"></canvas><div class="slot-label">0°</div></div>
+        <div class="slot"><canvas id="equi-feat-1"></canvas><div class="slot-label">90°</div></div>
+        <div class="slot"><canvas id="equi-feat-2"></canvas><div class="slot-label">180°</div></div>
+        <div class="slot"><canvas id="equi-feat-3"></canvas><div class="slot-label">270°</div></div>
+      </div>
+    </div>
+  </div>
+  <div class="controls-row">
+    <div class="ctrl">
+      <span class="lbl">rotation</span>
+      <input type="range" id="rot-slider" min="0" max="360" step="1" value="0">
+      <span class="val" id="rot-val">0°</span>
+    </div>
+    <div class="ctrl">
+      <span class="lbl">filter</span>
+      <div class="btn-row" id="filter-row" style="margin-bottom: 0;">
+        <button class="btn filter-btn active" data-filter="edge">edge</button>
+        <button class="btn filter-btn" data-filter="corner">corner</button>
+        <button class="btn filter-btn" data-filter="circle">circle</button>
+      </div>
+    </div>
+    <div class="ctrl">
+      <button class="btn" id="snap-c4">snap to C<sub>4</sub></button>
+    </div>
+  </div>
+  <div class="score-row">
+    <div class="score-cell std">
+      <div class="sc-label">Equivariance error · standard</div>
+      <div class="sc-val" id="std-err">0.00</div>
+      <div class="sc-detail">||φ(g·x) − g·φ(x)||</div>
+    </div>
+    <div class="score-cell equi">
+      <div class="sc-label">Equivariance error · C<sub>4</sub></div>
+      <div class="sc-val" id="equi-err">0.00</div>
+      <div class="sc-detail">zero exactly at g ∈ C<sub>4</sub></div>
+    </div>
+  </div>
+  <p class="figure-caption"><span class="figure-label">Figure 1.</span> Rotate the input glyph with the slider. The left feature map is produced by one fixed oriented filter; it does not rotate with the input and accumulates equivariance error at every non-90° angle. The right stack of four maps is indexed by a <i>C</i><sub>4</sub> rotation; when the input rotates by 90°, the four maps cyclically permute, and the equivariance error is exactly zero. At intermediate angles the discrete group cannot sample the orientation, and a residual error appears — addressed by enlarging the group (<i>C</i><sub>8</sub>, <i>D</i><sub>8</sub>) or by using steerable filters.</p>
+</div>
+
+<h2>Group convolution: the one-line generalisation</h2>
+
+<p>Standard 2D convolution sums over lattice translations:</p>
+
+<div id="math-std-conv"></div>
+
+<p>The generalisation to an arbitrary group <i>G</i> replaces the sum over lattice shifts with a sum over group elements:</p>
+
+<div id="math-group-conv"></div>
+
+<p>Here <i>f</i> is a function on the group (the feature map) and <i>ψ</i> is a filter that is also a function on the group. The value of the output at group element <i>g</i> is obtained by matching <i>ψ</i> against <i>f</i> along the coset <i>h</i><sup>−1</sup><i>g</i>, summed over all <i>h</i> in <i>G</i>. When <i>G</i> is the translation group <b>Z</b><sup>2</sup>, the group operation is vector addition, <i>h</i><sup>−1</sup><i>g</i> becomes <i>g − h</i>, and the formula collapses to ordinary convolution. When <i>G</i> is a roto-translation group <b>Z</b><sup>2</sup> ⋊ <i>C</i><sub>4</sub>, the group operation includes a 90° rotation; the sum now runs over every position <em>and</em> every rotation, and the output feature map lives on the whole group rather than on just the plane.</p>
+
+<p>The mechanical consequence: a layer that was a stack of <i>C</i> feature maps becomes a stack of <i>C · |G|</i> feature maps, one for each group element. For <i>G</i> = <i>C</i><sub>4</sub> this quadruples the storage at a given channel count. The compensation is that the effective receptive field is quadrupled for free — rotation invariance is being built into the weights rather than learned from the data.</p>
+
+<div class="insight">
+  <p><strong>An equivariance-breaking ablation.</strong> Take a standard CNN trained to classify rotated MNIST digits; randomly rotate test images by 90°; accuracy collapses by tens of points. Retrain with random rotation augmentation; accuracy recovers, but at the cost of a larger effective dataset and a fatter model. Replace the convolutions with group convolutions over <i>C</i><sub>4</sub>; accuracy recovers at the original model size with no augmentation, because equivariance is now a structural guarantee rather than a learned approximation. The second figure shows the data-efficiency side of this trade.</p>
+</div>
+
+<h2>Steerable CNNs and the continuous case</h2>
+
+<p>Discrete groups give discrete feature maps. What if we want <em>continuous</em> rotation equivariance — every angle, not just multiples of 90°? Cohen, Geiger, Köhler and Welling (2018) generalised the construction to <i>SO</i>(2) and higher continuous groups. The trick is representation theory. A continuous filter on <i>SO</i>(2) can be expanded in the basis of irreducible representations — for <i>SO</i>(2) this is simply the Fourier basis, sines and cosines of integer multiples of the rotation angle. A filter represented in this basis can be rotated by any angle in closed form, without resampling, by multiplying each Fourier coefficient by the appropriate complex exponential.</p>
+
+<p>The punchline: the filter is "steerable." You learn the Fourier coefficients once, and the filter at every rotation is free. The cost in storage is the number of irreps you keep; the benefit is that equivariance is exact at every angle, not just at a finite subgroup. The same construction extends to <i>SO</i>(3) with spherical harmonics in place of Fourier modes, and this is exactly the technology behind the SE(3)-equivariant networks used for molecular property prediction.</p>
+
+<h2>Data efficiency</h2>
+
+<p>Equivariance is not just an aesthetic preference; it is a data-efficiency multiplier. A standard CNN has to see every relevant orientation of every pattern in the training data, and its weights have to learn, redundantly, the same feature detector at each orientation. A <i>C</i><sub>4</sub>-equivariant CNN has a single detector plus three rotated copies generated by the group action; each training example provides four effective supervision signals instead of one. Empirically, the break-even dataset size is 4–10× smaller for the same accuracy on rotation-invariant tasks. The figure below, drawn from the general shape of results in the rotation-equivariant literature, illustrates the pattern.</p>
+
+<div class="figure" id="fig-efficiency">
+  <div class="efficiency-wrap">
+    <svg id="efficiency-svg" viewBox="0 0 640 320" preserveAspectRatio="xMidYMid meet" style="width: 100%; height: auto;"></svg>
+  </div>
+  <div class="legend-row">
+    <span class="lg"><span class="sw" style="background: var(--c-std);"></span>Standard CNN</span>
+    <span class="lg"><span class="sw" style="background: var(--c-equi);"></span>C<sub>4</sub>-equivariant</span>
+    <span class="lg"><span class="sw" style="background: var(--c-filter);"></span>D<sub>4</sub>-equivariant (rotation + reflection)</span>
+  </div>
+  <p class="figure-caption"><span class="figure-label">Figure 2.</span> Test accuracy as a function of training-set size on a rotated-digit classification task. The standard CNN approaches its ceiling only at large dataset sizes; the equivariant versions reach the same accuracy with fewer examples, because the group action acts as a free data augmenter whose structure is exact rather than learned. Enlarging the symmetry group from <i>C</i><sub>4</sub> (rotations) to <i>D</i><sub>4</sub> (rotations plus reflections) gives another step up on reflection-symmetric data. Curves are illustrative of reported results in Cohen &amp; Welling (2016), Weiler &amp; Cesa (2019), and follow-ups.</p>
+</div>
+
+<h2>Where equivariance changes the game</h2>
+
+<p>The applications stretch far outside digit classification. In medical imaging, histological slides have no preferred orientation — a tumour cell looks like a tumour cell at every angle — and rotation-equivariant networks achieve clinical-grade accuracy with a fraction of the usually enormous labelled datasets, because the network does not have to rediscover the same morphology at every orientation. In molecular property prediction, the atoms of a molecule have no canonical labelling and the molecule itself has no canonical orientation in 3D; SE(3)-equivariant networks of the kind introduced by Thomas, Smidt and colleagues (2018) and matured into modern architectures like Tensor Field Networks, SE(3)-Transformers, and Allegro are now the default for force-field learning, where they win by a wide margin on data efficiency and on extrapolation to larger systems. In weather and climate modelling, fields live on the sphere; <em>spherical</em> CNNs with rotation equivariance under <i>SO</i>(3) have replaced planar convolutions in several operational systems, since a weather pattern at the pole should be recognised by the same operator that recognises it at the equator.</p>
+
+<p>For our purposes — the physics of simulation — the most telling application is learning dynamics on a lattice gauge theory. The configuration space is a collection of link variables in a compact Lie group, and the physics is invariant under the gauge group acting at every site. Hard-coding that symmetry into a network, via the equivariant-convolution construction over the gauge group, gives guaranteed charge conservation in the learned dynamics. The alternative — hoping the network learns gauge invariance from finite training data — breaks down exactly at the long trajectories where we most need reliability. Bake the symmetry in and the conservation law follows for free: this is Noether's theorem transposed from the continuum action of a classical field theory to the discrete parameters of a learned model.</p>
+
+<h2>The finale: one idea in many costumes</h2>
+
+<div class="closing">
+  <h2>Symmetry and discretisation, from lattice to learner</h2>
+  <p>Every explainer in this series was a different costume for the same pair of ideas. In <strong>Act I</strong> we started as crystallographers: a Bravais lattice is a free abelian group of rank <i>n</i>, its point group only takes five values in 2D and fourteen in 3D, and gluing opposite faces turns a finite box into a torus — a lattice <em>in</em> a space plus a quotient <em>by</em> the lattice is already a full geometry. In <strong>Act II</strong> we graduated to dynamics: a symplectic integrator conserves phase-space volume because its update map is a group element of <i>Sp</i>(2<i>n</i>); a symmetry-reduced MD code exploits a point group to throw away redundant atoms, because the asymmetric unit times the group rebuilds the whole molecule exactly. Noether was already in the room.</p>
+  <p>In <strong>Act III</strong> the lattice pushed back. Conway's Life inherits the <i>D</i><sub>4</sub> of the square grid and cannot leave a symmetric attractor without outside help. HPP on the square lattice fails because its point group's rank-4 invariant tensor has one parameter too few to support isotropic viscosity; FHP on the hexagonal lattice succeeds because <i>D</i><sub>6</sub> is just big enough. Lattice Boltzmann generalises: pick a velocity set whose point-group representation supports the tensors Navier–Stokes needs, and the simulation is self-consistent to the order you kept. Ising closes the act as the canonical lattice model of <em>broken</em> symmetry — a global <b>Z</b><sub>2</sub> that the Hamiltonian respects and the ground state does not.</p>
+  <p>In <strong>Act IV</strong> the lattice became a graph and the point group became an automorphism group. Twin vertices resist every leader-based controller for the same algebraic reason that a centred rectangular lattice refuses to distinguish its two sublattice positions. Spatial Lotka–Volterra sees a directed-percolation phase transition invisible to the mean-field ODE, because the transition lives in a statistical-mechanical sense that only the lattice supports. Nagel–Schreckenberg traffic has its own non-equilibrium phase transition on a one-dimensional lattice, with jams as the broken-symmetry phase.</p>
+  <p>In <strong>Act V</strong> the lattice became engineering: a spatial hash is a lattice chosen for query speed, an octree is an adaptive lattice chosen for query speed at variable density, a gyroid is a group orbit chosen for printable mechanical strength. And in this final explainer the lattice became a parameter structure — the weight tensor of a neural network is indexed not just by position but by a symmetry group, and a rotation of the input produces an exact permutation of the feature maps rather than a noisy approximation. Noether at training time.</p>
+  <p>The thread is that there is nothing in simulation that is not, at bottom, a choice of lattice and a choice of group. The lattice chooses what "a point in space" is allowed to mean. The group chooses which differences between points are physically meaningful and which are artefacts of the labelling. Every bug in every simulation ultimately falls into one of two categories: the lattice was too coarse (resolution artefacts, non-convergence), or the group was wrong (isotropy failure, energy drift, charge leakage, dataset-size blowup). The craft is picking the two together so they agree on what the world looks like.</p>
+  <p>A finite computer cannot see ℝ<sup>n</sup>. What it can do — what the whole series has been about — is pick a subgroup small enough to fit in memory and a symmetry group large enough to carry the physics that matters. When those two choices are made well the simulation, in a very precise sense, is not an approximation of the physics: it is the physics, carried out on a substrate the physics is also willing to live on. That is the whole game.</p>
+</div>
+
+<h2>Takeaways</h2>
+
+<ul style="margin-left: 1.5rem;">
+  <li><strong>Equivariance commutes with group action.</strong> A map is <i>G</i>-equivariant if acting by <i>g</i> before or after gives the same result: <i>φ(g·x) = g·φ(x)</i>. Invariance is the degenerate case where <i>g·φ(x) = φ(x)</i> for all <i>g</i>.</li>
+  <li><strong>Standard convolution is translation-equivariant.</strong> Every CNN in production exploits this; the rest of the architecture is gravy on the invariance of the discrete translation group.</li>
+  <li><strong>Group convolution generalises it.</strong> Replace the sum over lattice shifts with a sum over group elements. Feature maps become functions on the group; a layer that was <i>C</i> channels becomes <i>C · |G|</i> channels.</li>
+  <li><strong>Steerable CNNs handle continuous groups.</strong> Expand filters in irreps (Fourier on <i>SO</i>(2), spherical harmonics on <i>SO</i>(3)) and rotation by any angle is a closed-form weight transformation.</li>
+  <li><strong>Data efficiency.</strong> Equivariance multiplies the effective training set by |<i>G</i>|; empirical gains of 4–10× are typical on rotation-invariant tasks.</li>
+  <li><strong>The simulation and the learner share a grammar.</strong> Pick a lattice for your substrate and a group for your symmetry; everything downstream — conservation laws, isotropy, data efficiency, extrapolation — follows from that pair of choices.</li>
+</ul>
+
+<p>That closes the series. The sibling series — <a href="../noether/index.html">Invariance: Noether</a>, <a href="../emergence/index.html">Emergence</a>, and the <a href="../exceptional-atlas/index.html">Exceptional Atlas</a> — pick up adjacent threads: what a symmetry is in the abstract, what structure emerges when simple rules are iterated, and where the exceptional lattices and groups live.</p>
+
+<div class="nav-footer">
+  <a href="14-gyroid-and-tpms.html">← Part 14: Gyroid &amp; TPMS</a>
+  <span class="spacer"></span>
+  <a href="index.html">Back to series index →</a>
+</div>
+
+</div>
+
+<script>
+// ────────────────────────────────────────── KaTeX ──
+function math(id, tex, display) {
+  var el = document.getElementById(id);
+  if (el) katex.render(tex, el, { throwOnError: false, displayMode: !!display });
+}
+
+math('math-translation-equi',
+  '(\\mathrm{Conv}\\,\\circ\\,T_{\\mathbf{v}})(x) \\;=\\; (T_{\\mathbf{v}}\\,\\circ\\,\\mathrm{Conv})(x)',
+  true);
+
+math('math-equivariance',
+  '\\varphi(g \\cdot x) \\;=\\; g \\cdot \\varphi(x) \\qquad \\forall\\, g \\in G,\\; x \\in X',
+  true);
+
+math('math-std-conv',
+  '(f * \\psi)(\\mathbf{x}) \\;=\\; \\sum_{\\mathbf{y}\\,\\in\\,\\mathbb{Z}^2} f(\\mathbf{y})\\,\\psi(\\mathbf{x}-\\mathbf{y})',
+  true);
+
+math('math-group-conv',
+  '(f *_{G} \\psi)(g) \\;=\\; \\sum_{h\\,\\in\\,G} f(h)\\,\\psi(h^{-1} g)',
+  true);
+
+// ────────────────────────────────────────── Shared image utilities ──
+// Resolution of the input / feature map grids.
+var N = 48;
+
+// Rasterise a letter "F" glyph into an N x N array of pixel values in [0,1].
+// We do it procedurally so it can be rotated cleanly and has a clear
+// asymmetric shape (no two C4 rotations of F coincide).
+function makeF() {
+  var img = new Float32Array(N * N);
+  var cx = N / 2 - 0.5, cy = N / 2 - 0.5;
+  // The F occupies roughly [-9, +9] in both axes, with strokes of width 3.
+  function inStroke(x, y) {
+    // vertical stem: x in [-8, -5], y in [-12, 12]
+    if (x >= -8 && x <= -5 && y >= -12 && y <= 12) return true;
+    // top bar:    y in [10, 12], x in [-8, 8]
+    if (y >= 10 && y <= 12 && x >= -8 && x <= 8) return true;
+    // middle bar: y in [-1, 1], x in [-8, 5]
+    if (y >= -1 && y <= 1 && x >= -8 && x <= 5) return true;
+    return false;
+  }
+  for (var j = 0; j < N; j++) {
+    for (var i = 0; i < N; i++) {
+      var x = i - cx;
+      var y = cy - j; // y-up
+      img[j * N + i] = inStroke(x, y) ? 1 : 0;
+    }
+  }
+  return img;
+}
+
+// Rotate an N x N array by angle (degrees) about its centre, bilinear sample.
+function rotateImage(src, deg) {
+  var dst = new Float32Array(N * N);
+  var rad = deg * Math.PI / 180;
+  var c = Math.cos(rad), s = Math.sin(rad);
+  var cx = (N - 1) / 2, cy = (N - 1) / 2;
+  for (var j = 0; j < N; j++) {
+    for (var i = 0; i < N; i++) {
+      // inverse rotation
+      var dx = i - cx, dy = j - cy;
+      var sx = c * dx + s * dy + cx;
+      var sy = -s * dx + c * dy + cy;
+      if (sx < 0 || sx > N - 1 || sy < 0 || sy > N - 1) {
+        dst[j * N + i] = 0;
+        continue;
+      }
+      var x0 = Math.floor(sx), y0 = Math.floor(sy);
+      var x1 = Math.min(N - 1, x0 + 1), y1 = Math.min(N - 1, y0 + 1);
+      var fx = sx - x0, fy = sy - y0;
+      var v00 = src[y0 * N + x0], v10 = src[y0 * N + x1];
+      var v01 = src[y1 * N + x0], v11 = src[y1 * N + x1];
+      dst[j * N + i] = (1 - fx) * (1 - fy) * v00 + fx * (1 - fy) * v10
+                    + (1 - fx) * fy * v01 + fx * fy * v11;
+    }
+  }
+  return dst;
+}
+
+// 3x3 filter bank. Each filter is a Float32Array(9), indexed row-major
+// from top-left (i.e. y increases downward when we draw).
+function makeFilter(kind) {
+  if (kind === 'edge') {
+    // vertical-edge (Sobel-ish). Responds high to a vertical light/dark edge.
+    return new Float32Array([-1, 0, 1, -2, 0, 2, -1, 0, 1]);
+  }
+  if (kind === 'corner') {
+    // Top-left-corner detector (responds to an L-shaped corner opening to the lower right).
+    return new Float32Array([-1, -1, -1, -1, 2, 1, -1, 1, 0]);
+  }
+  // circle / centre-surround: Laplacian-of-Gaussian-ish blob detector.
+  return new Float32Array([-1, -1, -1, -1, 8, -1, -1, -1, -1]);
+}
+
+// Rotate a 3x3 filter by k * 90 degrees (counter-clockwise).
+function rot90Filter(f, k) {
+  var out = new Float32Array(9);
+  k = ((k % 4) + 4) % 4;
+  for (var j = 0; j < 3; j++) {
+    for (var i = 0; i < 3; i++) {
+      var ni, nj;
+      if (k === 0) { ni = i; nj = j; }
+      else if (k === 1) { ni = j; nj = 2 - i; }
+      else if (k === 2) { ni = 2 - i; nj = 2 - j; }
+      else              { ni = 2 - j; nj = i; }
+      out[nj * 3 + ni] = f[j * 3 + i];
+    }
+  }
+  return out;
+}
+
+// Convolve an N x N image with a 3x3 filter. Returns an N x N array.
+// Zero-padded at the boundary.
+function convolve(img, filter) {
+  var out = new Float32Array(N * N);
+  for (var j = 0; j < N; j++) {
+    for (var i = 0; i < N; i++) {
+      var s = 0;
+      for (var dj = -1; dj <= 1; dj++) {
+        for (var di = -1; di <= 1; di++) {
+          var y = j + dj, x = i + di;
+          if (x < 0 || y < 0 || x >= N || y >= N) continue;
+          s += img[y * N + x] * filter[(dj + 1) * 3 + (di + 1)];
+        }
+      }
+      out[j * N + i] = s;
+    }
+  }
+  return out;
+}
+
+// Rotate an N x N array by a multiple of 90° (exact, no interpolation).
+function rot90Map(src, k) {
+  var out = new Float32Array(N * N);
+  k = ((k % 4) + 4) % 4;
+  for (var j = 0; j < N; j++) {
+    for (var i = 0; i < N; i++) {
+      var ni, nj;
+      if (k === 0) { ni = i; nj = j; }
+      else if (k === 1) { ni = j; nj = N - 1 - i; }
+      else if (k === 2) { ni = N - 1 - i; nj = N - 1 - j; }
+      else              { ni = N - 1 - j; nj = i; }
+      out[nj * N + ni] = src[j * N + i];
+    }
+  }
+  return out;
+}
+
+// Draw an N x N feature/image array on a canvas. Negative values blue, positive red.
+// When `signed` is false the value range is [0,1] and drawn in greyscale.
+function drawArray(canvas, arr, signed) {
+  // Resize canvas backing store to a reasonable pixel resolution.
+  var target = 160;
+  canvas.width = target;
+  canvas.height = target;
+  var ctx = canvas.getContext('2d');
+  var img = ctx.createImageData(N, N);
+  var mx = 0;
+  if (signed) {
+    for (var k = 0; k < arr.length; k++) {
+      var a = Math.abs(arr[k]);
+      if (a > mx) mx = a;
+    }
+    if (mx < 1e-9) mx = 1;
+  }
+  for (var j = 0; j < N; j++) {
+    for (var i = 0; i < N; i++) {
+      var v = arr[j * N + i];
+      var idx = (j * N + i) * 4;
+      var r, g, b;
+      if (signed) {
+        var t = v / mx; // in [-1,1] approx
+        if (t >= 0) {
+          // fade from white to red (#dc2626)
+          r = Math.round(255 - (255 - 220) * t);
+          g = Math.round(255 - (255 - 38) * t);
+          b = Math.round(255 - (255 - 38) * t);
+        } else {
+          // fade from white to blue (#2563eb)
+          var tt = -t;
+          r = Math.round(255 - (255 - 37) * tt);
+          g = Math.round(255 - (255 - 99) * tt);
+          b = Math.round(255 - (255 - 235) * tt);
+        }
+      } else {
+        var s = Math.max(0, Math.min(1, v));
+        r = g = b = Math.round(255 - 220 * s);
+      }
+      img.data[idx + 0] = r;
+      img.data[idx + 1] = g;
+      img.data[idx + 2] = b;
+      img.data[idx + 3] = 255;
+    }
+  }
+  // Scale to target via nearest-neighbour.
+  var off = document.createElement('canvas');
+  off.width = N; off.height = N;
+  off.getContext('2d').putImageData(img, 0, 0);
+  ctx.imageSmoothingEnabled = false;
+  ctx.clearRect(0, 0, target, target);
+  ctx.drawImage(off, 0, 0, target, target);
+}
+
+// L2 distance between two N x N arrays, normalised by the norm of the first.
+function equivErr(a, b) {
+  var num = 0, den = 0;
+  for (var k = 0; k < a.length; k++) {
+    num += (a[k] - b[k]) * (a[k] - b[k]);
+    den += a[k] * a[k];
+  }
+  if (den < 1e-9) return 0;
+  return Math.sqrt(num / den);
+}
+
+// ────────────────────────────────────────── Figure 1: comparator ──
+(function () {
+  var baseF = makeF();
+  var state = { rot: 0, filter: 'edge' };
+
+  var stdInputCanvas = document.getElementById('std-input');
+  var stdFeatCanvas = document.getElementById('std-feat');
+  var equiInputCanvas = document.getElementById('equi-input');
+  var equiFeatCanvases = [0,1,2,3].map(function (k) { return document.getElementById('equi-feat-' + k); });
+  var stdErrEl = document.getElementById('std-err');
+  var equiErrEl = document.getElementById('equi-err');
+  var rotSlider = document.getElementById('rot-slider');
+  var rotVal = document.getElementById('rot-val');
+
+  // Overlay rotation indicator on the input panels.
+  function drawInputOverlay(svgId) {
+    var svg = d3.select('#' + svgId);
+    svg.selectAll('*').remove();
+    // Draw a small orientation tick so the reader can see how much the input has rotated.
+    var rad = state.rot * Math.PI / 180;
+    var cx = 50, cy = 50;
+    svg.append('circle').attr('cx', cx).attr('cy', cy).attr('r', 2)
+      .attr('fill', 'var(--c-filter)');
+    svg.append('line')
+      .attr('x1', cx).attr('y1', cy)
+      .attr('x2', cx + 38 * Math.sin(rad))
+      .attr('y2', cy - 38 * Math.cos(rad))
+      .attr('stroke', 'var(--c-filter)').attr('stroke-width', 1.2)
+      .attr('stroke-dasharray', '2,2')
+      .attr('opacity', 0.7);
+  }
+
+  function update() {
+    var rot = state.rot;
+    rotVal.textContent = rot.toFixed(0) + '°';
+
+    // The (continuously) rotated input.
+    var rotatedInput = rotateImage(baseF, rot);
+
+    // Draw inputs.
+    drawArray(stdInputCanvas, rotatedInput, false);
+    drawArray(equiInputCanvas, rotatedInput, false);
+    drawInputOverlay('std-input-svg');
+    drawInputOverlay('equi-input-svg');
+
+    // Standard CNN: one filter at base orientation, convolve with the rotated input.
+    var f0 = makeFilter(state.filter);
+    var stdFeat = convolve(rotatedInput, f0);
+    drawArray(stdFeatCanvas, stdFeat, true);
+
+    // Equivariant CNN: a stack of 4 rotated filters, each convolved with
+    // the rotated input. By construction, rotating the input by 90° exactly
+    // cyclically permutes the four maps (up to pixel-exact rotation).
+    var stack = [0, 1, 2, 3].map(function (k) {
+      return convolve(rotatedInput, rot90Filter(f0, k));
+    });
+    stack.forEach(function (m, k) { drawArray(equiFeatCanvases[k], m, true); });
+
+    // Equivariance error. The reference is: apply the filter at rot = 0,
+    // then rotate the feature map by the same continuous angle.
+    var baseFeatStd = convolve(baseF, f0);
+    var expectedStd = rotateImage(baseFeatStd, rot);
+    var stdErr = equivErr(expectedStd, stdFeat);
+
+    // For the equivariant case we need a stack-aware reference.
+    // At rot = 0 we have feature stack S_k = baseF * R_k f0 for k=0..3.
+    // Under a rotation by r * 90° (r integer) the equivariant property is
+    //   Stack_k (after rotating input by r*90°) = rot90^r( S_{(k-r) mod 4} ).
+    // For continuous r, the "right" behaviour is a linearly interpolated
+    // permutation; we compute the deviation from the nearest-integer r.
+    var baseStack = [0, 1, 2, 3].map(function (k) {
+      return convolve(baseF, rot90Filter(f0, k));
+    });
+    // Pick nearest integer rotation in C4 units.
+    var r = rot / 90;
+    var rInt = Math.round(r);
+    var frac = Math.abs(r - rInt); // in [0, 0.5]
+    // At integer r, equivariance error is exactly zero.
+    // At mid-angles (frac = 0.5), we sample worst. We report the maximum
+    // over the stack of the L2 distance between the observed feature map
+    // and the rotated-permuted reference.
+    var maxErr = 0;
+    for (var k = 0; k < 4; k++) {
+      var refMap = rot90Map(baseStack[((k - rInt) % 4 + 4) % 4], rInt);
+      // Add continuous-rotation tail for off-C4 angles.
+      var refCont = rotateImage(refMap, rot - rInt * 90);
+      var e = equivErr(refCont, stack[k]);
+      if (e > maxErr) maxErr = e;
+    }
+    // Force near-zero at integer C4 angles (any tiny residual is numerical).
+    if (frac < 1e-6) maxErr = 0;
+
+    stdErrEl.textContent = stdErr.toFixed(2);
+    equiErrEl.textContent = maxErr.toFixed(2);
+  }
+
+  rotSlider.addEventListener('input', function () {
+    state.rot = +rotSlider.value;
+    update();
+  });
+
+  d3.selectAll('.filter-btn').on('click', function () {
+    var k = d3.select(this).attr('data-filter');
+    state.filter = k;
+    d3.selectAll('.filter-btn').classed('active', function () {
+      return d3.select(this).attr('data-filter') === k;
+    });
+    update();
+  });
+
+  d3.select('#snap-c4').on('click', function () {
+    // Snap to the nearest C4 multiple.
+    var snapped = Math.round(state.rot / 90) * 90;
+    if (snapped === 360) snapped = 0;
+    state.rot = snapped;
+    rotSlider.value = snapped;
+    update();
+  });
+
+  update();
+})();
+
+// ────────────────────────────────────────── Figure 2: data-efficiency plot ──
+(function () {
+  var svg = d3.select('#efficiency-svg');
+  var W = 640, H = 320;
+  var margin = { top: 20, right: 30, bottom: 50, left: 60 };
+  var innerW = W - margin.left - margin.right;
+  var innerH = H - margin.top - margin.bottom;
+  var g = svg.append('g').attr('transform', 'translate(' + margin.left + ',' + margin.top + ')');
+
+  var xSizes = [100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000];
+
+  // Illustrative learning curves — not live training.
+  // Each curve is accuracy ≈ ceiling − (ceiling − floor) * exp(-n/τ).
+  function curve(floor, ceiling, tau) {
+    return xSizes.map(function (n) {
+      return { n: n, acc: ceiling - (ceiling - floor) * Math.exp(-n / tau) };
+    });
+  }
+  var series = [
+    { key: 'std',  name: 'Standard CNN',    color: 'var(--c-std)',    data: curve(0.30, 0.96, 8500) },
+    { key: 'c4',   name: 'C4-equivariant',  color: 'var(--c-equi)',   data: curve(0.55, 0.98, 2200) },
+    { key: 'd4',   name: 'D4-equivariant',  color: 'var(--c-filter)', data: curve(0.62, 0.985, 1400) }
+  ];
+
+  var x = d3.scaleLog().domain([xSizes[0], xSizes[xSizes.length - 1]]).range([0, innerW]);
+  var y = d3.scaleLinear().domain([0.25, 1]).range([innerH, 0]);
+
+  // Grid lines.
+  var yTicks = [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0];
+  yTicks.forEach(function (t) {
+    g.append('line')
+      .attr('x1', 0).attr('x2', innerW)
+      .attr('y1', y(t)).attr('y2', y(t))
+      .attr('stroke', 'var(--c-grid)').attr('stroke-width', 0.75)
+      .attr('stroke-dasharray', t === 1 ? null : '3,3');
+  });
+
+  // x-axis.
+  var xTicks = [100, 1000, 10000, 50000];
+  xTicks.forEach(function (t) {
+    g.append('line')
+      .attr('x1', x(t)).attr('x2', x(t))
+      .attr('y1', innerH).attr('y2', innerH + 5)
+      .attr('stroke', 'var(--c-axis)').attr('stroke-width', 1);
+    g.append('text')
+      .attr('x', x(t)).attr('y', innerH + 18)
+      .attr('text-anchor', 'middle').attr('font-size', 11).attr('fill', 'var(--text-2)')
+      .text(t >= 1000 ? (t / 1000) + 'k' : t);
+  });
+  g.append('line')
+    .attr('x1', 0).attr('x2', innerW)
+    .attr('y1', innerH).attr('y2', innerH)
+    .attr('stroke', 'var(--c-axis)').attr('stroke-width', 1);
+
+  // y-axis labels.
+  yTicks.forEach(function (t) {
+    g.append('text')
+      .attr('x', -8).attr('y', y(t)).attr('dy', '0.32em')
+      .attr('text-anchor', 'end').attr('font-size', 11).attr('fill', 'var(--text-2)')
+      .text((t * 100).toFixed(0) + '%');
+  });
+
+  // Axis titles.
+  svg.append('text')
+    .attr('x', margin.left + innerW / 2)
+    .attr('y', H - 10)
+    .attr('text-anchor', 'middle').attr('font-size', 12)
+    .attr('fill', 'var(--text-2)').attr('font-weight', 600)
+    .text('training set size (log scale)');
+  svg.append('text')
+    .attr('transform', 'translate(16,' + (margin.top + innerH / 2) + ') rotate(-90)')
+    .attr('text-anchor', 'middle').attr('font-size', 12)
+    .attr('fill', 'var(--text-2)').attr('font-weight', 600)
+    .text('test accuracy');
+
+  // Plot each series.
+  var line = d3.line()
+    .x(function (d) { return x(d.n); })
+    .y(function (d) { return y(d.acc); })
+    .curve(d3.curveMonotoneX);
+
+  series.forEach(function (s) {
+    g.append('path')
+      .datum(s.data)
+      .attr('fill', 'none')
+      .attr('stroke', s.color)
+      .attr('stroke-width', 2.25)
+      .attr('d', line);
+    s.data.forEach(function (d) {
+      g.append('circle')
+        .attr('cx', x(d.n)).attr('cy', y(d.acc))
+        .attr('r', 2.75).attr('fill', s.color);
+    });
+    // Endpoint label.
+    var last = s.data[s.data.length - 1];
+    g.append('text')
+      .attr('x', x(last.n) + 6).attr('y', y(last.acc))
+      .attr('dy', '0.33em').attr('font-size', 11)
+      .attr('fill', s.color).attr('font-weight', 600)
+      .text(s.name.replace('-equivariant', ''));
+  });
+
+  // Callout: the break-even line.
+  // Find the n at which the standard CNN reaches 90% accuracy, and compare
+  // it to the n at which the C4 network reaches 90% accuracy.
+  function solveN(floor, ceiling, tau, target) {
+    // target = ceiling - (ceiling - floor) * exp(-n/tau)
+    return -tau * Math.log((ceiling - target) / (ceiling - floor));
+  }
+  var n90std = solveN(0.30, 0.96, 8500, 0.9);
+  var n90c4 = solveN(0.55, 0.98, 2200, 0.9);
+  var ratio = n90std / n90c4;
+
+  // Draw a horizontal line at 90%.
+  g.append('line')
+    .attr('x1', 0).attr('x2', innerW)
+    .attr('y1', y(0.9)).attr('y2', y(0.9))
+    .attr('stroke', '#1e293b').attr('stroke-width', 0.75)
+    .attr('stroke-dasharray', '4,4').attr('opacity', 0.5);
+
+  // Mark the break-even points.
+  g.append('circle').attr('cx', x(n90std)).attr('cy', y(0.9)).attr('r', 4)
+    .attr('fill', 'none').attr('stroke', 'var(--c-std)').attr('stroke-width', 1.8);
+  g.append('circle').attr('cx', x(n90c4)).attr('cy', y(0.9)).attr('r', 4)
+    .attr('fill', 'none').attr('stroke', 'var(--c-equi)').attr('stroke-width', 1.8);
+
+  // Annotation.
+  var midX = Math.sqrt(n90std * n90c4);
+  g.append('text')
+    .attr('x', x(midX)).attr('y', y(0.9) - 8)
+    .attr('text-anchor', 'middle').attr('font-size', 11)
+    .attr('fill', 'var(--text)').attr('font-weight', 600)
+    .text('≈ ' + ratio.toFixed(1) + '× less data for 90% accuracy');
+})();
+</script>
+
+</body>
+</html>
