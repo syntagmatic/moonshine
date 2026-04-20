@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Causal Trees — Decision Trees</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
+<script src="../lib/motion.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --article-width: 740px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem;
+  --line-height: 1.65;
+  --text: #1a1a2e;
+  --text-2: #4a4a6a;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --bg: #fafafa;
+  --fig-bg: #ffffff;
+  --border: #e2e2e8;
+  --c-treat: #2563eb;
+  --c-control: #dc2626;
+  --c-pred: #64748b;
+  --c-causal: #7c3aed;
+  --c-uplift: #059669;
+  --c-train: #2563eb;
+  --c-eval: #ea580c;
+}
+.t-treat { color: var(--c-treat); font-weight: 600; }
+.t-control { color: var(--c-control); font-weight: 600; }
+.t-pred { color: var(--c-pred); font-weight: 600; }
+.t-causal { color: var(--c-causal); font-weight: 600; }
+.t-train { color: var(--c-train); font-weight: 600; }
+.t-eval { color: var(--c-eval); font-weight: 600; }
+
+body { font-family: var(--body-font); font-size: var(--body-size); line-height: var(--line-height); color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased; }
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
+h1, h2 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+p { margin: 0 0 1rem; }
+a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+a:hover { color: #1d4ed8; }
+code { font-family: var(--mono-font); font-size: 0.9em; background: #f1f1f5; padding: 0.15em 0.4em; border-radius: 3px; }
+
+.back-link { font-family: var(--heading-font); font-size: 0.85rem; display: inline-block; margin-bottom: 1rem; color: var(--text-2); text-decoration: none; }
+.back-link:hover { color: var(--accent); }
+
+.header { padding: 3rem 0 2rem; border-bottom: 1px solid var(--border); margin-bottom: 2.5rem; }
+.header .subtitle { font-family: var(--heading-font); font-size: 1.15rem; color: var(--text-2); max-width: 620px; }
+
+.figure { margin: 2rem 0; padding: 1.5rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; line-height: 1.45; }
+.figure-label { font-weight: 600; color: var(--text); }
+
+.btn { font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600; padding: 0.4rem 0.85rem; border-radius: 5px; border: 1px solid var(--border); background: var(--fig-bg); color: var(--text); cursor: pointer; user-select: none; transition: background 0.15s, border-color 0.15s; }
+.btn:hover { border-color: var(--accent); background: var(--accent-light); }
+.btn.active { background: var(--accent); color: white; border-color: var(--accent); }
+
+.insight { background: var(--accent-light); border-left: 3px solid var(--accent); padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 4px 4px 0; }
+
+svg text { font-family: var(--heading-font); }
+
+.panel { display: grid; grid-template-columns: 1fr 260px; gap: 1.5rem; align-items: start; }
+@media (max-width: 680px) { .panel { grid-template-columns: 1fr; } }
+.controls-col { display: flex; flex-direction: column; gap: 0.85rem; font-family: var(--heading-font); font-size: 0.9rem; }
+.slider-row { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 0.5rem 1rem; }
+.slider-row .lbl { color: var(--text-2); font-weight: 600; font-size: 0.82rem; }
+.slider-row .val { font-family: var(--mono-font); color: var(--text); min-width: 3rem; text-align: right; font-weight: 600; }
+.slider-row input[type="range"] { width: 100%; }
+
+.mode-toggle { display: flex; gap: 0.4rem; }
+.mode-toggle .btn { flex: 1; padding: 0.4rem 0.4rem; font-size: 0.78rem; }
+.mode-toggle .btn.predict.active { background: var(--c-pred); border-color: var(--c-pred); }
+.mode-toggle .btn.causal.active { background: var(--c-causal); border-color: var(--c-causal); }
+
+.stat-box { padding: 0.8rem 1rem; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; font-family: var(--heading-font); font-size: 0.86rem; line-height: 1.55; }
+.stat-box .label { font-size: 0.72rem; font-weight: 700; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.3rem; }
+.stat-box .row { display: flex; justify-content: space-between; gap: 0.5rem; margin-top: 0.15rem; }
+.stat-box .row .k { color: var(--text-2); }
+.stat-box .row .v { font-family: var(--mono-font); font-weight: 600; color: var(--text); }
+
+.dual-panel { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+@media (max-width: 680px) { .dual-panel { grid-template-columns: 1fr; } }
+.viz-label { font-family: var(--heading-font); font-size: 0.75rem; font-weight: 700; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.35rem; }
+
+.nav-footer { margin-top: 5rem; padding-top: 2rem; border-top: 1px solid var(--border); display: flex; justify-content: space-between; font-family: var(--heading-font); font-size: 0.9rem; }
+.nav-footer a { color: var(--accent); text-decoration: none; }
+.nav-footer a:hover { text-decoration: underline; }
+.nav-footer .spacer { flex: 1; }
+
+@media (prefers-reduced-motion: reduce) { html:not([data-motion="full"]) * { transition-duration: 0s !important; animation-duration: 0s !important; } }
+@media (max-width: 680px) { h1 { font-size: 1.75rem; } .article { padding: 1.5rem 1rem 4rem; } }
+</style>
+</head>
+<body>
+<div class="article">
+
+<a href="index.html" class="back-link">← Decision Trees</a>
+
+<div class="header">
+  <h1>Causal Trees</h1>
+  <p class="subtitle">Chapter 6 of 8. Every tree so far has asked "what will happen?" Causal trees ask a subtly different question: "what would change if I intervened?" That shift forces the algorithm to change, in a way that also forces it to split its data in half.</p>
+</div>
+
+<p>Imagine you run an online store. You have a predictive model that tells you which customers are most likely to buy a pair of sneakers. You target the high-probability customers with a 20%-off promo code. Did the code work?</p>
+
+<p>Your model tells you who is most likely to buy. But you don't care about the customers who would have bought anyway — the code is just giving away discounts to them. And you don't care about the customers who would never have bought, with or without the code — those are wasted. You care about the customers whose purchase depends on whether they got the code. The <em>persuadables</em>. That's a different group than the high-probability one.</p>
+
+<p>To find them, you need a different kind of tree.</p>
+
+<h2>Why standard trees can't answer this</h2>
+
+<p>A standard tree is trained to predict an outcome y from features x. It finds splits that make each leaf's y values as homogeneous as possible. If "age &lt; 30" happens to correlate with "will buy," the tree will find it.</p>
+
+<p>But what you actually want is splits that separate people with <em>different treatment responses</em>. For any single customer, you observe one of two things: their response after receiving the code, or their response after not receiving the code — never both. You can't train directly on individual-level treatment effects, because they're not observable. The tree has to work with a clever surrogate.</p>
+
+<h2>The causal split criterion</h2>
+
+<p>Here's the Athey–Imbens 2016 idea. Instead of looking for splits that maximise purity of the outcome, look for splits where the two resulting subgroups have <em>different average treatment effects</em>.</p>
+
+<p>For each candidate split, estimate the uplift in both the left and right children: in each child, (treated group's average outcome) − (control group's average outcome). A good split separates high-uplift from low-uplift subpopulations — a subgroup that responds at +25% and a subgroup that responds at +2% is a split that found where the treatment works.</p>
+
+<p>This changes the fundamental logic. A predictive tree asks "who has high Y?" A causal tree asks "who has high Y-under-treatment minus Y-under-control?"</p>
+
+<h2>Two objectives on one dataset</h2>
+
+<p>The interactive below puts both in the same view. Toggle between <span class="t-pred">Predict outcome</span> (the standard tree) and <span class="t-causal">Maximise uplift</span> (the causal tree) and watch the split jump. The dataset is the same; the objective changes.</p>
+
+<div class="figure">
+  <div id="fig-causal" class="panel">
+    <div>
+      <div id="fc-viz"></div>
+    </div>
+    <div class="controls-col">
+      <div style="font-weight: 700; font-size: 0.85rem;">Tree objective</div>
+      <div class="mode-toggle" id="fc-mode">
+        <button class="btn predict active" data-m="predict">Predict outcome</button>
+        <button class="btn causal" data-m="causal">Maximise uplift</button>
+      </div>
+      <div class="slider-row">
+        <div class="lbl">uplift strength</div>
+        <input type="range" id="fc-up" min="0" max="100" step="5" value="60">
+        <div class="val" id="fc-up-val">60%</div>
+      </div>
+      <div style="font-size: 0.72rem; color: var(--text-2);">Strength of the treatment effect on persuadables</div>
+      <div class="stat-box">
+        <div class="label">Top split</div>
+        <div class="row"><span class="k">axis</span><span class="v" id="fc-axis">—</span></div>
+        <div class="row"><span class="k">threshold</span><span class="v" id="fc-thresh">—</span></div>
+      </div>
+      <div class="stat-box">
+        <div class="label">Left child</div>
+        <div class="row"><span class="k"><span class="t-treat">treated</span></span><span class="v" id="fc-l-t">—</span></div>
+        <div class="row"><span class="k"><span class="t-control">control</span></span><span class="v" id="fc-l-c">—</span></div>
+        <div class="row"><span class="k">uplift</span><span class="v" id="fc-l-up">—</span></div>
+      </div>
+      <div class="stat-box">
+        <div class="label">Right child</div>
+        <div class="row"><span class="k"><span class="t-treat">treated</span></span><span class="v" id="fc-r-t">—</span></div>
+        <div class="row"><span class="k"><span class="t-control">control</span></span><span class="v" id="fc-r-c">—</span></div>
+        <div class="row"><span class="k">uplift</span><span class="v" id="fc-r-up">—</span></div>
+      </div>
+    </div>
+  </div>
+  <p class="figure-caption"><span class="figure-label">Figure 1.</span> Each dot is a customer. <span class="t-treat">Blue circles</span> got the promo code; <span class="t-control">red triangles</span> didn't. Filled shapes mean "bought"; empty mean "did not." Under <strong>Predict outcome</strong>, the tree finds the upper-right region where buying rates are high — but these people buy with or without the code, so targeting them is wasteful. Under <strong>Maximise uplift</strong>, the tree finds the lower-left region, where treated customers buy much more often than control customers — the persuadable subpopulation. Dropping the uplift strength shrinks the difference and the causal tree has less signal to work with.</p>
+</div>
+
+<h2>The double-dipping problem</h2>
+
+<p>There's a subtle statistical issue here. If you use all your training data to pick the best uplift split, you're then using the <em>same</em> data to estimate how big the uplift actually is. Your split-finder was biased toward splits that happen to show high uplift on this sample, so the uplift estimate inside each leaf will be systematically inflated. The more splits you try, the bigger the inflation.</p>
+
+<p>This matters a lot if you want confidence intervals. The usual standard-error calculations assume the tree structure was chosen independently of the data — which it wasn't. Your 95% confidence interval might actually be a 70% confidence interval.</p>
+
+<h2>Honest estimation</h2>
+
+<p>Athey and Imbens' fix is called <em>honest estimation</em>, and it's refreshingly simple. Split your training data in half:</p>
+
+<ul style="margin-left: 1.5rem; margin-bottom: 1rem;">
+  <li>Use the <span class="t-train">first half</span> to grow the tree: pick splits, decide the structure. Never look at the second half during this phase.</li>
+  <li>Use the <span class="t-eval">second half</span> to estimate the uplift in each leaf: for each leaf built from the first half, drop the second-half rows in and compute the average treatment effect. Never touch the structure.</li>
+</ul>
+
+<p>Because the two halves never interact, the leaf-level estimates are honest in the statistical sense. Standard confidence intervals work. Nobody has cheated.</p>
+
+<p>You pay for this with half your data, which is why causal forests often use hundreds of trees — each tree's two halves combine via the ensemble to recover statistical power.</p>
+
+<div class="figure">
+  <div id="fig-honest" class="panel">
+    <div>
+      <div class="dual-panel">
+        <div>
+          <div class="viz-label"><span class="t-train">Training half</span> — grows the tree</div>
+          <div id="fh-train"></div>
+        </div>
+        <div>
+          <div class="viz-label"><span class="t-eval">Evaluation half</span> — estimates the uplift</div>
+          <div id="fh-eval"></div>
+        </div>
+      </div>
+    </div>
+    <div class="controls-col">
+      <div class="slider-row">
+        <div class="lbl">data size</div>
+        <input type="range" id="fh-n" min="60" max="400" step="20" value="160">
+        <div class="val" id="fh-n-val">160</div>
+      </div>
+      <div class="stat-box">
+        <div class="label">Leaf uplift (persuadable region)</div>
+        <div class="row"><span class="k">naive estimate</span><span class="v" id="fh-naive">—</span></div>
+        <div class="row"><span class="k">honest estimate</span><span class="v" id="fh-honest">—</span></div>
+        <div class="row"><span class="k">true effect</span><span class="v" id="fh-true">—</span></div>
+      </div>
+      <div class="stat-box">
+        <div class="label">Honest 95% CI</div>
+        <div class="row"><span class="k">width</span><span class="v" id="fh-ci">—</span></div>
+      </div>
+      <div style="font-size: 0.72rem; color: var(--text-2);">The naive estimate — using the same data to both pick the split and estimate the uplift — is systematically biased upward. Honest estimation uses a fresh half to report a number you can trust.</div>
+    </div>
+  </div>
+  <p class="figure-caption"><span class="figure-label">Figure 2.</span> Honest estimation in action. The <span class="t-train">training half</span> grows the tree and finds the persuadable region. The <span class="t-eval">evaluation half</span> drops fresh customers into the same region and computes a fresh uplift estimate — one that has <em>not</em> seen any of the splits being tested. At small N both estimates are noisy; as N grows, the honest estimate converges to the true effect while the naive estimate stays slightly inflated.</p>
+</div>
+
+<h2>What this doesn't buy you</h2>
+
+<p>Causal trees only work when your data has <em>randomised</em> treatment assignment — i.e., when who got the treatment was decided by a coin flip, not by who looked like they'd respond. If treatment was assigned based on features (maybe salespeople gave discounts to people who seemed interested), then your "treatment effect" is confounded by selection, and the tree will happily estimate something that is not a causal effect.</p>
+
+<p>This is why A/B tests are the gold standard: they randomise by design. Causal trees on A/B test data give you genuine heterogeneous treatment effects — the thing you cannot get from a normal predictive model. For observational data with no randomisation, there are more sophisticated methods (instrumental variables, propensity scores, doubly robust estimation), but the assumptions they require are strong and the methods sit outside this series.</p>
+
+<h2>What this buys you</h2>
+
+<p>When you do have randomised data, causal trees answer a question that standard ML simply can't: where does the treatment <em>work</em>? Not who will buy — where does the promo code cause a purchase that wouldn't have happened otherwise. Not who will churn — where does the retention campaign change behaviour. Not who will recover — where does the drug genuinely help.</p>
+
+<p>Targeted marketing moves from "send to high-probability buyers" to "send to persuadable buyers." Personalised medicine moves from "predict outcomes" to "decide who benefits." This is the shift from prediction to intervention, and it's what decision trees become when you ask a different question.</p>
+
+<h2>Takeaways</h2>
+
+<ul style="margin-left: 1.5rem;">
+  <li><strong>Predictive trees minimise Var(Y | leaf).</strong> Causal trees maximise Var(τ | leaf), where τ is the treatment effect. The split changes; the algorithm stays recognisable.</li>
+  <li><strong>You never observe τ.</strong> For any single row, either you have Y-under-treatment or Y-under-control, not both. Causal trees find the split by comparing the two groups' averages in each candidate child.</li>
+  <li><strong>Honest estimation splits the data in half.</strong> First half grows the structure, second half estimates the magnitudes. Statistical validity restored.</li>
+  <li><strong>Requires randomised data.</strong> A/B tests work; observational data needs extra care to control confounding.</li>
+  <li><strong>Different deliverable.</strong> Standard trees tell you what will happen; causal trees tell you where you can change what happens.</li>
+</ul>
+
+<p>Next: two places trees go that have nothing to do with tabular data. Soft trees for neural-network integration, and MCTS for game search.</p>
+
+<div class="nav-footer">
+  <a href="05-reading-the-forest.html">← Chapter 5: Reading the Forest</a>
+  <span class="spacer"></span>
+  <a href="07-trees-unbound.html">Chapter 7: Trees Unbound →</a>
+</div>
+
+</div>
+
+<script>
+function prng(seed) { var s = seed >>> 0; return function () { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
+function mean(arr) { return arr.reduce(function (a, b) { return a + b; }, 0) / arr.length; }
+
+function makeCausalDataset(seed, N, upliftStrength) {
+  var r = prng(seed);
+  var out = [];
+  for (var i = 0; i < N; i++) {
+    var x = r(), y = r();
+    var T = r() < 0.5 ? 1 : 0;
+    var pBuy;
+    if (x > 0.5 && y > 0.5) pBuy = 0.85;
+    else if (x < 0.3 && y < 0.3) pBuy = T === 1 ? (0.1 + 0.6 * upliftStrength) : 0.1;
+    else pBuy = T === 1 ? 0.2 : 0.12;
+    var buy = r() < pBuy ? 1 : 0;
+    out.push({ x: x, y: y, T: T, Y: buy });
+  }
+  return out;
+}
+
+// ────────────────────────────────────────── Fig 1 ──
+(function () {
+  var state = { mode: 'predict', upliftStrength: 0.6 };
+  var N = 300;
+
+  function splitMetric(left, right, mode) {
+    var parent = left.concat(right);
+    var n = parent.length;
+    if (mode === 'predict') {
+      function gini(arr) { var p = mean(arr.map(function (r) { return r.Y; })); return 2 * p * (1 - p); }
+      return gini(parent) - (left.length / n * gini(left) + right.length / n * gini(right));
+    }
+    function uplift(arr) {
+      var t = arr.filter(function (p) { return p.T === 1; });
+      var c = arr.filter(function (p) { return p.T === 0; });
+      if (t.length === 0 || c.length === 0) return 0;
+      return mean(t.map(function (r) { return r.Y; })) - mean(c.map(function (r) { return r.Y; }));
+    }
+    var parentUp = uplift(parent);
+    var score = 0;
+    [left, right].forEach(function (child) {
+      if (child.length === 0) return;
+      var u = uplift(child);
+      score += child.length / n * (u - parentUp) * (u - parentUp);
+    });
+    return score;
+  }
+
+  function bestSplit(pts, mode) {
+    var best = null;
+    ['x', 'y'].forEach(function (ax) {
+      var sorted = pts.slice().sort(function (a, b) { return a[ax] - b[ax]; });
+      for (var i = 8; i < sorted.length - 8; i++) {
+        if (sorted[i][ax] - sorted[i - 1][ax] < 1e-6) continue;
+        var thr = (sorted[i][ax] + sorted[i - 1][ax]) / 2;
+        var left = sorted.slice(0, i), right = sorted.slice(i);
+        if (mode === 'causal') {
+          function hasBoth(arr) { return arr.filter(function (r) { return r.T === 1; }).length >= 5 && arr.filter(function (r) { return r.T === 0; }).length >= 5; }
+          if (!hasBoth(left) || !hasBoth(right)) continue;
+        }
+        var score = splitMetric(left, right, mode);
+        if (!best || score > best.score) best = { axis: ax, threshold: thr, score: score, left: left, right: right };
+      }
+    });
+    return best;
+  }
+
+  var W = 440, H = 320, padL = 30, padR = 14, padT = 16, padB = 28;
+  var svg = d3.select('#fc-viz').append('svg')
+    .attr('viewBox', '0 0 ' + W + ' ' + H)
+    .attr('width', '100%').style('max-width', W + 'px');
+  function X(x) { return padL + x * (W - padL - padR); }
+  function Y(y) { return H - padB - y * (H - padT - padB); }
+
+  svg.append('rect').attr('x', padL).attr('y', padT).attr('width', W - padL - padR).attr('height', H - padT - padB)
+    .attr('fill', 'none').attr('stroke', 'var(--border)');
+
+  var splitLayer = svg.append('g');
+  var dataLayer = svg.append('g');
+  var legendLayer = svg.append('g');
+
+  function render() {
+    var pts = makeCausalDataset(21, N, state.upliftStrength);
+    var best = bestSplit(pts, state.mode);
+    splitLayer.selectAll('*').remove();
+    dataLayer.selectAll('*').remove();
+    legendLayer.selectAll('*').remove();
+
+    if (best) {
+      var col = state.mode === 'predict' ? 'var(--c-pred)' : 'var(--c-causal)';
+      if (best.axis === 'x') {
+        splitLayer.append('line').attr('x1', X(best.threshold)).attr('x2', X(best.threshold))
+          .attr('y1', padT).attr('y2', H - padB).attr('stroke', col).attr('stroke-width', 2.5);
+      } else {
+        splitLayer.append('line').attr('x1', padL).attr('x2', W - padR)
+          .attr('y1', Y(best.threshold)).attr('y2', Y(best.threshold)).attr('stroke', col).attr('stroke-width', 2.5);
+      }
+    }
+
+    pts.forEach(function (p) {
+      var color = p.T === 1 ? 'var(--c-treat)' : 'var(--c-control)';
+      var fill = p.Y === 1 ? color : 'white';
+      if (p.T === 1) {
+        dataLayer.append('circle').attr('cx', X(p.x)).attr('cy', Y(p.y)).attr('r', 3.5)
+          .attr('fill', fill).attr('stroke', color).attr('stroke-width', 1);
+      } else {
+        var tx = X(p.x), ty = Y(p.y);
+        dataLayer.append('path').attr('d', 'M' + tx + ',' + (ty - 3.5) + 'L' + (tx + 3.5) + ',' + (ty + 3) + 'L' + (tx - 3.5) + ',' + (ty + 3) + 'Z')
+          .attr('fill', fill).attr('stroke', color).attr('stroke-width', 1);
+      }
+    });
+
+    legendLayer.append('circle').attr('cx', W - padR - 90).attr('cy', padT + 4).attr('r', 3.5).attr('fill', 'var(--c-treat)');
+    legendLayer.append('text').attr('x', W - padR - 84).attr('y', padT + 7).attr('font-size', 9).attr('fill', 'var(--text-2)').text('treated  ○ = no buy');
+    legendLayer.append('path').attr('d', 'M' + (W - padR - 90) + ',' + (padT + 20) + 'L' + (W - padR - 87) + ',' + (padT + 25) + 'L' + (W - padR - 93) + ',' + (padT + 25) + 'Z').attr('fill', 'var(--c-control)');
+    legendLayer.append('text').attr('x', W - padR - 84).attr('y', padT + 24).attr('font-size', 9).attr('fill', 'var(--text-2)').text('control  △');
+
+    if (best) {
+      document.getElementById('fc-axis').textContent = best.axis;
+      document.getElementById('fc-thresh').textContent = best.threshold.toFixed(3);
+      function fillStats(arr, pre) {
+        var t = arr.filter(function (r) { return r.T === 1; });
+        var c = arr.filter(function (r) { return r.T === 0; });
+        var tr = t.length > 0 ? mean(t.map(function (r) { return r.Y; })) : NaN;
+        var cr = c.length > 0 ? mean(c.map(function (r) { return r.Y; })) : NaN;
+        document.getElementById(pre + '-t').textContent = isNaN(tr) ? '—' : (tr * 100).toFixed(1) + '%';
+        document.getElementById(pre + '-c').textContent = isNaN(cr) ? '—' : (cr * 100).toFixed(1) + '%';
+        var up = isNaN(tr) || isNaN(cr) ? NaN : (tr - cr);
+        document.getElementById(pre + '-up').textContent = isNaN(up) ? '—' : (up >= 0 ? '+' : '') + (up * 100).toFixed(1) + 'pp';
+      }
+      fillStats(best.left, 'fc-l');
+      fillStats(best.right, 'fc-r');
+    }
+  }
+
+  d3.selectAll('#fc-mode button').on('click', function () {
+    state.mode = this.getAttribute('data-m');
+    d3.selectAll('#fc-mode button').classed('active', function () { return this.getAttribute('data-m') === state.mode; });
+    render();
+  });
+  d3.select('#fc-up').on('input', function () {
+    state.upliftStrength = (+this.value) / 100;
+    document.getElementById('fc-up-val').textContent = this.value + '%';
+    render();
+  });
+  render();
+})();
+
+// ────────────────────────────────────────── Fig 2: honest estimation ──
+(function () {
+  var state = { N: 160 };
+  var UPLIFT_STRENGTH = 0.6;
+  var TRUE_EFFECT = 0.6 * UPLIFT_STRENGTH; // Persuadable region's true uplift.
+
+  var W = 280, H = 230, padL = 18, padR = 14, padT = 14, padB = 22;
+  function mkSvg(elId) {
+    var svg = d3.select('#' + elId).append('svg')
+      .attr('viewBox', '0 0 ' + W + ' ' + H)
+      .attr('width', '100%').style('max-width', W + 'px');
+    svg.append('rect').attr('x', padL).attr('y', padT).attr('width', W - padL - padR).attr('height', H - padT - padB)
+      .attr('fill', 'none').attr('stroke', 'var(--border)');
+    return svg;
+  }
+  var svgTr = mkSvg('fh-train');
+  var svgEv = mkSvg('fh-eval');
+  function X(x) { return padL + x * (W - padL - padR); }
+  function Y(y) { return H - padB - y * (H - padT - padB); }
+
+  function drawPoints(svg, pts, highlightRegion) {
+    svg.selectAll('g.pts').remove();
+    var g = svg.append('g').attr('class', 'pts');
+    if (highlightRegion) {
+      g.append('rect').attr('x', X(0)).attr('y', Y(0.3)).attr('width', X(0.3) - X(0)).attr('height', Y(0) - Y(0.3))
+        .attr('fill', 'var(--c-uplift)').attr('opacity', 0.12);
+    }
+    pts.forEach(function (p) {
+      var color = p.T === 1 ? 'var(--c-treat)' : 'var(--c-control)';
+      var fill = p.Y === 1 ? color : 'white';
+      if (p.T === 1) {
+        g.append('circle').attr('cx', X(p.x)).attr('cy', Y(p.y)).attr('r', 2.5).attr('fill', fill).attr('stroke', color).attr('stroke-width', 0.8);
+      } else {
+        var tx = X(p.x), ty = Y(p.y);
+        g.append('path').attr('d', 'M' + tx + ',' + (ty - 2.5) + 'L' + (tx + 2.5) + ',' + (ty + 2) + 'L' + (tx - 2.5) + ',' + (ty + 2) + 'Z').attr('fill', fill).attr('stroke', color).attr('stroke-width', 0.8);
+      }
+    });
+  }
+
+  function render() {
+    var all = makeCausalDataset(51, state.N * 2, UPLIFT_STRENGTH);
+    var half = Math.floor(all.length / 2);
+    var train = all.slice(0, half);
+    var evalSet = all.slice(half);
+
+    drawPoints(svgTr, train, true);
+    drawPoints(svgEv, evalSet, true);
+
+    // Training-half region = persuadable region (x<0.3 and y<0.3).
+    // The "split" is at x=0.3 (or thereabouts) — assume found.
+    function uplift(arr) {
+      var t = arr.filter(function (r) { return r.T === 1; });
+      var c = arr.filter(function (r) { return r.T === 0; });
+      if (t.length === 0 || c.length === 0) return NaN;
+      return mean(t.map(function (r) { return r.Y; })) - mean(c.map(function (r) { return r.Y; }));
+    }
+
+    var trainRegion = train.filter(function (r) { return r.x < 0.3 && r.y < 0.3; });
+    var evalRegion = evalSet.filter(function (r) { return r.x < 0.3 && r.y < 0.3; });
+
+    // "Naive" = estimate from training half (same data used to define split)
+    var naive = uplift(trainRegion);
+    // "Honest" = estimate from eval half
+    var honest = uplift(evalRegion);
+
+    document.getElementById('fh-naive').textContent = isNaN(naive) ? '—' : (naive >= 0 ? '+' : '') + (naive * 100).toFixed(1) + 'pp';
+    document.getElementById('fh-honest').textContent = isNaN(honest) ? '—' : (honest >= 0 ? '+' : '') + (honest * 100).toFixed(1) + 'pp';
+    document.getElementById('fh-true').textContent = (TRUE_EFFECT >= 0 ? '+' : '') + (TRUE_EFFECT * 100).toFixed(1) + 'pp';
+
+    // 95% CI width ≈ 1.96 * sqrt(var_t/n_t + var_c/n_c) on eval half
+    var t = evalRegion.filter(function (r) { return r.T === 1; });
+    var c = evalRegion.filter(function (r) { return r.T === 0; });
+    if (t.length > 1 && c.length > 1) {
+      var pT = mean(t.map(function (r) { return r.Y; }));
+      var pC = mean(c.map(function (r) { return r.Y; }));
+      var se = Math.sqrt(pT * (1 - pT) / t.length + pC * (1 - pC) / c.length);
+      var ci = 1.96 * se;
+      document.getElementById('fh-ci').textContent = '±' + (ci * 100).toFixed(1) + 'pp';
+    } else {
+      document.getElementById('fh-ci').textContent = '—';
+    }
+  }
+
+  d3.select('#fh-n').on('input', function () {
+    state.N = +this.value;
+    document.getElementById('fh-n-val').textContent = state.N;
+    render();
+  });
+  render();
+})();
+
+if (window.Motion) window.Motion.mountBanner();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Frontier — Decision Trees</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
+<script src="../lib/motion.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --article-width: 740px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem;
+  --line-height: 1.65;
+  --text: #1a1a2e;
+  --text-2: #4a4a6a;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --bg: #fafafa;
+  --fig-bg: #ffffff;
+  --border: #e2e2e8;
+  --c-regular: #2563eb;
+  --c-oblivious: #7c3aed;
+  --c-obdd: #059669;
+  --c-greedy: #dc2626;
+  --c-optimal: #059669;
+}
+.t-regular { color: var(--c-regular); font-weight: 600; }
+.t-oblivious { color: var(--c-oblivious); font-weight: 600; }
+.t-obdd { color: var(--c-obdd); font-weight: 600; }
+.t-greedy { color: var(--c-greedy); font-weight: 600; }
+.t-optimal { color: var(--c-optimal); font-weight: 600; }
+
+body { font-family: var(--body-font); font-size: var(--body-size); line-height: var(--line-height); color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased; }
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
+h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+h3 { font-size: 1.15rem; margin: 2rem 0 0.5rem; }
+p { margin: 0 0 1rem; }
+a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+a:hover { color: #1d4ed8; }
+code { font-family: var(--mono-font); font-size: 0.9em; background: #f1f1f5; padding: 0.15em 0.4em; border-radius: 3px; }
+
+.back-link { font-family: var(--heading-font); font-size: 0.85rem; display: inline-block; margin-bottom: 1rem; color: var(--text-2); text-decoration: none; }
+.back-link:hover { color: var(--accent); }
+
+.header { padding: 3rem 0 2rem; border-bottom: 1px solid var(--border); margin-bottom: 2.5rem; }
+.header .subtitle { font-family: var(--heading-font); font-size: 1.15rem; color: var(--text-2); max-width: 620px; }
+
+.figure { margin: 2rem 0; padding: 1.5rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; line-height: 1.45; }
+.figure-label { font-weight: 600; color: var(--text); }
+
+.btn { font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600; padding: 0.4rem 0.85rem; border-radius: 5px; border: 1px solid var(--border); background: var(--fig-bg); color: var(--text); cursor: pointer; user-select: none; transition: background 0.15s, border-color 0.15s; }
+.btn:hover { border-color: var(--accent); background: var(--accent-light); }
+.btn.active { background: var(--accent); color: white; border-color: var(--accent); }
+
+.insight { background: var(--accent-light); border-left: 3px solid var(--accent); padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 4px 4px 0; }
+
+svg text { font-family: var(--heading-font); }
+
+.panel { display: grid; grid-template-columns: 1fr 240px; gap: 1.5rem; align-items: start; }
+@media (max-width: 680px) { .panel { grid-template-columns: 1fr; } }
+.controls-col { display: flex; flex-direction: column; gap: 0.85rem; font-family: var(--heading-font); font-size: 0.9rem; }
+
+.stage-toggle { display: flex; flex-direction: column; gap: 0.3rem; }
+.stage-toggle .btn { padding: 0.45rem 0.5rem; font-size: 0.78rem; text-align: left; }
+.stage-toggle .btn.active { background: var(--accent); border-color: var(--accent); }
+
+.stat-box { padding: 0.8rem 1rem; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; font-family: var(--heading-font); font-size: 0.86rem; line-height: 1.55; }
+.stat-box .label { font-size: 0.72rem; font-weight: 700; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.3rem; }
+.stat-box .row { display: flex; justify-content: space-between; gap: 0.5rem; margin-top: 0.15rem; }
+.stat-box .row .k { color: var(--text-2); }
+.stat-box .row .v { font-family: var(--mono-font); font-weight: 600; color: var(--text); }
+
+.frontier-cards { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.85rem; margin: 1.5rem 0; }
+@media (max-width: 680px) { .frontier-cards { grid-template-columns: 1fr; } }
+.frontier-card { padding: 1rem 1.15rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; border-top: 3px solid var(--accent); }
+.frontier-card h3 { margin: 0 0 0.3rem; font-size: 1rem; }
+.frontier-card p { font-size: 0.86rem; line-height: 1.5; color: var(--text-2); }
+
+.closing-box { background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; padding: 2rem; margin: 3rem 0; }
+.closing-box h3 { margin-top: 0; }
+
+.nav-footer { margin-top: 5rem; padding-top: 2rem; border-top: 1px solid var(--border); display: flex; justify-content: space-between; font-family: var(--heading-font); font-size: 0.9rem; }
+.nav-footer a { color: var(--accent); text-decoration: none; }
+.nav-footer a:hover { text-decoration: underline; }
+.nav-footer .spacer { flex: 1; }
+
+@media (prefers-reduced-motion: reduce) { html:not([data-motion="full"]) * { transition-duration: 0s !important; animation-duration: 0s !important; } }
+@media (max-width: 680px) { h1 { font-size: 1.75rem; } .article { padding: 1.5rem 1rem 4rem; } }
+</style>
+</head>
+<body>
+<div class="article">
+
+<a href="index.html" class="back-link">← Decision Trees</a>
+
+<div class="header">
+  <h1>The Frontier</h1>
+  <p class="subtitle">Chapter 8 of 8. Two topics here. A structural trick that makes inference extraordinarily fast and connects trees to a 40-year-old idea from hardware verification. And a tour of research that's quietly overturning the forty-year assumption that globally optimal trees are intractable.</p>
+</div>
+
+<p>This chapter closes the series on two notes. The first is a structural observation about how trees are <em>represented</em>: under a simple extra constraint, they collapse into a compressed data structure that makes prediction orders of magnitude faster at deployment. The second is a research update: methods that were considered hopeless for decades are finally within reach, and some of the foundational assumptions of the field are being quietly overturned.</p>
+
+<h2>Oblivious trees: same question at every depth</h2>
+
+<p>A normal decision tree can split however it wants at every node. Different nodes at the same depth can ask about different features with different thresholds. This flexibility is expensive at inference time: every prediction means walking a branchy, unpredictable path, which is slow on modern CPUs because it defeats branch prediction.</p>
+
+<p>An <em>oblivious tree</em> adds one rule: every node at the same depth must use the <em>same</em> split predicate. You write down the D questions up front — "is age > 40? is income > 50k? does the row have a phone number?" — and the tree is just a mapping from the D-bit answer vector to a leaf value.</p>
+
+<p>This seems brutal. In exchange you get: predictions that are a single array lookup instead of D branches, no pointer chasing, and an implicit regularising effect on training. CatBoost, the boosting library, uses oblivious trees exclusively — it's the reason its inference is so fast at scale.</p>
+
+<h2>The structural payoff</h2>
+
+<p>Oblivious trees have an even deeper property. If two subtrees of the tree end up computing the same function (i.e., two different root-to-leaf paths produce the same subsequent predictions), you can <em>merge</em> them: keep one copy of the subtree and point two parents at it. The tree becomes a directed acyclic graph, not a tree at all.</p>
+
+<p>This is exactly what an <em>Ordered Binary Decision Diagram</em> (OBDD) does — a data structure invented by Randal Bryant in 1986 for hardware verification. The decision-tree world independently discovered it was useful for fast inference, but it's the same mathematical object. For functions with lots of redundancy, OBDDs can shrink exponentially — billion-node trees collapse to thousand-node graphs that compute identical functions.</p>
+
+<div class="figure">
+  <div id="fig-ob" class="panel">
+    <div>
+      <div id="fo-viz"></div>
+    </div>
+    <div class="controls-col">
+      <div style="font-weight: 700; font-size: 0.85rem;">Stage</div>
+      <div class="stage-toggle" id="fo-stage">
+        <button class="btn active" data-s="regular">Regular tree</button>
+        <button class="btn" data-s="oblivious">Oblivious constraint</button>
+        <button class="btn" data-s="obdd">Merge into DAG</button>
+      </div>
+      <div class="stat-box">
+        <div class="label">Structure</div>
+        <div class="row"><span class="k">internal nodes</span><span class="v" id="fo-internal">—</span></div>
+        <div class="row"><span class="k">leaves</span><span class="v" id="fo-leaves">—</span></div>
+        <div class="row"><span class="k">unique tests</span><span class="v" id="fo-tests">—</span></div>
+      </div>
+      <div class="stat-box">
+        <div class="label">Inference per prediction</div>
+        <div class="row"><span class="k">comparisons</span><span class="v" id="fo-compar">—</span></div>
+        <div class="row"><span class="k">branches</span><span class="v" id="fo-branches">—</span></div>
+      </div>
+    </div>
+  </div>
+  <p class="figure-caption"><span class="figure-label">Figure 1.</span> Three representations of the same decision logic. <span class="t-regular">Regular tree</span>: each node has its own split predicate. <span class="t-oblivious">Oblivious</span>: every node at a given depth uses the same predicate — the tree becomes a balanced 2<sup>D</sup>-leaf structure. <span class="t-obdd">OBDD</span>: identical subtrees are merged, collapsing the tree into a compressed DAG. The function computed is unchanged at every stage; only the representation shrinks and inference speeds up.</p>
+</div>
+
+<h2>Why this isn't the default</h2>
+
+<p>Oblivious trees are strictly less expressive than regular trees for the same depth. A regular tree can reach a given loss with fewer leaves because each branch gets its own splits. The constraint doesn't hurt much in practice — CatBoost is competitive with XGBoost on accuracy — but it does hurt a little, and only matters when you're deploying at scale. Most problems don't need the speedup enough to accept the constraint.</p>
+
+<p>OBDD-style merging also doesn't come automatically from standard tree training. You have to build the tree oblivious-first, then merge identical subtrees as a post-processing step. This is standard in hardware-verification software but rare in ML libraries.</p>
+
+<h2>The other frontier: optimal trees</h2>
+
+<p>We opened chapter 1 with Hyafil and Rivest's 1976 result that finding the globally optimal decision tree is NP-complete. That result is still true. But its practical consequences are eroding.</p>
+
+<p>Since 2017, two lines of work have made globally optimal trees practical for real problems. Bertsimas and Dunn showed that Mixed-Integer Optimisation solvers can find globally optimal trees on datasets with hundreds or thousands of rows. GOSDT (2019) and related algorithms push further with dynamic-programming-style pruning. These methods find optimal sparse trees in seconds where CART has been running for years.</p>
+
+<p>The shocking empirical result: these optimal trees, chosen by exhaustive search, do <em>not</em> overfit more than greedy trees. Often they generalise <em>better</em>, because they can find deep structural patterns — like the classic XOR — that greedy search systematically misses.</p>
+
+<div class="figure">
+  <div id="fig-opt" class="panel">
+    <div>
+      <div id="fp-viz"></div>
+    </div>
+    <div class="controls-col">
+      <div class="stat-box">
+        <div class="label"><span class="t-greedy">Greedy tree</span></div>
+        <div class="row"><span class="k">depth</span><span class="v" id="fp-g-depth">—</span></div>
+        <div class="row"><span class="k">leaves</span><span class="v" id="fp-g-leaves">—</span></div>
+        <div class="row"><span class="k">error</span><span class="v" id="fp-g-err">—</span></div>
+      </div>
+      <div class="stat-box">
+        <div class="label"><span class="t-optimal">Optimal tree</span></div>
+        <div class="row"><span class="k">depth</span><span class="v" id="fp-o-depth">—</span></div>
+        <div class="row"><span class="k">leaves</span><span class="v" id="fp-o-leaves">—</span></div>
+        <div class="row"><span class="k">error</span><span class="v" id="fp-o-err">—</span></div>
+      </div>
+    </div>
+  </div>
+  <p class="figure-caption"><span class="figure-label">Figure 2.</span> The canonical case where greedy fails. An XOR-like pattern: class 1 if exactly one of two features is on (not both, not neither). Neither feature on its own is predictive; the signal lives entirely in the interaction. Greedy splits on one feature first and has to recover; optimal considers the whole tree at once and finds the clean decomposition. On problems where interactions matter, optimal systematically outperforms.</p>
+</div>
+
+<h2>Three more directions worth knowing</h2>
+
+<p>Beyond optimal trees, three other directions are actively shaping what decision-tree software can do.</p>
+
+<div class="frontier-cards">
+  <div class="frontier-card">
+    <h3>Streaming trees</h3>
+    <p>What if your data doesn't fit in memory? Hoeffding trees grow from infinite data streams, using probability bounds to decide when enough samples have been seen to commit to a split with statistical confidence. Used in real-time fraud detection, network intrusion detection, anywhere data arrives faster than you can retrain.</p>
+  </div>
+  <div class="frontier-card">
+    <h3>Privacy-preserving trees</h3>
+    <p>Training on sensitive data (medical records, financial records) and publishing the trained tree can leak training examples. Differentially private trees inject calibrated noise during training — enough to hide any single row's influence while keeping the model useful. Used where GDPR/HIPAA requires provable non-identifiability.</p>
+  </div>
+  <div class="frontier-card">
+    <h3>Fair trees</h3>
+    <p>Training data with historical bias (e.g., credit scoring that under-approved certain zip codes) will train trees that replicate the bias. Fair-tree training modifies the splitting criterion to penalise splits that correlate too strongly with protected attributes, or enforces equal error rates across groups. The definitions of "fair" are contested; the mechanisms are well-understood.</p>
+  </div>
+  <div class="frontier-card">
+    <h3>Optimal trees become standard</h3>
+    <p>As MIO solvers keep improving, the default for "train a small interpretable tree" may shift from greedy CART to an optimal solver. Already happening in regulated finance and medicine where small optimal trees are preferred for auditability.</p>
+  </div>
+</div>
+
+<div class="closing-box">
+  <h3>Where we've been</h3>
+  <p>A decision tree is a flowchart. It picks questions greedily, splitting the data one feature at a time, and makes predictions by averaging whatever lands in each leaf. That's the whole basic idea, and forty years of research have filled in every angle of it. Ensembles make it more accurate. Boosting makes it more expressive. SHAP makes it readable again. Causal trees make it answer intervention questions. Soft variants make it trainable with gradient descent. MCTS uses its structure to search instead of fit. Oblivious variants make it fast at scale. And a new generation of solvers is, finally, making it truly optimal.</p>
+  <p>The algorithm is still deceptively simple. There are just a lot of ways to be simple.</p>
+</div>
+
+<div class="nav-footer">
+  <a href="07-trees-unbound.html">← Chapter 7: Trees Unbound</a>
+  <span class="spacer"></span>
+  <a href="index.html">Back to series index →</a>
+</div>
+
+</div>
+
+<script>
+// ────────────────────────────────────────── Fig 1: oblivious stages ──
+(function () {
+  var OBL_LEAVES = [0, 0, 1, 0, 0, 1, 1, 1];
+  var OBL_SPLITS = ['A', 'B', 'C'];
+  var REG_SPLITS = [['A'], ['B', 'D'], ['C', 'E', 'F', 'B']];
+  var REG_LEAVES = [0, 1, 0, 1, 0, 0, 1, 0];
+
+  var state = { stage: 'regular' };
+  var W = 540, H = 340, padL = 20, padR = 20, padT = 30, padB = 40;
+  var svg = d3.select('#fo-viz').append('svg')
+    .attr('viewBox', '0 0 ' + W + ' ' + H)
+    .attr('width', '100%').style('max-width', W + 'px');
+
+  function render() {
+    svg.selectAll('*').remove();
+    var depth = 3;
+    var levelH = (H - padT - padB) / depth;
+
+    if (state.stage === 'regular' || state.stage === 'oblivious') {
+      var nodesByLevel = [];
+      for (var d = 0; d <= depth; d++) {
+        var count = Math.pow(2, d);
+        var lvl = [];
+        for (var i = 0; i < count; i++) {
+          var x = padL + (i + 0.5) / count * (W - padL - padR);
+          var y = padT + d * levelH;
+          lvl.push({ x: x, y: y, d: d, i: i });
+        }
+        nodesByLevel.push(lvl);
+      }
+      for (var d = 0; d < depth; d++) {
+        nodesByLevel[d].forEach(function (n, i) {
+          var l = nodesByLevel[d + 1][i * 2], r = nodesByLevel[d + 1][i * 2 + 1];
+          svg.append('line').attr('x1', n.x).attr('y1', n.y).attr('x2', l.x).attr('y2', l.y - 10).attr('stroke', 'var(--text-2)').attr('stroke-width', 1);
+          svg.append('line').attr('x1', n.x).attr('y1', n.y).attr('x2', r.x).attr('y2', r.y - 10).attr('stroke', 'var(--text-2)').attr('stroke-width', 1);
+        });
+      }
+      for (var d = 0; d <= depth; d++) {
+        nodesByLevel[d].forEach(function (n, i) {
+          var label = '';
+          if (d < depth) label = state.stage === 'oblivious' ? OBL_SPLITS[d] : REG_SPLITS[d][i];
+          else label = state.stage === 'oblivious' ? OBL_LEAVES[i] : REG_LEAVES[i];
+          if (d < depth) {
+            svg.append('circle').attr('cx', n.x).attr('cy', n.y).attr('r', 13)
+              .attr('fill', 'white').attr('stroke', state.stage === 'oblivious' ? 'var(--c-oblivious)' : 'var(--c-regular)').attr('stroke-width', 1.5);
+            svg.append('text').attr('x', n.x).attr('y', n.y + 4).attr('text-anchor', 'middle')
+              .attr('font-size', 11).attr('font-weight', 700).attr('fill', 'var(--text)').text(label);
+          } else {
+            svg.append('rect').attr('x', n.x - 11).attr('y', n.y - 11).attr('width', 22).attr('height', 22)
+              .attr('fill', label === 1 ? 'var(--accent-light)' : 'white').attr('stroke', 'var(--text-2)').attr('rx', 3);
+            svg.append('text').attr('x', n.x).attr('y', n.y + 4).attr('text-anchor', 'middle')
+              .attr('font-size', 11).attr('font-weight', 700).attr('fill', 'var(--text)').text(label);
+          }
+        });
+      }
+      for (var d = 0; d < depth; d++) {
+        svg.append('text').attr('x', padL - 4).attr('y', padT + d * levelH + 4).attr('text-anchor', 'end').attr('font-size', 10).attr('fill', 'var(--text-2)').text('depth ' + d);
+      }
+      svg.append('text').attr('x', padL - 4).attr('y', padT + depth * levelH + 4).attr('text-anchor', 'end').attr('font-size', 10).attr('fill', 'var(--text-2)').text('leaf');
+
+      var internal = Math.pow(2, depth) - 1;
+      var leaves = Math.pow(2, depth);
+      var tests = state.stage === 'oblivious' ? depth : internal;
+      document.getElementById('fo-internal').textContent = internal;
+      document.getElementById('fo-leaves').textContent = leaves;
+      document.getElementById('fo-tests').textContent = tests;
+      document.getElementById('fo-compar').textContent = depth;
+      document.getElementById('fo-branches').textContent = state.stage === 'oblivious' ? '0 (array lookup)' : depth;
+    } else {
+      var terminals = { 0: { x: W / 3, y: H - padB + 4, label: 0 }, 1: { x: 2 * W / 3, y: H - padB + 4, label: 1 } };
+      var level2 = {
+        '00': { x: W * 0.18, y: padT + 2 * levelH, children: [0, 0] },
+        '10': { x: W * 0.4, y: padT + 2 * levelH, children: [1, 0] },
+        '01': { x: W * 0.6, y: padT + 2 * levelH, children: [0, 1] },
+        '11': { x: W * 0.82, y: padT + 2 * levelH, children: [1, 1] }
+      };
+      var level1 = {
+        'A0': { x: W * 0.3, y: padT + levelH, children: ['00', '10'] },
+        'A1': { x: W * 0.7, y: padT + levelH, children: ['01', '11'] }
+      };
+      var level0 = { x: W / 2, y: padT };
+
+      ['A0', 'A1'].forEach(function (k) {
+        var n = level1[k];
+        svg.append('line').attr('x1', level0.x).attr('y1', level0.y + 13).attr('x2', n.x).attr('y2', n.y - 13)
+          .attr('stroke', 'var(--text-2)').attr('stroke-width', 1);
+      });
+      Object.keys(level1).forEach(function (k) {
+        var n = level1[k];
+        n.children.forEach(function (ck) {
+          var c = level2[ck];
+          svg.append('line').attr('x1', n.x).attr('y1', n.y + 13).attr('x2', c.x).attr('y2', c.y - 13)
+            .attr('stroke', 'var(--text-2)').attr('stroke-width', 1);
+        });
+      });
+      Object.keys(level2).forEach(function (k) {
+        var n = level2[k];
+        n.children.forEach(function (leafVal) {
+          var t = terminals[leafVal];
+          svg.append('line').attr('x1', n.x).attr('y1', n.y + 13).attr('x2', t.x).attr('y2', t.y - 6)
+            .attr('stroke', 'var(--text-2)').attr('stroke-width', 1);
+        });
+      });
+      svg.append('circle').attr('cx', level0.x).attr('cy', level0.y).attr('r', 13)
+        .attr('fill', 'white').attr('stroke', 'var(--c-obdd)').attr('stroke-width', 2);
+      svg.append('text').attr('x', level0.x).attr('y', level0.y + 4).attr('text-anchor', 'middle').attr('font-size', 11).attr('font-weight', 700).attr('fill', 'var(--text)').text('A');
+      Object.keys(level1).forEach(function (k) {
+        var n = level1[k];
+        svg.append('circle').attr('cx', n.x).attr('cy', n.y).attr('r', 13).attr('fill', 'white').attr('stroke', 'var(--c-obdd)').attr('stroke-width', 2);
+        svg.append('text').attr('x', n.x).attr('y', n.y + 4).attr('text-anchor', 'middle').attr('font-size', 11).attr('font-weight', 700).attr('fill', 'var(--text)').text('B');
+      });
+      Object.keys(level2).forEach(function (k) {
+        var n = level2[k];
+        svg.append('circle').attr('cx', n.x).attr('cy', n.y).attr('r', 13).attr('fill', 'white').attr('stroke', 'var(--c-obdd)').attr('stroke-width', 2);
+        svg.append('text').attr('x', n.x).attr('y', n.y + 4).attr('text-anchor', 'middle').attr('font-size', 11).attr('font-weight', 700).attr('fill', 'var(--text)').text('C');
+      });
+      Object.keys(terminals).forEach(function (k) {
+        var t = terminals[k];
+        svg.append('rect').attr('x', t.x - 11).attr('y', t.y - 11).attr('width', 22).attr('height', 22).attr('fill', t.label === 1 ? 'var(--accent-light)' : 'white').attr('stroke', 'var(--text-2)').attr('rx', 3);
+        svg.append('text').attr('x', t.x).attr('y', t.y + 4).attr('text-anchor', 'middle').attr('font-size', 11).attr('font-weight', 700).attr('fill', 'var(--text)').text(t.label);
+      });
+      svg.append('text').attr('x', padL - 4).attr('y', level0.y + 4).attr('text-anchor', 'end').attr('font-size', 10).attr('fill', 'var(--text-2)').text('A');
+      svg.append('text').attr('x', padL - 4).attr('y', padT + levelH + 4).attr('text-anchor', 'end').attr('font-size', 10).attr('fill', 'var(--text-2)').text('B');
+      svg.append('text').attr('x', padL - 4).attr('y', padT + 2 * levelH + 4).attr('text-anchor', 'end').attr('font-size', 10).attr('fill', 'var(--text-2)').text('C');
+      svg.append('text').attr('x', padL - 4).attr('y', H - padB + 4).attr('text-anchor', 'end').attr('font-size', 10).attr('fill', 'var(--text-2)').text('leaf');
+
+      var internal = 1 + Object.keys(level1).length + Object.keys(level2).length;
+      var leaves = Object.keys(terminals).length;
+      document.getElementById('fo-internal').textContent = internal;
+      document.getElementById('fo-leaves').textContent = leaves;
+      document.getElementById('fo-tests').textContent = 3;
+      document.getElementById('fo-compar').textContent = 3;
+      document.getElementById('fo-branches').textContent = '0 (array lookup)';
+    }
+  }
+
+  d3.selectAll('#fo-stage button').on('click', function () {
+    state.stage = this.getAttribute('data-s');
+    d3.selectAll('#fo-stage button').classed('active', function () { return this.getAttribute('data-s') === state.stage; });
+    render();
+  });
+  render();
+})();
+
+// ────────────────────────────────────────── Fig 2: greedy vs optimal on XOR ──
+(function () {
+  function prng(seed) { var s = seed >>> 0; return function () { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
+  function gini(arr) { if (arr.length === 0) return 0; var p = arr.filter(function (p) { return p.cls === 1; }).length / arr.length; return 2 * p * (1 - p); }
+
+  var pts = [];
+  var r = prng(13);
+  for (var i = 0; i < 100; i++) {
+    var x = r() < 0.5 ? 0 : 1;
+    var y = r() < 0.5 ? 0 : 1;
+    var xJit = x + (r() - 0.5) * 0.18;
+    var yJit = y + (r() - 0.5) * 0.18;
+    var c = (x === y) ? 0 : 1;
+    pts.push({ x: 0.25 + xJit * 0.5, y: 0.25 + yJit * 0.5, cls: c });
+  }
+
+  function buildGreedy(pts, depth) {
+    if (depth === 0 || pts.length < 4 || gini(pts) < 1e-9) {
+      return { leaf: true, pred: pts.filter(function (p) { return p.cls === 1; }).length > pts.length / 2 ? 1 : 0 };
+    }
+    var best = null, parentG = gini(pts);
+    ['x', 'y'].forEach(function (ax) {
+      var sorted = pts.slice().sort(function (a, b) { return a[ax] - b[ax]; });
+      for (var i = 1; i < sorted.length; i++) {
+        if (sorted[i][ax] - sorted[i - 1][ax] < 1e-9) continue;
+        var thr = (sorted[i][ax] + sorted[i - 1][ax]) / 2;
+        var left = sorted.slice(0, i), right = sorted.slice(i);
+        var g = parentG - (left.length / pts.length * gini(left) + right.length / pts.length * gini(right));
+        if (!best || g > best.gain) best = { axis: ax, threshold: thr, gain: g, left: left, right: right };
+      }
+    });
+    if (!best || best.gain < 1e-9) return { leaf: true, pred: pts.filter(function (p) { return p.cls === 1; }).length > pts.length / 2 ? 1 : 0 };
+    return { leaf: false, axis: best.axis, threshold: best.threshold,
+      left: buildGreedy(best.left, depth - 1), right: buildGreedy(best.right, depth - 1) };
+  }
+  function buildOptimal(pts) {
+    function leafOf(arr) { return arr.filter(function (p) { return p.cls === 1; }).length > arr.length / 2 ? 1 : 0; }
+    function ySplit(arr) {
+      var yL = arr.filter(function (p) { return p.y <= 0.5; });
+      var yR = arr.filter(function (p) { return p.y > 0.5; });
+      return { leaf: false, axis: 'y', threshold: 0.5, left: { leaf: true, pred: leafOf(yL) }, right: { leaf: true, pred: leafOf(yR) } };
+    }
+    var xL = pts.filter(function (p) { return p.x <= 0.5; });
+    var xR = pts.filter(function (p) { return p.x > 0.5; });
+    return { leaf: false, axis: 'x', threshold: 0.5, left: ySplit(xL), right: ySplit(xR) };
+  }
+  function predict(tree, p) {
+    if (tree.leaf) return tree.pred;
+    return p[tree.axis] <= tree.threshold ? predict(tree.left, p) : predict(tree.right, p);
+  }
+  function countNodes(tree) { if (tree.leaf) return { leaves: 1, depth: 0 }; var l = countNodes(tree.left), r = countNodes(tree.right); return { leaves: l.leaves + r.leaves, depth: 1 + Math.max(l.depth, r.depth) }; }
+
+  var greedy = buildGreedy(pts, 2);
+  var optimal = buildOptimal(pts);
+
+  var W = 440, H = 280, cellW = (W - 16) / 2, cellH = H - 20;
+  var svg = d3.select('#fp-viz').append('svg')
+    .attr('viewBox', '0 0 ' + W + ' ' + H)
+    .attr('width', '100%').style('max-width', W + 'px');
+
+  function drawTreeOn(g, x0, y0, w, h, tree, color) {
+    g.append('rect').attr('x', x0).attr('y', y0).attr('width', w).attr('height', h)
+      .attr('fill', 'none').attr('stroke', 'var(--border)');
+    var G = 20;
+    var cw = w / G, ch = h / G;
+    for (var i = 0; i < G; i++) {
+      for (var j = 0; j < G; j++) {
+        var pt = { x: (i + 0.5) / G, y: (j + 0.5) / G };
+        var pred = predict(tree, pt);
+        g.append('rect').attr('x', x0 + i * cw).attr('y', y0 + (G - 1 - j) * ch)
+          .attr('width', cw + 0.5).attr('height', ch + 0.5)
+          .attr('fill', pred === 1 ? 'var(--accent)' : 'var(--c-greedy)').attr('opacity', 0.15);
+      }
+    }
+    pts.forEach(function (p) {
+      g.append('circle').attr('cx', x0 + p.x * w).attr('cy', y0 + (1 - p.y) * h).attr('r', 2.6)
+        .attr('fill', p.cls === 1 ? 'var(--accent)' : 'var(--c-greedy)').attr('stroke', 'white').attr('stroke-width', 0.6);
+    });
+    function walkSplits(node, xLo, xHi, yLo, yHi) {
+      if (node.leaf) return;
+      if (node.axis === 'x') {
+        g.append('line').attr('x1', x0 + node.threshold * w).attr('x2', x0 + node.threshold * w)
+          .attr('y1', y0 + (1 - yHi) * h).attr('y2', y0 + (1 - yLo) * h)
+          .attr('stroke', color).attr('stroke-width', 2);
+        walkSplits(node.left, xLo, node.threshold, yLo, yHi);
+        walkSplits(node.right, node.threshold, xHi, yLo, yHi);
+      } else {
+        g.append('line').attr('x1', x0 + xLo * w).attr('x2', x0 + xHi * w)
+          .attr('y1', y0 + (1 - node.threshold) * h).attr('y2', y0 + (1 - node.threshold) * h)
+          .attr('stroke', color).attr('stroke-width', 2);
+        walkSplits(node.left, xLo, xHi, yLo, node.threshold);
+        walkSplits(node.right, xLo, xHi, node.threshold, yHi);
+      }
+    }
+    walkSplits(tree, 0, 1, 0, 1);
+  }
+
+  var g1 = svg.append('g');
+  var g2 = svg.append('g');
+  drawTreeOn(g1, 8, 20, cellW, cellH - 20, greedy, 'var(--c-greedy)');
+  drawTreeOn(g2, cellW + 8, 20, cellW, cellH - 20, optimal, 'var(--c-optimal)');
+  svg.append('text').attr('x', 8 + cellW / 2).attr('y', 14).attr('text-anchor', 'middle')
+    .attr('font-size', 11).attr('font-weight', 700).attr('fill', 'var(--c-greedy)').text('greedy');
+  svg.append('text').attr('x', cellW + 8 + cellW / 2).attr('y', 14).attr('text-anchor', 'middle')
+    .attr('font-size', 11).attr('font-weight', 700).attr('fill', 'var(--c-optimal)').text('optimal');
+
+  var gErr = 0; pts.forEach(function (p) { if (predict(greedy, p) !== p.cls) gErr++; });
+  var oErr = 0; pts.forEach(function (p) { if (predict(optimal, p) !== p.cls) oErr++; });
+  var gC = countNodes(greedy), oC = countNodes(optimal);
+  document.getElementById('fp-g-depth').textContent = gC.depth;
+  document.getElementById('fp-g-leaves').textContent = gC.leaves;
+  document.getElementById('fp-g-err').textContent = (100 * gErr / pts.length).toFixed(0) + '%';
+  document.getElementById('fp-o-depth').textContent = oC.depth;
+  document.getElementById('fp-o-leaves').textContent = oC.leaves;
+  document.getElementById('fp-o-err').textContent = (100 * oErr / pts.length).toFixed(0) + '%';
+})();
+
+if (window.Motion) window.Motion.mountBanner();
+</script>
+
+</body>
+</html>

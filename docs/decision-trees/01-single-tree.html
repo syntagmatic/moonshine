@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Single Tree — Decision Trees</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
+<script src="../lib/motion.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --article-width: 740px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem;
+  --line-height: 1.65;
+  --text: #1a1a2e;
+  --text-2: #4a4a6a;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --bg: #fafafa;
+  --fig-bg: #ffffff;
+  --border: #e2e2e8;
+  --c-pos: #2563eb;
+  --c-neg: #dc2626;
+  --c-gini: #7c3aed;
+  --c-entropy: #0891b2;
+  --c-misclass: #ea580c;
+  --c-split: #059669;
+  --c-gain: #16a34a;
+  --c-truth: #059669;
+  --c-pred: #2563eb;
+}
+.t-pos { color: var(--c-pos); font-weight: 600; }
+.t-neg { color: var(--c-neg); font-weight: 600; }
+.t-gini { color: var(--c-gini); font-weight: 600; }
+.t-entropy { color: var(--c-entropy); font-weight: 600; }
+.t-misclass { color: var(--c-misclass); font-weight: 600; }
+.t-split { color: var(--c-split); font-weight: 600; }
+.t-pred { color: var(--c-pred); font-weight: 600; }
+.t-truth { color: var(--c-truth); font-weight: 600; }
+
+body { font-family: var(--body-font); font-size: var(--body-size); line-height: var(--line-height); color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased; }
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
+h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+h3 { font-size: 1.15rem; margin: 2rem 0 0.75rem; }
+p { margin: 0 0 1rem; }
+a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+a:hover { color: #1d4ed8; }
+code { font-family: var(--mono-font); font-size: 0.9em; background: #f1f1f5; padding: 0.15em 0.4em; border-radius: 3px; }
+
+.back-link { font-family: var(--heading-font); font-size: 0.85rem; display: inline-block; margin-bottom: 1rem; color: var(--text-2); text-decoration: none; }
+.back-link:hover { color: var(--accent); }
+
+.header { padding: 3rem 0 2rem; border-bottom: 1px solid var(--border); margin-bottom: 2.5rem; }
+.header .subtitle { font-family: var(--heading-font); font-size: 1.15rem; color: var(--text-2); max-width: 620px; }
+
+.figure { margin: 2rem 0; padding: 1.5rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; line-height: 1.45; }
+.figure-label { font-weight: 600; color: var(--text); }
+
+.btn { font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600; padding: 0.4rem 0.85rem; border-radius: 5px; border: 1px solid var(--border); background: var(--fig-bg); color: var(--text); cursor: pointer; user-select: none; transition: background 0.15s, border-color 0.15s; }
+.btn:hover { border-color: var(--accent); background: var(--accent-light); }
+.btn.active { background: var(--accent); color: white; border-color: var(--accent); }
+.btn-row { display: flex; flex-wrap: wrap; gap: 0.45rem; margin-bottom: 1rem; }
+
+.insight { background: var(--accent-light); border-left: 3px solid var(--accent); padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 4px 4px 0; }
+.insight p { margin: 0; }
+
+svg text { font-family: var(--heading-font); }
+
+.panel { display: grid; grid-template-columns: 1fr 260px; gap: 1.5rem; align-items: start; }
+@media (max-width: 680px) { .panel { grid-template-columns: 1fr; } }
+.controls-col { display: flex; flex-direction: column; gap: 0.85rem; font-family: var(--heading-font); font-size: 0.9rem; }
+
+.mode-toggle { display: flex; gap: 0.4rem; margin-bottom: 0.5rem; }
+.mode-toggle .btn { flex: 1; padding: 0.45rem 0.5rem; font-size: 0.8rem; }
+.mode-toggle .btn.regress.active { background: var(--c-truth); border-color: var(--c-truth); }
+
+.metric-toggle { display: flex; gap: 0.4rem; }
+.metric-toggle .btn { flex: 1; padding: 0.4rem 0.35rem; font-size: 0.75rem; }
+.metric-toggle .btn.gini.active { background: var(--c-gini); border-color: var(--c-gini); }
+.metric-toggle .btn.entropy.active { background: var(--c-entropy); border-color: var(--c-entropy); }
+.metric-toggle .btn.misclass.active { background: var(--c-misclass); border-color: var(--c-misclass); }
+
+.stat-box { padding: 0.8rem 1rem; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; font-family: var(--heading-font); font-size: 0.86rem; line-height: 1.55; }
+.stat-box .label { font-size: 0.72rem; font-weight: 700; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.3rem; }
+.stat-box .row { display: flex; justify-content: space-between; gap: 0.5rem; margin-top: 0.15rem; }
+.stat-box .row .k { color: var(--text-2); }
+.stat-box .row .v { font-family: var(--mono-font); font-weight: 600; color: var(--text); }
+.stat-box .gain-row { margin-top: 0.5rem; padding-top: 0.4rem; border-top: 1px solid var(--border); }
+.stat-box .gain-row .v { color: var(--c-gain); }
+
+.slider-row { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 0.5rem 1rem; }
+.slider-row .lbl { color: var(--text-2); font-weight: 600; font-size: 0.82rem; }
+.slider-row .val { font-family: var(--mono-font); color: var(--text); min-width: 3rem; text-align: right; font-weight: 600; }
+.slider-row input[type="range"] { width: 100%; }
+
+.preset-row { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.4rem; }
+.preset-row .btn { padding: 0.3rem 0.5rem; font-size: 0.72rem; }
+
+.nav-footer { margin-top: 5rem; padding-top: 2rem; border-top: 1px solid var(--border); display: flex; justify-content: space-between; font-family: var(--heading-font); font-size: 0.9rem; }
+.nav-footer a { color: var(--accent); text-decoration: none; }
+.nav-footer a:hover { text-decoration: underline; }
+.nav-footer .spacer { flex: 1; }
+
+@media (prefers-reduced-motion: reduce) { html:not([data-motion="full"]) * { transition-duration: 0s !important; animation-duration: 0s !important; } }
+@media (max-width: 680px) { h1 { font-size: 1.75rem; } .article { padding: 1.5rem 1rem 4rem; } }
+</style>
+</head>
+<body>
+<div class="article">
+
+<a href="index.html" class="back-link">← Decision Trees</a>
+
+<div class="header">
+  <h1>The Single Tree</h1>
+  <p class="subtitle">Chapter 1 of 8. Every tree is built the same way: at each node, pick the question that separates the data best, and recurse. "Best" is trickier than it looks, and the trick that makes it work is different for classes than for numbers.</p>
+</div>
+
+<p>A decision tree is a flowchart. Each internal node asks a yes/no question about one feature — "is age greater than 40?" — and sends the row left or right. Each leaf is a final prediction. You build the tree top-down: start with all your data at the root, find the question that separates it best, split, recurse on each side, stop when each group is small enough or pure enough.</p>
+
+<p>Everything else in this series follows from this. Before we move on, we need two things: a rule for scoring splits, and a sense of what the tree's outputs look like. Both depend on what you're predicting — a class or a number.</p>
+
+<h2>Picking a split</h2>
+
+<p>Imagine a row of <span class="t-pos">positives</span> and <span class="t-neg">negatives</span>. You want to split them into two groups with a single threshold, and each group to contain <em>mostly one kind</em>. Your first instinct is probably to count mistakes: pick the majority in each group, count how many rows got the wrong label, and minimise. This is called <span class="t-misclass">misclassification error</span>, and it's a real scoring rule. It's also, it turns out, bad.</p>
+
+<p>Two other measures fix the problem. <span class="t-gini">Gini</span> asks: if I pick a row at random from the group and assign it a random class weighted by the group's composition, what's the chance I get it wrong? <span class="t-entropy">Entropy</span> asks: how many yes/no questions, on average, would I need to guess the label? Both peak at 50/50, both hit zero on a pure group. But unlike misclassification, they have <em>curved</em> shapes, and that curvature makes them prefer splits that produce pure leaves.</p>
+
+<p>The main interactive is about feeling this difference directly.</p>
+
+<h2>When the target is a number</h2>
+
+<p>Swap "how mixed is this bucket?" for "how spread out are these numbers?" and the same algorithm works. The scoring rule becomes <em>variance reduction</em>: pick the split that makes the average squared distance from the mean shrink most. Each leaf's prediction collapses to the mean of its numbers.</p>
+
+<p>The result is a <em>staircase</em>. Every leaf outputs a single value, so the tree's prediction is a patchwork of flat segments. More splits produce more steps. A fine enough staircase can approximate any reasonable pattern — but the tree literally cannot produce a slope or a curve, because every leaf is one number.</p>
+
+<p>Both modes — classes and numbers — live in the interactive below. Toggle the mode at the top and the whole visualisation reconfigures.</p>
+
+<div class="figure">
+  <div id="main" class="panel">
+    <div>
+      <div id="main-viz"></div>
+    </div>
+    <div class="controls-col">
+      <div style="font-weight: 700; font-size: 0.85rem;">Target type</div>
+      <div class="mode-toggle" id="m-mode">
+        <button class="btn active" data-m="classify">Classes</button>
+        <button class="btn regress" data-m="regress">Numbers</button>
+      </div>
+      <div id="class-controls">
+        <div style="font-weight: 700; font-size: 0.85rem;">Impurity measure</div>
+        <div class="metric-toggle" id="m-metric">
+          <button class="btn gini active" data-m="gini">Gini</button>
+          <button class="btn entropy" data-m="entropy">Entropy</button>
+          <button class="btn misclass" data-m="misclass">Misclass</button>
+        </div>
+        <div class="stat-box">
+          <div class="label">Split score</div>
+          <div class="row"><span class="k">parent impurity</span><span class="v" id="m-parent">—</span></div>
+          <div class="row"><span class="k">weighted children</span><span class="v" id="m-wc">—</span></div>
+          <div class="row gain-row"><span class="k">gain</span><span class="v" id="m-gain">—</span></div>
+        </div>
+        <div class="preset-row">
+          <button class="btn preset" data-preset="balanced">Balanced case</button>
+          <button class="btn preset" data-preset="pure">Pure-leaf case</button>
+        </div>
+      </div>
+      <div id="regress-controls" style="display: none;">
+        <div class="slider-row">
+          <div class="lbl">splits</div>
+          <input type="range" id="m-splits" min="0" max="12" step="1" value="3">
+          <div class="val" id="m-splits-val">3</div>
+        </div>
+        <div class="slider-row">
+          <div class="lbl">noise</div>
+          <input type="range" id="m-noise" min="0" max="100" step="1" value="35">
+          <div class="val" id="m-noise-val">0.35</div>
+        </div>
+        <div class="btn-row" style="margin: 0;">
+          <button class="btn" id="m-reroll">Re-sample</button>
+        </div>
+        <div class="stat-box">
+          <div class="label">Staircase fit</div>
+          <div class="row"><span class="k">leaves</span><span class="v" id="m-leaves">—</span></div>
+          <div class="row"><span class="k">variance</span><span class="v" id="m-var">—</span></div>
+          <div class="row"><span class="k">reduction</span><span class="v" id="m-red">—</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="figure-caption"><span class="figure-label">Figure 1.</span> One tree, two modes. In <strong>Classes</strong> mode, drag the green line through a strip of points and toggle the purity measure — watch the impurity curves and the parent-to-children gain update. The "pure-leaf case" preset shows the famous example where <span class="t-misclass">misclassification</span> ties two splits while <span class="t-gini">Gini</span> and <span class="t-entropy">entropy</span> correctly prefer the one that isolates a pure child. In <strong>Numbers</strong> mode, slide the split count from 0 to 12 and watch a staircase build up through a noisy sine wave — each flat segment is one leaf predicting the mean of its points.</p>
+</div>
+
+<h2>Why misclassification fails</h2>
+
+<p>Take 800 rows, evenly split: 400 positives, 400 negatives. Consider two candidate splits.</p>
+
+<ul style="margin-left: 1.5rem; margin-bottom: 1rem;">
+  <li><strong>Split A</strong> — both children are 300 of one class and 100 of the other (75/25).</li>
+  <li><strong>Split B</strong> — one child has 200/400 (mixed), the other has 200/0 (<em>perfectly pure</em>).</li>
+</ul>
+
+<p>Intuitively, Split B is better: it locks in a final answer for 200 rows. But if you count mistakes — the majority class gets everyone — both splits get 200 wrong out of 800. Misclassification declares them tied. Try the preset above to see it happen in real time. Gini and entropy break the tie correctly because their curves sit <em>strictly above</em> straight lines, giving pure-leaf splits an additional bonus the flat triangle of misclassification can't see.</p>
+
+<div class="insight">
+  <p>A split that isolates a pure leaf is strictly better than one that doesn't, even when they have the same weighted error rate. Gini and entropy can see this because they curve downward. Misclassification can't because it's a straight triangle. This is why every mainstream tree algorithm uses Gini or entropy, not the thing you'd reach for first.</p>
+</div>
+
+<h2>What the staircase cannot do</h2>
+
+<p>In regression mode, the tree's prediction is always a set of flat segments. It can approximate any reasonable function if you give it enough leaves, but there are a few things it structurally cannot do.</p>
+
+<p>It cannot produce a slope inside a leaf — every row in the same leaf gets the same number. It cannot draw a smooth curve. And most importantly, it cannot extrapolate. Ask it for a prediction outside the range of your training data, and it returns the edge leaf's average — literally the closest value it has ever seen. If the real world extrapolates (bigger houses cost more, even past the biggest house you've seen), a tree simply won't keep up.</p>
+
+<p>That's the price of the staircase. Everything else works. You can throw mixed data types at a tree without preprocessing. You can train one in seconds. And as we'll see, when you stack many of them, you get something that dominates tabular-data leaderboards.</p>
+
+<h2>The greedy algorithm</h2>
+
+<p>With a split-scoring function in hand, the whole algorithm writes itself. At each node, try every feature, try every threshold, pick the split with the highest gain. Recurse on the two children. Stop when children are pure, too small, or you've hit a depth limit.</p>
+
+<p>Notice what this <em>doesn't</em> do: look ahead. A mediocre split now might set up two great splits two levels down, but the greedy algorithm will never find out, because it won't pick the mediocre split. This shortsightedness is a real cost. It's not fixed by tweaking — finding the globally optimal tree is NP-hard, proven in 1976 by Hyafil and Rivest. Every standard tree algorithm is a workaround for that one hard fact, and chapter 8 closes the series by showing when and how modern optimisation methods finally beat the greedy heuristic.</p>
+
+<h2>Takeaways</h2>
+
+<ul style="margin-left: 1.5rem;">
+  <li><strong>Trees are built top-down, greedily.</strong> At every node, pick the best split, commit, recurse. Never backtrack.</li>
+  <li><strong>For classes, Gini or entropy — not misclassification.</strong> The curved measures correctly prefer splits that isolate pure leaves. Gini and entropy agree on the optimal split over 99% of the time; the choice between them is mostly stylistic.</li>
+  <li><strong>For numbers, variance reduction.</strong> Pick the split that most reduces the spread around the mean. Every leaf predicts the mean of its training rows.</li>
+  <li><strong>Regression trees predict staircases.</strong> Flat segments only, no slopes, no curves, no extrapolation. It's a feature of the model class, not a bug.</li>
+  <li><strong>The greedy algorithm isn't optimal.</strong> The optimal tree is intractable in the worst case. Everything in this series is either a workaround for that fact or, in chapter 8, a challenge to it.</li>
+</ul>
+
+<p>Next: the geometric side of the same idea. Every split is horizontal or vertical. That gives the tree a superpower and a blind spot, and the fix for the blind spot is expensive enough that nobody uses it.</p>
+
+<div class="nav-footer">
+  <a href="index.html">← Series index</a>
+  <span class="spacer"></span>
+  <a href="02-geometry-and-pruning.html">Chapter 2: Geometry and Pruning →</a>
+</div>
+
+</div>
+
+<script>
+function giniImp(p) { return 2 * p * (1 - p); }
+function entropyImp(p) {
+  if (p <= 0 || p >= 1) return 0;
+  return -p * Math.log2(p) - (1 - p) * Math.log2(1 - p);
+}
+function misclassImp(p) { return Math.min(p, 1 - p); }
+
+var IMP = {
+  gini: { fn: giniImp, label: 'Gini', color: 'var(--c-gini)' },
+  entropy: { fn: entropyImp, label: 'Entropy', color: 'var(--c-entropy)' },
+  misclass: { fn: misclassImp, label: 'Misclassification', color: 'var(--c-misclass)' }
+};
+
+function prng(seed) {
+  var s = seed >>> 0;
+  return function () { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
+}
+function mean(arr) { return arr.reduce(function (a, b) { return a + b; }, 0) / arr.length; }
+function variance(arr) {
+  if (arr.length <= 1) return 0;
+  var m = mean(arr);
+  return arr.reduce(function (s, v) { return s + (v - m) * (v - m); }, 0) / arr.length;
+}
+
+// Greedy 1D regression splits.
+function greedyRegSplits(pts, k) {
+  if (k <= 0) return { splits: [], leaves: [{ indices: pts.slice().sort(function (a, b) { return a.x - b.x; }) }] };
+  var sorted = pts.slice().sort(function (a, b) { return a.x - b.x; });
+  var leaves = [{ indices: sorted, score: variance(sorted.map(function (p) { return p.y; })) * sorted.length }];
+  function bestSplit(leaf) {
+    var items = leaf.indices;
+    if (items.length < 2) return null;
+    var totSum = 0, totSumSq = 0;
+    items.forEach(function (p) { totSum += p.y; totSumSq += p.y * p.y; });
+    var totalSS = totSumSq - totSum * totSum / items.length;
+    var runSum = 0, runSumSq = 0, bestGain = 0, bestT = null;
+    for (var i = 1; i < items.length; i++) {
+      runSum += items[i - 1].y;
+      runSumSq += items[i - 1].y * items[i - 1].y;
+      if (items[i].x - items[i - 1].x < 1e-9) continue;
+      var nL = i, nR = items.length - i;
+      var sumR = totSum - runSum, sumSqR = totSumSq - runSumSq;
+      var ssL = runSumSq - runSum * runSum / nL;
+      var ssR = sumSqR - sumR * sumR / nR;
+      var gain = totalSS - (ssL + ssR);
+      if (gain > bestGain) { bestGain = gain; bestT = (items[i].x + items[i - 1].x) / 2; }
+    }
+    return bestT !== null ? { threshold: bestT, gain: bestGain } : null;
+  }
+  for (var step = 0; step < k; step++) {
+    var cIdx = -1, best = null;
+    leaves.forEach(function (leaf, idx) { var b = bestSplit(leaf); if (b && (!best || b.gain > best.gain)) { best = b; cIdx = idx; } });
+    if (!best) break;
+    var leaf = leaves[cIdx];
+    var left = leaf.indices.filter(function (p) { return p.x < best.threshold; });
+    var right = leaf.indices.filter(function (p) { return p.x >= best.threshold; });
+    leaves.splice(cIdx, 1,
+      { indices: left, score: variance(left.map(function (p) { return p.y; })) * left.length },
+      { indices: right, score: variance(right.map(function (p) { return p.y; })) * right.length }
+    );
+  }
+  leaves.sort(function (a, b) { return a.indices[0].x - b.indices[0].x; });
+  var splits = [];
+  for (var j = 0; j < leaves.length - 1; j++) {
+    splits.push((leaves[j].indices[leaves[j].indices.length - 1].x + leaves[j + 1].indices[0].x) / 2);
+  }
+  return { splits: splits, leaves: leaves };
+}
+
+function trueFn(x) { return 0.5 + 0.4 * Math.sin(x * Math.PI * 1.8); }
+
+// ────────────────────────────────────────── Unified interactive ──
+(function () {
+  var state = {
+    mode: 'classify',
+    metric: 'gini',
+    thresh: 0.5,
+    // Regression-mode
+    splits: 3, noise: 0.35, seed: 1,
+    // Classification-mode data
+    classData: null,
+    // Regression data
+    regData: null
+  };
+
+  // Classification strip
+  function genClassData(seed) {
+    var r = prng(seed);
+    var N = 40;
+    var out = [];
+    for (var i = 0; i < N; i++) {
+      var x = i / (N - 1);
+      var pProb = 0.85 - 0.7 * x;
+      out.push({ x: x, c: r() < pProb ? 1 : 0 });
+    }
+    return out;
+  }
+  function genRegData() {
+    var r = prng(state.seed);
+    var N = 60;
+    var out = [];
+    for (var i = 0; i < N; i++) {
+      var x = i / (N - 1) + (r() - 0.5) * 0.005;
+      x = Math.max(0, Math.min(1, x));
+      var y = trueFn(x) + (r() - 0.5) * state.noise * 2;
+      out.push({ x: x, y: y });
+    }
+    return out;
+  }
+  state.classData = genClassData(5);
+  state.regData = genRegData();
+
+  var W = 440, H = 340;
+  var svg = d3.select('#main-viz').append('svg')
+    .attr('viewBox', '0 0 ' + W + ' ' + H)
+    .attr('width', '100%').style('max-width', W + 'px');
+
+  // Layers
+  var bgLayer = svg.append('g');
+  var dataLayer = svg.append('g');
+  var splitLayer = svg.append('g');
+  var chartLayer = svg.append('g');
+
+  function splitStatsCls(pts, thresh) {
+    var left = pts.filter(function (p) { return p.x <= thresh; });
+    var right = pts.filter(function (p) { return p.x > thresh; });
+    function c(s) {
+      var pos = s.filter(function (p) { return p.c === 1; }).length;
+      return { pos: pos, neg: s.length - pos, n: s.length, p: s.length ? pos / s.length : 0 };
+    }
+    return { left: c(left), right: c(right), parent: c(pts) };
+  }
+
+  function renderClassify() {
+    bgLayer.selectAll('*').remove();
+    dataLayer.selectAll('*').remove();
+    splitLayer.selectAll('*').remove();
+    chartLayer.selectAll('*').remove();
+
+    var padX = 30;
+    var wInner = W - 2 * padX;
+    var stripY = 14, stripH = 48;
+    var chartTop = stripY + stripH + 22, chartBot = H - 28;
+
+    // Strip frame
+    bgLayer.append('rect').attr('x', padX).attr('y', stripY).attr('width', wInner).attr('height', stripH)
+      .attr('fill', 'var(--bg)').attr('stroke', 'var(--border)').attr('rx', 3);
+    bgLayer.append('text').attr('x', padX).attr('y', stripY - 4)
+      .attr('font-size', 10).attr('fill', 'var(--text-2)').attr('font-weight', 600)
+      .text('data strip — 40 rows; drag the green line');
+
+    // Chart axes
+    bgLayer.append('line').attr('x1', padX).attr('y1', chartBot).attr('x2', W - padX).attr('y2', chartBot).attr('stroke', 'var(--border)');
+    bgLayer.append('line').attr('x1', padX).attr('y1', chartTop).attr('x2', padX).attr('y2', chartBot).attr('stroke', 'var(--border)');
+    [0, 0.5, 1].forEach(function (p) {
+      bgLayer.append('text').attr('x', padX + p * (W - 2 * padX)).attr('y', chartBot + 14).attr('text-anchor', 'middle')
+        .attr('font-size', 10).attr('fill', 'var(--text-2)').text(p);
+    });
+    bgLayer.append('text').attr('x', padX).attr('y', chartTop - 5).attr('font-size', 10).attr('fill', 'var(--text-2)').text('impurity');
+    bgLayer.append('text').attr('x', W - padX).attr('y', chartBot + 14).attr('text-anchor', 'end').attr('font-size', 10).attr('fill', 'var(--text-2)').text('fraction positive →');
+
+    // Draw data
+    var stripCY = stripY + stripH / 2;
+    state.classData.forEach(function (p) {
+      dataLayer.append('circle').attr('cx', padX + p.x * wInner).attr('cy', stripCY + (p.c === 1 ? -8 : 8)).attr('r', 3)
+        .attr('fill', p.c === 1 ? 'var(--c-pos)' : 'var(--c-neg)');
+    });
+
+    function chartX(p) { return padX + p * (W - 2 * padX); }
+    function chartY(v) { return chartBot - v * (chartBot - chartTop); }
+
+    // Curves — all three, active one highlighted
+    Object.keys(IMP).forEach(function (key) {
+      var d = '';
+      for (var i = 0; i <= 120; i++) {
+        var p = i / 120;
+        d += (i === 0 ? 'M' : 'L') + chartX(p) + ',' + chartY(IMP[key].fn(p));
+      }
+      chartLayer.append('path').attr('d', d).attr('fill', 'none')
+        .attr('stroke', IMP[key].color).attr('stroke-width', key === state.metric ? 2.2 : 1).attr('opacity', key === state.metric ? 1 : 0.28);
+    });
+
+    // Split line / handle
+    var tx = padX + state.thresh * wInner;
+    splitLayer.append('line').attr('x1', tx).attr('x2', tx).attr('y1', stripY - 4).attr('y2', stripY + stripH + 4)
+      .attr('stroke', 'var(--c-split)').attr('stroke-width', 2.5).style('cursor', 'ew-resize');
+    splitLayer.append('rect').attr('x', tx - 5).attr('y', stripY - 8).attr('width', 10).attr('height', stripH + 16)
+      .attr('fill', 'var(--c-split)').attr('rx', 2).attr('opacity', 0.85).style('cursor', 'ew-resize');
+
+    // Markers for parent / children on the active curve
+    var st = splitStatsCls(state.classData, state.thresh);
+    var impFn = IMP[state.metric].fn;
+    var color = IMP[state.metric].color;
+    var parentImp = impFn(st.parent.p);
+    var leftImp = impFn(st.left.p);
+    var rightImp = impFn(st.right.p);
+    var wL = st.left.n / st.parent.n, wR = st.right.n / st.parent.n;
+    var wc = wL * leftImp + wR * rightImp;
+    var gain = parentImp - wc;
+
+    splitLayer.append('circle').attr('cx', chartX(st.parent.p)).attr('cy', chartY(parentImp)).attr('r', 4)
+      .attr('fill', color).attr('stroke', 'white').attr('stroke-width', 1.5);
+    splitLayer.append('text').attr('x', chartX(st.parent.p)).attr('y', chartY(parentImp) - 10)
+      .attr('text-anchor', 'middle').attr('font-size', 10).attr('fill', 'var(--text)').attr('font-weight', 600).text('parent');
+    if (st.left.n > 0) {
+      splitLayer.append('circle').attr('cx', chartX(st.left.p)).attr('cy', chartY(leftImp)).attr('r', 3.5).attr('fill', 'white').attr('stroke', color).attr('stroke-width', 1.8);
+      splitLayer.append('text').attr('x', chartX(st.left.p)).attr('y', chartY(leftImp) + 14).attr('text-anchor', 'middle').attr('font-size', 9).attr('fill', 'var(--text-2)').text('L');
+    }
+    if (st.right.n > 0) {
+      splitLayer.append('circle').attr('cx', chartX(st.right.p)).attr('cy', chartY(rightImp)).attr('r', 3.5).attr('fill', 'white').attr('stroke', color).attr('stroke-width', 1.8);
+      splitLayer.append('text').attr('x', chartX(st.right.p)).attr('y', chartY(rightImp) + 14).attr('text-anchor', 'middle').attr('font-size', 9).attr('fill', 'var(--text-2)').text('R');
+    }
+    if (st.left.n > 0 && st.right.n > 0) {
+      splitLayer.append('line').attr('x1', chartX(st.left.p)).attr('y1', chartY(leftImp)).attr('x2', chartX(st.right.p)).attr('y2', chartY(rightImp))
+        .attr('stroke', color).attr('stroke-width', 1.2).attr('stroke-dasharray', '4 3').attr('opacity', 0.6);
+      splitLayer.append('circle').attr('cx', chartX(st.parent.p)).attr('cy', chartY(wc)).attr('r', 3).attr('fill', color).attr('opacity', 0.4);
+      splitLayer.append('line').attr('x1', chartX(st.parent.p)).attr('y1', chartY(parentImp)).attr('x2', chartX(st.parent.p)).attr('y2', chartY(wc))
+        .attr('stroke', 'var(--c-gain)').attr('stroke-width', 3).attr('opacity', 0.7);
+      splitLayer.append('text').attr('x', chartX(st.parent.p) + 8).attr('y', chartY((parentImp + wc) / 2) + 3)
+        .attr('font-size', 10).attr('fill', 'var(--c-gain)').attr('font-weight', 700).text('gain ' + gain.toFixed(3));
+    }
+
+    // Legend
+    var leg = splitLayer.append('g').attr('transform', 'translate(' + (W - padX - 170) + ',' + (chartTop + 6) + ')');
+    ['gini', 'entropy', 'misclass'].forEach(function (k, i) {
+      var y = i * 14;
+      leg.append('line').attr('x1', 0).attr('y1', y).attr('x2', 16).attr('y2', y)
+        .attr('stroke', IMP[k].color).attr('stroke-width', 1.8).attr('opacity', k === state.metric ? 1 : 0.4);
+      leg.append('text').attr('x', 22).attr('y', y + 3).attr('font-size', 10)
+        .attr('fill', k === state.metric ? 'var(--text)' : 'var(--text-2)')
+        .attr('font-weight', k === state.metric ? 700 : 400).text(IMP[k].label);
+    });
+
+    // Stats
+    document.getElementById('m-parent').textContent = parentImp.toFixed(3);
+    document.getElementById('m-wc').textContent = wc.toFixed(3);
+    document.getElementById('m-gain').textContent = gain.toFixed(3);
+  }
+
+  function renderRegress() {
+    bgLayer.selectAll('*').remove();
+    dataLayer.selectAll('*').remove();
+    splitLayer.selectAll('*').remove();
+    chartLayer.selectAll('*').remove();
+
+    var padL = 32, padR = 12, padT = 16, padB = 28;
+    function X(x) { return padL + x * (W - padL - padR); }
+    function Y(y) { return H - padB - (y - (-0.5)) / 2 * (H - padT - padB); }
+
+    bgLayer.append('line').attr('x1', padL).attr('y1', H - padB).attr('x2', W - padR).attr('y2', H - padB).attr('stroke', 'var(--border)');
+    bgLayer.append('line').attr('x1', padL).attr('y1', padT).attr('x2', padL).attr('y2', H - padB).attr('stroke', 'var(--border)');
+    [0, 0.25, 0.5, 0.75, 1].forEach(function (t) {
+      bgLayer.append('text').attr('x', X(t)).attr('y', H - padB + 14).attr('text-anchor', 'middle')
+        .attr('font-size', 10).attr('fill', 'var(--text-2)').text(t);
+    });
+    bgLayer.append('text').attr('x', (padL + W - padR) / 2).attr('y', H - 4).attr('text-anchor', 'middle').attr('font-size', 11).attr('fill', 'var(--text-2)').text('input x');
+    bgLayer.append('text').attr('transform', 'translate(14,' + ((padT + H - padB) / 2) + ') rotate(-90)').attr('text-anchor', 'middle').attr('font-size', 11).attr('fill', 'var(--text-2)').text('target y');
+
+    var truth = '';
+    for (var i = 0; i <= 200; i++) {
+      var x = i / 200;
+      truth += (i === 0 ? 'M' : 'L') + X(x) + ',' + Y(trueFn(x));
+    }
+    bgLayer.append('path').attr('d', truth).attr('fill', 'none')
+      .attr('stroke', 'var(--c-truth)').attr('stroke-width', 1.5).attr('stroke-dasharray', '4 3').attr('opacity', 0.8);
+
+    state.regData.forEach(function (p) {
+      dataLayer.append('circle').attr('cx', X(p.x)).attr('cy', Y(p.y)).attr('r', 2.3)
+        .attr('fill', 'var(--text-2)').attr('opacity', 0.7);
+    });
+
+    var fit = greedyRegSplits(state.regData, state.splits);
+    fit.splits.forEach(function (t) {
+      splitLayer.append('line').attr('x1', X(t)).attr('x2', X(t)).attr('y1', padT).attr('y2', H - padB)
+        .attr('stroke', 'var(--c-split)').attr('stroke-width', 1).attr('stroke-dasharray', '2 3').attr('opacity', 0.6);
+    });
+    fit.leaves.forEach(function (leaf) {
+      if (leaf.indices.length === 0) return;
+      var m = mean(leaf.indices.map(function (p) { return p.y; }));
+      var xStart = leaf.indices[0].x, xEnd = leaf.indices[leaf.indices.length - 1].x;
+      chartLayer.append('line').attr('x1', X(xStart - 0.005)).attr('x2', X(xEnd + 0.005))
+        .attr('y1', Y(m)).attr('y2', Y(m)).attr('stroke', 'var(--c-pred)').attr('stroke-width', 2.5);
+    });
+
+    // Stats
+    var residSq = 0, rootSq = 0;
+    var rootMean = mean(state.regData.map(function (p) { return p.y; }));
+    state.regData.forEach(function (p) { rootSq += (p.y - rootMean) * (p.y - rootMean); });
+    fit.leaves.forEach(function (leaf) {
+      if (leaf.indices.length === 0) return;
+      var m = mean(leaf.indices.map(function (p) { return p.y; }));
+      leaf.indices.forEach(function (pt) { residSq += (pt.y - m) * (pt.y - m); });
+    });
+    document.getElementById('m-leaves').textContent = fit.leaves.length;
+    document.getElementById('m-var').textContent = (residSq / state.regData.length).toFixed(3);
+    document.getElementById('m-red').textContent = (100 * (1 - residSq / rootSq)).toFixed(1) + '%';
+  }
+
+  function render() {
+    if (state.mode === 'classify') {
+      document.getElementById('class-controls').style.display = '';
+      document.getElementById('regress-controls').style.display = 'none';
+      renderClassify();
+    } else {
+      document.getElementById('class-controls').style.display = 'none';
+      document.getElementById('regress-controls').style.display = '';
+      renderRegress();
+    }
+  }
+
+  // Dragging in classify mode
+  svg.call(d3.drag().filter(function (event) {
+    if (state.mode !== 'classify') return false;
+    var p = d3.pointer(event, svg.node());
+    var svgY = p[1] * (H / svg.node().getBoundingClientRect().height);
+    return svgY < 70;
+  }).on('drag', function (event) {
+    var p = d3.pointer(event, svg.node());
+    var svgX = p[0] * (W / svg.node().getBoundingClientRect().width);
+    var padX = 30;
+    var wInner = W - 2 * padX;
+    var frac = (svgX - padX) / wInner;
+    state.thresh = Math.max(0.02, Math.min(0.98, frac));
+    render();
+  }));
+
+  // Mode toggle
+  d3.selectAll('#m-mode button').on('click', function () {
+    var m = this.getAttribute('data-m');
+    state.mode = m;
+    d3.selectAll('#m-mode button').classed('active', function () { return this.getAttribute('data-m') === m; });
+    render();
+  });
+  // Metric toggle
+  d3.selectAll('#m-metric button').on('click', function () {
+    var m = this.getAttribute('data-m');
+    state.metric = m;
+    d3.selectAll('#m-metric button').classed('active', function () { return this.getAttribute('data-m') === m; });
+    render();
+  });
+  // Presets
+  d3.selectAll('.preset').on('click', function () {
+    var p = this.getAttribute('data-preset');
+    if (p === 'balanced') {
+      // Create a special data = half +/+ and half +/- with a balanced split point.
+      var pts = [];
+      // 20 left rows with 75% pos, 20 right rows with 25% pos — both children 75/25 under a 0.5 split
+      var rr = prng(13);
+      for (var i = 0; i < 20; i++) pts.push({ x: i / 40, c: rr() < 0.75 ? 1 : 0 });
+      for (var i = 0; i < 20; i++) pts.push({ x: 0.5 + i / 40, c: rr() < 0.25 ? 1 : 0 });
+      state.classData = pts;
+      state.thresh = 0.5;
+    } else if (p === 'pure') {
+      // Pure-leaf preset: left half 33% pos, right half 100% pos.
+      var pts = [];
+      var rr = prng(23);
+      for (var i = 0; i < 30; i++) pts.push({ x: i / 60, c: rr() < 0.333 ? 1 : 0 });
+      for (var i = 0; i < 10; i++) pts.push({ x: 0.5 + i / 40, c: 1 });
+      state.classData = pts;
+      state.thresh = 0.5;
+    }
+    render();
+  });
+  // Regression controls
+  d3.select('#m-splits').on('input', function () {
+    state.splits = +this.value;
+    document.getElementById('m-splits-val').textContent = state.splits;
+    render();
+  });
+  d3.select('#m-noise').on('input', function () {
+    state.noise = (+this.value) / 100;
+    document.getElementById('m-noise-val').textContent = state.noise.toFixed(2);
+    state.regData = genRegData();
+    render();
+  });
+  d3.select('#m-reroll').on('click', function () {
+    state.seed = (state.seed + 101301) >>> 0;
+    state.regData = genRegData();
+    render();
+  });
+
+  render();
+})();
+
+if (window.Motion) window.Motion.mountBanner();
+</script>
+
+</body>
+</html>

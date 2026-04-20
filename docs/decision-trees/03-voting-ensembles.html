@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Voting Ensembles — Decision Trees</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
+<script src="../lib/motion.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --article-width: 740px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem;
+  --line-height: 1.65;
+  --text: #1a1a2e;
+  --text-2: #4a4a6a;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --bg: #fafafa;
+  --fig-bg: #ffffff;
+  --border: #e2e2e8;
+  --c-data: #64748b;
+  --c-single: #7c3aed;
+  --c-avg: #2563eb;
+  --c-truth: #059669;
+  --c-oob: #ea580c;
+}
+.t-single { color: var(--c-single); font-weight: 600; }
+.t-avg { color: var(--c-avg); font-weight: 600; }
+.t-truth { color: var(--c-truth); font-weight: 600; }
+
+body { font-family: var(--body-font); font-size: var(--body-size); line-height: var(--line-height); color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased; }
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
+h1, h2 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+p { margin: 0 0 1rem; }
+a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+a:hover { color: #1d4ed8; }
+code { font-family: var(--mono-font); font-size: 0.9em; background: #f1f1f5; padding: 0.15em 0.4em; border-radius: 3px; }
+
+.back-link { font-family: var(--heading-font); font-size: 0.85rem; display: inline-block; margin-bottom: 1rem; color: var(--text-2); text-decoration: none; }
+.back-link:hover { color: var(--accent); }
+
+.header { padding: 3rem 0 2rem; border-bottom: 1px solid var(--border); margin-bottom: 2.5rem; }
+.header .subtitle { font-family: var(--heading-font); font-size: 1.15rem; color: var(--text-2); max-width: 620px; }
+
+.figure { margin: 2rem 0; padding: 1.5rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; line-height: 1.45; }
+.figure-label { font-weight: 600; color: var(--text); }
+
+.btn { font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600; padding: 0.4rem 0.85rem; border-radius: 5px; border: 1px solid var(--border); background: var(--fig-bg); color: var(--text); cursor: pointer; user-select: none; transition: background 0.15s, border-color 0.15s; }
+.btn:hover { border-color: var(--accent); background: var(--accent-light); }
+.btn.active { background: var(--accent); color: white; border-color: var(--accent); }
+
+.insight { background: var(--accent-light); border-left: 3px solid var(--accent); padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 4px 4px 0; }
+
+svg text { font-family: var(--heading-font); }
+
+.panel { display: grid; grid-template-columns: 1fr 260px; gap: 1.5rem; align-items: start; }
+@media (max-width: 680px) { .panel { grid-template-columns: 1fr; } }
+.controls-col { display: flex; flex-direction: column; gap: 0.85rem; font-family: var(--heading-font); font-size: 0.9rem; }
+.slider-row { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 0.5rem 1rem; }
+.slider-row .lbl { color: var(--text-2); font-weight: 600; font-size: 0.82rem; }
+.slider-row .val { font-family: var(--mono-font); color: var(--text); min-width: 3rem; text-align: right; font-weight: 600; }
+.slider-row input[type="range"] { width: 100%; }
+
+.stat-box { padding: 0.8rem 1rem; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; font-family: var(--heading-font); font-size: 0.86rem; line-height: 1.55; }
+.stat-box .label { font-size: 0.72rem; font-weight: 700; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.3rem; }
+.stat-box .row { display: flex; justify-content: space-between; gap: 0.5rem; margin-top: 0.15rem; }
+.stat-box .row .k { color: var(--text-2); }
+.stat-box .row .v { font-family: var(--mono-font); font-weight: 600; color: var(--text); }
+
+.nav-footer { margin-top: 5rem; padding-top: 2rem; border-top: 1px solid var(--border); display: flex; justify-content: space-between; font-family: var(--heading-font); font-size: 0.9rem; }
+.nav-footer a { color: var(--accent); text-decoration: none; }
+.nav-footer a:hover { text-decoration: underline; }
+.nav-footer .spacer { flex: 1; }
+
+@media (prefers-reduced-motion: reduce) { html:not([data-motion="full"]) * { transition-duration: 0s !important; animation-duration: 0s !important; } }
+@media (max-width: 680px) { h1 { font-size: 1.75rem; } .article { padding: 1.5rem 1rem 4rem; } }
+</style>
+</head>
+<body>
+<div class="article">
+
+<a href="index.html" class="back-link">← Decision Trees</a>
+
+<div class="header">
+  <h1>Voting Ensembles</h1>
+  <p class="subtitle">Chapter 3 of 8. A single tree is jumpy. A hundred trees averaged are rock-steady. But the trees have to actually disagree for averaging to help, and if they don't, a second trick — hiding features at random — forces them to.</p>
+</div>
+
+<p>Take your training data, remove five random rows, re-train a tree. The new tree will often look structurally very different. Add back the five rows and remove five different ones; different tree again. Trees are <em>unstable</em> — small perturbations to the training data produce large changes in the model. On a hard problem this jitter limits a single tree's usefulness no matter how carefully you pick splits or tune α.</p>
+
+<p>The bagging idea is comically simple. Instead of training one tree, train a hundred — each on a slightly different version of your data — and average them. Most of the jitter cancels out. You can see this happen in real time on a noisy dataset, and once you do, you've understood why most ensemble methods exist.</p>
+
+<h2>What "slightly different versions" means</h2>
+
+<p>The standard recipe is <em>bootstrap sampling</em>. To make one version of your dataset, draw rows from the original with replacement, keeping the same total count. Some rows appear twice, some don't appear at all. Train a tree on this version. Repeat.</p>
+
+<p>What's remarkable is how little engineering this is. No complicated data augmentation, no carefully-designed perturbations. You literally sample your rows with replacement. The trees diverge because they saw different samples; the divergence is what averaging cancels.</p>
+
+<p>A nice side effect: every bootstrap sample leaves out about a third of the data. Pass those left-out rows through their respective trees and you get a free validation set — the <em>out-of-bag</em> estimate — without ever splitting your data.</p>
+
+<h2>The correlation ceiling</h2>
+
+<p>Averaging has a limit. If every tree is trained on very similar data, and if one feature is wildly more predictive than the others, every tree will pick that feature to split on first. The trees will differ in small details but end up highly correlated. Averaging correlated predictions buys you much less than averaging independent ones. Past a certain number of trees, bagging stops improving.</p>
+
+<p>Random forests fix this by adding one small extra step. At every node of every tree, instead of considering every feature as a candidate for splitting, consider a random subset of them. That's it. Now the dominant feature isn't available at most nodes, the trees are forced to split on other features at least sometimes, they diverge structurally, and the correlation drops.</p>
+
+<p>The standard recommendation is to consider <code>√p</code> features per split for classification (and <code>p/3</code> for regression). This came out of Breiman's empirical work in 2001 and has held up remarkably well across problem types.</p>
+
+<h2>Going one step further</h2>
+
+<p>If hiding features helps, what if we also randomised the split threshold — instead of searching for the best threshold for each feature, pick a random one? This is what Extra-Trees (Extremely Randomised Trees) do. Individual trees become even worse predictors. But the forest becomes even more decorrelated, and on noisy problems the ensemble often outperforms a standard random forest.</p>
+
+<p>The lesson: for an ensemble, individual tree quality matters less than tree-to-tree diversity. You can afford to make each tree quite bad if it makes the trees disagree more.</p>
+
+<h2>All three knobs on one dataset</h2>
+
+<p>The interactive below lets you control all three dials on the same regression problem — tree count, features per split, and threshold randomness. You can watch, in real time, how each dial affects individual trees and how the average responds.</p>
+
+<div class="figure">
+  <div id="main" class="panel">
+    <div>
+      <div id="m-viz"></div>
+    </div>
+    <div class="controls-col">
+      <div class="slider-row">
+        <div class="lbl">trees (B)</div>
+        <input type="range" id="m-B" min="1" max="80" step="1" value="20">
+        <div class="val" id="m-B-val">20</div>
+      </div>
+      <div class="slider-row">
+        <div class="lbl">features per split (m)</div>
+        <input type="range" id="m-m" min="1" max="4" step="1" value="4">
+        <div class="val" id="m-m-val">4</div>
+      </div>
+      <div style="font-size: 0.72rem; color: var(--text-2); margin-top: -0.5rem;">4 = plain bagging · lower = random forest</div>
+      <div class="slider-row">
+        <div class="lbl">threshold randomness</div>
+        <input type="range" id="m-rand" min="0" max="100" step="5" value="0">
+        <div class="val" id="m-rand-val">0%</div>
+      </div>
+      <div style="font-size: 0.72rem; color: var(--text-2); margin-top: -0.5rem;">0% = greedy · 100% = Extra-Trees</div>
+      <div class="slider-row">
+        <div class="lbl">noise</div>
+        <input type="range" id="m-noise" min="10" max="80" step="5" value="35">
+        <div class="val" id="m-noise-val">0.35</div>
+      </div>
+      <div style="display: flex; gap: 0.4rem;">
+        <button class="btn" id="m-reroll">Re-sample</button>
+        <button class="btn active" id="m-show">Show trees</button>
+      </div>
+      <div class="stat-box">
+        <div class="label">Test RMSE</div>
+        <div class="row"><span class="k"><span class="t-single">single tree</span></span><span class="v" id="m-err-single">—</span></div>
+        <div class="row"><span class="k"><span class="t-avg">ensemble</span></span><span class="v" id="m-err-ens">—</span></div>
+      </div>
+      <div class="stat-box">
+        <div class="label">Tree-to-tree similarity</div>
+        <div class="row"><span class="k">correlation</span><span class="v" id="m-corr">—</span></div>
+        <div class="row"><span class="k">OOB fraction</span><span class="v" id="m-oob">—</span></div>
+      </div>
+    </div>
+  </div>
+  <p class="figure-caption"><span class="figure-label">Figure 1.</span> An ensemble of trees on a noisy pattern. <span class="t-single">Faint purple lines</span> are individual trees; the <span class="t-avg">thick blue line</span> is their average. Increase <strong>trees (B)</strong> and watch the average smooth out. Drop <strong>features per split</strong> and the individual trees start to diverge — tree-to-tree correlation drops and the ensemble's prediction error typically improves. Raise <strong>threshold randomness</strong> to make individual trees even less greedy; some datasets improve, others don't. Noise resets the data.</p>
+</div>
+
+<div class="insight">
+  <p>Three settings to try: max everything (m = 4, randomness = 0%) is plain bagging. Middle (m = 2, randomness = 0%) is a standard random forest. Extreme (m = 1, randomness = 100%) is Extra-Trees. Watch the tree-to-tree correlation drop as you move from top to bottom, and watch the ensemble error respond.</p>
+</div>
+
+<h2>Bagged trees should be deep</h2>
+
+<p>A habit from the single-tree chapter worth unlearning: for a single tree you prune aggressively. For a bagged ensemble, you do the opposite — grow each tree fully, with no pruning at all. The logic is the bias-variance trade-off: individual trees want to be low-bias (deep, able to capture any pattern) and high-variance (it's fine, averaging kills variance). A pruned tree is higher-bias, which averaging cannot fix.</p>
+
+<p>This sounds backwards but every modern ensemble library defaults to this. Random forests in scikit-learn use no max depth by default. XGBoost uses shallow trees, but only because its trees aren't being averaged — they're being added, which (next chapter) is a different operation.</p>
+
+<h2>Where forests shine</h2>
+
+<p>After twenty-five years, random forests are still the first thing many data scientists reach for. They need minimal tuning — the default hyperparameters work on most problems. They handle mixed data types without preprocessing. They give you feature importance and out-of-bag error for free. And on tabular data, they're typically competitive with or better than careful deep learning.</p>
+
+<p>The main practical limitation is inference speed: 500 trees means 500 lookups per row, which is slower than a single model. Chapter 8 shows a structural trick that fixes this — at the cost of a different kind of constraint.</p>
+
+<h2>Takeaways</h2>
+
+<ul style="margin-left: 1.5rem;">
+  <li><strong>Trees are jittery, averaging cancels jitter.</strong> Bagging trains many trees on bootstrap resamples and averages predictions.</li>
+  <li><strong>Bagging plateaus at the correlation floor.</strong> Trees trained on similar data end up correlated; averaging correlated predictions helps less.</li>
+  <li><strong>Random forests break correlation.</strong> Hide <code>√p</code> features per split and trees are forced to diverge structurally.</li>
+  <li><strong>Extra-Trees go even further.</strong> Randomise the split threshold too. Weaker individual trees, but more diverse forest, often better overall.</li>
+  <li><strong>Don't prune bagged trees.</strong> Individual trees want to be low-bias; averaging handles variance.</li>
+  <li><strong>Out-of-bag error is a free validation set.</strong> Every bootstrap leaves out about a third of the data (<code>1/e ≈ 36.8%</code>). Predict on those rows to estimate generalisation.</li>
+</ul>
+
+<p>Next: a completely different way of combining many trees. Instead of averaging them, grow them sequentially so each one fixes the previous one's mistakes.</p>
+
+<div class="nav-footer">
+  <a href="02-geometry-and-pruning.html">← Chapter 2: Geometry and Pruning</a>
+  <span class="spacer"></span>
+  <a href="04-boosting.html">Chapter 4: Boosting →</a>
+</div>
+
+</div>
+
+<script>
+function prng(seed) { var s = seed >>> 0; return function () { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
+function mean(arr) { return arr.reduce(function (a, b) { return a + b; }, 0) / arr.length; }
+
+// Build a regression tree with per-split feature subsampling and optional random thresholds.
+// pts have .features = [x1, x2, ...] and .y.
+function buildTree(pts, depth, maxDepth, m, randomness, r, P) {
+  if (depth >= maxDepth || pts.length < 3) {
+    return { leaf: true, prediction: mean(pts.map(function (p) { return p.y; })) };
+  }
+  // Sample m features.
+  var perm = [];
+  for (var j = 0; j < P; j++) perm.push(j);
+  for (var k = perm.length - 1; k > 0; k--) {
+    var s = Math.floor(r() * (k + 1));
+    var tmp = perm[k]; perm[k] = perm[s]; perm[s] = tmp;
+  }
+  var feats = perm.slice(0, m);
+  var n = pts.length;
+  var best = null;
+
+  feats.forEach(function (f) {
+    var sorted = pts.slice().sort(function (a, b) { return a.features[f] - b.features[f]; });
+    if (sorted[0].features[f] === sorted[n - 1].features[f]) return;
+    var thr;
+    if (r() < randomness) {
+      // Random threshold in range.
+      thr = sorted[0].features[f] + r() * (sorted[n - 1].features[f] - sorted[0].features[f]);
+    } else {
+      // Greedy threshold search on this feature.
+      var totSum = 0, totSumSq = 0;
+      sorted.forEach(function (p) { totSum += p.y; totSumSq += p.y * p.y; });
+      var totalSS = totSumSq - totSum * totSum / n;
+      var runSum = 0, runSumSq = 0;
+      var bestF = null;
+      for (var i = 1; i < n; i++) {
+        runSum += sorted[i - 1].y;
+        runSumSq += sorted[i - 1].y * sorted[i - 1].y;
+        if (sorted[i].features[f] - sorted[i - 1].features[f] < 1e-9) continue;
+        var nL = i, nR = n - i;
+        var sumR = totSum - runSum, sumSqR = totSumSq - runSumSq;
+        var ssL = runSumSq - runSum * runSum / nL;
+        var ssR = sumSqR - sumR * sumR / nR;
+        var gain = totalSS - (ssL + ssR);
+        if (!bestF || gain > bestF.gain) bestF = { gain: gain, threshold: (sorted[i].features[f] + sorted[i - 1].features[f]) / 2 };
+      }
+      if (!bestF) return;
+      thr = bestF.threshold;
+    }
+    var left = sorted.filter(function (p) { return p.features[f] <= thr; });
+    var right = sorted.filter(function (p) { return p.features[f] > thr; });
+    if (left.length === 0 || right.length === 0) return;
+    // Evaluate actual gain (even when threshold was random) for selection across features.
+    var lM = mean(left.map(function (p) { return p.y; }));
+    var rM = mean(right.map(function (p) { return p.y; }));
+    var totSum = 0, totSumSq = 0;
+    sorted.forEach(function (p) { totSum += p.y; totSumSq += p.y * p.y; });
+    var totalSS = totSumSq - totSum * totSum / n;
+    var ssL = left.reduce(function (s, p) { return s + (p.y - lM) * (p.y - lM); }, 0);
+    var ssR = right.reduce(function (s, p) { return s + (p.y - rM) * (p.y - rM); }, 0);
+    var g = totalSS - (ssL + ssR);
+    if (!best || g > best.gain) best = { feature: f, threshold: thr, gain: g, left: left, right: right };
+  });
+  if (!best) return { leaf: true, prediction: mean(pts.map(function (p) { return p.y; })) };
+  return {
+    leaf: false, feature: best.feature, threshold: best.threshold,
+    left: buildTree(best.left, depth + 1, maxDepth, m, randomness, r, P),
+    right: buildTree(best.right, depth + 1, maxDepth, m, randomness, r, P)
+  };
+}
+
+function predictTree(tree, features) {
+  if (tree.leaf) return tree.prediction;
+  return features[tree.feature] <= tree.threshold ? predictTree(tree.left, features) : predictTree(tree.right, features);
+}
+
+function trueFn(x) { return 0.5 + 0.4 * Math.sin(x * Math.PI * 1.8); }
+
+(function () {
+  // Dataset has 4 features. Only feature 0 (x) carries real signal; features 1,2,3 are mostly noise
+  // but feature 1 has a weak correlation to y.
+  var P = 4;
+  var N = 70;
+  var state = { B: 20, m: 4, rand: 0, noise: 0.35, seed: 1, showTrees: true };
+
+  function makeData() {
+    var r = prng(state.seed);
+    var out = [];
+    for (var i = 0; i < N; i++) {
+      var x = i / (N - 1) + (r() - 0.5) * 0.005;
+      x = Math.max(0, Math.min(1, x));
+      var feats = [x, 0.5 + 0.2 * Math.sin(x * Math.PI * 3) + (r() - 0.5) * 0.3, r(), r()];
+      var y = trueFn(x) + (r() - 0.5) * state.noise * 2;
+      out.push({ features: feats, y: y });
+    }
+    return out;
+  }
+  function makeTestData() {
+    var r = prng(state.seed + 4444);
+    var out = [];
+    for (var i = 0; i < 200; i++) {
+      var x = r();
+      var feats = [x, 0.5 + 0.2 * Math.sin(x * Math.PI * 3) + (r() - 0.5) * 0.3, r(), r()];
+      out.push({ features: feats, y: trueFn(x) });
+    }
+    return out;
+  }
+
+  var MAX_B = 80;
+  var data, testData, forest;
+  function rebuildForest() {
+    data = makeData();
+    testData = makeTestData();
+    forest = [];
+    var r = prng(state.seed + 999 + state.m * 13 + Math.round(state.rand * 100) * 7);
+    for (var b = 0; b < MAX_B; b++) {
+      var sample = [];
+      var seen = {};
+      for (var i = 0; i < data.length; i++) {
+        var idx = Math.floor(r() * data.length);
+        sample.push(data[idx]);
+        seen[idx] = true;
+      }
+      var tree = buildTree(sample, 0, 10, state.m, state.rand, r, P);
+      tree._oobFrac = 1 - Object.keys(seen).length / data.length;
+      forest.push(tree);
+    }
+  }
+  rebuildForest();
+
+  var W = 440, H = 320, padL = 32, padR = 12, padT = 16, padB = 28;
+  var svg = d3.select('#m-viz').append('svg')
+    .attr('viewBox', '0 0 ' + W + ' ' + H)
+    .attr('width', '100%').style('max-width', W + 'px');
+
+  function X(x) { return padL + x * (W - padL - padR); }
+  function Y(y) { return H - padB - (y - (-0.15)) / 1.3 * (H - padT - padB); }
+
+  svg.append('line').attr('x1', padL).attr('y1', H - padB).attr('x2', W - padR).attr('y2', H - padB).attr('stroke', 'var(--border)');
+  svg.append('line').attr('x1', padL).attr('y1', padT).attr('x2', padL).attr('y2', H - padB).attr('stroke', 'var(--border)');
+  [0, 0.25, 0.5, 0.75, 1].forEach(function (t) {
+    svg.append('text').attr('x', X(t)).attr('y', H - padB + 14).attr('text-anchor', 'middle')
+      .attr('font-size', 10).attr('fill', 'var(--text-2)').text(t);
+  });
+  svg.append('text').attr('x', (padL + W - padR) / 2).attr('y', H - 4).attr('text-anchor', 'middle').attr('font-size', 11).attr('fill', 'var(--text-2)').text('feature 0 (the informative one)');
+
+  // True function (once)
+  var truthPath = '';
+  for (var i = 0; i <= 200; i++) { var x = i / 200; truthPath += (i === 0 ? 'M' : 'L') + X(x) + ',' + Y(trueFn(x)); }
+  svg.append('path').attr('d', truthPath).attr('fill', 'none')
+    .attr('stroke', 'var(--c-truth)').attr('stroke-width', 1.5).attr('stroke-dasharray', '4 3').attr('opacity', 0.8);
+
+  var dataLayer = svg.append('g');
+  var treeLayer = svg.append('g');
+  var avgLayer = svg.append('g');
+
+  function render() {
+    dataLayer.selectAll('*').remove();
+    treeLayer.selectAll('*').remove();
+    avgLayer.selectAll('*').remove();
+
+    data.forEach(function (p) {
+      dataLayer.append('circle').attr('cx', X(p.features[0])).attr('cy', Y(p.y)).attr('r', 1.8)
+        .attr('fill', 'var(--c-data)').attr('opacity', 0.55);
+    });
+
+    var xs = [];
+    for (var i = 0; i <= 180; i++) xs.push(i / 180);
+    if (state.showTrees) {
+      for (var b = 0; b < state.B; b++) {
+        var path = '';
+        xs.forEach(function (x, k) {
+          var features = [x, 0.5, 0.5, 0.5];
+          var y = predictTree(forest[b], features);
+          path += (k === 0 ? 'M' : 'L') + X(x) + ',' + Y(y);
+        });
+        treeLayer.append('path').attr('d', path).attr('fill', 'none')
+          .attr('stroke', 'var(--c-single)').attr('stroke-width', 0.7)
+          .attr('opacity', Math.max(0.1, 0.35 - state.B * 0.002));
+      }
+    }
+
+    var avgPath = '';
+    xs.forEach(function (x, k) {
+      var features = [x, 0.5, 0.5, 0.5];
+      var sum = 0;
+      for (var b = 0; b < state.B; b++) sum += predictTree(forest[b], features);
+      var y = sum / state.B;
+      avgPath += (k === 0 ? 'M' : 'L') + X(x) + ',' + Y(y);
+    });
+    avgLayer.append('path').attr('d', avgPath).attr('fill', 'none')
+      .attr('stroke', 'var(--c-avg)').attr('stroke-width', 2.5);
+
+    // Stats
+    var singleErr = 0, ensErr = 0;
+    var testF = testData;
+    testF.forEach(function (p) {
+      var singlePred = predictTree(forest[0], p.features);
+      singleErr += (singlePred - p.y) * (singlePred - p.y);
+      var sum = 0;
+      for (var b = 0; b < state.B; b++) sum += predictTree(forest[b], p.features);
+      var avg = sum / state.B;
+      ensErr += (avg - p.y) * (avg - p.y);
+    });
+    singleErr = Math.sqrt(singleErr / testF.length);
+    ensErr = Math.sqrt(ensErr / testF.length);
+    document.getElementById('m-err-single').textContent = singleErr.toFixed(3);
+    document.getElementById('m-err-ens').textContent = ensErr.toFixed(3);
+
+    // Correlation between trees: simple metric — average pairwise Pearson correlation of predictions on test data.
+    if (state.B >= 2) {
+      var preds = [];
+      for (var b = 0; b < state.B; b++) preds.push(testF.map(function (p) { return predictTree(forest[b], p.features); }));
+      var total = 0, pairs = 0, sampleN = Math.min(state.B, 15);
+      for (var i = 0; i < sampleN; i++) {
+        for (var j = i + 1; j < sampleN; j++) {
+          var m1 = mean(preds[i]), m2 = mean(preds[j]);
+          var cov = 0, v1 = 0, v2 = 0;
+          for (var k = 0; k < preds[i].length; k++) {
+            cov += (preds[i][k] - m1) * (preds[j][k] - m2);
+            v1 += (preds[i][k] - m1) * (preds[i][k] - m1);
+            v2 += (preds[j][k] - m2) * (preds[j][k] - m2);
+          }
+          var corr = v1 > 0 && v2 > 0 ? cov / Math.sqrt(v1 * v2) : 0;
+          total += corr;
+          pairs++;
+        }
+      }
+      var avgCorr = pairs > 0 ? total / pairs : 0;
+      document.getElementById('m-corr').textContent = avgCorr.toFixed(3);
+    } else {
+      document.getElementById('m-corr').textContent = '—';
+    }
+
+    var avgOob = 0;
+    for (var b = 0; b < state.B; b++) avgOob += forest[b]._oobFrac;
+    avgOob /= state.B;
+    document.getElementById('m-oob').textContent = (avgOob * 100).toFixed(1) + '%';
+  }
+
+  d3.select('#m-B').on('input', function () { state.B = +this.value; document.getElementById('m-B-val').textContent = state.B; render(); });
+  d3.select('#m-m').on('input', function () { state.m = +this.value; document.getElementById('m-m-val').textContent = state.m; rebuildForest(); render(); });
+  d3.select('#m-rand').on('input', function () {
+    state.rand = (+this.value) / 100;
+    document.getElementById('m-rand-val').textContent = (+this.value) + '%';
+    rebuildForest(); render();
+  });
+  d3.select('#m-noise').on('input', function () {
+    state.noise = (+this.value) / 100;
+    document.getElementById('m-noise-val').textContent = state.noise.toFixed(2);
+    rebuildForest(); render();
+  });
+  d3.select('#m-reroll').on('click', function () { state.seed = (state.seed + 31337) >>> 0; rebuildForest(); render(); });
+  d3.select('#m-show').on('click', function () {
+    state.showTrees = !state.showTrees;
+    d3.select('#m-show').classed('active', state.showTrees).text(state.showTrees ? 'Show trees' : 'Hide trees');
+    render();
+  });
+
+  render();
+})();
+
+if (window.Motion) window.Motion.mountBanner();
+</script>
+
+</body>
+</html>

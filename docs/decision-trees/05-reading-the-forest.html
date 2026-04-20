@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reading the Forest — Decision Trees</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
+<script src="../lib/motion.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --article-width: 740px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem;
+  --line-height: 1.65;
+  --text: #1a1a2e;
+  --text-2: #4a4a6a;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --bg: #fafafa;
+  --fig-bg: #ffffff;
+  --border: #e2e2e8;
+  --c-info: #059669;
+  --c-ratio: #7c3aed;
+  --c-warn: #ea580c;
+  --c-base: #64748b;
+  --c-pred: #2563eb;
+  --c-up: #059669;
+  --c-down: #dc2626;
+}
+.t-info { color: var(--c-info); font-weight: 600; }
+.t-ratio { color: var(--c-ratio); font-weight: 600; }
+.t-warn { color: var(--c-warn); font-weight: 600; }
+.t-up { color: var(--c-up); font-weight: 600; }
+.t-down { color: var(--c-down); font-weight: 600; }
+
+body { font-family: var(--body-font); font-size: var(--body-size); line-height: var(--line-height); color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased; }
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
+h1, h2 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+p { margin: 0 0 1rem; }
+a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+a:hover { color: #1d4ed8; }
+code { font-family: var(--mono-font); font-size: 0.9em; background: #f1f1f5; padding: 0.15em 0.4em; border-radius: 3px; }
+
+.back-link { font-family: var(--heading-font); font-size: 0.85rem; display: inline-block; margin-bottom: 1rem; color: var(--text-2); text-decoration: none; }
+.back-link:hover { color: var(--accent); }
+
+.header { padding: 3rem 0 2rem; border-bottom: 1px solid var(--border); margin-bottom: 2.5rem; }
+.header .subtitle { font-family: var(--heading-font); font-size: 1.15rem; color: var(--text-2); max-width: 620px; }
+
+.figure { margin: 2rem 0; padding: 1.5rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; line-height: 1.45; }
+.figure-label { font-weight: 600; color: var(--text); }
+
+.btn { font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600; padding: 0.4rem 0.85rem; border-radius: 5px; border: 1px solid var(--border); background: var(--fig-bg); color: var(--text); cursor: pointer; user-select: none; transition: background 0.15s, border-color 0.15s; }
+.btn:hover { border-color: var(--accent); background: var(--accent-light); }
+.btn.active { background: var(--accent); color: white; border-color: var(--accent); }
+
+.insight { background: #fef3c7; border-left: 3px solid var(--c-warn); padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 4px 4px 0; color: #713f12; }
+
+svg text { font-family: var(--heading-font); }
+
+.panel { display: grid; grid-template-columns: 1fr 260px; gap: 1.5rem; align-items: start; }
+@media (max-width: 680px) { .panel { grid-template-columns: 1fr; } }
+.controls-col { display: flex; flex-direction: column; gap: 0.85rem; font-family: var(--heading-font); font-size: 0.9rem; }
+.slider-row { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 0.5rem 1rem; }
+.slider-row .lbl { color: var(--text-2); font-weight: 600; font-size: 0.82rem; }
+.slider-row .val { font-family: var(--mono-font); color: var(--text); min-width: 3rem; text-align: right; font-weight: 600; }
+.slider-row input[type="range"] { width: 100%; }
+
+.stat-box { padding: 0.8rem 1rem; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; font-family: var(--heading-font); font-size: 0.86rem; line-height: 1.55; }
+.stat-box .label { font-size: 0.72rem; font-weight: 700; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.3rem; }
+.stat-box .row { display: flex; justify-content: space-between; gap: 0.5rem; margin-top: 0.15rem; }
+.stat-box .row .k { color: var(--text-2); }
+.stat-box .row .v { font-family: var(--mono-font); font-weight: 600; color: var(--text); }
+
+.nav-footer { margin-top: 5rem; padding-top: 2rem; border-top: 1px solid var(--border); display: flex; justify-content: space-between; font-family: var(--heading-font); font-size: 0.9rem; }
+.nav-footer a { color: var(--accent); text-decoration: none; }
+.nav-footer a:hover { text-decoration: underline; }
+.nav-footer .spacer { flex: 1; }
+
+@media (prefers-reduced-motion: reduce) { html:not([data-motion="full"]) * { transition-duration: 0s !important; animation-duration: 0s !important; } }
+@media (max-width: 680px) { h1 { font-size: 1.75rem; } .article { padding: 1.5rem 1rem 4rem; } }
+</style>
+</head>
+<body>
+<div class="article">
+
+<a href="index.html" class="back-link">← Decision Trees</a>
+
+<div class="header">
+  <h1>Reading the Forest</h1>
+  <p class="subtitle">Chapter 5 of 8. A single tree is readable. A thousand trees are not. Two tools recover the readability: one global — "what does the model care about?" — and one per-prediction — "why did it say that?"</p>
+</div>
+
+<p>A decision tree used to be one of the textbook <em>interpretable</em> models. You could draw it on a whiteboard, point at each split, explain the whole logic to a stakeholder. That's gone once you're running a thousand boosted trees. The prediction is a sum of a thousand tiny contributions; no one tree carries the explanation.</p>
+
+<p>Two techniques reconstruct the missing interpretability. The first asks what the ensemble has learned in aggregate: which features does it rely on, and how can we tell whether that reliance is real? The second zooms in: for a specific prediction, exactly how much did each feature contribute?</p>
+
+<h2>What a split tells you</h2>
+
+<p>Start with what a single split conveys. Before the split, you have some uncertainty about the label. After — knowing which side of the threshold a row fell on — you usually have less. The <em>reduction in uncertainty</em> is what information theory calls <em>information gain</em>. A high-gain split has partitioned the data into much purer groups.</p>
+
+<p>Sum information gain across all nodes where a feature was used (weighted by the number of rows that passed through each node) and you have a reasonable proxy for the feature's overall importance. This is called <em>mean decrease in impurity</em> and it's the default "feature importance" metric in most tree libraries.</p>
+
+<p>It has a famous failure mode.</p>
+
+<h2>The ID-column trap</h2>
+
+<p>Consider a dataset with a unique identifier for each row — a user ID, a timestamp with microsecond precision. When the tree algorithm evaluates this feature, splitting on it sends every row to its own leaf. Every leaf is perfectly pure. The information gain is maximal — 100%, you've completely eliminated uncertainty.</p>
+
+<p>And the resulting tree is completely useless. On any new row with an unseen ID, the tree has no idea what to do. The feature has the highest possible importance and carries zero signal.</p>
+
+<p>C4.5's fix from the 1990s is elegant: normalise the gain by how much the split itself fragments the data. If the split produces two balanced halves, the normaliser is 1 bit. If it produces a thousand groups, the normaliser is ~10 bits. A split that fragments the data a thousand ways needs ten times the gain of a binary split to score as well. The <em>gain ratio</em> collapses the ID column's score to near-zero while leaving genuinely informative features alone.</p>
+
+<div class="figure">
+  <div id="fig-gain" class="panel">
+    <div>
+      <div id="fg-viz"></div>
+    </div>
+    <div class="controls-col">
+      <div class="slider-row">
+        <div class="lbl">rows N</div>
+        <input type="range" id="fg-n" min="30" max="400" step="10" value="120">
+        <div class="val" id="fg-n-val">120</div>
+      </div>
+      <div class="stat-box">
+        <div class="label">Feature ranking</div>
+        <div style="font-size: 0.78rem; color: var(--text-2); margin-top: 0.4rem;">
+          <div style="display: flex; justify-content: space-between; font-weight: 600; padding-bottom: 0.2rem; border-bottom: 1px solid var(--border);"><span></span><span><span class="t-info">gain</span> · <span class="t-ratio">ratio</span></span></div>
+          <div id="fg-scorecard"></div>
+        </div>
+      </div>
+      <div style="font-size: 0.72rem; color: var(--text-2);">At small N the ID column looks plausible. As N grows, its raw <span class="t-info">gain</span> stays high while its <span class="t-ratio">gain ratio</span> collapses — the cardinality-penalty at work.</div>
+    </div>
+  </div>
+  <p class="figure-caption"><span class="figure-label">Figure 1.</span> The ID-column trap. Four features in the same dataset: a weakly informative <strong>age</strong>, an informative 4-level <strong>job</strong>, a weakly informative 12-level <strong>city</strong>, and a 100%-unique <strong>user_id</strong> that carries no real signal. Under raw <span class="t-info">information gain</span>, user_id always wins — it produces perfectly pure leaves. Under <span class="t-ratio">gain ratio</span>, user_id collapses because its split entropy (log of its cardinality) is huge. Slide N and watch the effect intensify on bigger datasets.</p>
+</div>
+
+<p>Modern libraries defend against this pathology in different ways — most commonly by binning high-cardinality features or target-encoding categorical variables — but the insight is worth knowing. A feature that looks wildly predictive on training data may just be a disguised form of "row lookup." If your model's feature importance is dominated by something that looks like a timestamp or an ID, check for leakage.</p>
+
+<h2>Attribution for a single prediction</h2>
+
+<p>Global feature importance tells you what the model cares about on average. Per-prediction attribution tells you why the model made one specific call: this house's predicted price came out $70k above average — which features pushed it up, and which pushed it down?</p>
+
+<p>The mathematical answer to this question was worked out in cooperative game theory in the 1950s. Shapley's idea: to fairly credit each "team member" for a team's output, simulate every possible ordering in which the members could have joined the team. Each member's <em>marginal contribution</em> is how much the output changed when they joined; their credit is the average across all orderings.</p>
+
+<p>The ML translation: features are team members, the "output" is the model's prediction. Baseline is the model's prediction when no features are known (it reverts to the training average). Each feature's <em>Shapley value</em> is its average marginal contribution as features are revealed.</p>
+
+<p>The Shapley value is the <em>unique</em> attribution scheme satisfying a few reasonable fairness axioms. Any other scheme violates one of them. Beautiful math — but impractical. With p features, you'd need 2<sup>p</sup> model evaluations per prediction to compute it. For 20 features, a million. For 50, forget it.</p>
+
+<h2>TreeSHAP: exact Shapley, efficiently</h2>
+
+<p>In 2017, Scott Lundberg noticed that if your model is a tree (or a forest), you can compute Shapley values <em>exactly</em> in polynomial time. The insight: when a feature is "absent" from a decision tree, you can equivalently take both children of any node that tests that feature, weighted by how many training rows went down each. This turns the exponential subset averaging into a structured walk over the tree.</p>
+
+<p>The algorithm is called TreeSHAP and runs in roughly O(T · L · D²) time — trees, leaves per tree, depth squared. On a typical random forest, that's milliseconds per prediction. The values are mathematically exact and guaranteed to sum to the model's prediction minus the baseline.</p>
+
+<div class="figure">
+  <div id="fig-shap" class="panel">
+    <div>
+      <div id="fs-viz"></div>
+    </div>
+    <div class="controls-col">
+      <div style="font-weight: 700; font-size: 0.85rem; margin-bottom: 0.3rem;">House features</div>
+      <div class="slider-row">
+        <div class="lbl">sqft</div>
+        <input type="range" id="fs-sqft" min="800" max="4000" step="50" value="2400">
+        <div class="val" id="fs-sqft-val">2400</div>
+      </div>
+      <div class="slider-row">
+        <div class="lbl">age</div>
+        <input type="range" id="fs-age" min="0" max="80" step="1" value="20">
+        <div class="val" id="fs-age-val">20</div>
+      </div>
+      <div class="slider-row">
+        <div class="lbl">beds</div>
+        <input type="range" id="fs-beds" min="1" max="6" step="1" value="3">
+        <div class="val" id="fs-beds-val">3</div>
+      </div>
+      <div class="slider-row">
+        <div class="lbl">zip score</div>
+        <input type="range" id="fs-zip" min="0" max="100" step="1" value="50">
+        <div class="val" id="fs-zip-val">50</div>
+      </div>
+      <div class="stat-box">
+        <div class="label">Attribution</div>
+        <div class="row"><span class="k">baseline</span><span class="v" id="fs-base">—</span></div>
+        <div class="row"><span class="k">prediction</span><span class="v" id="fs-pred">—</span></div>
+        <div class="row"><span class="k">Σ contributions</span><span class="v" id="fs-sum">—</span></div>
+      </div>
+    </div>
+  </div>
+  <p class="figure-caption"><span class="figure-label">Figure 2.</span> A single prediction decomposed. Start at the <span style="color: var(--c-base); font-weight: 600;">baseline</span> — the model's average prediction — and walk to the <span style="color: var(--c-pred); font-weight: 600;">actual prediction</span> one feature at a time. <span class="t-up">Green bars push price up</span>; <span class="t-down">red bars push price down</span>. Drag the feature sliders and watch the bars resize in real time. The total contributions always sum to exactly (prediction − baseline), which is the axiomatic guarantee Shapley provides and TreeSHAP delivers efficiently.</p>
+</div>
+
+<h2>What SHAP does and doesn't tell you</h2>
+
+<p>SHAP values describe what the <em>model</em> is doing, not what the real world is doing. If the model has learned the wrong pattern, SHAP will faithfully explain the wrong thing. A large SHAP value for a feature means the model depends heavily on it; it does <em>not</em> mean that changing the feature in the real world would change the outcome. For the causal question, you need a different tool — which the next chapter builds from scratch.</p>
+
+<p>Shapley values also handle feature interactions gracefully. If two features only matter together, SHAP credits both of them; the attribution naturally distributes across interactions without you having to specify them. This is one reason TreeSHAP has been adopted in regulated industries — it's the most rigorous way of explaining a tree-based model's predictions that exists.</p>
+
+<h2>Two views of the same tree</h2>
+
+<p>Information gain tells you which features the tree <em>learned from</em>. SHAP tells you which features <em>explained any given prediction</em>. They're complementary lenses on the same object. Information gain is great when you want to audit which features the model relies on. SHAP is great when you have a specific prediction you need to justify to a user, a regulator, or yourself.</p>
+
+<p>Both views, combined, give you back most of what you lost when you moved from a single tree to an ensemble.</p>
+
+<h2>Takeaways</h2>
+
+<ul style="margin-left: 1.5rem;">
+  <li><strong>Information gain measures split quality.</strong> But raw gain catastrophically overweights high-cardinality features like IDs.</li>
+  <li><strong>Gain ratio fixes this.</strong> Normalise by the split's own entropy. A 1000-way split needs 10× the gain of a binary split to score as well.</li>
+  <li><strong>Shapley values give axiomatic local attribution.</strong> Each feature is credited its average marginal contribution across all feature orderings.</li>
+  <li><strong>General Shapley is exponential.</strong> 2<sup>p</sup> subsets per prediction. For real models, intractable.</li>
+  <li><strong>TreeSHAP is polynomial.</strong> For tree ensembles, a clever dynamic programming over decision paths computes exact Shapley values in O(T · L · D²).</li>
+  <li><strong>Attribution ≠ causation.</strong> SHAP explains the model. For intervention questions — "what would change?" — you need causal trees, next chapter.</li>
+</ul>
+
+<div class="nav-footer">
+  <a href="04-boosting.html">← Chapter 4: Boosting</a>
+  <span class="spacer"></span>
+  <a href="06-causal-trees.html">Chapter 6: Causal Trees →</a>
+</div>
+
+</div>
+
+<script>
+function prng(seed) { var s = seed >>> 0; return function () { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
+
+function entropy(p) {
+  if (p <= 0 || p >= 1) return 0;
+  return -p * Math.log2(p) - (1 - p) * Math.log2(1 - p);
+}
+
+function gainMultiway(rows, featKey, labelKey) {
+  var n = rows.length;
+  if (n === 0) return { gain: 0, gainRatio: 0 };
+  var pos = rows.filter(function (r) { return r[labelKey] === 1; }).length;
+  var H = entropy(pos / n);
+  var groups = {};
+  rows.forEach(function (r) { var k = r[featKey]; if (!groups[k]) groups[k] = []; groups[k].push(r); });
+  var condH = 0, splitEnt = 0;
+  Object.keys(groups).forEach(function (k) {
+    var grp = groups[k];
+    var w = grp.length / n;
+    var gPos = grp.filter(function (r) { return r[labelKey] === 1; }).length;
+    condH += w * entropy(gPos / grp.length);
+    splitEnt += -w * Math.log2(w);
+  });
+  var gain = H - condH;
+  return { gain: gain, gainRatio: splitEnt > 1e-9 ? gain / splitEnt : 0 };
+}
+function gainContinuous(rows, featKey, labelKey) {
+  var sorted = rows.slice().sort(function (a, b) { return a[featKey] - b[featKey]; });
+  var n = sorted.length;
+  if (n < 2) return { gain: 0, gainRatio: 0 };
+  var pos = sorted.filter(function (r) { return r[labelKey] === 1; }).length;
+  var H = entropy(pos / n);
+  var best = { gain: 0, gainRatio: 0 };
+  var leftPos = 0;
+  for (var i = 1; i < n; i++) {
+    if (sorted[i - 1][labelKey] === 1) leftPos++;
+    if (sorted[i][featKey] - sorted[i - 1][featKey] < 1e-9) continue;
+    var nL = i, nR = n - i;
+    var pL = leftPos / nL, pR = (pos - leftPos) / nR;
+    var condH = (nL / n) * entropy(pL) + (nR / n) * entropy(pR);
+    var gain = H - condH;
+    var wL = nL / n, wR = nR / n;
+    var splitEnt = (wL > 0 ? -wL * Math.log2(wL) : 0) + (wR > 0 ? -wR * Math.log2(wR) : 0);
+    var ratio = splitEnt > 1e-9 ? gain / splitEnt : 0;
+    if (gain > best.gain) best = { gain: gain, gainRatio: ratio };
+  }
+  return best;
+}
+
+// ────────────────────────────────────────── Fig 1: ID trap ──
+(function () {
+  var state = { N: 120 };
+
+  function makeDataset(N) {
+    var r = prng(41 + N);
+    var rows = [];
+    for (var i = 0; i < N; i++) {
+      var age = 20 + Math.floor(r() * 50);
+      var job = ['engineer', 'teacher', 'doctor', 'artist'][Math.floor(r() * 4)];
+      var city = 'C' + Math.floor(r() * 12);
+      var id = 'U' + i;
+      var p = age < 40 ? 0.7 : 0.3;
+      if (job === 'engineer') p += 0.1;
+      if (job === 'artist') p -= 0.1;
+      var label = r() < Math.max(0, Math.min(1, p)) ? 1 : 0;
+      rows.push({ age: age, job: job, city: city, id: id, label: label });
+    }
+    return rows;
+  }
+
+  var features = [
+    { key: 'age', label: 'age', kind: 'continuous' },
+    { key: 'job', label: 'job (4)', kind: 'categorical' },
+    { key: 'city', label: 'city (12)', kind: 'categorical' },
+    { key: 'id', label: 'user_id (N)', kind: 'categorical' }
+  ];
+
+  var W = 440, H = 300, padL = 22, padR = 16, padT = 14, padB = 28;
+  var svg = d3.select('#fg-viz').append('svg')
+    .attr('viewBox', '0 0 ' + W + ' ' + H)
+    .attr('width', '100%').style('max-width', W + 'px');
+
+  function X(x) { return padL + x * (W - padL - padR); }
+  var rowH = 58;
+
+  function render() {
+    var rows = makeDataset(state.N);
+    svg.selectAll('*').remove();
+
+    svg.append('line').attr('x1', padL).attr('x2', W - padR).attr('y1', H - padB).attr('y2', H - padB).attr('stroke', 'var(--border)');
+    [0, 0.25, 0.5, 0.75, 1].forEach(function (t) {
+      svg.append('line').attr('x1', X(t)).attr('y1', H - padB).attr('x2', X(t)).attr('y2', H - padB + 4).attr('stroke', 'var(--border)');
+      svg.append('text').attr('x', X(t)).attr('y', H - padB + 16).attr('text-anchor', 'middle')
+        .attr('font-size', 10).attr('fill', 'var(--text-2)').text(t.toFixed(2));
+    });
+    svg.append('text').attr('x', (padL + W - padR) / 2).attr('y', H - 6)
+      .attr('text-anchor', 'middle').attr('font-size', 11).attr('fill', 'var(--text-2)').text('normalised score');
+
+    var row0 = padT + 20;
+    var scorecard = '';
+    features.forEach(function (f, idx) {
+      var result = f.kind === 'continuous' ? gainContinuous(rows, f.key, 'label') : gainMultiway(rows, f.key, 'label');
+      var gain = Math.max(0, result.gain);
+      var gainRatio = Math.max(0, result.gainRatio);
+      svg.append('text').attr('x', padL).attr('y', row0 + idx * rowH - 6)
+        .attr('font-size', 11).attr('font-weight', 700).attr('fill', 'var(--text)').text(f.label);
+      // Gain bar
+      svg.append('rect').attr('x', padL).attr('y', row0 + idx * rowH - 2)
+        .attr('width', Math.max(0, X(Math.min(1, gain)) - padL)).attr('height', 10)
+        .attr('fill', 'var(--c-info)').attr('opacity', 0.85);
+      svg.append('text').attr('x', padL + 4).attr('y', row0 + idx * rowH + 6)
+        .attr('font-size', 9).attr('fill', 'white').attr('font-weight', 600).text('gain ' + gain.toFixed(3));
+      // Gain ratio bar
+      svg.append('rect').attr('x', padL).attr('y', row0 + idx * rowH + 14)
+        .attr('width', Math.max(0, X(Math.min(1, gainRatio)) - padL)).attr('height', 10)
+        .attr('fill', 'var(--c-ratio)').attr('opacity', 0.85);
+      svg.append('text').attr('x', padL + 4).attr('y', row0 + idx * rowH + 22)
+        .attr('font-size', 9).attr('fill', 'white').attr('font-weight', 600).text('gain ratio ' + gainRatio.toFixed(3));
+
+      scorecard += '<div style="display: flex; justify-content: space-between; padding: 0.15rem 0; font-family: var(--heading-font);">' +
+        '<span>' + f.label + '</span>' +
+        '<span><span style="font-family: var(--mono-font); color: var(--c-info); font-weight: 600;">' + gain.toFixed(3) + '</span> · <span style="font-family: var(--mono-font); color: var(--c-ratio); font-weight: 600;">' + gainRatio.toFixed(3) + '</span></span>' +
+        '</div>';
+    });
+    document.getElementById('fg-scorecard').innerHTML = scorecard;
+  }
+
+  d3.select('#fg-n').on('input', function () {
+    state.N = +this.value;
+    document.getElementById('fg-n-val').textContent = state.N;
+    render();
+  });
+
+  render();
+})();
+
+// ────────────────────────────────────────── Fig 2: SHAP waterfall ──
+(function () {
+  var baseline = { sqft: 1800, age: 30, beds: 3, zip: 50 };
+  function model(x) {
+    var base = 350000;
+    var sqftEffect = (x.sqft - 1800) * 130;
+    var ageEffect = -1500 * Math.max(0, x.age - 5);
+    var bedsEffect = 12000 * (x.beds - 3);
+    var zipEffect = (x.zip - 50) * 1500;
+    var interact = (x.zip - 50) * Math.max(0, x.sqft - 2000) * 0.3;
+    return base + sqftEffect + ageEffect + bedsEffect + zipEffect + interact;
+  }
+  var FEATS = ['sqft', 'age', 'beds', 'zip'];
+  var FEAT_LABELS = { sqft: 'square footage', age: 'age', beds: 'bedrooms', zip: 'zip score' };
+
+  function factorial(n) { var out = 1; for (var i = 2; i <= n; i++) out *= i; return out; }
+  function shapley(x) {
+    var values = {};
+    function evalSubset(subset) {
+      var xSub = {};
+      FEATS.forEach(function (f) { xSub[f] = subset.indexOf(f) >= 0 ? x[f] : baseline[f]; });
+      return model(xSub);
+    }
+    FEATS.forEach(function (f) {
+      var others = FEATS.filter(function (o) { return o !== f; });
+      var n = others.length;
+      var total = 0;
+      for (var mask = 0; mask < (1 << n); mask++) {
+        var S = [];
+        for (var b = 0; b < n; b++) if (mask & (1 << b)) S.push(others[b]);
+        var sizeS = S.length;
+        var weight = factorial(sizeS) * factorial(FEATS.length - sizeS - 1) / factorial(FEATS.length);
+        var delta = evalSubset(S.concat([f])) - evalSubset(S);
+        total += weight * delta;
+      }
+      values[f] = total;
+    });
+    return values;
+  }
+
+  var state = { x: { sqft: 2400, age: 20, beds: 3, zip: 50 } };
+  var W = 620, H = 280, padL = 95, padR = 20, padT = 20, padB = 40;
+  var svg = d3.select('#fs-viz').append('svg')
+    .attr('viewBox', '0 0 ' + W + ' ' + H)
+    .attr('width', '100%').style('max-width', W + 'px');
+
+  function render() {
+    svg.selectAll('*').remove();
+    var vals = shapley(state.x);
+    var pred = model(state.x);
+    var base = model(baseline);
+
+    var values = [base];
+    var cur = base;
+    FEATS.forEach(function (f) { cur += vals[f]; values.push(cur); });
+    var minV = Math.min.apply(null, values.concat([pred]));
+    var maxV = Math.max.apply(null, values.concat([pred]));
+    var range = maxV - minV;
+    minV -= range * 0.05; maxV += range * 0.05;
+    function X(v) { return padL + (v - minV) / (maxV - minV) * (W - padL - padR); }
+
+    var rowH = (H - padT - padB) / (FEATS.length + 2);
+    svg.append('text').attr('x', padL - 6).attr('y', padT + rowH / 2 + 4).attr('text-anchor', 'end')
+      .attr('font-size', 11).attr('fill', 'var(--text-2)').attr('font-weight', 600).text('baseline');
+    svg.append('circle').attr('cx', X(base)).attr('cy', padT + rowH / 2).attr('r', 5).attr('fill', 'var(--c-base)').attr('stroke', 'white').attr('stroke-width', 1.5);
+    svg.append('text').attr('x', X(base)).attr('y', padT + rowH / 2 - 9).attr('text-anchor', 'middle').attr('font-size', 10).attr('fill', 'var(--c-base)').attr('font-weight', 700).text('$' + (base / 1000).toFixed(0) + 'k');
+
+    var runningX = base;
+    FEATS.forEach(function (f, i) {
+      var contrib = vals[f];
+      var nextX = runningX + contrib;
+      var y = padT + (i + 1) * rowH + rowH / 2;
+      svg.append('text').attr('x', padL - 6).attr('y', y + 4).attr('text-anchor', 'end')
+        .attr('font-size', 11).attr('fill', 'var(--text)').attr('font-weight', 600).text(FEAT_LABELS[f]);
+      svg.append('line').attr('x1', X(runningX)).attr('x2', X(runningX)).attr('y1', y - rowH).attr('y2', y).attr('stroke', 'var(--border)').attr('stroke-dasharray', '2 2');
+      var color = contrib >= 0 ? 'var(--c-up)' : 'var(--c-down)';
+      svg.append('rect').attr('x', X(Math.min(runningX, nextX))).attr('y', y - 8)
+        .attr('width', Math.abs(X(nextX) - X(runningX))).attr('height', 16)
+        .attr('fill', color).attr('opacity', 0.85).attr('rx', 2);
+      var tipX = X(nextX);
+      var dir = contrib >= 0 ? 1 : -1;
+      svg.append('path').attr('d', 'M' + tipX + ',' + (y - 8) + 'L' + (tipX + dir * 6) + ',' + y + 'L' + tipX + ',' + (y + 8) + 'Z').attr('fill', color);
+      var labelX = (X(runningX) + X(nextX)) / 2;
+      svg.append('text').attr('x', labelX).attr('y', y + 4).attr('text-anchor', 'middle')
+        .attr('font-size', 10).attr('font-weight', 700).attr('fill', 'white')
+        .text((contrib >= 0 ? '+' : '') + '$' + (contrib / 1000).toFixed(1) + 'k');
+      runningX = nextX;
+    });
+
+    var pY = padT + (FEATS.length + 1) * rowH + rowH / 2;
+    svg.append('text').attr('x', padL - 6).attr('y', pY + 4).attr('text-anchor', 'end').attr('font-size', 11).attr('fill', 'var(--c-pred)').attr('font-weight', 700).text('prediction');
+    svg.append('line').attr('x1', X(pred)).attr('x2', X(pred)).attr('y1', pY - rowH).attr('y2', pY).attr('stroke', 'var(--border)').attr('stroke-dasharray', '2 2');
+    svg.append('circle').attr('cx', X(pred)).attr('cy', pY).attr('r', 5).attr('fill', 'var(--c-pred)').attr('stroke', 'white').attr('stroke-width', 1.5);
+    svg.append('text').attr('x', X(pred)).attr('y', pY - 9).attr('text-anchor', 'middle').attr('font-size', 11).attr('fill', 'var(--c-pred)').attr('font-weight', 700).text('$' + (pred / 1000).toFixed(0) + 'k');
+
+    svg.append('line').attr('x1', padL).attr('x2', W - padR).attr('y1', H - padB).attr('y2', H - padB).attr('stroke', 'var(--border)');
+    var ticks = d3.scaleLinear().domain([minV, maxV]).ticks(5);
+    ticks.forEach(function (t) {
+      svg.append('line').attr('x1', X(t)).attr('x2', X(t)).attr('y1', H - padB).attr('y2', H - padB + 4).attr('stroke', 'var(--border)');
+      svg.append('text').attr('x', X(t)).attr('y', H - padB + 16).attr('text-anchor', 'middle').attr('font-size', 10).attr('fill', 'var(--text-2)').text('$' + (t / 1000).toFixed(0) + 'k');
+    });
+
+    document.getElementById('fs-base').textContent = '$' + (base / 1000).toFixed(0) + 'k';
+    document.getElementById('fs-pred').textContent = '$' + (pred / 1000).toFixed(0) + 'k';
+    var tot = FEATS.reduce(function (s, f) { return s + vals[f]; }, 0);
+    document.getElementById('fs-sum').textContent = (tot >= 0 ? '+' : '') + '$' + (tot / 1000).toFixed(1) + 'k';
+  }
+
+  ['sqft', 'age', 'beds', 'zip'].forEach(function (f) {
+    d3.select('#fs-' + f).on('input', function () {
+      state.x[f] = +this.value;
+      document.getElementById('fs-' + f + '-val').textContent = this.value;
+      render();
+    });
+  });
+  render();
+})();
+
+if (window.Motion) window.Motion.mountBanner();
+</script>
+
+</body>
+</html>
