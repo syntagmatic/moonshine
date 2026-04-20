@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Graphs and Networks — Atlas of Atlases</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<script src="../lib/motion.js"></script>
+<script src="lib.js"></script>
+<style>
+/* Figure 1 — Hasse taxonomy */
+.tax-wrap { display: grid; grid-template-columns: 1fr 250px; gap: 1rem; align-items: start; }
+@media (max-width: 720px) { .tax-wrap { grid-template-columns: 1fr; } }
+.tax-wrap > div:first-child { overflow-x: auto; }
+.tax-svg { width: 100%; max-width: 920px; height: auto; display: block; }
+.tax-node rect {
+  stroke: #d1d5db; stroke-width: 1.1;
+  fill: #f8fafc;
+  cursor: pointer;
+  transition: stroke 0.12s, stroke-width 0.12s, filter 0.12s, fill 0.12s;
+}
+.tax-node text { font-family: 'Source Sans 3'; font-size: 10.5px; fill: var(--text); font-weight: 600; text-anchor: middle; pointer-events: none; }
+.tax-node.dim rect { opacity: 0.22; }
+.tax-node.dim text { opacity: 0.35; }
+.tax-node.up rect { stroke: var(--up); stroke-width: 2.6; fill: #f5f3ff; filter: drop-shadow(0 0 3px var(--up)); }
+.tax-node.down rect { stroke: var(--down); stroke-width: 2.6; fill: #fffbeb; filter: drop-shadow(0 0 3px var(--down)); }
+.tax-node.focus rect { stroke: #000; stroke-width: 2.6; fill: #fff; }
+.tax-edge { fill: none; stroke: #cbd5e1; stroke-width: 1.2; transition: stroke 0.12s, stroke-width 0.12s, opacity 0.12s; }
+.tax-edge.up { stroke: var(--up); stroke-width: 2; }
+.tax-edge.down { stroke: var(--down); stroke-width: 2; }
+.tax-edge.dim { opacity: 0.12; }
+
+.tax-panel {
+  font-family: 'Source Sans 3'; font-size: 0.85rem; color: var(--text);
+  background: var(--fig-bg); border: 1px solid var(--border); border-radius: 5px;
+  padding: 0.75rem 0.85rem; min-height: 280px;
+}
+.tax-panel .pname { font-size: 1rem; font-weight: 700; margin-bottom: 0.1rem; }
+.tax-panel .pdef { color: var(--text-2); font-size: 0.82rem; line-height: 1.45; margin-bottom: 0.65rem; }
+.tax-panel .section-label { font-size: 0.68rem; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 0.3rem; margin-top: 0.55rem; }
+.tax-panel .chip {
+  display: inline-block; padding: 0.18rem 0.45rem; border-radius: 3px;
+  color: #fff; font-size: 0.73rem; font-weight: 600; margin: 0.12rem 0.18rem 0.12rem 0;
+  text-decoration: none;
+}
+.tax-panel .chip:hover { filter: brightness(1.1); }
+.tax-panel .empty { font-style: italic; color: var(--text-3); font-size: 0.8rem; }
+
+/* Figure 2 — small multiples gallery */
+.gal-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.7rem; }
+@media (max-width: 640px) { .gal-grid { grid-template-columns: repeat(2, 1fr); } }
+.gal-tile {
+  background: #fdfdff; border: 1px solid var(--border); border-radius: 5px;
+  padding: 0.65rem 0.65rem 0.85rem; display: flex; flex-direction: column; gap: 0.35rem;
+}
+.gal-tile .title { font-family: 'Source Sans 3'; font-size: 0.85rem; font-weight: 700; }
+.gal-tile .def { font-family: 'Source Sans 3'; font-size: 0.72rem; color: var(--text-2); line-height: 1.4; }
+.gal-tile svg { width: 100%; height: 90px; display: block; }
+.gal-tile .chips { display: flex; flex-wrap: wrap; gap: 0.15rem; margin-top: 0.2rem; }
+.gal-tile .chip {
+  display: inline-block; padding: 0.15rem 0.4rem; border-radius: 3px;
+  color: #fff; font-size: 0.68rem; font-weight: 600; text-decoration: none;
+}
+
+/* Figure 3 — pair intersection */
+.pair-wrap { }
+.pair-pickers { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: baseline; margin-bottom: 0.8rem; font-family: 'Source Sans 3'; font-size: 0.85rem; color: var(--text-2); }
+.pair-pickers select {
+  font-family: 'Source Sans 3'; font-size: 0.85rem;
+  padding: 0.25rem 0.45rem; border: 1px solid var(--border); border-radius: 4px;
+  background: var(--fig-bg); color: var(--text);
+}
+.pair-svg { width: 100%; max-width: 700px; height: auto; display: block; margin: 0 auto; }
+.pair-ring { fill: none; stroke: var(--border-2); stroke-width: 1; stroke-dasharray: 3 3; }
+.pair-node-arc { stroke: #fff; stroke-width: 1.5; cursor: pointer; transition: opacity 0.12s; }
+.pair-node-label { font-family: 'Source Sans 3'; font-size: 10px; fill: var(--text); }
+.pair-node-label.faint { fill: var(--text-3); }
+.pair-venn-label { font-family: 'Source Sans 3'; font-size: 12px; font-weight: 700; }
+.pair-count { font-family: 'Source Code Pro'; font-size: 11px; fill: var(--text-2); }
+</style>
+</head>
+<body>
+<div class="article">
+
+<nav class="back-links">
+  <a href="../index.html">← All series</a>
+  <span class="sep">/</span>
+  <a href="index.html">Atlas of Atlases</a>
+</nav>
+
+<header>
+  <h1>Graphs and Networks</h1>
+  <p class="subtitle">A poset of vertex-and-edge structures — from bare graph to Cayley graph, persistence complex, quiver, neighbour graph — with leaves drawn from nine Moonshine series. The same concept lights up in <em>tda</em>, <em>lattice-simulation</em>, <em>bioinformatics</em>, and <em>mathematical-diagrams</em> simultaneously, and that coincidence <em>is</em> the figure.</p>
+</header>
+
+<p class="lede">A graph is a pair <code>(V, E)</code>. Almost every refinement — directed, weighted, simplicial, labelled, Cayley, chordal, planar — is a graph plus extra structure, which is exactly what a taxonomy should encode. The figure below is that taxonomy. Eighteen concepts, ordered by generality. Hover any of them and its up-cone (more general versions) lights purple, its down-cone (specialisations and concrete instances) lights amber, and the side panel fills with explainer chips from whichever series ship a worked example.</p>
+
+<h2>Figure 1 · Concept taxonomy</h2>
+
+<div class="figure">
+  <div class="figure-title">Graph-theoretic concepts, partially ordered by generality</div>
+  <div class="tax-wrap">
+    <div>
+      <svg class="tax-svg" id="fig1-svg" viewBox="0 0 920 600"></svg>
+    </div>
+    <div class="tax-panel" id="fig1-panel"></div>
+  </div>
+  <div class="legend">
+    <span><span class="up-label">↑ more general</span> — supergroups of the concept</span>
+    <span><span class="down-label">↓ more specific</span> — refinements and instances</span>
+    <span>hover any node; side panel fills with explainer chips across series</span>
+  </div>
+  <div class="figure-caption">Rank 0 at the top is the bare definition — a set of vertices and a set of edges. Rank grows downward as we add structure: direction, weight, a group action, a higher-dimensional face, a distance threshold, a probabilistic transition. Multi-series nodes are the load-bearing ones. <em>Cayley graph</em> appears in mathematical-diagrams, parallel-coordinates, and lattice-simulation at once. <em>Simplicial complex</em> appears in tda and emergence. <em>DAG</em> appears in decision-trees, algorithms-ml, and bioinformatics.</div>
+</div>
+
+<p>Two kinds of edges live in this diagram. The solid backbone is <em>subtype</em>: a tree is a special DAG, a DAG is a special directed graph, a directed graph is a graph with an asymmetric edge relation. The same logic threads <em>Cayley graph → vertex-transitive graph → regular graph → graph</em>. The other kind of edge is <em>enrichment</em>: a simplicial complex isn't exactly a subtype of graph, but it refines one by adding 2-faces and up. I treat both as downward edges because the information flow is the same — the specialisation carries the general structure as a forgetful footprint.</p>
+
+<p>What the cross-series chips make visible is how lopsided the reuse is. The <em>tree</em> node shows up in five places at once: decision-trees uses it as a classifier, grateful-dead uses it as a setlist dendrogram, bioinformatics uses it as a phylogeny, algorithms-ml uses it as an ensemble member, lattice-simulation uses it as a spanning structure for an octree. The <em>bipartite</em> node is nearly as promiscuous — parallel-coordinates' two-axis duality, bioinformatics' gene-sample heatmaps, emergence's opinion dynamics. Meanwhile the <em>quiver</em> node has exactly one leaf, in mathematical-diagrams. That asymmetry is the geography of the atlas.</p>
+
+<h2>Figure 2 · Canonical drawings</h2>
+
+<div class="figure">
+  <div class="figure-title">One tiny drawing per concept, with its cross-series reference chips</div>
+  <div class="gal-grid" id="fig2-grid"></div>
+  <div class="figure-caption">The taxonomy gives generality ordering; the gallery gives visual identity. Every concept has a canonical drawing, and the chips underneath each tile name every explainer that leans on it. The gallery is deliberately small: the point is that six drawings you could sketch on a napkin — a tree, a DAG, a cycle, a bipartite graph, a simplicial complex, a Cayley graph — are the vocabulary out of which almost every diagram in the atlas is built.</div>
+</div>
+
+<p>There is a reason the canonical drawings are all simple. Most visual-analytic work in the Moonshine corpus is not about novel graph types — it is about <em>overlaying extra structure onto one of these six skeletons</em>. The Fiedler partition in lattice-simulation and bioinformatics is a two-colouring of an undirected graph. The MFCC cluster tree of Grateful Dead shows is a tree with timbral colour painted on each leaf. The Rips complex is a simplicial complex parameterised by a distance. The cellular automaton transition diagram is a Cayley graph of a shift semigroup. Learning the six shapes well is most of the work.</p>
+
+<h2>Figure 3 · Pair intersection</h2>
+
+<div class="figure">
+  <div class="figure-title">Pick two series; see which graph concepts they share</div>
+  <div class="pair-pickers">
+    <label>A <select id="pair-a"></select></label>
+    <label>B <select id="pair-b"></select></label>
+  </div>
+  <svg class="pair-svg" id="fig3-svg" viewBox="0 0 700 420"></svg>
+  <div class="figure-caption">Two series placed on left and right. Each graph concept is drawn at a radial angle; its three arcs report how many explainers from series A, series B, and both use it. The middle column is the intersection — concepts shared between the two series. The default pairing, <em>topological-data-analysis</em> × <em>bioinformatics</em>, shows the shared spine: simplicial complex, tree, bipartite, neighbour graph.</div>
+</div>
+
+<p>The intersection view answers a question the taxonomy can't: <em>for any two series, how much of their graph-theoretic vocabulary is the same?</em> Moving the pickers around reveals structure. Decision-trees × algorithms-ml shares trees, DAGs, and Markov chains. Grateful-dead × bioinformatics shares segue graphs, dendrograms, and co-occurrence matrices — all instances of weighted graphs and hierarchical trees. Parallel-coordinates × mathematical-diagrams shares the Cayley graph. Lattice-simulation × topological-data-analysis shares the neighbour graph, the simplicial complex, and, through graph automorphisms, the Cayley graph. The empty cells are informative too: the Monster never meets a decision tree.</p>
+
+<footer class="footer-nav">
+  <a class="prev" href="02-group-theory.html">Group theory across the atlas</a>
+  <a class="home" href="index.html">Atlas home</a>
+  <a class="next" href="04-spectral-methods.html">Spectral methods</a>
+</footer>
+
+</div>
+
+<script>
+// ─────────────────────────────── concept taxonomy ──
+
+// Each concept: { key, label, definition, parents, leaves: [{series, title, href}] }
+// Parents are the more-general concepts. Leaves are explainers across series.
+var CONCEPTS = [
+  { key: 'graph', label: 'graph', parents: [],
+    def: 'A vertex set V and edge set E ⊂ V × V. The common ancestor of everything here.' },
+
+  { key: 'undirected', label: 'undirected graph', parents: ['graph'],
+    def: 'Edges are unordered pairs {u, v}. Symmetry in the adjacency matrix.' },
+  { key: 'directed', label: 'directed graph', parents: ['graph'],
+    def: 'Edges are ordered pairs (u, v). Adjacency is asymmetric.' },
+  { key: 'weighted', label: 'weighted graph', parents: ['graph'],
+    def: 'Each edge carries a real number — distance, similarity, probability, flux.' },
+  { key: 'labelled', label: 'labelled graph', parents: ['graph'],
+    def: 'Each vertex or edge carries a label from some finite alphabet.' },
+  { key: 'hypergraph', label: 'hypergraph', parents: ['graph'],
+    def: 'Edges connect any number of vertices — generalises pairwise to k-ary.' },
+
+  { key: 'regular', label: 'regular graph', parents: ['undirected'],
+    def: 'Every vertex has the same degree. Bipartite lattices are a prototype.' },
+  { key: 'bipartite', label: 'bipartite graph', parents: ['undirected'],
+    def: 'Vertices split into two classes; edges go only between classes.' },
+  { key: 'complete', label: 'complete graph Kn', parents: ['regular'],
+    def: 'Every pair of distinct vertices is joined. The maximal regular graph.' },
+  { key: 'cycle', label: 'cycle Cn', parents: ['regular'],
+    def: 'A single closed loop of n vertices. Degree 2 everywhere.' },
+  { key: 'cayley', label: 'Cayley graph', parents: ['regular', 'labelled', 'directed'],
+    def: 'Vertices are group elements; edges are right-multiplication by generators. A group drawn as a graph.' },
+
+  { key: 'dag', label: 'DAG', parents: ['directed'],
+    def: 'Directed acyclic graph. A partial order drawn as edges.' },
+  { key: 'tree', label: 'tree', parents: ['dag', 'undirected'],
+    def: 'Connected acyclic graph on n vertices with n−1 edges. Unique path between any two vertices.' },
+  { key: 'markov', label: 'Markov chain', parents: ['directed', 'weighted'],
+    def: 'Directed graph whose edge weights are transition probabilities summing to 1 per row.' },
+  { key: 'quiver', label: 'quiver', parents: ['directed', 'labelled'],
+    def: 'A directed multigraph — used in representation theory and Dynkin classification.' },
+
+  { key: 'neighbour', label: 'neighbour graph', parents: ['undirected', 'weighted'],
+    def: 'From a metric point cloud: connect pairs at distance < r, or k nearest neighbours.' },
+  { key: 'simplicial', label: 'simplicial complex', parents: ['hypergraph', 'undirected'],
+    def: 'A graph extended with 2-faces, 3-faces, etc., closed under taking subfaces.' },
+  { key: 'planar', label: 'planar graph', parents: ['undirected'],
+    def: 'Embeddable in the plane without edge crossings. Euler\'s formula applies.' },
+
+  { key: 'hasse', label: 'Hasse diagram', parents: ['dag'],
+    def: 'The transitive reduction of a poset — a DAG drawn with covering relations only.' }
+];
+
+// Leaves: each is { concept-key: [ {series, title, href} ] }
+// All files verified to exist in the repo.
+var LEAVES = {
+  'graph': [
+    { series: 'mathematical-diagrams', title: 'Quiver diagrams', href: '../mathematical-diagrams/09-quiver-diagrams.html' }
+  ],
+  'undirected': [
+    { series: 'emergence', title: 'Power-law networks', href: '../emergence/31-power-law-networks.html' },
+    { series: 'lattice-simulation', title: 'Graph automorphisms', href: '../lattice-simulation/10-graph-automorphisms.html' }
+  ],
+  'directed': [
+    { series: 'emergence', title: 'Ant colony', href: '../emergence/09-ant-colony.html' }
+  ],
+  'weighted': [
+    { series: 'grateful-dead', title: 'Songs together', href: '../grateful-dead/05-songs-together.html' },
+    { series: 'bioinformatics', title: 'Circos plot', href: '../bioinformatics/06-circos-plot.html' }
+  ],
+  'labelled': [
+    { series: 'bioinformatics', title: 'Genome browser', href: '../bioinformatics/05-genome-browser.html' }
+  ],
+  'hypergraph': [
+    { series: 'topological-data-analysis', title: 'Simplicial complexes', href: '../topological-data-analysis/02-simplicial-complexes.html' }
+  ],
+  'regular': [
+    { series: 'lattice-simulation', title: 'Bravais lattices', href: '../lattice-simulation/01-bravais-lattices.html' },
+    { series: 'lattice-simulation', title: 'Equivariant networks', href: '../lattice-simulation/15-equivariant-networks.html' }
+  ],
+  'bipartite': [
+    { series: 'parallel-coordinates', title: 'The duality', href: '../parallel-coordinates/01-the-duality.html' },
+    { series: 'bioinformatics', title: 'Heatmap dendrogram', href: '../bioinformatics/01-heatmap-dendrogram.html' },
+    { series: 'emergence', title: 'Opinion dynamics', href: '../emergence/20-opinion-dynamics.html' }
+  ],
+  'complete': [
+    { series: 'mathematical-diagrams', title: 'Chord diagrams', href: '../mathematical-diagrams/12-chord-diagrams.html' }
+  ],
+  'cycle': [
+    { series: 'mathematical-diagrams', title: 'Braid diagrams', href: '../mathematical-diagrams/05-braid-diagrams.html' },
+    { series: 'lattice-simulation', title: 'Periodic boundaries', href: '../lattice-simulation/03-periodic-boundaries.html' }
+  ],
+  'cayley': [
+    { series: 'mathematical-diagrams', title: 'Cayley graphs', href: '../mathematical-diagrams/03-cayley-graphs.html' },
+    { series: 'parallel-coordinates', title: 'Cayley graphs', href: '../parallel-coordinates/19-cayley-graphs.html' },
+    { series: 'lattice-simulation', title: 'Graph automorphisms', href: '../lattice-simulation/10-graph-automorphisms.html' }
+  ],
+  'dag': [
+    { series: 'decision-trees', title: 'Causal trees', href: '../decision-trees/06-causal-trees.html' },
+    { series: 'algorithms-ml', title: 'Backpropagation', href: '../algorithms-ml/04-backpropagation.html' },
+    { series: 'bioinformatics', title: 'Multi-omics heatmap', href: '../bioinformatics/12-multi-omics-heatmap.html' }
+  ],
+  'tree': [
+    { series: 'decision-trees', title: 'Single tree', href: '../decision-trees/01-single-tree.html' },
+    { series: 'algorithms-ml', title: 'Decision trees', href: '../algorithms-ml/05-decision-trees.html' },
+    { series: 'bioinformatics', title: 'Heatmap dendrogram', href: '../bioinformatics/01-heatmap-dendrogram.html' },
+    { series: 'grateful-dead', title: 'MFCC timbral DNA', href: '../grateful-dead/07-mfcc-timbral-DNA.html' },
+    { series: 'lattice-simulation', title: 'Spatial hashing vs octrees', href: '../lattice-simulation/13-spatial-hashing-vs-octrees.html' }
+  ],
+  'markov': [
+    { series: 'algorithms-ml', title: 'Markov chains', href: '../algorithms-ml/03-markov-chains.html' },
+    { series: 'grateful-dead', title: 'Show grammar', href: '../grateful-dead/03-show-grammar.html' },
+    { series: 'emergence', title: 'Random walks', href: '../emergence/18-random-walks.html' }
+  ],
+  'quiver': [
+    { series: 'mathematical-diagrams', title: 'Quiver diagrams', href: '../mathematical-diagrams/09-quiver-diagrams.html' }
+  ],
+  'neighbour': [
+    { series: 'topological-data-analysis', title: 'Points, proximity, Rips', href: '../topological-data-analysis/01-points-proximity-rips.html' },
+    { series: 'algorithms-ml', title: 'k-nearest neighbors', href: '../algorithms-ml/06-k-nearest-neighbors.html' },
+    { series: 'parallel-coordinates', title: 'Structure in 4D', href: '../parallel-coordinates/13-structure-in-4d.html' },
+    { series: 'lattice-simulation', title: 'Spatial hashing vs octrees', href: '../lattice-simulation/13-spatial-hashing-vs-octrees.html' }
+  ],
+  'simplicial': [
+    { series: 'topological-data-analysis', title: 'Simplicial complexes', href: '../topological-data-analysis/02-simplicial-complexes.html' },
+    { series: 'topological-data-analysis', title: 'The Mapper algorithm', href: '../topological-data-analysis/03-the-mapper-algorithm.html' },
+    { series: 'emergence', title: 'Morphogenesis', href: '../emergence/29-morphogenesis.html' }
+  ],
+  'planar': [
+    { series: 'mathematical-diagrams', title: 'Knot diagrams', href: '../mathematical-diagrams/06-knot-diagrams.html' },
+    { series: 'grateful-dead', title: 'Segue graph', href: '../grateful-dead/04-segue-graph.html' }
+  ],
+  'hasse': [
+    { series: 'mathematical-diagrams', title: 'Hasse diagrams', href: '../mathematical-diagrams/01-hasse-diagrams.html' },
+    { series: 'lattice-simulation', title: 'Symmetry reduction', href: '../lattice-simulation/05-symmetry-reduction.html' }
+  ]
+};
+
+var byKey = {};
+CONCEPTS.forEach(function (c) { byKey[c.key] = c; });
+
+var EDGES = [];
+CONCEPTS.forEach(function (c) {
+  c.parents.forEach(function (p) { EDGES.push([p, c.key]); });
+});
+
+// ───── Figure 1: Hasse taxonomy ─────────────────────────────
+(function () {
+  var W = 920, H = 600;
+  var svg = d3.select('#fig1-svg');
+
+  // Manual rank + order for a clean Sugiyama-style layout.
+  var rank = {
+    'graph': 0,
+    'undirected': 1, 'directed': 1, 'weighted': 1, 'labelled': 1, 'hypergraph': 1,
+    'regular': 2, 'bipartite': 2, 'planar': 2, 'dag': 2, 'markov': 2, 'quiver': 2, 'neighbour': 2, 'simplicial': 2,
+    'tree': 3, 'complete': 3, 'cycle': 3, 'hasse': 3,
+    'cayley': 4
+  };
+  var ORDER = {
+    0: ['graph'],
+    1: ['hypergraph', 'undirected', 'weighted', 'labelled', 'directed'],
+    2: ['simplicial', 'planar', 'bipartite', 'regular', 'neighbour', 'markov', 'dag', 'quiver'],
+    3: ['complete', 'cycle', 'tree', 'hasse'],
+    4: ['cayley']
+  };
+
+  // Per-label width from measured character count.
+  function nodeWidth(label) { return Math.max(70, label.length * 6.5 + 20); }
+  var NH = 22;
+
+  // Rows whose total node-width exceeds available space get zigzagged:
+  // odd-index nodes shift up by ZIG, even-index shift down by ZIG.
+  var ZIG = 14;
+  var pos = {};
+  var yPad = 38, xPad = 30;
+  var maxRank = 4;
+  var gap = 14; // minimum horizontal gap between adjacent node boxes
+
+  for (var r = 0; r <= maxRank; r++) {
+    var row = ORDER[r];
+    var yBase = yPad + (r / maxRank) * (H - 2 * yPad);
+    var totalW = row.reduce(function (s, k) { return s + nodeWidth(byKey[k].label); }, 0)
+               + gap * Math.max(0, row.length - 1);
+    var avail = W - 2 * xPad;
+    var zigzag = totalW > avail;
+
+    // Distribute x-centres evenly across the row.
+    // Compute cumulative widths and centre each box in its slot.
+    var slots = [];
+    if (zigzag) {
+      // pack tight: cursor advances by width+gap
+      var cursor = xPad + Math.max(0, (avail - totalW) / 2);
+      row.forEach(function (k) {
+        var w = nodeWidth(byKey[k].label);
+        slots.push(cursor + w / 2);
+        cursor += w + gap;
+      });
+    } else {
+      row.forEach(function (k, i) {
+        slots.push(xPad + ((i + 1) / (row.length + 1)) * avail);
+      });
+    }
+    row.forEach(function (k, i) {
+      var yOff = zigzag ? (i % 2 === 0 ? -ZIG : ZIG) : 0;
+      pos[k] = { x: slots[i], y: yBase + yOff };
+    });
+  }
+
+  // Edges drawn as cubic Beziers — use per-node actual y (including zigzag offset).
+  var edgeSel = svg.append('g').selectAll('path').data(EDGES).enter().append('path')
+    .attr('class', 'tax-edge')
+    .attr('d', function (e) {
+      var p = pos[e[0]], q = pos[e[1]];
+      var midY = (p.y + q.y) / 2;
+      return 'M' + p.x + ',' + p.y + ' C' + p.x + ',' + midY + ' ' + q.x + ',' + midY + ' ' + q.x + ',' + q.y;
+    })
+    .attr('data-src', function (e) { return e[0]; })
+    .attr('data-dst', function (e) { return e[1]; });
+
+  var nodeSel = svg.append('g').selectAll('.tax-node').data(CONCEPTS).enter().append('g')
+    .attr('class', 'tax-node')
+    .attr('data-key', function (d) { return d.key; })
+    .attr('transform', function (d) {
+      var p = pos[d.key];
+      return 'translate(' + (p.x - nodeWidth(d.label) / 2) + ',' + (p.y - NH / 2) + ')';
+    });
+
+  nodeSel.append('rect')
+    .attr('width', function (d) { return nodeWidth(d.label); })
+    .attr('height', NH)
+    .attr('rx', 4);
+
+  nodeSel.append('text')
+    .attr('x', function (d) { return nodeWidth(d.label) / 2; })
+    .attr('y', NH / 2 + 3.5)
+    .text(function (d) { return d.label; });
+
+  // Panel rendering
+  var panel = d3.select('#fig1-panel');
+  function renderPanel(key) {
+    var c = byKey[key];
+    panel.html('');
+    panel.append('div').attr('class', 'pname').text(c.label);
+    panel.append('div').attr('class', 'pdef').text(c.def);
+
+    var up = Atlas.upCone(key, EDGES); delete up[key];
+    var down = Atlas.downCone(key, EDGES); delete down[key];
+
+    var leaves = LEAVES[key] || [];
+    panel.append('div').attr('class', 'section-label').text(
+      leaves.length ? 'Explainers (' + leaves.length + ' across ' +
+        (new Set(leaves.map(function (l) { return l.series; }))).size + ' series)'
+      : 'Explainers'
+    );
+    if (leaves.length === 0) {
+      panel.append('div').attr('class', 'empty').text('No direct leaves — this is a structural node.');
+    } else {
+      var host = panel.append('div');
+      leaves.forEach(function (l) {
+        var s = Atlas.byKey[l.series];
+        host.append('a')
+          .attr('class', 'chip')
+          .style('background', s ? s.color : '#999')
+          .attr('href', l.href)
+          .attr('title', (s ? s.title : l.series) + ' — ' + l.title)
+          .text(l.title);
+      });
+    }
+
+    var upKeys = Object.keys(up);
+    if (upKeys.length) {
+      panel.append('div').attr('class', 'section-label').style('color', 'var(--up)').text('Up-cone (more general)');
+      var uh = panel.append('div').style('font-size', '0.78rem').style('color', 'var(--text-2)');
+      uh.text(upKeys.map(function (k) { return byKey[k].label; }).join(' · '));
+    }
+    var downKeys = Object.keys(down);
+    if (downKeys.length) {
+      panel.append('div').attr('class', 'section-label').style('color', 'var(--down)').text('Down-cone (more specific)');
+      var dh = panel.append('div').style('font-size', '0.78rem').style('color', 'var(--text-2)');
+      dh.text(downKeys.map(function (k) { return byKey[k].label; }).join(' · '));
+    }
+  }
+
+  function highlight(key) {
+    var up = Atlas.upCone(key, EDGES);
+    var down = Atlas.downCone(key, EDGES);
+    nodeSel.classed('up', function (d) { return up[d.key] && d.key !== key; });
+    nodeSel.classed('down', function (d) { return down[d.key] && d.key !== key; });
+    nodeSel.classed('focus', function (d) { return d.key === key; });
+    nodeSel.classed('dim', function (d) { return !up[d.key] && !down[d.key]; });
+    edgeSel.classed('up', function (e) { return up[e[0]] && up[e[1]]; });
+    edgeSel.classed('down', function (e) { return down[e[0]] && down[e[1]]; });
+    edgeSel.classed('dim', function (e) {
+      var bothUp = up[e[0]] && up[e[1]];
+      var bothDown = down[e[0]] && down[e[1]];
+      return !bothUp && !bothDown;
+    });
+  }
+  function clearHighlight() {
+    nodeSel.classed('up', false).classed('down', false).classed('focus', false).classed('dim', false);
+    edgeSel.classed('up', false).classed('down', false).classed('dim', false);
+  }
+
+  nodeSel.on('mouseenter', function (event, d) { highlight(d.key); renderPanel(d.key); });
+  nodeSel.on('mouseleave', function () { clearHighlight(); });
+  nodeSel.on('click', function (event, d) { renderPanel(d.key); });
+
+  // Initial panel: tree (heavily cross-linked)
+  renderPanel('tree');
+})();
+
+// ───── Figure 2: canonical drawings gallery ─────────────────
+(function () {
+  var grid = d3.select('#fig2-grid');
+  var W = 150, H = 90;
+
+  var tiles = [
+    { key: 'tree', drawer: drawTree },
+    { key: 'dag', drawer: drawDAG },
+    { key: 'cycle', drawer: drawCycle },
+    { key: 'bipartite', drawer: drawBipartite },
+    { key: 'simplicial', drawer: drawSimplicial },
+    { key: 'cayley', drawer: drawCayley }
+  ];
+
+  tiles.forEach(function (t) {
+    var c = byKey[t.key];
+    var tile = grid.append('div').attr('class', 'gal-tile');
+    tile.append('div').attr('class', 'title').text(c.label);
+    tile.append('div').attr('class', 'def').text(c.def);
+    var svg = tile.append('svg').attr('viewBox', '0 0 ' + W + ' ' + H);
+    t.drawer(svg, W, H);
+    var chipRow = tile.append('div').attr('class', 'chips');
+    (LEAVES[t.key] || []).forEach(function (l) {
+      var s = Atlas.byKey[l.series];
+      chipRow.append('a')
+        .attr('class', 'chip')
+        .style('background', s ? s.color : '#999')
+        .attr('href', l.href)
+        .attr('title', (s ? s.title : l.series) + ' — ' + l.title)
+        .text(s ? s.title.split(' ')[0] : l.series);
+    });
+  });
+
+  function edge(svg, x1, y1, x2, y2, opt) {
+    opt = opt || {};
+    svg.append('line').attr('x1', x1).attr('y1', y1).attr('x2', x2).attr('y2', y2)
+      .attr('stroke', opt.stroke || '#94a3b8').attr('stroke-width', opt.w || 1.2)
+      .attr('marker-end', opt.arrow ? 'url(#arr)' : null);
+  }
+  function node(svg, x, y, opt) {
+    opt = opt || {};
+    svg.append('circle').attr('cx', x).attr('cy', y).attr('r', opt.r || 3.5)
+      .attr('fill', opt.fill || '#1e293b').attr('stroke', '#fff').attr('stroke-width', 1);
+  }
+
+  function defsArrow(svg) {
+    var defs = svg.append('defs');
+    defs.append('marker').attr('id', 'arr').attr('viewBox', '0 -5 10 10').attr('refX', 8).attr('refY', 0)
+      .attr('markerWidth', 5).attr('markerHeight', 5).attr('orient', 'auto')
+      .append('path').attr('d', 'M0,-4L8,0L0,4').attr('fill', '#64748b');
+  }
+
+  function drawTree(svg, W, H) {
+    // Binary tree
+    var cx = W / 2;
+    var lvls = [
+      [{ x: cx, y: 15 }],
+      [{ x: cx - 30, y: 40 }, { x: cx + 30, y: 40 }],
+      [{ x: cx - 45, y: 70 }, { x: cx - 15, y: 70 }, { x: cx + 15, y: 70 }, { x: cx + 45, y: 70 }]
+    ];
+    edge(svg, lvls[0][0].x, lvls[0][0].y, lvls[1][0].x, lvls[1][0].y);
+    edge(svg, lvls[0][0].x, lvls[0][0].y, lvls[1][1].x, lvls[1][1].y);
+    edge(svg, lvls[1][0].x, lvls[1][0].y, lvls[2][0].x, lvls[2][0].y);
+    edge(svg, lvls[1][0].x, lvls[1][0].y, lvls[2][1].x, lvls[2][1].y);
+    edge(svg, lvls[1][1].x, lvls[1][1].y, lvls[2][2].x, lvls[2][2].y);
+    edge(svg, lvls[1][1].x, lvls[1][1].y, lvls[2][3].x, lvls[2][3].y);
+    lvls.forEach(function (l) { l.forEach(function (p) { node(svg, p.x, p.y); }); });
+  }
+
+  function drawDAG(svg, W, H) {
+    defsArrow(svg);
+    var pts = [
+      { x: 20, y: 20 },
+      { x: 60, y: 20 },
+      { x: 40, y: 50 },
+      { x: 90, y: 45 },
+      { x: 120, y: 25 },
+      { x: 100, y: 75 }
+    ];
+    var es = [[0, 2], [1, 2], [1, 3], [2, 5], [3, 4], [3, 5]];
+    es.forEach(function (e) {
+      edge(svg, pts[e[0]].x, pts[e[0]].y, pts[e[1]].x, pts[e[1]].y, { arrow: true });
+    });
+    pts.forEach(function (p) { node(svg, p.x, p.y); });
+  }
+
+  function drawCycle(svg, W, H) {
+    var cx = W / 2, cy = H / 2, r = 28;
+    var N = 7;
+    var pts = d3.range(N).map(function (i) {
+      var a = -Math.PI / 2 + i * 2 * Math.PI / N;
+      return { x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) };
+    });
+    pts.forEach(function (p, i) {
+      var q = pts[(i + 1) % N];
+      edge(svg, p.x, p.y, q.x, q.y);
+    });
+    pts.forEach(function (p) { node(svg, p.x, p.y); });
+  }
+
+  function drawBipartite(svg, W, H) {
+    var left = d3.range(4).map(function (i) { return { x: 30, y: 15 + i * 20 }; });
+    var right = d3.range(3).map(function (i) { return { x: 120, y: 22 + i * 24 }; });
+    var es = [[0, 0], [0, 1], [1, 0], [1, 2], [2, 1], [3, 1], [3, 2]];
+    es.forEach(function (e) {
+      edge(svg, left[e[0]].x, left[e[0]].y, right[e[1]].x, right[e[1]].y);
+    });
+    left.forEach(function (p) { node(svg, p.x, p.y, { fill: '#2563eb' }); });
+    right.forEach(function (p) { node(svg, p.x, p.y, { fill: '#ea580c' }); });
+  }
+
+  function drawSimplicial(svg, W, H) {
+    // Three points forming a triangle (2-simplex), one extra vertex with edges.
+    var A = { x: 45, y: 25 }, B = { x: 85, y: 30 }, C = { x: 60, y: 65 };
+    var D = { x: 110, y: 65 };
+    // Filled triangle (2-face)
+    svg.append('path')
+      .attr('d', 'M' + A.x + ',' + A.y + 'L' + B.x + ',' + B.y + 'L' + C.x + ',' + C.y + 'Z')
+      .attr('fill', '#c4b5fd').attr('opacity', 0.7).attr('stroke', 'none');
+    edge(svg, A.x, A.y, B.x, B.y);
+    edge(svg, B.x, B.y, C.x, C.y);
+    edge(svg, A.x, A.y, C.x, C.y);
+    edge(svg, B.x, B.y, D.x, D.y);
+    edge(svg, C.x, C.y, D.x, D.y);
+    [A, B, C, D].forEach(function (p) { node(svg, p.x, p.y); });
+  }
+
+  function drawCayley(svg, W, H) {
+    // Cayley graph of Z6 with two generators (±1 and ±2): a hexagon plus chords.
+    var cx = W / 2, cy = H / 2, r = 30;
+    var N = 6;
+    var pts = d3.range(N).map(function (i) {
+      var a = -Math.PI / 2 + i * 2 * Math.PI / N;
+      return { x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) };
+    });
+    // generator a: ±1 (hexagon edges)
+    pts.forEach(function (p, i) {
+      var q = pts[(i + 1) % N];
+      edge(svg, p.x, p.y, q.x, q.y, { stroke: '#6366f1', w: 1.4 });
+    });
+    // generator b: +2 (triangle chord in dashed orange)
+    [0, 2, 4].forEach(function (i) {
+      var p = pts[i], q = pts[(i + 2) % N];
+      svg.append('line').attr('x1', p.x).attr('y1', p.y).attr('x2', q.x).attr('y2', q.y)
+        .attr('stroke', '#ea580c').attr('stroke-width', 1.2).attr('stroke-dasharray', '3 2');
+    });
+    pts.forEach(function (p) { node(svg, p.x, p.y); });
+  }
+})();
+
+// ───── Figure 3: pair intersection ───────────────────────────
+(function () {
+  // Build concept-to-series map
+  var conceptSeries = {};
+  CONCEPTS.forEach(function (c) {
+    var agg = {};
+    (LEAVES[c.key] || []).forEach(function (l) {
+      agg[l.series] = (agg[l.series] || 0) + 1;
+    });
+    conceptSeries[c.key] = agg;
+  });
+
+  // Only keep concepts that have at least one leaf.
+  var CONCEPT_KEYS_WITH_LEAVES = CONCEPTS.filter(function (c) { return (LEAVES[c.key] || []).length > 0; }).map(function (c) { return c.key; });
+
+  // Offer series picker among ones with any presence.
+  var seriesWithLeaves = {};
+  CONCEPTS.forEach(function (c) {
+    (LEAVES[c.key] || []).forEach(function (l) { seriesWithLeaves[l.series] = true; });
+  });
+  var seriesList = Atlas.SERIES.filter(function (s) { return seriesWithLeaves[s.key]; });
+
+  var pa = d3.select('#pair-a'), pb = d3.select('#pair-b');
+  seriesList.forEach(function (s) {
+    pa.append('option').attr('value', s.key).text(s.title);
+    pb.append('option').attr('value', s.key).text(s.title);
+  });
+  pa.property('value', 'topological-data-analysis');
+  pb.property('value', 'bioinformatics');
+
+  var W = 700, H = 420;
+  var svg = d3.select('#fig3-svg');
+
+  function render() {
+    svg.selectAll('*').remove();
+    var keyA = pa.property('value');
+    var keyB = pb.property('value');
+    var sA = Atlas.byKey[keyA];
+    var sB = Atlas.byKey[keyB];
+
+    // For each concept, count leaves in A only, in B only, shared.
+    var rows = CONCEPT_KEYS_WITH_LEAVES.map(function (k) {
+      var m = conceptSeries[k];
+      var a = m[keyA] || 0;
+      var b = m[keyB] || 0;
+      return { key: k, label: byKey[k].label, a: a, b: b };
+    });
+
+    // Partition: A-only, intersection (both), B-only.
+    var aOnly = rows.filter(function (r) { return r.a > 0 && r.b === 0; });
+    var both  = rows.filter(function (r) { return r.a > 0 && r.b > 0; });
+    var bOnly = rows.filter(function (r) { return r.a === 0 && r.b > 0; });
+
+    // Layout: three columns.
+    var colX = { a: 160, m: 350, b: 540 };
+    var headerY = 26;
+
+    svg.append('text').attr('x', colX.a).attr('y', headerY).attr('text-anchor', 'middle')
+      .attr('class', 'pair-venn-label').attr('fill', sA.color).text(sA.title);
+    svg.append('text').attr('x', colX.m).attr('y', headerY).attr('text-anchor', 'middle')
+      .attr('class', 'pair-venn-label').attr('fill', 'var(--accent)').text('shared');
+    svg.append('text').attr('x', colX.b).attr('y', headerY).attr('text-anchor', 'middle')
+      .attr('class', 'pair-venn-label').attr('fill', sB.color).text(sB.title);
+
+    var subY = headerY + 14;
+    svg.append('text').attr('x', colX.a).attr('y', subY).attr('text-anchor', 'middle')
+      .attr('class', 'pair-count').text(aOnly.length + ' concepts only in A');
+    svg.append('text').attr('x', colX.m).attr('y', subY).attr('text-anchor', 'middle')
+      .attr('class', 'pair-count').text(both.length + ' shared');
+    svg.append('text').attr('x', colX.b).attr('y', subY).attr('text-anchor', 'middle')
+      .attr('class', 'pair-count').text(bOnly.length + ' concepts only in B');
+
+    // helper
+    function drawCol(items, cx, color, countKey) {
+      var rowH = 26;
+      var startY = 62;
+      items.forEach(function (r, i) {
+        var y = startY + i * rowH;
+        // concept label
+        svg.append('text').attr('x', cx).attr('y', y).attr('text-anchor', 'middle')
+          .attr('class', 'pair-node-label').style('font-weight', 700).text(r.label);
+        // count bar
+        var n = r[countKey];
+        var bw = 8 * n;
+        svg.append('rect').attr('x', cx - bw / 2).attr('y', y + 4).attr('width', bw).attr('height', 6)
+          .attr('fill', color).attr('rx', 2);
+        svg.append('text').attr('x', cx).attr('y', y + 20).attr('text-anchor', 'middle')
+          .attr('class', 'pair-count').text(n + ' explainer' + (n === 1 ? '' : 's'));
+      });
+      if (items.length === 0) {
+        svg.append('text').attr('x', cx).attr('y', 90).attr('text-anchor', 'middle')
+          .attr('class', 'pair-count').style('font-style', 'italic').text('(none)');
+      }
+    }
+
+    drawCol(aOnly, colX.a, sA.color, 'a');
+    drawCol(bOnly, colX.b, sB.color, 'b');
+
+    // For 'both' column: show a split bar A|B
+    var rowH = 44;
+    var startY = 62;
+    both.forEach(function (r, i) {
+      var y = startY + i * rowH;
+      svg.append('text').attr('x', colX.m).attr('y', y).attr('text-anchor', 'middle')
+        .attr('class', 'pair-node-label').style('font-weight', 700).text(r.label);
+      var totalBw = 8 * (r.a + r.b);
+      var aw = 8 * r.a, bw = 8 * r.b;
+      svg.append('rect').attr('x', colX.m - totalBw / 2).attr('y', y + 4).attr('width', aw).attr('height', 8)
+        .attr('fill', sA.color).attr('rx', 2);
+      svg.append('rect').attr('x', colX.m - totalBw / 2 + aw).attr('y', y + 4).attr('width', bw).attr('height', 8)
+        .attr('fill', sB.color).attr('rx', 2);
+      svg.append('text').attr('x', colX.m).attr('y', y + 26).attr('text-anchor', 'middle')
+        .attr('class', 'pair-count')
+        .text(r.a + ' ' + sA.title.split(' ')[0] + ' · ' + r.b + ' ' + sB.title.split(' ')[0]);
+    });
+    if (both.length === 0) {
+      svg.append('text').attr('x', colX.m).attr('y', 90).attr('text-anchor', 'middle')
+        .attr('class', 'pair-count').style('font-style', 'italic').text('(no shared concepts)');
+    }
+
+    // Connecting faint lines between shared rows and their A/B column rows
+    both.forEach(function (r, i) {
+      var y = startY + i * rowH + 6;
+      // find matching rows in aOnly? no — shared row lives in both so we link to imaginary rows in A and B — skip for cleanliness
+    });
+
+    // Summary line at bottom
+    var bottomY = H - 16;
+    var jaccard = both.length / Math.max(1, (aOnly.length + both.length + bOnly.length));
+    svg.append('text').attr('x', W / 2).attr('y', bottomY).attr('text-anchor', 'middle')
+      .attr('class', 'pair-count')
+      .text('Jaccard over graph concepts: ' + (jaccard * 100).toFixed(0) + '%  ·  ' +
+            'intersection size = ' + both.length + ' / union = ' +
+            (aOnly.length + both.length + bOnly.length));
+  }
+
+  pa.on('change', render);
+  pb.on('change', render);
+  render();
+})();
+</script>
+
+</body>
+</html>
+</content>
+</invoke>

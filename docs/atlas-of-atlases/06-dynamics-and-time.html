@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dynamics and Time — Atlas of Atlases</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<script src="../lib/motion.js"></script>
+<script src="lib.js"></script>
+<style>
+/* ── Figure 1 · Hasse of dynamics concepts ───────────────────────── */
+.dyn-wrap { overflow-x: auto; }
+.dyn-svg { width: 100%; max-width: 960px; height: auto; display: block; }
+.dyn-node rect { stroke-width: 1.2; cursor: pointer; transition: stroke-width 0.12s, filter 0.12s; }
+.dyn-node text.label { font-family: 'Source Sans 3'; font-size: 10.5px; fill: var(--text); font-weight: 600; text-anchor: middle; pointer-events: none; }
+.dyn-node.dim rect { opacity: 0.22; }
+.dyn-node.up rect { stroke: var(--up); stroke-width: 2.5; filter: drop-shadow(0 0 3px var(--up)); }
+.dyn-node.down rect { stroke: var(--down); stroke-width: 2.5; filter: drop-shadow(0 0 3px var(--down)); }
+.dyn-node.focus rect { stroke: #000; stroke-width: 2.5; }
+.dyn-edge { fill: none; stroke: #cbd5e1; stroke-width: 1.3; transition: stroke 0.12s, stroke-width 0.12s; }
+.dyn-edge.up { stroke: var(--up); stroke-width: 2; }
+.dyn-edge.down { stroke: var(--down); stroke-width: 2; }
+.dyn-edge.dim { opacity: 0.12; }
+
+.dyn-tip {
+  position: absolute; pointer-events: none; opacity: 0; transition: opacity 0.1s;
+  background: #111; color: #fff; font-family: 'Source Sans 3'; font-size: 0.8rem;
+  padding: 0.45rem 0.6rem; border-radius: 4px; max-width: 260px; z-index: 20;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+}
+.dyn-tip .tip-head { font-weight: 700; margin-bottom: 0.25rem; }
+.dyn-tip .tip-sub { color: #cbd5e1; font-size: 0.72rem; margin-bottom: 0.35rem; }
+.dyn-tip .chip {
+  display: inline-block; padding: 0.14rem 0.4rem; border-radius: 3px;
+  color: #fff; font-size: 0.7rem; font-weight: 600;
+  margin: 0.12rem 0.2rem 0.12rem 0; font-family: 'Source Sans 3';
+}
+.dyn-tip .chip a { color: #fff; text-decoration: none; }
+
+/* ── Figure 2 · 2×2 quadrant grid ─────────────────────────────────── */
+.quad-wrap {
+  display: grid;
+  grid-template-columns: 72px 1fr 1fr;
+  grid-template-rows: 40px 1fr 1fr;
+  gap: 4px;
+  font-family: var(--heading-font);
+}
+.quad-axis-col, .quad-axis-row {
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.82rem; font-weight: 700; color: var(--text-2); text-align: center;
+}
+.quad-axis-row { writing-mode: vertical-rl; transform: rotate(180deg); line-height: 1.2; }
+.quad-corner { }
+.quad-cell {
+  background: var(--fig-bg);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 0.65rem 0.7rem;
+  min-height: 160px;
+  position: relative;
+}
+.quad-cell-title {
+  font-size: 0.78rem; font-weight: 700; color: var(--text);
+  text-transform: uppercase; letter-spacing: 0.05em;
+  margin-bottom: 0.3rem;
+}
+.quad-cell-sub {
+  font-size: 0.72rem; color: var(--text-3); margin-bottom: 0.55rem;
+  font-style: italic;
+}
+.quad-chip {
+  display: inline-block;
+  padding: 0.22rem 0.5rem;
+  border-radius: 3px;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 600;
+  margin: 0.13rem 0.15rem 0.13rem 0;
+  cursor: default;
+  line-height: 1.3;
+}
+.quad-chip a { color: #fff; text-decoration: none; }
+.quad-chip small { font-weight: 400; opacity: 0.75; font-size: 0.92em; margin-left: 0.2rem; }
+@media (max-width: 640px) {
+  .quad-wrap { grid-template-columns: 58px 1fr; grid-template-rows: auto; }
+  .quad-corner, .quad-axis-col { display: none; }
+  .quad-axis-row { writing-mode: horizontal-tb; transform: none; justify-content: flex-start; padding-left: 0.25rem; }
+}
+
+/* ── Figure 3 · Formalism picker radial menu ──────────────────────── */
+.pick-wrap { display: grid; grid-template-columns: minmax(280px, 340px) 1fr; gap: 1.25rem; align-items: start; }
+@media (max-width: 640px) { .pick-wrap { grid-template-columns: 1fr; } }
+.pick-svg { width: 100%; max-width: 340px; height: auto; display: block; }
+.pick-wedge { cursor: pointer; transition: opacity 0.15s, filter 0.15s; }
+.pick-wedge.on { filter: drop-shadow(0 0 5px rgba(109, 40, 217, 0.55)); }
+.pick-wedge:not(.on) { opacity: 0.6; }
+.pick-wedge-label {
+  font-family: 'Source Sans 3'; font-size: 10.5px; fill: #fff; font-weight: 700;
+  pointer-events: none; text-anchor: middle;
+}
+.pick-center {
+  font-family: 'Source Sans 3'; font-size: 10px; fill: var(--text-2);
+  text-anchor: middle; pointer-events: none; font-weight: 600;
+}
+.pick-view { font-family: var(--heading-font); font-size: 0.88rem; color: var(--text); }
+.pick-view h3 { font-size: 1.1rem; margin: 0 0 0.25rem; font-weight: 700; color: var(--text); }
+.pick-view .pick-def {
+  font-size: 0.85rem; color: var(--text-2);
+  margin-bottom: 0.8rem; line-height: 1.5;
+}
+.pick-view .pick-def code { font-size: 0.88em; background: var(--accent-light); padding: 0.05rem 0.3rem; border-radius: 3px; }
+.pick-view .series-block { margin-bottom: 0.6rem; }
+.pick-view .series-head {
+  display: flex; align-items: center; gap: 0.5rem;
+  font-size: 0.78rem; font-weight: 700;
+  margin-bottom: 0.25rem;
+}
+.pick-view .series-dot { width: 10px; height: 10px; border-radius: 50%; }
+.pick-view .series-name a { color: inherit; text-decoration: none; }
+.pick-view .series-name a:hover { color: var(--accent); }
+.pick-view .series-examples {
+  font-size: 0.78rem; color: var(--text-2); line-height: 1.5;
+  padding-left: 1.1rem;
+}
+.pick-view .series-examples a { color: var(--text-2); text-decoration: underline; text-decoration-color: var(--border-2); text-underline-offset: 2px; }
+.pick-view .series-examples a:hover { color: var(--accent); text-decoration-color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="article">
+
+<nav class="back-links">
+  <a href="../index.html">← All series</a>
+  <span class="sep">/</span>
+  <a href="index.html">Atlas of Atlases</a>
+</nav>
+
+<header>
+  <h1>Dynamics and time</h1>
+  <p class="subtitle">Six or seven Moonshine series spend most of their time simulating something. Under the hood they are all instances of the same small zoo of time-evolution formalisms. This article lays that zoo out as a single Hasse diagram, sorts it into a deterministic-vs-stochastic quadrant, then lets you pick a formalism and see which explainers actually use it.</p>
+</header>
+
+<p class="lede">An ODE, a Markov chain, a cellular automaton and an agent-based model all solve the same underlying problem: given the state of a system at time <em>t</em>, what is its state at time <em>t + dt</em>? The answers differ on two axes. Is the update rule deterministic or does it sample from a distribution? Is time advanced in discrete ticks or as a continuous flow? That two-axis split, plus the question of whether state lives on a lattice or on the real line, is enough to explain why the same half-dozen formalisms keep reappearing across the Moonshine corpus.</p>
+
+<h2>Figure 1 · The Hasse of time-evolution formalisms</h2>
+
+<div class="figure">
+  <div class="figure-title">From <em>dynamical system</em> at the top down to specific integrators</div>
+  <div class="dyn-wrap" style="position: relative;">
+    <svg class="dyn-svg" id="fig1-svg" viewBox="0 0 960 600"></svg>
+    <div class="dyn-tip" id="fig1-tip"></div>
+  </div>
+  <div class="legend">
+    <span><span class="up-label">↑ more general</span> — the formalism this one specialises</span>
+    <span><span class="down-label">↓ more specific</span> — concrete integrators or schemes that instantiate it</span>
+    <span>hover a node for its series badges and example explainers</span>
+  </div>
+  <div class="figure-caption">The root <em>dynamical system</em> splits on two independent binaries — deterministic vs stochastic, continuous-time vs discrete-time — and those mix further with continuous-state vs discrete-state. Specific workhorses (leapfrog, Metropolis, lattice Boltzmann, random walk) sit at the bottom. Hover any node to see which Moonshine explainers instantiate it.</div>
+</div>
+
+<p>The poset is not strict — most nodes have two or three parents, because every real formalism sits at an intersection of binaries. Metropolis-Hastings is discrete-time and stochastic and on a discrete state space; leapfrog is discrete-time and deterministic and on a continuous state space; a Langevin SDE is continuous-time, stochastic, continuous-state. What the diagram gives you is a way to compare them: move up for generality, move down for a runnable scheme. The up-cone of <em>lattice Boltzmann</em> passes through <em>discrete-velocity PDE</em>, <em>cellular automaton</em> and <em>kinetic equation</em> before it reaches <em>dynamical system</em>. That is exactly the ancestry the <a href="../lattice-simulation/08-lattice-boltzmann.html">lattice-Boltzmann explainer</a> traces.</p>
+
+<p>Three families dominate the landscape. The <em>ODE family</em> flows deterministic states on continuous time — the <a href="../lithium-ion/05-voltage-under-load.html">RC-circuit model of a lithium cell</a>, the <a href="../emergence/07-predator-prey.html">Lotka-Volterra equations</a>, any <a href="../emergence/17-strange-attractors.html">strange attractor</a>. The <em>Markov family</em> takes discrete jumps between states under a transition kernel — a <a href="../algorithms-ml/03-markov-chains.html">Markov chain</a>, <a href="../lattice-simulation/09-ising-z2-breaking.html">Metropolis on the Ising model</a>, the <a href="../emergence/04-traffic-shockwaves.html">Nagel-Schreckenberg</a> traffic rule. The <em>agent / CA family</em> is a special case: identical local rules applied in parallel on a lattice or graph, which is how <a href="../emergence/02-cellular-automata.html">cellular automata</a>, <a href="../emergence/01-flocking.html">flocking</a>, <a href="../sph/01-particles-and-forces.html">SPH particles</a> and Boltzmann lattices are all put together. The Hasse makes the inheritance explicit.</p>
+
+<h2>Figure 2 · The deterministic × time-continuity quadrant</h2>
+
+<div class="figure">
+  <div class="figure-title">Every time-evolution scheme lives in exactly one of four cells</div>
+  <div class="quad-wrap" id="fig2-quad">
+    <div class="quad-corner"></div>
+    <div class="quad-axis-col">continuous time</div>
+    <div class="quad-axis-col">discrete time</div>
+
+    <div class="quad-axis-row">deterministic</div>
+    <div class="quad-cell" data-cell="det-cont">
+      <div class="quad-cell-title">ODE / PDE / Hamiltonian flow</div>
+      <div class="quad-cell-sub">dx/dt = f(x) — no noise, continuous time</div>
+      <div class="quad-chip-area" data-cell="det-cont"></div>
+    </div>
+    <div class="quad-cell" data-cell="det-disc">
+      <div class="quad-cell-title">Cellular automaton / symplectic step</div>
+      <div class="quad-cell-sub">x<sub>n+1</sub> = f(x<sub>n</sub>) — tick-based, no noise</div>
+      <div class="quad-chip-area" data-cell="det-disc"></div>
+    </div>
+
+    <div class="quad-axis-row">stochastic</div>
+    <div class="quad-cell" data-cell="sto-cont">
+      <div class="quad-cell-title">SDE / Langevin / CTMC</div>
+      <div class="quad-cell-sub">dx = f dt + σ dW — continuous time, noise</div>
+      <div class="quad-chip-area" data-cell="sto-cont"></div>
+    </div>
+    <div class="quad-cell" data-cell="sto-disc">
+      <div class="quad-cell-title">Markov chain / random walk / MCMC</div>
+      <div class="quad-cell-sub">x<sub>n+1</sub> ∼ P(· | x<sub>n</sub>) — tick-based, noise</div>
+      <div class="quad-chip-area" data-cell="sto-disc"></div>
+    </div>
+  </div>
+  <div class="figure-caption">Each chip is an actual Moonshine explainer, placed in the cell whose formalism it implements. A series can legitimately live in several cells — <em>emergence</em> has ODE explainers, CA explainers and Langevin explainers all at once, and those chips land in three different quadrants. The lower-right cell is by far the densest: sampling problems are the bread and butter of computational work, and Metropolis, random walks and agent-based models all flow into it.</div>
+</div>
+
+<p>The split is unforgiving. An explainer either admits noise or it does not; it either advances in ticks or in dt. The bottom-right is the noisy discrete quadrant — Metropolis-Hastings, Ising, Nagel-Schreckenberg, opinion dynamics, percolation — and it is where most of the <a href="../lattice-simulation/index.html">lattice-simulation series</a> and half of <a href="../emergence/index.html">emergence</a> live. The top-left, the ODE/PDE quadrant, is narrower but has the lithium cell, predator-prey, reaction-diffusion, vortex streets and the full Hamiltonian flow chapter of lattice-simulation. The top-right holds the symplectic integrators and classical CAs — the same update, applied forever, with no dice. The bottom-left — SDE, CTMC, Langevin — is where the Brownian ratchet and Langevin dynamics sit, and where earthquake inter-arrival times look a lot like a continuous-time Markov point process.</p>
+
+<h2>Figure 3 · Pick a formalism, see who uses it</h2>
+
+<div class="figure">
+  <div class="figure-title">Radial menu of six formalisms, cross-linked to Moonshine</div>
+  <div class="pick-wrap">
+    <div>
+      <svg class="pick-svg" id="fig3-svg" viewBox="0 0 320 320"></svg>
+      <div class="legend" style="margin-top: 0.5rem;">
+        <span>click a wedge to switch formalism</span>
+      </div>
+    </div>
+    <div class="pick-view" id="fig3-view"></div>
+  </div>
+  <div class="figure-caption">Six families that cover almost everything simulated in the corpus. The view on the right lists every series that has at least one explainer in the selected family, grouped by series, with the specific explainers linked. When you click ODE and see both the lithium-ion RC model and Lotka-Volterra appear, that is a cross-series overlap by formalism rather than by subject matter.</div>
+</div>
+
+<p>The six wedges are not a partition of the Hasse — they are the six formalisms that actually carry weight across the corpus. <em>ODE</em> and <em>SDE</em> are the two continuous-time families. <em>Markov chain</em> and <em>Metropolis/MCMC</em> are the two discrete-time stochastic families, separated because the second has a detailed-balance invariant. <em>Cellular automaton</em> and <em>agent-based</em> are the two lattice / particle families; the first has a fixed grid and the second does not. Between these six, the <a href="../emergence/index.html">emergence</a> catalogue, the <a href="../lattice-simulation/index.html">lattice-simulation</a> series, the <a href="../lithium-ion/index.html">lithium-ion cell</a> and the <a href="../japan-earthquakes/index.html">Japan earthquakes</a> point-process story are all covered.</p>
+
+<p>What the three figures share is the claim that <em>time-evolution formalism</em> is a first-class dimension of the Moonshine corpus. It is not a tag we happened to apply; it is the shape of a non-trivial chunk of what the series actually are. A reader who walks through the corpus looking for SDEs can thread Langevin dynamics in emergence, the diffusion interpretation of gradient descent in algorithms-ml, and the anomaly-detection model in Japan earthquakes into a single reading arc. A reader who walks through looking for CAs can thread Langton's ant, Lenia, Conway's Life, lattice Boltzmann and Ising into another. The Hasse, the quadrant and the picker are three ways of saying the same thing: pick a clock, and the corpus reorganises.</p>
+
+<footer class="footer-nav">
+  <a class="prev" href="05-geometry-and-manifolds.html">Geometry and manifolds</a>
+  <a class="next" href="07-data-and-statistics.html">Data and statistics</a>
+</footer>
+
+</div>
+
+<script>
+// ───────────────────────────────────────── Figure 1: Hasse of dynamics ──
+
+// Node id -> display label + optional description
+var NODE_META = {
+  'dyn-sys':       { label: 'dynamical system',      tag: 'root',           desc: 'any rule advancing state in time' },
+  'det':           { label: 'deterministic',          tag: 'branch',         desc: 'next state is a function of current state' },
+  'sto':           { label: 'stochastic',             tag: 'branch',         desc: 'next state is a sample from a distribution' },
+  'cont-time':     { label: 'continuous-time',        tag: 'branch',         desc: 'rule given as dx/dt' },
+  'disc-time':     { label: 'discrete-time',          tag: 'branch',         desc: 'rule given as x_{n+1} = f(x_n)' },
+  'ode':           { label: 'ODE',                    tag: 'family',         desc: 'ordinary differential equation: deterministic continuous flow' },
+  'pde':           { label: 'PDE',                    tag: 'family',         desc: 'partial differential equation: fields over space+time' },
+  'hamilton':      { label: 'Hamiltonian flow',       tag: 'family',         desc: 'ODE that conserves energy on a symplectic manifold' },
+  'sde':           { label: 'SDE / Langevin',         tag: 'family',         desc: 'ODE with a Brownian-motion driving term' },
+  'ctmc':          { label: 'CTMC / point process',   tag: 'family',         desc: 'continuous-time Markov jumps' },
+  'dtmc':          { label: 'Markov chain',           tag: 'family',         desc: 'discrete-time Markov jumps with transition kernel P' },
+  'mcmc':          { label: 'Metropolis / MCMC',      tag: 'scheme',         desc: 'DTMC with detailed balance targeting a distribution π' },
+  'rw':            { label: 'random walk',            tag: 'scheme',         desc: 'DTMC with translation-invariant kernel' },
+  'ca':            { label: 'cellular automaton',     tag: 'scheme',         desc: 'parallel local rule on a lattice' },
+  'lbm':           { label: 'lattice Boltzmann',      tag: 'scheme',         desc: 'discretised kinetic equation on a velocity lattice' },
+  'abm':           { label: 'agent-based model',      tag: 'scheme',         desc: 'local rules on a population of identifiable agents' },
+  'symplectic':    { label: 'symplectic integrator',  tag: 'scheme',         desc: 'discrete-time scheme preserving the symplectic form' },
+  'leapfrog':      { label: 'leapfrog / velocity-Verlet', tag: 'scheme',     desc: 'second-order symplectic step for Hamiltonian ODEs' },
+  'runge-kutta':   { label: 'Runge-Kutta',            tag: 'scheme',         desc: 'explicit multi-stage ODE integrator' },
+  'euler':         { label: 'explicit Euler',         tag: 'scheme',         desc: 'first-order forward difference' },
+  'gd':            { label: 'gradient descent',       tag: 'scheme',         desc: 'discrete-time ODE flow on the loss landscape' }
+};
+
+// Edges: [more-general, more-specific].  Multiple parents allowed.
+var DYN_EDGES = [
+  ['dyn-sys', 'det'],
+  ['dyn-sys', 'sto'],
+  ['dyn-sys', 'cont-time'],
+  ['dyn-sys', 'disc-time'],
+
+  ['det',       'ode'],
+  ['cont-time', 'ode'],
+  ['det',       'pde'],
+  ['cont-time', 'pde'],
+  ['ode',       'hamilton'],
+
+  ['sto',       'sde'],
+  ['cont-time', 'sde'],
+  ['sto',       'ctmc'],
+  ['cont-time', 'ctmc'],
+  ['sto',       'dtmc'],
+  ['disc-time', 'dtmc'],
+
+  ['dtmc',      'mcmc'],
+  ['dtmc',      'rw'],
+
+  ['det',       'ca'],
+  ['disc-time', 'ca'],
+  ['ca',        'lbm'],
+  ['pde',       'lbm'],
+
+  ['det',       'abm'],
+  ['disc-time', 'abm'],
+  ['sto',       'abm'],
+
+  ['disc-time', 'symplectic'],
+  ['hamilton',  'symplectic'],
+  ['symplectic','leapfrog'],
+
+  ['ode',         'runge-kutta'],
+  ['disc-time',   'runge-kutta'],
+  ['ode',         'euler'],
+  ['disc-time',   'euler'],
+
+  ['euler',   'gd']
+];
+
+// Badge data per node: which Moonshine series + which explainers live here.
+// Each item is { series: key, hrefs: [{label, href}] }.
+var NODE_BADGES = {
+  'dyn-sys':     [
+    { series: 'emergence',          hrefs: [{ label: 'emergence series', href: '../emergence/index.html' }] },
+    { series: 'lattice-simulation', hrefs: [{ label: 'lattice-simulation series', href: '../lattice-simulation/index.html' }] },
+    { series: 'lithium-ion',        hrefs: [{ label: 'lithium-ion series', href: '../lithium-ion/index.html' }] }
+  ],
+  'ode':         [
+    { series: 'lithium-ion',        hrefs: [{ label: 'voltage under load', href: '../lithium-ion/05-voltage-under-load.html' },
+                                            { label: 'voltage at rest',    href: '../lithium-ion/04-voltage-at-rest.html' }] },
+    { series: 'emergence',          hrefs: [{ label: 'predator-prey',      href: '../emergence/07-predator-prey.html' },
+                                            { label: 'strange attractors', href: '../emergence/17-strange-attractors.html' },
+                                            { label: 'Kuramoto model',     href: '../emergence/27-kuramoto-model.html' }] },
+    { series: 'noether',            hrefs: [{ label: 'noether series',     href: '../noether/index.html' }] }
+  ],
+  'pde':         [
+    { series: 'emergence',          hrefs: [{ label: 'reaction-diffusion', href: '../emergence/03-reaction-diffusion.html' },
+                                            { label: 'wave interference',  href: '../emergence/15-wave-interference.html' },
+                                            { label: 'vortex streets',     href: '../emergence/19-vortex-streets.html' }] },
+    { series: 'sph',                hrefs: [{ label: 'particles and forces', href: '../sph/01-particles-and-forces.html' }] }
+  ],
+  'hamilton':    [
+    { series: 'lattice-simulation', hrefs: [{ label: 'symplectic integrators', href: '../lattice-simulation/04-symplectic-integrators.html' }] },
+    { series: 'sph',                hrefs: [{ label: 'sph series',             href: '../sph/index.html' }] }
+  ],
+  'sde':         [
+    { series: 'emergence',          hrefs: [{ label: 'Brownian ratchet',   href: '../emergence/37-brownian-ratchet.html' },
+                                            { label: 'random walks',       href: '../emergence/18-random-walks.html' }] },
+    { series: 'algorithms-ml',      hrefs: [{ label: 'gradient descent',   href: '../algorithms-ml/01-gradient-descent.html' }] }
+  ],
+  'ctmc':        [
+    { series: 'japan-earthquakes',  hrefs: [{ label: 'temporal animation', href: '../japan-earthquakes/02b-temporal-animation/index.html' },
+                                            { label: 'early warning',      href: '../japan-earthquakes/16-early-warning/index.html' }] },
+    { series: 'emergence',          hrefs: [{ label: 'epidemic spreading', href: '../emergence/05-epidemic-spreading.html' }] }
+  ],
+  'dtmc':        [
+    { series: 'algorithms-ml',      hrefs: [{ label: 'Markov chains',      href: '../algorithms-ml/03-markov-chains.html' }] },
+    { series: 'autoresearch',       hrefs: [{ label: 'autoresearch series', href: '../autoresearch/index.html' }] },
+    { series: 'emergence',          hrefs: [{ label: 'opinion dynamics',   href: '../emergence/20-opinion-dynamics.html' }] }
+  ],
+  'mcmc':        [
+    { series: 'lattice-simulation', hrefs: [{ label: 'Ising Z2 breaking',  href: '../lattice-simulation/09-ising-z2-breaking.html' }] },
+    { series: 'emergence',          hrefs: [{ label: 'spin glass',         href: '../emergence/32-spin-glass.html' }] },
+    { series: 'algorithms-ml',      hrefs: [{ label: 'Bayes theorem',      href: '../algorithms-ml/08-bayes-theorem.html' }] }
+  ],
+  'rw':          [
+    { series: 'emergence',          hrefs: [{ label: 'random walks',       href: '../emergence/18-random-walks.html' },
+                                            { label: 'self-avoiding walks', href: '../emergence/34-self-avoiding-walks.html' },
+                                            { label: 'diffusion-limited aggregation', href: '../emergence/12-diffusion-limited-aggregation.html' }] }
+  ],
+  'ca':          [
+    { series: 'emergence',          hrefs: [{ label: 'cellular automata',  href: '../emergence/02-cellular-automata.html' },
+                                            { label: "Langton's ant",      href: '../emergence/11-langtons-ant.html' },
+                                            { label: 'Lenia',              href: '../emergence/25-lenia.html' }] },
+    { series: 'lattice-simulation', hrefs: [{ label: 'life and symmetry',  href: '../lattice-simulation/06-life-and-symmetry-attractors.html' },
+                                            { label: 'Nagel-Schreckenberg', href: '../lattice-simulation/12-nagel-schreckenberg.html' }] }
+  ],
+  'lbm':         [
+    { series: 'lattice-simulation', hrefs: [{ label: 'lattice Boltzmann',  href: '../lattice-simulation/08-lattice-boltzmann.html' },
+                                            { label: 'HPP vs FHP',         href: '../lattice-simulation/07-hpp-vs-fhp.html' }] }
+  ],
+  'abm':         [
+    { series: 'emergence',          hrefs: [{ label: 'flocking',           href: '../emergence/01-flocking.html' },
+                                            { label: 'ant colony',         href: '../emergence/09-ant-colony.html' },
+                                            { label: 'Schelling',          href: '../emergence/06-schelling-segregation.html' },
+                                            { label: 'swarm robotics',     href: '../emergence/30-swarm-robotics.html' }] },
+    { series: 'sph',                hrefs: [{ label: 'SPH particles',      href: '../sph/01-particles-and-forces.html' }] }
+  ],
+  'symplectic':  [
+    { series: 'lattice-simulation', hrefs: [{ label: 'symplectic integrators', href: '../lattice-simulation/04-symplectic-integrators.html' }] }
+  ],
+  'leapfrog':    [
+    { series: 'lattice-simulation', hrefs: [{ label: 'symplectic integrators', href: '../lattice-simulation/04-symplectic-integrators.html' }] },
+    { series: 'sph',                hrefs: [{ label: 'particles and forces', href: '../sph/01-particles-and-forces.html' }] }
+  ],
+  'runge-kutta': [
+    { series: 'lithium-ion',        hrefs: [{ label: 'voltage under load', href: '../lithium-ion/05-voltage-under-load.html' }] }
+  ],
+  'euler':       [
+    { series: 'lithium-ion',        hrefs: [{ label: 'voltage under load', href: '../lithium-ion/05-voltage-under-load.html' }] },
+    { series: 'algorithms-ml',      hrefs: [{ label: 'gradient descent',   href: '../algorithms-ml/01-gradient-descent.html' }] }
+  ],
+  'gd':          [
+    { series: 'algorithms-ml',      hrefs: [{ label: 'gradient descent',   href: '../algorithms-ml/01-gradient-descent.html' },
+                                            { label: 'backpropagation',    href: '../algorithms-ml/04-backpropagation.html' }] }
+  ]
+};
+
+// Manual rank + order: top is most general; bottom is most specific.
+var NODE_RANK = {
+  'dyn-sys': 0,
+  'det': 1, 'sto': 1, 'cont-time': 1, 'disc-time': 1,
+  'ode': 2, 'pde': 2, 'sde': 2, 'ctmc': 2, 'dtmc': 2, 'ca': 2, 'abm': 2,
+  'hamilton': 3, 'rw': 3, 'mcmc': 3, 'lbm': 3, 'symplectic': 3, 'runge-kutta': 3, 'euler': 3,
+  'leapfrog': 4, 'gd': 4
+};
+
+// x-order within each rank
+var RANK_ORDER = {
+  0: ['dyn-sys'],
+  1: ['det', 'cont-time', 'disc-time', 'sto'],
+  2: ['ode', 'pde', 'ca', 'abm', 'dtmc', 'ctmc', 'sde'],
+  3: ['hamilton', 'runge-kutta', 'euler', 'symplectic', 'lbm', 'mcmc', 'rw'],
+  4: ['gd', 'leapfrog']
+};
+
+var DYN_W = 960, DYN_H = 600;
+var DYN_XPAD = 30, DYN_YPAD = 40;
+var MAXR = 4;
+var NH = 28;
+var ZIG = 20; // vertical offset for zigzag rows
+
+// Measure per-node width from label length.
+function nodeWidth(id) {
+  var label = (NODE_META[id] || {}).label || id;
+  return Math.max(70, label.length * 6.5 + 20);
+}
+
+var dynPos = {};
+var dynW = {};
+for (var r = 0; r <= MAXR; r++) {
+  var row = RANK_ORDER[r];
+  var y = DYN_YPAD + (r / MAXR) * (DYN_H - 2 * DYN_YPAD);
+  // Compute widths for this row.
+  var widths = row.map(nodeWidth);
+  var totalW = widths.reduce(function (a, b) { return a + b; }, 0);
+  var avail = DYN_W - 2 * DYN_XPAD;
+  var gap;
+  var zigzag = false;
+  if (row.length > 1) {
+    gap = (avail - totalW) / (row.length - 1);
+    // If nodes would touch or overlap, enable zigzag and recompute with tighter spacing.
+    if (gap < 14) {
+      zigzag = true;
+      gap = (avail - totalW) / (row.length - 1);
+      if (gap < 4) gap = 4; // never negative
+    }
+  } else {
+    gap = 0;
+  }
+  var cursor;
+  if (row.length === 1) {
+    cursor = DYN_XPAD + avail / 2 - widths[0] / 2;
+  } else {
+    cursor = DYN_XPAD;
+  }
+  row.forEach(function (n, i) {
+    var w = widths[i];
+    var cx = cursor + w / 2;
+    var cy = y;
+    if (zigzag) {
+      cy = y + (i % 2 === 0 ? -ZIG : ZIG);
+    }
+    dynPos[n] = { x: cx, y: cy, rank: r };
+    dynW[n] = w;
+    cursor += w + gap;
+  });
+}
+
+// Node background tint: branch nodes get amber, schemes get indigo, root gets purple, families get teal.
+function nodeFill(id) {
+  var tag = (NODE_META[id] || {}).tag;
+  if (tag === 'root')   return '#ede9fe';
+  if (tag === 'branch') return '#fef3c7';
+  if (tag === 'family') return '#dbeafe';
+  if (tag === 'scheme') return '#d1fae5';
+  return '#f3f4f6';
+}
+function nodeStroke(id) {
+  var tag = (NODE_META[id] || {}).tag;
+  if (tag === 'root')   return '#7c3aed';
+  if (tag === 'branch') return '#d97706';
+  if (tag === 'family') return '#2563eb';
+  if (tag === 'scheme') return '#059669';
+  return '#64748b';
+}
+
+var fig1 = d3.select('#fig1-svg');
+var tip  = d3.select('#fig1-tip');
+
+// edges
+var edgeSel = fig1.append('g').selectAll('path').data(DYN_EDGES).enter().append('path')
+  .attr('class', 'dyn-edge')
+  .attr('d', function (e) {
+    var p = dynPos[e[0]], q = dynPos[e[1]];
+    if (!p || !q) return '';
+    var midY = (p.y + q.y) / 2;
+    return 'M' + p.x + ',' + p.y + ' C' + p.x + ',' + midY + ' ' + q.x + ',' + midY + ' ' + q.x + ',' + q.y;
+  });
+
+var nodeData = Object.keys(NODE_META).map(function (id) {
+  return { id: id, meta: NODE_META[id], pos: dynPos[id] };
+});
+
+var nodeSel = fig1.append('g').selectAll('.dyn-node').data(nodeData).enter().append('g')
+  .attr('class', 'dyn-node')
+  .attr('data-id', function (d) { return d.id; })
+  .attr('transform', function (d) { return 'translate(' + (d.pos.x - dynW[d.id]/2) + ',' + (d.pos.y - NH/2) + ')'; });
+
+nodeSel.append('rect')
+  .attr('width', function (d) { return dynW[d.id]; }).attr('height', NH).attr('rx', 4)
+  .attr('fill', function (d) { return nodeFill(d.id); })
+  .attr('stroke', function (d) { return nodeStroke(d.id); });
+
+nodeSel.append('text')
+  .attr('class', 'label')
+  .attr('x', function (d) { return dynW[d.id] / 2; }).attr('y', NH / 2 + 3.5)
+  .text(function (d) { return d.meta.label; });
+
+nodeSel.on('mouseenter', function (event, d) {
+  highlightDyn(d.id);
+  showTip(event, d);
+});
+nodeSel.on('mousemove', function (event, d) { showTip(event, d); });
+nodeSel.on('mouseleave', function () { clearDyn(); tip.style('opacity', 0); });
+
+function showTip(event, d) {
+  var badges = NODE_BADGES[d.id] || [];
+  var html = '<div class="tip-head">' + d.meta.label + '</div>';
+  if (d.meta.desc) html += '<div class="tip-sub">' + d.meta.desc + '</div>';
+  if (badges.length === 0) {
+    html += '<div class="tip-sub" style="margin:0">(branch node — no direct explainers)</div>';
+  } else {
+    badges.forEach(function (b) {
+      var s = Atlas.byKey[b.series];
+      if (!s) return;
+      html += '<span class="chip" style="background:' + s.color + '">' +
+              '<a href="' + s.href + '">' + s.title + '</a></span>';
+    });
+  }
+  var host = document.getElementById('fig1-svg').getBoundingClientRect();
+  var wrap = document.getElementById('fig1-tip').parentElement.getBoundingClientRect();
+  tip.html(html)
+    .style('left', (event.clientX - wrap.left + 14) + 'px')
+    .style('top',  (event.clientY - wrap.top  + 14) + 'px')
+    .style('opacity', 1);
+}
+
+function highlightDyn(id) {
+  var up = Atlas.upCone(id, DYN_EDGES);
+  var dn = Atlas.downCone(id, DYN_EDGES);
+  nodeSel.classed('up',    function (d) { return up[d.id] && d.id !== id; });
+  nodeSel.classed('down',  function (d) { return dn[d.id] && d.id !== id; });
+  nodeSel.classed('focus', function (d) { return d.id === id; });
+  nodeSel.classed('dim',   function (d) { return !up[d.id] && !dn[d.id]; });
+  edgeSel.classed('up',   function (e) { return up[e[0]] && up[e[1]]; });
+  edgeSel.classed('down', function (e) { return dn[e[0]] && dn[e[1]]; });
+  edgeSel.classed('dim',  function (e) {
+    var bu = up[e[0]] && up[e[1]];
+    var bd = dn[e[0]] && dn[e[1]];
+    return !bu && !bd;
+  });
+}
+function clearDyn() {
+  nodeSel.classed('up', false).classed('down', false).classed('focus', false).classed('dim', false);
+  edgeSel.classed('up', false).classed('down', false).classed('dim', false);
+}
+
+// ───────────────────────────────────────── Figure 2: 2×2 quadrant grid ──
+(function () {
+  // Each chip carries a series key + label + href.
+  var CHIPS = {
+    'det-cont': [
+      { series: 'lithium-ion',        label: 'voltage under load',   href: '../lithium-ion/05-voltage-under-load.html' },
+      { series: 'lithium-ion',        label: 'voltage at rest',      href: '../lithium-ion/04-voltage-at-rest.html' },
+      { series: 'emergence',          label: 'predator-prey',        href: '../emergence/07-predator-prey.html' },
+      { series: 'emergence',          label: 'Kuramoto',             href: '../emergence/27-kuramoto-model.html' },
+      { series: 'emergence',          label: 'reaction-diffusion',   href: '../emergence/03-reaction-diffusion.html' },
+      { series: 'emergence',          label: 'strange attractors',   href: '../emergence/17-strange-attractors.html' },
+      { series: 'emergence',          label: 'vortex streets',       href: '../emergence/19-vortex-streets.html' },
+      { series: 'emergence',          label: 'wave interference',    href: '../emergence/15-wave-interference.html' },
+      { series: 'lattice-simulation', label: 'Hamiltonian flow',     href: '../lattice-simulation/04-symplectic-integrators.html' },
+      { series: 'sph',                label: 'SPH forces',           href: '../sph/01-particles-and-forces.html' }
+    ],
+    'det-disc': [
+      { series: 'lattice-simulation', label: 'symplectic integrators', href: '../lattice-simulation/04-symplectic-integrators.html' },
+      { series: 'lattice-simulation', label: 'life & symmetry',      href: '../lattice-simulation/06-life-and-symmetry-attractors.html' },
+      { series: 'emergence',          label: 'cellular automata',    href: '../emergence/02-cellular-automata.html' },
+      { series: 'emergence',          label: "Langton's ant",        href: '../emergence/11-langtons-ant.html' },
+      { series: 'emergence',          label: 'Lenia',                href: '../emergence/25-lenia.html' },
+      { series: 'algorithms-ml',      label: 'gradient descent',     href: '../algorithms-ml/01-gradient-descent.html' },
+      { series: 'algorithms-ml',      label: 'backpropagation',      href: '../algorithms-ml/04-backpropagation.html' }
+    ],
+    'sto-cont': [
+      { series: 'emergence',          label: 'Brownian ratchet',     href: '../emergence/37-brownian-ratchet.html' },
+      { series: 'emergence',          label: 'random walks (cont.)', href: '../emergence/18-random-walks.html' },
+      { series: 'japan-earthquakes',  label: 'early warning',        href: '../japan-earthquakes/16-early-warning/index.html' },
+      { series: 'japan-earthquakes',  label: 'temporal animation',   href: '../japan-earthquakes/02b-temporal-animation/index.html' },
+      { series: 'emergence',          label: 'epidemic spreading',   href: '../emergence/05-epidemic-spreading.html' }
+    ],
+    'sto-disc': [
+      { series: 'lattice-simulation', label: 'Ising / Metropolis',   href: '../lattice-simulation/09-ising-z2-breaking.html' },
+      { series: 'lattice-simulation', label: 'Nagel-Schreckenberg',  href: '../lattice-simulation/12-nagel-schreckenberg.html' },
+      { series: 'lattice-simulation', label: 'lattice Boltzmann',    href: '../lattice-simulation/08-lattice-boltzmann.html' },
+      { series: 'algorithms-ml',      label: 'Markov chains',        href: '../algorithms-ml/03-markov-chains.html' },
+      { series: 'algorithms-ml',      label: 'Bayes theorem',        href: '../algorithms-ml/08-bayes-theorem.html' },
+      { series: 'emergence',          label: 'Schelling',            href: '../emergence/06-schelling-segregation.html' },
+      { series: 'emergence',          label: 'opinion dynamics',     href: '../emergence/20-opinion-dynamics.html' },
+      { series: 'emergence',          label: 'spin glass',           href: '../emergence/32-spin-glass.html' },
+      { series: 'emergence',          label: 'majority rule',        href: '../emergence/35-majority-rule.html' },
+      { series: 'emergence',          label: 'sandpile',             href: '../emergence/08-sandpile.html' },
+      { series: 'emergence',          label: 'flocking',             href: '../emergence/01-flocking.html' },
+      { series: 'emergence',          label: 'ant colony',           href: '../emergence/09-ant-colony.html' },
+      { series: 'emergence',          label: 'DLA',                  href: '../emergence/12-diffusion-limited-aggregation.html' },
+      { series: 'emergence',          label: 'self-avoiding walks',  href: '../emergence/34-self-avoiding-walks.html' },
+      { series: 'emergence',          label: 'swarm robotics',       href: '../emergence/30-swarm-robotics.html' },
+      { series: 'autoresearch',       label: 'iteration loop',       href: '../autoresearch/index.html' }
+    ]
+  };
+
+  Object.keys(CHIPS).forEach(function (cellKey) {
+    var area = document.querySelector('.quad-chip-area[data-cell="' + cellKey + '"]');
+    if (!area) return;
+    CHIPS[cellKey].forEach(function (c) {
+      var s = Atlas.byKey[c.series];
+      if (!s) return;
+      var span = document.createElement('span');
+      span.className = 'quad-chip';
+      span.style.background = s.color;
+      var a = document.createElement('a');
+      a.href = c.href;
+      a.textContent = c.label;
+      span.appendChild(a);
+      area.appendChild(span);
+    });
+  });
+})();
+
+// ───────────────────────────────────────── Figure 3: formalism picker ──
+(function () {
+  var FORMALISMS = [
+    {
+      key: 'ode',
+      label: 'ODE',
+      def: 'Deterministic continuous-time flow <code>dx/dt = f(x)</code>. No noise; integrate with Euler, Runge-Kutta, or symplectic methods.',
+      series: {
+        'lithium-ion':   ['04-voltage-at-rest.html:voltage at rest', '05-voltage-under-load.html:voltage under load'],
+        'emergence':     ['07-predator-prey.html:predator-prey', '17-strange-attractors.html:strange attractors',
+                          '27-kuramoto-model.html:Kuramoto', '19-vortex-streets.html:vortex streets',
+                          '03-reaction-diffusion.html:reaction-diffusion', '15-wave-interference.html:wave interference'],
+        'lattice-simulation': ['04-symplectic-integrators.html:Hamiltonian flow'],
+        'sph':           ['01-particles-and-forces.html:particle forces']
+      }
+    },
+    {
+      key: 'sde',
+      label: 'SDE',
+      def: 'Continuous-time stochastic flow <code>dx = f dt + σ dW</code>. Adds Brownian driving. Langevin, diffusion, continuous-time point processes.',
+      series: {
+        'emergence':     ['37-brownian-ratchet.html:Brownian ratchet', '18-random-walks.html:random walks (continuum limit)'],
+        'japan-earthquakes': ['16-early-warning/index.html:early warning', '02b-temporal-animation/index.html:temporal point process'],
+        'algorithms-ml': ['01-gradient-descent.html:gradient descent as SDE']
+      }
+    },
+    {
+      key: 'markov',
+      label: 'Markov',
+      def: 'Discrete-time memoryless jumps <code>x_{n+1} ∼ P(· | x_n)</code>. Transition kernel is the whole model.',
+      series: {
+        'algorithms-ml': ['03-markov-chains.html:Markov chains'],
+        'autoresearch': ['index.html:iteration loop'],
+        'emergence':    ['20-opinion-dynamics.html:opinion dynamics'],
+        'lattice-simulation': ['12-nagel-schreckenberg.html:Nagel-Schreckenberg']
+      }
+    },
+    {
+      key: 'mcmc',
+      label: 'MCMC',
+      def: 'Markov chain with detailed balance targeting a distribution π. Metropolis-Hastings, Gibbs, Metropolis on spin systems.',
+      series: {
+        'lattice-simulation': ['09-ising-z2-breaking.html:Ising / Metropolis'],
+        'emergence':    ['32-spin-glass.html:spin glass', '35-majority-rule.html:majority rule'],
+        'algorithms-ml': ['08-bayes-theorem.html:Bayesian sampling']
+      }
+    },
+    {
+      key: 'ca',
+      label: 'CA',
+      def: 'Cellular automaton: identical local rule applied in parallel on a lattice every tick. Rules live in a tiny space, behaviour is enormous.',
+      series: {
+        'emergence':    ['02-cellular-automata.html:elementary CA', '11-langtons-ant.html:Langton\'s ant',
+                         '25-lenia.html:Lenia', '40-phase-transitions.html:percolation / phase'],
+        'lattice-simulation': ['06-life-and-symmetry-attractors.html:Life', '08-lattice-boltzmann.html:lattice Boltzmann',
+                         '07-hpp-vs-fhp.html:HPP vs FHP', '12-nagel-schreckenberg.html:traffic CA']
+      }
+    },
+    {
+      key: 'abm',
+      label: 'ABM',
+      def: 'Agent-based model: identifiable agents with local rules and optional stochasticity. Particles without a fixed grid.',
+      series: {
+        'emergence':    ['01-flocking.html:flocking', '09-ant-colony.html:ant colony',
+                         '06-schelling-segregation.html:Schelling', '30-swarm-robotics.html:swarm robotics',
+                         '42-trail-systems.html:trail systems', '14-slime-mold.html:slime mold'],
+        'sph':          ['01-particles-and-forces.html:SPH particles', '03-beyond-water.html:beyond water']
+      }
+    }
+  ];
+
+  var PW = 320, PH = 320, pcx = PW / 2, pcy = PH / 2;
+  var innerR = 42, outerR = 130;
+  var svg = d3.select('#fig3-svg');
+
+  // central label
+  svg.append('circle').attr('cx', pcx).attr('cy', pcy).attr('r', innerR - 4)
+    .attr('fill', '#fff').attr('stroke', 'var(--border-2)').attr('stroke-width', 1);
+  svg.append('text').attr('class', 'pick-center').attr('x', pcx).attr('y', pcy - 3).text('pick a');
+  svg.append('text').attr('class', 'pick-center').attr('x', pcx).attr('y', pcy + 11).text('formalism');
+
+  var N = FORMALISMS.length;
+  var slice = (2 * Math.PI) / N;
+  var colors = ['#2563eb', '#0891b2', '#7c3aed', '#059669', '#ea580c', '#dc2626'];
+
+  var arc = d3.arc().innerRadius(innerR).outerRadius(outerR);
+
+  var wedges = svg.append('g').attr('transform', 'translate(' + pcx + ',' + pcy + ')')
+    .selectAll('g').data(FORMALISMS).enter().append('g')
+    .attr('class', 'pick-wedge')
+    .attr('data-key', function (d) { return d.key; })
+    .on('click', function (event, d) { select(d.key); });
+
+  wedges.append('path')
+    .attr('d', function (d, i) {
+      return arc({
+        startAngle: i * slice - Math.PI / 2 - slice / 2 + 0.02,
+        endAngle:   i * slice - Math.PI / 2 + slice / 2 - 0.02
+      });
+    })
+    .attr('fill', function (d, i) { return colors[i]; });
+
+  wedges.append('text')
+    .attr('class', 'pick-wedge-label')
+    .attr('transform', function (d, i) {
+      var a = i * slice - Math.PI / 2;
+      var r = (innerR + outerR) / 2;
+      return 'translate(' + (r * Math.cos(a)) + ',' + (r * Math.sin(a) + 4) + ')';
+    })
+    .text(function (d) { return d.label; });
+
+  var view = d3.select('#fig3-view');
+
+  function select(key) {
+    svg.selectAll('.pick-wedge').classed('on', function (d) { return d.key === key; });
+    var f = FORMALISMS.filter(function (x) { return x.key === key; })[0];
+    view.html('');
+    view.append('h3').text(f.label);
+    view.append('div').attr('class', 'pick-def').html(f.def);
+    var order = ['emergence', 'lattice-simulation', 'algorithms-ml', 'sph', 'lithium-ion', 'japan-earthquakes', 'autoresearch', 'noether'];
+    order.forEach(function (k) {
+      if (!f.series[k]) return;
+      var s = Atlas.byKey[k]; if (!s) return;
+      var blk = view.append('div').attr('class', 'series-block');
+      var head = blk.append('div').attr('class', 'series-head');
+      head.append('span').attr('class', 'series-dot').style('background', s.color);
+      var name = head.append('span').attr('class', 'series-name');
+      name.append('a').attr('href', s.href).text(s.title);
+      var ex = blk.append('div').attr('class', 'series-examples');
+      f.series[k].forEach(function (pair, i) {
+        var bits = pair.split(':');
+        var href = s.href.replace(/index\.html$/, '') + bits[0];
+        if (i > 0) ex.append('span').text(' · ');
+        ex.append('a').attr('href', href).text(bits[1]);
+      });
+    });
+  }
+  select('ode');
+})();
+</script>
+
+</body>
+</html>

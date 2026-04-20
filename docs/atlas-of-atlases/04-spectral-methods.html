@@ -1,0 +1,720 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Spectral Methods — Atlas of Atlases</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@400;600;700&family=Source+Code+Pro:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<script src="lib.js"></script>
+<style>
+/* ───── Figure 1 — Hasse of spectral concepts ───── */
+.hasse-wrap { overflow-x: auto; }
+.hasse-svg { width: 100%; max-width: 1000px; height: auto; display: block; }
+.hasse-node rect { stroke-width: 1.2; cursor: pointer; transition: stroke-width 0.12s, filter 0.12s; fill: #fff; stroke: var(--border-2); }
+.hasse-node text.lbl { font-family: 'Source Sans 3'; font-size: 10.5px; fill: var(--text); font-weight: 600; text-anchor: middle; pointer-events: none; }
+.hasse-node text.sub { font-family: 'Source Code Pro'; font-size: 8.5px; fill: var(--text-3); text-anchor: middle; pointer-events: none; }
+.hasse-node.dim rect { opacity: 0.25; }
+.hasse-node.dim text { opacity: 0.25; }
+.hasse-node.up rect { stroke: var(--up); stroke-width: 2.5; filter: drop-shadow(0 0 3px var(--up)); }
+.hasse-node.down rect { stroke: var(--down); stroke-width: 2.5; filter: drop-shadow(0 0 3px var(--down)); }
+.hasse-node.focus rect { stroke: #000; stroke-width: 2.5; }
+.hasse-edge { fill: none; stroke: #cbd5e1; stroke-width: 1.2; transition: stroke 0.12s, stroke-width 0.12s; }
+.hasse-edge.up { stroke: var(--up); stroke-width: 2; }
+.hasse-edge.down { stroke: var(--down); stroke-width: 2; }
+.hasse-edge.dim { opacity: 0.12; }
+
+.chips-row { min-height: 2.4rem; margin-top: 0.5rem; padding: 0.4rem 0.55rem; background: #f5f5f7; border: 1px solid var(--border); border-radius: 4px; font-family: 'Source Sans 3'; font-size: 0.82rem; color: var(--text-2); }
+.chips-row .label { color: var(--text-3); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; margin-right: 0.4rem; }
+.chip { display: inline-block; padding: 0.18rem 0.48rem; border-radius: 3px; color: #fff; font-size: 0.76rem; font-weight: 600; margin: 0.1rem 0.2rem 0.1rem 0; text-decoration: none; }
+.chip:hover { filter: brightness(1.1); }
+.chip-empty { color: var(--text-3); font-style: italic; font-size: 0.82rem; }
+
+/* ───── Figure 2 — Live eigenproblem demo ───── */
+.eig-wrap { display: grid; grid-template-columns: 260px 1fr; gap: 1.25rem; align-items: start; }
+@media (max-width: 720px) { .eig-wrap { grid-template-columns: 1fr; } }
+.eig-picker { display: flex; flex-direction: column; gap: 0.35rem; font-family: 'Source Sans 3'; font-size: 0.82rem; }
+.eig-picker button {
+  display: flex; justify-content: space-between; align-items: center; gap: 0.5rem;
+  background: var(--fig-bg); border: 1px solid var(--border); border-radius: 4px;
+  padding: 0.4rem 0.6rem; text-align: left; color: var(--text); cursor: pointer;
+  font-family: inherit; font-size: inherit;
+}
+.eig-picker button:hover { border-color: var(--accent); }
+.eig-picker button.on { border-color: var(--accent); background: var(--accent-light); color: var(--accent); font-weight: 700; }
+.eig-picker .sub { font-family: 'Source Code Pro'; font-size: 0.72rem; color: var(--text-3); }
+
+.eig-panel { background: #fff; border: 1px solid var(--border); border-radius: 4px; padding: 0.85rem 0.9rem; }
+.eig-panel h4 { font-family: 'Source Sans 3'; font-size: 0.92rem; font-weight: 700; margin: 0 0 0.3rem; color: var(--text); }
+.eig-panel .desc { font-family: 'Source Sans 3'; font-size: 0.82rem; color: var(--text-2); margin-bottom: 0.6rem; line-height: 1.4; }
+.eig-graph-svg { width: 100%; max-width: 460px; height: 160px; display: block; margin: 0 auto 0.4rem; }
+.eig-spectrum-svg { width: 100%; height: 84px; display: block; margin-bottom: 0.4rem; }
+.eig-graph-node { fill: var(--accent); stroke: #fff; stroke-width: 1.4; }
+.eig-graph-edge { stroke: #94a3b8; stroke-width: 1.4; }
+.eig-graph-label { font-family: 'Source Code Pro'; font-size: 9px; fill: #fff; text-anchor: middle; pointer-events: none; }
+.eig-tick-line { stroke: #94a3b8; stroke-width: 1; }
+.eig-tick-eig { stroke: var(--accent); stroke-width: 2; }
+.eig-tick-eig.fiedler { stroke: var(--down); stroke-width: 2.8; }
+.eig-tick-label { font-family: 'Source Code Pro'; font-size: 9.5px; fill: var(--text-2); text-anchor: middle; }
+.eig-fiedler-note { font-family: 'Source Sans 3'; font-size: 0.76rem; color: var(--down); font-weight: 600; }
+
+/* ───── Figure 3 — Spectral recipe matrix ───── */
+.recipe-wrap { overflow-x: auto; }
+.recipe-svg { width: 100%; max-width: 820px; height: auto; display: block; }
+.recipe-row-label { font-family: 'Source Sans 3'; font-size: 10.5px; fill: var(--text); font-weight: 600; }
+.recipe-row-sub { font-family: 'Source Code Pro'; font-size: 8.5px; fill: var(--text-3); }
+.recipe-col-label { font-family: 'Source Sans 3'; font-size: 10px; font-weight: 600; }
+.recipe-cell { stroke: #fff; stroke-width: 1.4; cursor: pointer; transition: filter 0.12s; }
+.recipe-cell:hover { filter: brightness(1.15); }
+.recipe-cell.empty { fill: #f1f1f4; }
+.recipe-glyph { font-family: 'Source Code Pro'; font-size: 9.5px; fill: #fff; font-weight: 700; text-anchor: middle; pointer-events: none; }
+.recipe-glyph.empty { fill: var(--text-3); font-weight: 500; }
+.recipe-row-bg { fill: #fafafa; }
+.recipe-row-bg.on { fill: var(--accent-light); }
+</style>
+</head>
+<body>
+<div class="article">
+
+<nav class="back-links">
+  <a href="../index.html">← All series</a>
+  <span class="sep">/</span>
+  <a href="index.html">Atlas of Atlases</a>
+</nav>
+
+<header>
+  <h1>Spectral methods</h1>
+  <p class="subtitle">Six moonshine series solve the same equation. <code>Av = λv</code> is the punchline of graph clustering, of PCA, of Fourier analysis, of normal-mode physics, of Koopman dynamics, of impedance spectroscopy, and of Hecke operator theory. This article is the Hasse diagram that fits over all of them.</p>
+</header>
+
+<p class="lede">The eigenproblem is a ladder, not a single rung. The operator at the top, <code>Av = λv</code>, forks by structure — symmetric vs. normal vs. non-normal vs. infinite-dimensional — and then forks again by domain, because the matrix <code>A</code> you care about depends on whether you are studying a graph, a covariance, a time-evolution, a Hessian, a crystal lattice, or a cell impedance. This article lays out the fork.</p>
+
+<h2>Figure 1 · The Hasse of spectral concepts</h2>
+
+<div class="figure">
+  <div class="figure-title">One eigenproblem at the root, seven concrete recipes at the leaves</div>
+  <div class="hasse-wrap">
+    <svg class="hasse-svg" id="fig1-svg" viewBox="0 0 1000 600"></svg>
+  </div>
+  <div class="chips-row" id="fig1-chips">
+    <span class="label">hover a node</span>
+    <span class="chip-empty">series whose explainers use that concept will appear here</span>
+  </div>
+  <div class="legend">
+    <span><span class="up-label">↑ more general</span> — the mother problem above</span>
+    <span><span class="down-label">↓ more specific</span> — concrete recipes below</span>
+    <span>series badges are colored by <code>Atlas.byKey[s].color</code></span>
+  </div>
+  <div class="figure-caption">Hover any node to light its up-cone in purple and its down-cone in amber; the badges below the diagram show which moonshine series own an explainer at that concept. Click a badge to jump to that series. The root, <em>any eigenproblem</em>, is the common ancestor; every leaf is a place in the corpus where solving <code>Av = λv</code> is the whole point.</div>
+</div>
+
+<p>The first fork is structural. A symmetric (or Hermitian) operator has real eigenvalues and an orthogonal eigenbasis. Drop symmetry and you pick up either normal operators (still diagonalisable, possibly over the complex plane) or non-normal ones (Koopman, Frobenius-Perron, advection) where left and right eigenvectors disagree and pseudospectra matter. Drop finite-dimensionality and the spectrum splits into point, continuous, and residual parts, which is exactly the regime Schrödinger problems and Hecke operators live in.</p>
+
+<p>The second fork is operator choice. A graph gives you the Laplacian <code>L = D − A</code>, and the smallest nontrivial eigenvector, the Fiedler vector, is the cut that bisects the graph most gently. A data matrix gives you the covariance, whose top eigenvectors are PCA axes and whose inverse square root is the whitening map. A shift-invariant operator gives you the DFT, because translations and the DFT share an eigenbasis. A nonlinear dynamical system gives you the Koopman operator, and its truncation to observables is DMD. A potential gives you the Hamiltonian, whose eigenstates are stationary modes. The fork is not arbitrary. It is structure all the way down.</p>
+
+<h2>Figure 2 · Live eigenproblem demo</h2>
+
+<div class="figure">
+  <div class="figure-title">Pick a graph; the Laplacian spectrum and the Fiedler cut fall out of the same decomposition</div>
+  <div class="eig-wrap">
+    <div class="eig-picker" id="fig2-picker"></div>
+    <div class="eig-panel" id="fig2-panel"></div>
+  </div>
+  <div class="legend">
+    <span><span class="swatch" style="background: var(--accent)"></span>eigenvalue tick</span>
+    <span><span class="swatch" style="background: var(--down)"></span>Fiedler value λ<sub>2</sub></span>
+    <span>λ<sub>1</sub>=0 always; its multiplicity counts connected components</span>
+  </div>
+  <div class="figure-caption">Five small graphs, their 6×6 combinatorial Laplacians, and the real spectrum of each. The ascending list of eigenvalues below each graph is a one-dimensional signature. The amber tick is the Fiedler value; its eigenvector colours the vertices above and cuts the graph into two pieces. Every badge below the spectrum is a moonshine series whose explainers use exactly this piece of machinery.</div>
+</div>
+
+<p>The demo is deliberately narrow, because breadth is a property of the caption rather than the figure. Five tiny graphs, five spectra, one eigenvector drawn on top. But the badges tell the cross-series story. The path graph is the discrete analogue of the one-dimensional Schrödinger problem; its eigenvectors are sines. The cycle is the discrete Fourier transform in disguise; its eigenvectors are roots of unity. The two-cluster graph has its Fiedler vector split cleanly between the clusters, which is exactly spectral clustering. The star graph has a spectrum that algorithms-ml would recognise as the degree-distribution signature of a hub, and the complete graph collapses to a single repeated eigenvalue, the extremal case.</p>
+
+<h2>Figure 3 · Spectral recipe matrix</h2>
+
+<div class="figure">
+  <div class="figure-title">Six operators, six series, one matrix of applications</div>
+  <div class="recipe-wrap">
+    <svg class="recipe-svg" id="fig3-svg" viewBox="0 0 820 400"></svg>
+  </div>
+  <div class="legend">
+    <span>rows: the operator whose spectrum matters</span>
+    <span>cols: a moonshine series</span>
+    <span>glyph: what the eigenproblem <em>becomes</em> in that series</span>
+    <span>hover a cell for the one-line story</span>
+  </div>
+  <div class="figure-caption">Each filled cell is an explainer (or a cluster of explainers) in that series where the row operator is the main object of study. The glyph is a short-hand for the specific flavour: F for Fiedler / spectral cut, P for principal components, D for DFT-diagonalisation, K for Koopman / DMD, H for Hamiltonian eigenstates, N for Nyquist / complex impedance, He for Hecke operator. The empty cells are not absences of mathematical content; they are absences from the current corpus.</div>
+</div>
+
+<p>Read the matrix two ways. Along a row, you see the operator stretched across domains: the Laplacian row lights up four different series because graph-cutting is a ubiquitous move. Along a column, you see a single series as a collection of spectral moves: algorithms-ml uses covariance (PCA), the Laplacian (attention-as-message-passing can be read spectrally), and the transfer operator (diffusion models). The payoff is that once you have internalised the ladder at the top of Figure 1, no domain feels surprising. You are always solving the same equation.</p>
+
+<p>The remaining article in this series, <em>geometry and manifolds</em>, picks up from here. Every eigenbasis is also a choice of coordinates, and every choice of coordinates is a chart on some manifold. The Fisher information metric that information-geometry builds over a statistical family is exactly the kernel of the expected Hessian, which means natural gradient descent is an eigen-decomposition of the parameter-space Hessian. Spectral methods do not end at the spectrum; they flow into the geometry, which is the next poset over.</p>
+
+<footer class="footer-nav">
+  <a class="prev" href="03-graphs-and-networks.html">Graphs and networks</a>
+  <a class="home" href="index.html">Atlas home</a>
+  <a class="next" href="05-geometry-and-manifolds.html">Geometry and manifolds</a>
+</footer>
+
+</div>
+
+<script>
+// ─────────────────────────────────────────────────────────────────────────
+// Figure 1 — Hasse of spectral concepts
+// ─────────────────────────────────────────────────────────────────────────
+(function () {
+  // nodes: each has key, label (display), sub (math), rank (layer), series (keys)
+  var NODES = [
+    { key: 'eig',       label: 'Eigenproblem',        sub: 'Av = λv',        rank: 0, series: [] },
+
+    { key: 'sym',       label: 'Symmetric / Hermitian', sub: 'A = Aᵀ',        rank: 1, series: [] },
+    { key: 'normal',    label: 'Normal',              sub: 'AAᵀ = AᵀA',       rank: 1, series: [] },
+    { key: 'nonnorm',   label: 'Non-normal',          sub: 'pseudospectra',   rank: 1, series: [] },
+    { key: 'inf',       label: 'Infinite-dim',        sub: 'L²(ℝ)',           rank: 1, series: [] },
+
+    { key: 'lap',       label: 'Graph Laplacian',     sub: 'L = D − A',       rank: 2, series: ['lattice-simulation', 'topological-data-analysis', 'bioinformatics', 'algorithms-ml'] },
+    { key: 'cov',       label: 'Covariance',          sub: 'Σ = E[xxᵀ]',       rank: 2, series: ['algorithms-ml', 'information-geometry', 'bioinformatics'] },
+    { key: 'shift',     label: 'Shift-invariant',     sub: 'T_k commutes',     rank: 2, series: ['algorithms-ml', 'lithium-ion'] },
+    { key: 'hess',      label: 'Hessian',             sub: '∇²f',              rank: 2, series: ['information-geometry', 'algorithms-ml', 'lattice-simulation'] },
+    { key: 'koop',      label: 'Koopman',             sub: 'U ∘ φ = φ ∘ F',    rank: 2, series: ['algorithms-ml', 'emergence'] },
+    { key: 'latop',     label: 'Lattice operator',    sub: 'H on Z^d',         rank: 2, series: ['lattice-simulation', 'modular-forms'] },
+    { key: 'schro',     label: 'Schrödinger',         sub: 'Hψ = Eψ',          rank: 2, series: ['lithium-ion', 'modular-forms'] },
+
+    { key: 'fiedler',   label: 'Fiedler / spectral clustering', sub: 'λ₂, v₂', rank: 3, series: ['lattice-simulation', 'topological-data-analysis', 'bioinformatics'] },
+    { key: 'pca',       label: 'PCA / whitening',     sub: 'Σ = UΛUᵀ',         rank: 3, series: ['algorithms-ml', 'information-geometry', 'parallel-coordinates'] },
+    { key: 'dft',       label: 'DFT / FFT',           sub: 'e^{2πikn/N}',      rank: 3, series: ['algorithms-ml', 'grateful-dead'] },
+    { key: 'dmd',       label: 'DMD',                 sub: 'X_+ = AX',         rank: 3, series: ['algorithms-ml', 'emergence'] },
+    { key: 'modes',     label: 'Normal modes',        sub: 'ω², eigenmodes',   rank: 3, series: ['lattice-simulation', 'sph'] },
+    { key: 'bloch',     label: 'Bloch / band',        sub: 'ψ = e^{ikx}u(x)',  rank: 3, series: ['lattice-simulation', 'modular-forms'] },
+    { key: 'hecke',     label: 'Hecke operator',      sub: 'T_p f = λ_p f',    rank: 3, series: ['modular-forms'] },
+    { key: 'nyquist',   label: 'Nyquist / impedance', sub: 'Z(iω)',            rank: 3, series: ['lithium-ion'] },
+    { key: 'fisher',    label: 'Fisher / nat-grad',   sub: 'g_{ij} = E[∂_iℓ ∂_jℓ]', rank: 3, series: ['information-geometry'] }
+  ];
+
+  // edges: parent -> child  (parent is more general / up the Hasse)
+  var EDGES = [
+    ['eig', 'sym'], ['eig', 'normal'], ['eig', 'nonnorm'], ['eig', 'inf'],
+
+    ['sym', 'lap'], ['sym', 'cov'], ['sym', 'hess'],
+    ['normal', 'shift'],
+    ['nonnorm', 'koop'],
+    ['inf', 'latop'], ['inf', 'schro'],
+
+    ['lap', 'fiedler'],
+    ['cov', 'pca'],
+    ['cov', 'fisher'],
+    ['hess', 'modes'], ['hess', 'fisher'],
+    ['shift', 'dft'],
+    ['koop', 'dmd'],
+    ['latop', 'bloch'],
+    ['schro', 'hecke'], ['schro', 'nyquist']
+  ];
+
+  var W = 1000, H = 600;
+  // manual layout: 4 ranks, pick x-positions
+  var LAYERS = {
+    0: ['eig'],
+    1: ['sym', 'normal', 'nonnorm', 'inf'],
+    2: ['lap', 'cov', 'hess', 'shift', 'koop', 'latop', 'schro'],
+    3: ['fiedler', 'pca', 'fisher', 'modes', 'dft', 'dmd', 'bloch', 'hecke', 'nyquist']
+  };
+  var maxRank = 3;
+  var yPad = 60;
+  var xPad = 20;
+  var nodeH = 34;
+
+  // Compute per-node width from label / sub lengths
+  var nodeW = {};
+  NODES.forEach(function (n) {
+    var maxChars = Math.max(n.label.length, n.sub.length);
+    nodeW[n.key] = Math.max(70, Math.round(maxChars * 6.5 + 20));
+  });
+
+  var pos = {};
+  for (var r = 0; r <= maxRank; r++) {
+    var row = LAYERS[r];
+    var y = yPad + (r / maxRank) * (H - 2 * yPad);
+    // Total width of nodes in this rank
+    var totalNodeW = row.reduce(function (acc, k) { return acc + nodeW[k]; }, 0);
+    var usable = W - 2 * xPad;
+    // zigzag if the row (plus minimal 6px gaps) exceeds usable width
+    var minGap = 6;
+    var needZigzag = totalNodeW + (row.length - 1) * minGap > usable;
+
+    if (needZigzag) {
+      // Give each node a horizontal slot proportional to its width so
+      // wider nodes don't overflow their slot edges. Alternate y ±20.
+      var slotCursor = xPad;
+      row.forEach(function (n, i) {
+        var slotW = (nodeW[n] / totalNodeW) * usable;
+        var x = slotCursor + slotW / 2;
+        var yOff = (i % 2 === 0) ? -20 : 20;
+        pos[n] = { x: x, y: y + yOff, rank: r };
+        slotCursor += slotW;
+      });
+    } else {
+      // Distribute with equal gaps between nodes, centered.
+      var gap = (usable - totalNodeW) / (row.length + 1);
+      var cursor = xPad + gap;
+      row.forEach(function (n) {
+        var w = nodeW[n];
+        pos[n] = { x: cursor + w / 2, y: y, rank: r };
+        cursor += w + gap;
+      });
+    }
+  }
+
+  var svg = d3.select('#fig1-svg');
+
+  var edgeSel = svg.append('g').selectAll('path').data(EDGES).enter().append('path')
+    .attr('class', 'hasse-edge')
+    .attr('d', function (e) {
+      var p = pos[e[0]], q = pos[e[1]];
+      var midY = (p.y + q.y) / 2;
+      return 'M' + p.x + ',' + (p.y + nodeH / 2) + ' C' + p.x + ',' + midY + ' ' + q.x + ',' + midY + ' ' + q.x + ',' + (q.y - nodeH / 2);
+    })
+    .attr('data-src', function (e) { return e[0]; })
+    .attr('data-dst', function (e) { return e[1]; });
+
+  var nodeSel = svg.append('g').selectAll('.hasse-node').data(NODES).enter().append('g')
+    .attr('class', 'hasse-node')
+    .attr('data-key', function (d) { return d.key; })
+    .attr('transform', function (d) {
+      var p = pos[d.key];
+      return 'translate(' + (p.x - nodeW[d.key] / 2) + ',' + (p.y - nodeH / 2) + ')';
+    });
+
+  nodeSel.append('rect')
+    .attr('width', function (d) { return nodeW[d.key]; }).attr('height', nodeH).attr('rx', 4);
+
+  nodeSel.append('text').attr('class', 'lbl')
+    .attr('x', function (d) { return nodeW[d.key] / 2; }).attr('y', nodeH / 2 - 1)
+    .text(function (d) { return d.label; });
+
+  nodeSel.append('text').attr('class', 'sub')
+    .attr('x', function (d) { return nodeW[d.key] / 2; }).attr('y', nodeH / 2 + 11)
+    .text(function (d) { return d.sub; });
+
+  var chipsRow = d3.select('#fig1-chips');
+
+  nodeSel.on('mouseenter', function (event, d) {
+    var up = Atlas.upCone(d.key, EDGES);
+    var down = Atlas.downCone(d.key, EDGES);
+    nodeSel.classed('up', function (n) { return up[n.key] && n.key !== d.key; });
+    nodeSel.classed('down', function (n) { return down[n.key] && n.key !== d.key; });
+    nodeSel.classed('focus', function (n) { return n.key === d.key; });
+    nodeSel.classed('dim', function (n) { return !up[n.key] && !down[n.key]; });
+    edgeSel.classed('up', function (e) { return up[e[0]] && up[e[1]]; });
+    edgeSel.classed('down', function (e) { return down[e[0]] && down[e[1]]; });
+    edgeSel.classed('dim', function (e) {
+      var bothUp = up[e[0]] && up[e[1]];
+      var bothDown = down[e[0]] && down[e[1]];
+      return !bothUp && !bothDown;
+    });
+    renderChips(d);
+  });
+
+  nodeSel.on('mouseleave', function () {
+    nodeSel.classed('up', false).classed('down', false).classed('focus', false).classed('dim', false);
+    edgeSel.classed('up', false).classed('down', false).classed('dim', false);
+    chipsRow.html('<span class="label">hover a node</span><span class="chip-empty">series whose explainers use that concept will appear here</span>');
+  });
+
+  function renderChips(d) {
+    chipsRow.html('');
+    chipsRow.append('span').attr('class', 'label').text(d.label + ':');
+    if (!d.series || d.series.length === 0) {
+      chipsRow.append('span').attr('class', 'chip-empty').text('abstract node — no direct series badge');
+      return;
+    }
+    d.series.forEach(function (k) {
+      var s = Atlas.byKey[k];
+      if (!s) return;
+      chipsRow.append('a').attr('class', 'chip').style('background', s.color)
+        .attr('href', s.href).text(s.title);
+    });
+  }
+})();
+
+// ─────────────────────────────────────────────────────────────────────────
+// Figure 2 — Live eigenproblem demo
+// ─────────────────────────────────────────────────────────────────────────
+(function () {
+  // Five 6-vertex graphs, each given as an edge list.
+  var GRAPHS = [
+    {
+      key: 'path', name: 'Path P₆',
+      desc: 'A line of six vertices. Laplacian eigenvectors are sampled cosines; the spectrum is the discrete analogue of the 1D vibrating string.',
+      edges: [[0,1],[1,2],[2,3],[3,4],[4,5]],
+      pos: [[0.08,0.5],[0.24,0.5],[0.40,0.5],[0.56,0.5],[0.72,0.5],[0.88,0.5]],
+      badges: ['lattice-simulation', 'algorithms-ml', 'modular-forms']
+    },
+    {
+      key: 'cycle', name: 'Cycle C₆',
+      desc: 'Shift-invariant by construction. Eigenvectors are roots of unity; the Laplacian diagonalises under the DFT.',
+      edges: [[0,1],[1,2],[2,3],[3,4],[4,5],[5,0]],
+      pos: [[0.5,0.1],[0.8,0.28],[0.8,0.72],[0.5,0.9],[0.2,0.72],[0.2,0.28]],
+      badges: ['algorithms-ml', 'grateful-dead', 'lithium-ion']
+    },
+    {
+      key: 'two-cluster', name: 'Two clusters',
+      desc: 'Two triangles joined by a single bridge. The Fiedler vector splits the vertices cleanly between the two components — this is spectral clustering in its purest form.',
+      edges: [[0,1],[1,2],[0,2],[3,4],[4,5],[3,5],[2,3]],
+      pos: [[0.12,0.25],[0.30,0.65],[0.42,0.3],[0.58,0.3],[0.70,0.65],[0.88,0.25]],
+      badges: ['lattice-simulation', 'topological-data-analysis', 'bioinformatics']
+    },
+    {
+      key: 'star', name: 'Star K₁,₅',
+      desc: 'One hub, five leaves. The spectrum has a zero, four degenerate ones, and a large top eigenvalue equal to n. A classic degree-signature pattern.',
+      edges: [[0,1],[0,2],[0,3],[0,4],[0,5]],
+      pos: [[0.5,0.5],[0.5,0.1],[0.86,0.32],[0.78,0.82],[0.22,0.82],[0.14,0.32]],
+      badges: ['algorithms-ml', 'bioinformatics']
+    },
+    {
+      key: 'complete', name: 'Complete K₆',
+      desc: 'Every vertex connected. Laplacian has one zero and n−1 copies of n — the maximum-symmetry extreme.',
+      edges: (function () {
+        var e = [];
+        for (var i = 0; i < 6; i++) for (var j = i + 1; j < 6; j++) e.push([i, j]);
+        return e;
+      })(),
+      pos: (function () {
+        var p = [];
+        for (var i = 0; i < 6; i++) {
+          var a = -Math.PI / 2 + i * 2 * Math.PI / 6;
+          p.push([0.5 + 0.35 * Math.cos(a), 0.5 + 0.35 * Math.sin(a)]);
+        }
+        return p;
+      })(),
+      badges: ['lattice-simulation', 'modular-forms']
+    }
+  ];
+
+  // Build Laplacian L = D - A (6x6)
+  function laplacian(graph) {
+    var n = graph.pos.length;
+    var L = [];
+    for (var i = 0; i < n; i++) { L.push(new Array(n).fill(0)); }
+    graph.edges.forEach(function (e) {
+      L[e[0]][e[1]] -= 1;
+      L[e[1]][e[0]] -= 1;
+      L[e[0]][e[0]] += 1;
+      L[e[1]][e[1]] += 1;
+    });
+    return L;
+  }
+
+  // Jacobi eigenvalue algorithm for real symmetric matrices — small, simple, fine for n=6.
+  function jacobiEig(A) {
+    var n = A.length;
+    var V = [];
+    for (var i = 0; i < n; i++) { V.push(new Array(n).fill(0)); V[i][i] = 1; }
+    var M = A.map(function (r) { return r.slice(); });
+    var MAX = 200, TOL = 1e-10;
+    for (var iter = 0; iter < MAX; iter++) {
+      // find largest off-diagonal
+      var p = 0, q = 1, maxVal = 0;
+      for (var i = 0; i < n - 1; i++) {
+        for (var j = i + 1; j < n; j++) {
+          if (Math.abs(M[i][j]) > maxVal) { maxVal = Math.abs(M[i][j]); p = i; q = j; }
+        }
+      }
+      if (maxVal < TOL) break;
+      var theta = (M[q][q] - M[p][p]) / (2 * M[p][q]);
+      var t = (theta >= 0 ? 1 : -1) / (Math.abs(theta) + Math.sqrt(1 + theta * theta));
+      var c = 1 / Math.sqrt(1 + t * t);
+      var s = t * c;
+      // rotate rows/cols p,q
+      var Mpp = M[p][p], Mqq = M[q][q], Mpq = M[p][q];
+      M[p][p] = c * c * Mpp - 2 * s * c * Mpq + s * s * Mqq;
+      M[q][q] = s * s * Mpp + 2 * s * c * Mpq + c * c * Mqq;
+      M[p][q] = 0; M[q][p] = 0;
+      for (var k = 0; k < n; k++) {
+        if (k !== p && k !== q) {
+          var Mkp = M[k][p], Mkq = M[k][q];
+          M[k][p] = c * Mkp - s * Mkq; M[p][k] = M[k][p];
+          M[k][q] = s * Mkp + c * Mkq; M[q][k] = M[k][q];
+        }
+      }
+      for (var k = 0; k < n; k++) {
+        var Vkp = V[k][p], Vkq = V[k][q];
+        V[k][p] = c * Vkp - s * Vkq;
+        V[k][q] = s * Vkp + c * Vkq;
+      }
+    }
+    var eigs = [];
+    for (var i = 0; i < n; i++) {
+      var vec = [];
+      for (var k = 0; k < n; k++) vec.push(V[k][i]);
+      eigs.push({ value: M[i][i], vector: vec });
+    }
+    eigs.sort(function (a, b) { return a.value - b.value; });
+    return eigs;
+  }
+
+  var picker = d3.select('#fig2-picker');
+  var buttons = picker.selectAll('button').data(GRAPHS).enter().append('button')
+    .on('click', function (event, g) { render(g.key); buttons.classed('on', function (x) { return x.key === g.key; }); });
+  buttons.append('span').text(function (g) { return g.name; });
+  buttons.append('span').attr('class', 'sub').text(function (g) {
+    return g.edges.length + ' edges';
+  });
+
+  var panel = d3.select('#fig2-panel');
+
+  function render(key) {
+    var g = GRAPHS.filter(function (x) { return x.key === key; })[0];
+    var L = laplacian(g);
+    var eigs = jacobiEig(L);
+
+    panel.html('');
+    panel.append('h4').text(g.name + ' — spectrum of L = D − A');
+    panel.append('div').attr('class', 'desc').text(g.desc);
+
+    // graph svg
+    var W = 460, H = 160;
+    var gsvg = panel.append('svg').attr('class', 'eig-graph-svg').attr('viewBox', '0 0 ' + W + ' ' + H);
+
+    // colour nodes by Fiedler vector (sign)
+    var fiedler = eigs[1].vector;
+    var fMin = d3.min(fiedler), fMax = d3.max(fiedler);
+    var fScale = d3.scaleLinear().domain([fMin, 0, fMax]).range(['#2563eb', '#f3f4f6', '#dc2626']);
+
+    // edges
+    gsvg.append('g').selectAll('line').data(g.edges).enter().append('line')
+      .attr('class', 'eig-graph-edge')
+      .attr('x1', function (e) { return 30 + g.pos[e[0]][0] * (W - 60); })
+      .attr('y1', function (e) { return 20 + g.pos[e[0]][1] * (H - 40); })
+      .attr('x2', function (e) { return 30 + g.pos[e[1]][0] * (W - 60); })
+      .attr('y2', function (e) { return 20 + g.pos[e[1]][1] * (H - 40); });
+
+    // nodes
+    var nodeG = gsvg.append('g').selectAll('g').data(g.pos).enter().append('g')
+      .attr('transform', function (p) {
+        return 'translate(' + (30 + p[0] * (W - 60)) + ',' + (20 + p[1] * (H - 40)) + ')';
+      });
+    nodeG.append('circle').attr('r', 11).attr('class', 'eig-graph-node')
+      .attr('fill', function (d, i) { return fScale(fiedler[i]); })
+      .attr('stroke', '#1a1a2e').attr('stroke-width', 1);
+    nodeG.append('text').attr('class', 'eig-graph-label').attr('y', 3).attr('fill', '#1a1a2e').text(function (d, i) { return i; });
+
+    // spectrum
+    var SW = 460, SH = 84;
+    var ssvg = panel.append('svg').attr('class', 'eig-spectrum-svg').attr('viewBox', '0 0 ' + SW + ' ' + SH);
+    var xMax = d3.max(eigs, function (e) { return e.value; }) * 1.05 + 0.1;
+    var xScale = d3.scaleLinear().domain([0, xMax]).range([30, SW - 20]);
+
+    // axis line
+    ssvg.append('line').attr('class', 'eig-tick-line')
+      .attr('x1', xScale(0)).attr('x2', xScale(xMax))
+      .attr('y1', 46).attr('y2', 46);
+
+    // axis ticks at 0, xMax/2, xMax
+    [0, xMax / 2, xMax].forEach(function (v) {
+      ssvg.append('line').attr('class', 'eig-tick-line')
+        .attr('x1', xScale(v)).attr('x2', xScale(v))
+        .attr('y1', 46).attr('y2', 52);
+      ssvg.append('text').attr('class', 'eig-tick-label')
+        .attr('x', xScale(v)).attr('y', 66).text(v.toFixed(1));
+    });
+
+    // eigenvalue ticks (amber for Fiedler)
+    eigs.forEach(function (e, i) {
+      ssvg.append('line')
+        .attr('class', 'eig-tick-eig' + (i === 1 ? ' fiedler' : ''))
+        .attr('x1', xScale(e.value)).attr('x2', xScale(e.value))
+        .attr('y1', 22).attr('y2', 46);
+      ssvg.append('text').attr('class', 'eig-tick-label')
+        .attr('x', xScale(e.value)).attr('y', 16)
+        .style('fill', i === 1 ? 'var(--down)' : 'var(--text-2)')
+        .style('font-weight', i === 1 ? 700 : 400)
+        .text(e.value.toFixed(2));
+    });
+
+    ssvg.append('text').attr('x', xScale(0)).attr('y', 80).attr('class', 'eig-fiedler-note')
+      .text('λ₁=0  λ₂=' + eigs[1].value.toFixed(3) + ' (Fiedler)  λ₆=' + eigs[5].value.toFixed(2));
+
+    // series badges
+    var badges = panel.append('div').style('margin-top', '0.6rem');
+    badges.append('span').attr('class', 'label')
+      .style('color', 'var(--text-3)').style('font-size', '0.72rem')
+      .style('text-transform', 'uppercase').style('letter-spacing', '0.06em')
+      .style('margin-right', '0.4rem')
+      .text('series that use this pattern:');
+    g.badges.forEach(function (k) {
+      var s = Atlas.byKey[k];
+      badges.append('a').attr('class', 'chip').style('background', s.color)
+        .attr('href', s.href).text(s.title);
+    });
+  }
+
+  render('two-cluster');
+  buttons.classed('on', function (x) { return x.key === 'two-cluster'; });
+})();
+
+// ─────────────────────────────────────────────────────────────────────────
+// Figure 3 — Spectral recipe matrix
+// ─────────────────────────────────────────────────────────────────────────
+(function () {
+  var ROWS = [
+    { key: 'laplacian',   label: 'Graph Laplacian',     sub: 'L = D − A' },
+    { key: 'covariance',  label: 'Covariance',          sub: 'Σ = E[xxᵀ]' },
+    { key: 'shift',       label: 'Shift-invariant',     sub: 'circulant' },
+    { key: 'transfer',    label: 'Transfer / Koopman',  sub: 'non-normal' },
+    { key: 'hamiltonian', label: 'Hamiltonian',         sub: 'Hψ = Eψ' },
+    { key: 'hecke',       label: 'Hecke',               sub: 'Tₚ on S_k(Γ)' }
+  ];
+
+  var COLS = [
+    'lattice-simulation',
+    'algorithms-ml',
+    'topological-data-analysis',
+    'lithium-ion',
+    'information-geometry',
+    'modular-forms'
+  ];
+
+  // cells: { row, col, glyph, note }
+  var CELLS = [
+    { row: 'laplacian', col: 'lattice-simulation',        glyph: 'F',  note: 'Fiedler-vector leader election and symmetry reduction on the lattice (see 10-graph-automorphisms).' },
+    { row: 'laplacian', col: 'algorithms-ml',             glyph: 'F',  note: 'Spectral clustering and Laplacian eigenmaps for dimension reduction.' },
+    { row: 'laplacian', col: 'topological-data-analysis', glyph: 'F',  note: 'Combinatorial Laplacian of a simplicial complex; kernel counts connected pieces, higher modes count holes.' },
+
+    { row: 'covariance', col: 'algorithms-ml',            glyph: 'P',  note: 'PCA, whitening, SVD-based compression — all eigendecompositions of Σ or XᵀX.' },
+    { row: 'covariance', col: 'information-geometry',    glyph: 'P',  note: 'Fisher information is the expected Hessian; its eigenbasis defines natural-gradient directions.' },
+
+    { row: 'shift', col: 'algorithms-ml',                 glyph: 'D',  note: 'Circulants diagonalise under the DFT; convolution becomes multiplication in Fourier space.' },
+    { row: 'shift', col: 'lithium-ion',                   glyph: 'N',  note: 'Electrochemical impedance spectroscopy: a linear time-invariant response analysed in frequency space — the Nyquist plot is its eigenspectrum in disguise.' },
+
+    { row: 'transfer', col: 'algorithms-ml',              glyph: 'K',  note: 'Dynamic mode decomposition; Koopman eigenfunctions give linear observables of nonlinear dynamics.' },
+    { row: 'transfer', col: 'lattice-simulation',         glyph: 'K',  note: 'Transfer matrix of a 1D lattice; the largest eigenvalue gives the free-energy density.' },
+
+    { row: 'hamiltonian', col: 'lithium-ion',             glyph: 'H',  note: 'Band structure of a solid electrolyte; eigenstates of the lattice Hamiltonian control transport.' },
+    { row: 'hamiltonian', col: 'modular-forms',           glyph: 'H',  note: 'Schrödinger-like operators on the upper half-plane with modular symmetry; cuspidal spectrum of the Laplacian.' },
+
+    { row: 'hecke', col: 'modular-forms',                 glyph: 'He', note: 'Hecke operators T_p act on spaces of modular forms; simultaneous eigenforms carry the arithmetic content.' }
+  ];
+
+  var W = 820, H = 400;
+  var leftPad = 180, rightPad = 12, topPad = 120, botPad = 20;
+  var rowH = (H - topPad - botPad) / ROWS.length;
+  var colW = (W - leftPad - rightPad) / COLS.length;
+
+  var svg = d3.select('#fig3-svg');
+
+  // row background bands
+  var rowBands = svg.append('g').selectAll('rect').data(ROWS).enter().append('rect')
+    .attr('class', 'recipe-row-bg')
+    .attr('x', leftPad).attr('y', function (d, i) { return topPad + i * rowH; })
+    .attr('width', W - leftPad - rightPad).attr('height', rowH - 2);
+
+  // row labels
+  svg.append('g').selectAll('g').data(ROWS).enter().append('g')
+    .attr('transform', function (d, i) { return 'translate(' + (leftPad - 10) + ',' + (topPad + i * rowH + rowH / 2) + ')'; })
+    .each(function (d) {
+      var g = d3.select(this);
+      g.append('text').attr('class', 'recipe-row-label').attr('text-anchor', 'end').attr('y', -2).text(d.label);
+      g.append('text').attr('class', 'recipe-row-sub').attr('text-anchor', 'end').attr('y', 10).text(d.sub);
+    });
+
+  // column labels — rotated
+  svg.append('g').selectAll('text').data(COLS).enter().append('text')
+    .attr('class', 'recipe-col-label')
+    .attr('transform', function (d, i) {
+      return 'translate(' + (leftPad + i * colW + colW / 2) + ',' + (topPad - 10) + ') rotate(-40)';
+    })
+    .attr('text-anchor', 'start')
+    .attr('fill', function (d) { return Atlas.byKey[d].color; })
+    .text(function (d) { return Atlas.byKey[d].title; });
+
+  // tooltip
+  var tooltip = svg.append('g').style('pointer-events', 'none').attr('opacity', 0);
+  tooltip.append('rect').attr('rx', 3).attr('fill', '#111').attr('opacity', 0.93);
+  var tt1 = tooltip.append('text').attr('fill', '#fff').attr('font-family', 'Source Sans 3').attr('font-size', 10.5).attr('font-weight', 700).attr('x', 8).attr('y', 14);
+  var tt2 = tooltip.append('text').attr('fill', '#cbd5e1').attr('font-family', 'Source Sans 3').attr('font-size', 9.5).attr('x', 8).attr('y', 28);
+
+  // cells
+  ROWS.forEach(function (row, ri) {
+    COLS.forEach(function (col, ci) {
+      var cell = CELLS.filter(function (c) { return c.row === row.key && c.col === col; })[0];
+      var x = leftPad + ci * colW;
+      var y = topPad + ri * rowH;
+      var filled = !!cell;
+
+      svg.append('rect')
+        .attr('class', 'recipe-cell' + (filled ? '' : ' empty'))
+        .attr('x', x + 3).attr('y', y + 3)
+        .attr('width', colW - 6).attr('height', rowH - 6).attr('rx', 3)
+        .attr('fill', filled ? Atlas.byKey[col].color : '#f1f1f4')
+        .on('mouseenter', function () {
+          if (!filled) return;
+          rowBands.classed('on', function (rr, rri) { return rri === ri; });
+          // tooltip
+          var line1 = row.label + ' in ' + Atlas.byKey[col].title;
+          var line2 = cell.note;
+          tt1.text(line1);
+          // word-wrap tt2 at ~62 chars
+          var chars = 62;
+          if (line2.length <= chars) {
+            tt2.text(line2);
+            tooltip.select('rect').attr('width', Math.max(line1.length, line2.length) * 5.8 + 16).attr('height', 38);
+          } else {
+            var cut = line2.lastIndexOf(' ', chars);
+            if (cut < 0) cut = chars;
+            tt2.text(line2.slice(0, cut));
+            if (tooltip.select('.tt3').empty()) {
+              tooltip.append('text').attr('class', 'tt3').attr('fill', '#cbd5e1').attr('font-family', 'Source Sans 3').attr('font-size', 9.5).attr('x', 8).attr('y', 40);
+            }
+            tooltip.select('.tt3').text(line2.slice(cut + 1));
+            tooltip.select('rect').attr('width', chars * 5.8 + 16).attr('height', 50);
+          }
+          var tx = Math.min(x + colW, W - 380);
+          var ty = Math.min(y, H - 54);
+          tooltip.attr('transform', 'translate(' + tx + ',' + ty + ')').attr('opacity', 1);
+        })
+        .on('mouseleave', function () {
+          rowBands.classed('on', false);
+          tooltip.attr('opacity', 0);
+          tooltip.select('.tt3').text('');
+        })
+        .on('click', function () {
+          if (!filled) return;
+          window.location.href = Atlas.byKey[col].href;
+        });
+
+      // glyph
+      svg.append('text')
+        .attr('class', 'recipe-glyph' + (filled ? '' : ' empty'))
+        .attr('x', x + colW / 2).attr('y', y + rowH / 2 + 4)
+        .text(filled ? cell.glyph : '·');
+    });
+  });
+
+  // glyph legend strip below
+  var LEG = [
+    { g: 'F',  t: 'Fiedler / spectral cut' },
+    { g: 'P',  t: 'Principal components' },
+    { g: 'D',  t: 'DFT diagonalisation' },
+    { g: 'K',  t: 'Koopman / DMD' },
+    { g: 'H',  t: 'Hamiltonian eigenstates' },
+    { g: 'N',  t: 'Nyquist / impedance' },
+    { g: 'He', t: 'Hecke operator' }
+  ];
+  var legG = svg.append('g').attr('transform', 'translate(' + leftPad + ',' + (H - 8) + ')');
+  var lx = 0;
+  LEG.forEach(function (l) {
+    var g = legG.append('g').attr('transform', 'translate(' + lx + ',0)');
+    g.append('rect').attr('x', 0).attr('y', -10).attr('width', 14).attr('height', 12).attr('rx', 2).attr('fill', 'var(--accent)');
+    g.append('text').attr('x', 7).attr('y', 0).attr('text-anchor', 'middle')
+      .attr('font-family', 'Source Code Pro').attr('font-size', 9).attr('font-weight', 700).attr('fill', '#fff').text(l.g);
+    g.append('text').attr('x', 18).attr('y', 0).attr('font-family', 'Source Sans 3').attr('font-size', 9.5).attr('fill', 'var(--text-2)').text(l.t);
+    lx += 22 + l.t.length * 5.2 + 10;
+  });
+})();
+</script>
+
+</body>
+</html>

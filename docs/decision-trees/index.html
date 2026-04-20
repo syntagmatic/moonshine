@@ -83,6 +83,13 @@ a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px
 }
 .card:hover { border-color: var(--accent); transform: translateY(-1px); }
 .card-number { font-family: var(--mono-font); font-size: 0.85rem; font-weight: 600; color: var(--text-2); min-width: 1.75rem; padding-top: 0.1rem; }
+.card-thumb {
+  width: 72px; height: 72px; flex-shrink: 0; border-radius: 4px;
+  background: #f8fafc; border: 1px solid #f1f5f9;
+  display: flex; align-items: center; justify-content: center; overflow: hidden;
+}
+.card-thumb canvas { display: block; }
+@media (max-width: 640px) { .card-thumb { width: 56px; height: 56px; } }
 .card-body { flex: 1; min-width: 0; }
 .card-title { font-family: var(--heading-font); font-weight: 700; font-size: 1.1rem; color: var(--text); margin-bottom: 0.25rem; }
 .card-desc { font-size: 0.92rem; color: var(--text-2); margin: 0; line-height: 1.5; }
@@ -337,10 +344,228 @@ var chapters = [
     tags: 'oblivious trees · OBDDs · optimal trees · streaming · privacy · fairness' }
 ];
 
+// ───────────────────────────────── per-chapter glyphs (declared before loop) ──
+function mountThumb(el, num) {
+  var s = 64, dpr = window.devicePixelRatio || 1;
+  var canvas = document.createElement('canvas');
+  canvas.width = s * dpr; canvas.height = s * dpr;
+  canvas.style.width = s + 'px'; canvas.style.height = s + 'px';
+  el.appendChild(canvas);
+  var ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  (GLYPHS[num] || function () {})(ctx, s);
+}
+
+var BLUE = '#2563eb', RED = '#dc2626', PURPLE = '#7c3aed', GREEN = '#059669',
+    ORANGE = '#ea580c', SLATE = '#94a3b8', DARK = '#1e293b', LIGHT = '#cbd5e1';
+
+var GLYPHS = {
+  // 01 · single tree: tiny tree with mixed-color leaves
+  '01': function (ctx) {
+    var N = [[32, 10], [18, 26], [46, 26], [10, 44], [26, 44], [38, 44], [54, 44]];
+    var E = [[0,1],[0,2],[1,3],[1,4],[2,5],[2,6]];
+    ctx.strokeStyle = LIGHT; ctx.lineWidth = 1;
+    E.forEach(function (e) { ctx.beginPath(); ctx.moveTo(N[e[0]][0], N[e[0]][1]); ctx.lineTo(N[e[1]][0], N[e[1]][1]); ctx.stroke(); });
+    // leaves as colored squares
+    var leafColor = [null, null, null, RED, BLUE, BLUE, RED];
+    N.forEach(function (n, i) {
+      if (i >= 3) {
+        ctx.fillStyle = leafColor[i]; ctx.globalAlpha = 0.85;
+        ctx.fillRect(n[0] - 4, n[1] - 4, 8, 8); ctx.globalAlpha = 1;
+      } else {
+        ctx.beginPath(); ctx.arc(n[0], n[1], 3.5, 0, Math.PI * 2);
+        ctx.fillStyle = '#ffffff'; ctx.fill();
+        ctx.strokeStyle = i === 0 ? DARK : SLATE; ctx.lineWidth = 1.3; ctx.stroke();
+      }
+    });
+    // axis tick at the root split (hint at threshold dragging)
+    ctx.fillStyle = DARK; ctx.fillRect(30, 54, 4, 2);
+  },
+  // 02 · geometry and pruning: 2D axis-aligned cuts on a scatter
+  '02': function (ctx) {
+    ctx.strokeStyle = '#e2e8f0'; ctx.lineWidth = 1;
+    ctx.strokeRect(8, 8, 48, 48);
+    // cuts
+    ctx.strokeStyle = PURPLE; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(30, 8); ctx.lineTo(30, 56); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(30, 30); ctx.lineTo(56, 30); ctx.stroke();
+    // diagonal (gray — "hurts without rotation")
+    ctx.strokeStyle = LIGHT; ctx.lineWidth = 0.8; ctx.setLineDash([2, 2]);
+    ctx.beginPath(); ctx.moveTo(10, 52); ctx.lineTo(50, 12); ctx.stroke();
+    ctx.setLineDash([]);
+    // points
+    var pts = [[16, 16, 1], [22, 24, 1], [16, 38, 0], [24, 46, 0], [38, 18, 1], [46, 14, 1], [50, 22, 1], [38, 40, 0], [50, 46, 0], [44, 48, 0]];
+    pts.forEach(function (p) {
+      ctx.fillStyle = p[2] ? BLUE : RED; ctx.globalAlpha = 0.8;
+      ctx.beginPath(); ctx.arc(p[0], p[1], 1.8, 0, Math.PI * 2); ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+  },
+  // 03 · voting ensembles: 3 tiny trees with arrows → vote box
+  '03': function (ctx) {
+    var xs = [10, 22, 34];
+    xs.forEach(function (x) {
+      ctx.strokeStyle = LIGHT; ctx.lineWidth = 0.8;
+      ctx.beginPath(); ctx.moveTo(x + 4, 12); ctx.lineTo(x, 22); ctx.moveTo(x + 4, 12); ctx.lineTo(x + 8, 22); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x, 22); ctx.lineTo(x - 2, 32); ctx.moveTo(x, 22); ctx.lineTo(x + 2, 32); ctx.moveTo(x + 8, 22); ctx.lineTo(x + 6, 32); ctx.moveTo(x + 8, 22); ctx.lineTo(x + 10, 32); ctx.stroke();
+      // root circle
+      ctx.fillStyle = '#fff'; ctx.strokeStyle = DARK; ctx.lineWidth = 1.1;
+      ctx.beginPath(); ctx.arc(x + 4, 12, 2.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      // leaves tiny squares
+      [[x - 2, 32], [x + 2, 32], [x + 6, 32], [x + 10, 32]].forEach(function (l, i) {
+        ctx.fillStyle = [RED, BLUE, BLUE, RED][i]; ctx.globalAlpha = 0.8;
+        ctx.fillRect(l[0] - 1.5, l[1] - 1.5, 3, 3);
+      });
+      ctx.globalAlpha = 1;
+    });
+    // arrow + vote box
+    ctx.strokeStyle = SLATE; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(45, 32); ctx.lineTo(52, 32); ctx.stroke();
+    ctx.fillStyle = BLUE; ctx.globalAlpha = 0.85;
+    ctx.fillRect(50, 40, 10, 10); ctx.globalAlpha = 1;
+    ctx.strokeStyle = DARK; ctx.lineWidth = 0.8;
+    ctx.strokeRect(50, 40, 10, 10);
+  },
+  // 04 · boosting: stacked trees correcting residuals
+  '04': function (ctx) {
+    // three horizontal "learner" rows with shrinking residual bars
+    for (var i = 0; i < 3; i++) {
+      var y = 14 + i * 14;
+      ctx.strokeStyle = LIGHT; ctx.lineWidth = 0.8;
+      ctx.beginPath(); ctx.moveTo(8, y); ctx.lineTo(56, y); ctx.stroke();
+      // small tree glyph left
+      ctx.strokeStyle = SLATE; ctx.lineWidth = 0.9;
+      ctx.beginPath(); ctx.moveTo(12, y - 4); ctx.lineTo(8, y + 4); ctx.moveTo(12, y - 4); ctx.lineTo(16, y + 4); ctx.stroke();
+      ctx.fillStyle = DARK;
+      ctx.beginPath(); ctx.arc(12, y - 4, 1.6, 0, Math.PI * 2); ctx.fill();
+      // residual bar shrinking with i
+      var w = [28, 18, 10][i];
+      ctx.fillStyle = [RED, ORANGE, GREEN][i]; ctx.globalAlpha = 0.78;
+      ctx.fillRect(22, y - 3, w, 6); ctx.globalAlpha = 1;
+    }
+    // arrow indicating sequence
+    ctx.strokeStyle = DARK; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(60, 12); ctx.lineTo(60, 50); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(58, 46); ctx.lineTo(60, 52); ctx.lineTo(62, 46); ctx.stroke();
+  },
+  // 05 · reading the forest: horizontal SHAP-style bar chart
+  '05': function (ctx) {
+    // axis line
+    ctx.strokeStyle = LIGHT; ctx.lineWidth = 0.8;
+    ctx.beginPath(); ctx.moveTo(30, 6); ctx.lineTo(30, 58); ctx.stroke();
+    // features
+    var bars = [
+      { y: 12, w: 20, dir: 1, c: BLUE },
+      { y: 22, w: 14, dir: 1, c: BLUE },
+      { y: 32, w: 8,  dir: -1, c: RED },
+      { y: 42, w: 18, dir: -1, c: RED },
+      { y: 52, w: 6,  dir: 1, c: BLUE }
+    ];
+    bars.forEach(function (b) {
+      ctx.fillStyle = b.c; ctx.globalAlpha = 0.8;
+      if (b.dir > 0) ctx.fillRect(30, b.y - 3, b.w, 6);
+      else ctx.fillRect(30 - b.w, b.y - 3, b.w, 6);
+      ctx.globalAlpha = 1;
+      // tick label dash
+      ctx.fillStyle = SLATE;
+      ctx.fillRect(6, b.y - 0.5, 4, 1);
+    });
+  },
+  // 06 · causal trees: tree + intervention arrow
+  '06': function (ctx) {
+    var N = [[22, 10], [10, 26], [34, 26], [4, 42], [16, 42], [28, 42], [40, 42]];
+    var E = [[0,1],[0,2],[1,3],[1,4],[2,5],[2,6]];
+    ctx.strokeStyle = LIGHT; ctx.lineWidth = 1;
+    E.forEach(function (e) { ctx.beginPath(); ctx.moveTo(N[e[0]][0], N[e[0]][1]); ctx.lineTo(N[e[1]][0], N[e[1]][1]); ctx.stroke(); });
+    // uplift signals (+/- arrows on leaves)
+    var signs = [null, null, null, '+', '-', '+', '-'];
+    var colors = [null, null, null, GREEN, RED, GREEN, RED];
+    N.forEach(function (n, i) {
+      if (i >= 3) {
+        ctx.fillStyle = colors[i]; ctx.globalAlpha = 0.85;
+        ctx.beginPath(); ctx.arc(n[0], n[1], 4, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1;
+        ctx.fillStyle = '#fff'; ctx.font = 'bold 7px Source Sans 3';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(signs[i], n[0], n[1] + 0.5);
+      } else {
+        ctx.beginPath(); ctx.arc(n[0], n[1], 3, 0, Math.PI * 2);
+        ctx.fillStyle = '#fff'; ctx.fill();
+        ctx.strokeStyle = i === 0 ? DARK : SLATE; ctx.lineWidth = 1.2; ctx.stroke();
+      }
+    });
+    // treatment intervention bolt
+    ctx.strokeStyle = PURPLE; ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.moveTo(52, 10); ctx.lineTo(48, 22); ctx.lineTo(52, 22); ctx.lineTo(46, 34); ctx.stroke();
+  },
+  // 07 · trees unbound: sigmoid curve + tree
+  '07': function (ctx) {
+    // sigmoid
+    ctx.strokeStyle = PURPLE; ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    for (var x = 6; x <= 58; x++) {
+      var t = (x - 32) / 6;
+      var y = 32 - 18 / (1 + Math.exp(-t));
+      if (x === 6) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    // axis
+    ctx.strokeStyle = LIGHT; ctx.lineWidth = 0.5;
+    ctx.beginPath(); ctx.moveTo(6, 22); ctx.lineTo(58, 22); ctx.stroke();
+    // MCTS asymmetric tree below
+    var base = 46;
+    ctx.strokeStyle = SLATE; ctx.lineWidth = 0.9;
+    [[32, base - 6, 22, base + 4], [32, base - 6, 44, base + 4], [22, base + 4, 16, base + 12], [22, base + 4, 28, base + 12], [44, base + 4, 42, base + 12], [28, base + 12, 26, base + 20], [28, base + 12, 32, base + 20]].forEach(function (e) {
+      ctx.beginPath(); ctx.moveTo(e[0], e[1]); ctx.lineTo(e[2], e[3]); ctx.stroke();
+    });
+    // root filled
+    ctx.fillStyle = DARK;
+    ctx.beginPath(); ctx.arc(32, base - 6, 2, 0, Math.PI * 2); ctx.fill();
+    // highlight deep branch (MCTS rollout)
+    ctx.strokeStyle = ORANGE; ctx.lineWidth = 1.3;
+    ctx.beginPath(); ctx.moveTo(32, base - 6); ctx.lineTo(22, base + 4); ctx.lineTo(28, base + 12); ctx.lineTo(32, base + 20); ctx.stroke();
+  },
+  // 08 · frontier: OBDD / compressed lookup grid
+  '08': function (ctx) {
+    // layered lattice: 5 rows of decreasing width
+    var rows = [
+      [32],
+      [20, 44],
+      [14, 32, 50],
+      [20, 44],
+      [12, 28, 36, 52]
+    ];
+    var ys = [10, 22, 34, 46, 56];
+    // edges
+    ctx.strokeStyle = LIGHT; ctx.lineWidth = 0.8;
+    for (var r = 0; r < rows.length - 1; r++) {
+      rows[r].forEach(function (x1) {
+        rows[r + 1].forEach(function (x2) {
+          if (Math.abs(x1 - x2) > 24) return;
+          ctx.beginPath(); ctx.moveTo(x1, ys[r]); ctx.lineTo(x2, ys[r + 1]); ctx.stroke();
+        });
+      });
+    }
+    // nodes
+    rows.forEach(function (row, r) {
+      row.forEach(function (x) {
+        ctx.fillStyle = r === 0 ? DARK : (r === rows.length - 1 ? '#fff' : '#fff');
+        ctx.beginPath(); ctx.arc(x, ys[r], 2.2, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = r === rows.length - 1 ? DARK : SLATE; ctx.lineWidth = 1;
+        ctx.stroke();
+      });
+    });
+    // terminal labels as two tiny colored leaves at bottom corners
+    ctx.fillStyle = RED; ctx.fillRect(8, ys[4] + 3, 4, 4);
+    ctx.fillStyle = BLUE; ctx.fillRect(52, ys[4] + 3, 4, 4);
+  }
+};
+
 var list = d3.select('#card-list').append('div').attr('class', 'card-list');
 chapters.forEach(function (c) {
   var a = list.append('a').attr('class', 'card').attr('href', c.href);
   a.append('div').attr('class', 'card-number').text(c.num);
+  var thumb = a.append('div').attr('class', 'card-thumb');
+  mountThumb(thumb.node(), c.num);
   var body = a.append('div').attr('class', 'card-body');
   body.append('div').attr('class', 'card-title').html(c.title);
   body.append('p').attr('class', 'card-desc').html(c.desc);
