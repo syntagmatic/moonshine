@@ -8,7 +8,7 @@ Interactive demonstrations of every visualization skill in `d3-power-tools`. Eac
 - **Quality target:** SPH-standard. Prev/next footer nav, shared semantic color vocabulary, IntersectionObserver on toggle-based rAF loops, ResizeObserver on canvas.
 - **Output:** `docs/d3-power-tools/<slug>.html`, one file per skill (semantic slugs, not numbered).
 - **Index:** `docs/d3-power-tools/index.html` — SPH-typography card grid grouped into eight categories, with a 5-color pipeline header viz.
-- **Source:** The series explains the skills documented in [d3-power-tools](https://github.com/kaidrumm/d3-power-tools).
+- **Source:** The series explains the skills documented in [d3-power-tools](https://github.com/syntagmatic/d3-power-tools).
 
 ## The unifying skeleton
 
