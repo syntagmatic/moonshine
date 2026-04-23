@@ -122,7 +122,7 @@ code { font-family: var(--mono-font); font-size: 0.85em; background: #f3f4f6; pa
 
   <header>
     <h1>Reaction-Diffusion</h1>
-    <p class="subtitle">Two chemicals on a grid. A 3×3 stencil stirs them every frame. The shapes <code>[128×128]</code> and <code>[3×3]</code> are not runtime checks — they live <em>in the type</em>, and the compiler can see a mismatched convolution before the program runs.</p>
+    <p class="subtitle">Two chemicals on a grid. A 3×3 stencil stirs them every frame. The shapes <code>[128×128]</code> and <code>[3×3]</code> are not runtime checks, they live <em>in the type</em>, and the compiler can see a mismatched convolution before the program runs.</p>
   </header>
 
   <!-- ────────────── §1 Cold sim ────────────── -->
@@ -161,15 +161,15 @@ sobelX     :: Stencil 3     -- edge detector, horizontal
 
 convolve :: Stencil k -> Field w h -> Field w h
 step     :: ReactionParams -> Field w h -> Field w h  -- built on convolve</div>
-    <p>Read the <code>convolve</code> signature as a promise: for <em>any</em> odd <code>k</code> and <em>any</em> <code>w,h</code>, I can take a <code>k×k</code> stencil and a <code>w×h</code> field and hand you back a field of the same shape. The output shape is literally the input shape — a compile-time equality, not a runtime test. Try to apply a <code>[2×3]</code> stencil and the type checker rejects the call before a single multiplication happens; try to add a <code>Field 128 128</code> to a <code>Field 64 128</code> and the same thing.</p>
-    <p>This is the "dependent-types lite" move. Full dependent types let the shape be <em>any</em> expression; shape-indexing asks only for natural-number parameters — enough to catch every dimension-mismatch bug, cheap enough that Rust, Haskell (with <code>DataKinds</code>), Idris, and Swift all implement it today.</p>
+    <p>Read the <code>convolve</code> signature as a promise: for <em>any</em> odd <code>k</code> and <em>any</em> <code>w,h</code>, I can take a <code>k×k</code> stencil and a <code>w×h</code> field and hand you back a field of the same shape. The output shape is literally the input shape, a compile-time equality, not a runtime test. Try to apply a <code>[2×3]</code> stencil and the type checker rejects the call before a single multiplication happens; try to add a <code>Field 128 128</code> to a <code>Field 64 128</code> and the same thing.</p>
+    <p>This is the "dependent-types lite" move. Full dependent types let the shape be <em>any</em> expression; shape-indexing asks only for natural-number parameters, enough to catch every dimension-mismatch bug, cheap enough that Rust, Haskell (with <code>DataKinds</code>), Idris, and Swift all implement it today.</p>
   </div>
 
   <!-- ────────────── §3 Signature diagram ────────────── -->
   <div class="section">
     <div class="section-tag">§3 · Signature diagram</div>
     <h2>Every pipe carries its shape</h2>
-    <p>Here is <code>step</code> drawn out. The stencil arrives on its own tagged pipe — a <code>[3×3]</code>. The field arrives on a wider pipe — a <code>[128×128]</code>. The output field's tag is the same as the input field's tag because the signature says so. The shape tags are rendered by <code>TV.shapeIndex</code>; think of them as the type checker's commentary floating over each wire.</p>
+    <p>Here is <code>step</code> drawn out. The stencil arrives on its own tagged pipe, a <code>[3×3]</code>. The field arrives on a wider pipe, a <code>[128×128]</code>. The output field's tag is the same as the input field's tag because the signature says so. The shape tags are rendered by <code>TV.shapeIndex</code>; think of them as the type checker's commentary floating over each wire.</p>
     <div class="haskell-block">step :: ReactionParams -> Stencil 3 -> Field 128 128 -> Field 128 128
   where
     ReactionParams = { F :: Scalar, k :: Scalar, dU :: Scalar, dV :: Scalar }</div>
@@ -183,22 +183,22 @@ step     :: ReactionParams -> Field w h -> Field w h  -- built on convolve</div>
   <div class="section">
     <div class="section-tag">§4 · What it lets you say</div>
     <h2>A stencil is a type-level value</h2>
-    <p>Because the shape is part of the type, we can enumerate stencils of a given shape and treat them as <em>different types</em> rather than different arrays. Four stencils below, all applied to the same seeded blob. A Laplacian smears. An edge-detector emphasizes the boundary. A 5×5 wider kernel blurs farther per step. The field shape stays <code>[64×64]</code> throughout — that's a compile-time fact; the <em>behavior</em> is the thing that changes.</p>
+    <p>Because the shape is part of the type, we can enumerate stencils of a given shape and treat them as <em>different types</em> rather than different arrays. Four stencils below, all applied to the same seeded blob. A Laplacian smears. An edge-detector emphasizes the boundary. A 5×5 wider kernel blurs farther per step. The field shape stays <code>[64×64]</code> throughout, that's a compile-time fact; the <em>behavior</em> is the thing that changes.</p>
     <div class="figure">
       <div class="stencil-gallery" id="gallery"></div>
       <div class="figure-caption">Every tile runs the same <code>convolve :: Stencil k -> Field 64 64 -> Field 64 64</code>, differing only in which <code>Stencil k</code> they pass. Swap a <code>Stencil 3</code> for a <code>Stencil 5</code>, the buffer layout changes but the signature still type-checks. Swap a <code>[2×3]</code> shape in, and the line wouldn't compile.</div>
     </div>
-    <p>The gallery is the expressiveness payoff. You can ship a library of named stencils, each with its own type, and combine them via well-typed combinators — <code>transpose :: Stencil k -> Stencil k</code>, <code>compose :: Stencil k -> Stencil k -> Stencil k</code> — knowing the dimensions will always line up.</p>
-    <p>Shape is the easy guarantee. The harder one — and the reason #12 ends the series — is the <em>symmetry group of the lattice itself</em>. Lattice-gas automata confronted this head-on in the 1980s. The original Hardy–Pomeau–de Pazzis (<strong>HPP</strong>) model restricted fluid particles to four cardinal directions on a square grid. It failed to reproduce the Navier–Stokes equations at the continuum limit, and the reason was purely group-theoretic: the point symmetry group of a square lattice is too small to guarantee a 4th-order isotropic tensor. Frisch, Hasslacher and Pomeau (<strong>FHP</strong>) replaced the square with a hexagonal lattice — <code>C₆ᵥ</code> is large enough — and the macroscopic hydrodynamics fell out. No parameter tuning changed things. The lattice's group did.</p>
+    <p>The gallery is the expressiveness payoff. You can ship a library of named stencils, each with its own type, and combine them via well-typed combinators, <code>transpose :: Stencil k -> Stencil k</code>, <code>compose :: Stencil k -> Stencil k -> Stencil k</code>, knowing the dimensions will always line up.</p>
+    <p>Shape is the easy guarantee. The harder one (and the reason #12 ends the series) is the <em>symmetry group of the lattice itself</em>. Lattice-gas automata confronted this head-on in the 1980s. The original Hardy–Pomeau–de Pazzis (<strong>HPP</strong>) model restricted fluid particles to four cardinal directions on a square grid. It failed to reproduce the Navier–Stokes equations at the continuum limit, and the reason was purely group-theoretic: the point symmetry group of a square lattice is too small to guarantee a 4th-order isotropic tensor. Frisch, Hasslacher and Pomeau (<strong>FHP</strong>) replaced the square with a hexagonal lattice (<code>C₆ᵥ</code> is large enough) and the macroscopic hydrodynamics fell out. No parameter tuning changed things. The lattice's group did.</p>
 
     <div class="figure">
       <div class="aniso-wrap">
         <div class="aniso-tile">
           <h4>HPP-style square  ·  Stencil 3</h4>
-          <div class="aniso-sub">only the four grid-axis neighbours contribute — the point group <code>D₄</code> is not rich enough</div>
+          <div class="aniso-sub">only the four grid-axis neighbours contribute, the point group <code>D₄</code> is not rich enough</div>
           <div class="stencil-mini" id="mini-5pt"></div>
           <canvas id="rd-5pt" width="128" height="128"></canvas>
-          <div class="aniso-note">The stencil's dihedral group is <em>D₄</em>, not <em>SO(2)</em>. 90° is a symmetry, 60° is not. No matter how you tune <em>F</em>, <em>k</em>, or dt, the long-wavelength limit of this step function is not isotropic Navier-Stokes — it is the HPP failure mode rendered at reaction-diffusion scale.</div>
+          <div class="aniso-note">The stencil's dihedral group is <em>D₄</em>, not <em>SO(2)</em>. 90° is a symmetry, 60° is not. No matter how you tune <em>F</em>, <em>k</em>, or dt, the long-wavelength limit of this step function is not isotropic Navier-Stokes, it is the HPP failure mode rendered at reaction-diffusion scale.</div>
         </div>
         <div class="aniso-tile">
           <h4>FHP-style hex-isotropic  ·  Stencil 3</h4>
@@ -215,15 +215,15 @@ step     :: ReactionParams -> Field w h -> Field w h  -- built on convolve</div>
       <div class="figure-caption">Both panels run Gray-Scott with identical parameters, identical seed, identical dt. The only difference is the Laplacian stencil — which is to say, the <em>lattice symmetry group</em> that the <code>step</code> function inherits. This is the same argument FHP made for Navier–Stokes, transplanted to Turing patterns. #12 §5d specializes this to a true 7-point hex stencil where the group action is exact, closing the loop.</div>
     </div>
 
-    <p>The type-system move here is to promote the lattice's point group from a lurking runtime assumption to a type parameter: <code>Stencil k (PointGroup g)</code>. A diffusion written against <code>PointGroup C₆ᵥ</code> cannot be implemented on a <code>Lattice D₄</code>; the shape index caught the buffer size, and now the group tag catches the physics. Lattice gauge theory makes exactly this move when it discretizes SU(3) onto a hypercubic lattice — the group lives on the links, not as an afterthought.</p>
+    <p>The type-system move here is to promote the lattice's point group from a lurking runtime assumption to a type parameter: <code>Stencil k (PointGroup g)</code>. A diffusion written against <code>PointGroup C₆ᵥ</code> cannot be implemented on a <code>Lattice D₄</code>; the shape index caught the buffer size, and now the group tag catches the physics. Lattice gauge theory makes exactly this move when it discretizes SU(3) onto a hypercubic lattice, the group lives on the links, not as an afterthought.</p>
   </div>
 
   <!-- ────────────── §5 Carry-forward ────────────── -->
   <div class="section">
     <div class="section-tag">§5 · Carry-forward</div>
     <div class="carry-forward">
-      <p><strong>We added.</strong> <code>TV.shapeIndex</code> — a compact <code>[w×h]</code> tag that rides on a pipe the way a color does, naming a type-level number. Shape-dependence is now an <em>axis</em> of the visual vocabulary. The teal field palette (<code>--c-field-lo</code> → <code>--c-field-hi</code>) is a per-explainer extension that stays clear of the reserved six.</p>
-      <p><strong>Reused where.</strong> Shape indices become a column on #11's parcoords: every prior signature gets re-drawn with its shape tags, so "expressiveness" is visible as how many shape constraints survive. #10's trait bounds are the same kind of type-level reasoning, one level up (constraints on <em>what</em> a type can do, not on <em>how big</em> it is). #12 §5d specializes <em>this</em> sim to a hex-stencil reaction-diffusion where <code>Weyl(A₂)</code> acts on the stencil — a <code>Stencil 3</code> whose entries are forced to be symmetric under the six-fold root-system symmetry.</p>
+      <p><strong>We added.</strong> <code>TV.shapeIndex</code>, a compact <code>[w×h]</code> tag that rides on a pipe the way a color does, naming a type-level number. Shape-dependence is now an <em>axis</em> of the visual vocabulary. The teal field palette (<code>--c-field-lo</code> → <code>--c-field-hi</code>) is a per-explainer extension that stays clear of the reserved six.</p>
+      <p><strong>Reused where.</strong> Shape indices become a column on #11's parcoords: every prior signature gets re-drawn with its shape tags, so "expressiveness" is visible as how many shape constraints survive. #10's trait bounds are the same kind of type-level reasoning, one level up (constraints on <em>what</em> a type can do, not on <em>how big</em> it is). #12 §5d specializes <em>this</em> sim to a hex-stencil reaction-diffusion where <code>Weyl(A₂)</code> acts on the stencil, a <code>Stencil 3</code> whose entries are forced to be symmetric under the six-fold root-system symmetry.</p>
     </div>
   </div>
 
