@@ -150,7 +150,8 @@ svg text { font-family: var(--heading-font); }
     <span id="det-display" style="font-weight:600;"></span>
   </div>
   <div id="action-status" class="status-bar"></div>
-  <p class="figure-caption"><span class="figure-label">Figure 1.</span> The Möbius action of γ ∈ SL₂(ℤ) on a draggable point τ (blue). The image γ·τ is shown in red. The dashed circle is the unit circle |τ| = 1, which S maps to itself. Preset buttons load the standard generators; manual entry allows any determinant-1 integer matrix.</p>
+  <div id="math-action-live" style="min-height: 5.25em; font-variant-numeric: tabular-nums;"></div>
+  <p class="figure-caption"><span class="figure-label">Figure 1.</span> The Möbius action of γ ∈ SL₂(ℤ) on a draggable point τ (blue). The image γ·τ is shown in red. The dashed circle is the unit circle |τ| = 1, which S maps to itself. Preset buttons load the standard generators; manual entry allows any determinant-1 integer matrix. The formula below shows the symbolic action alongside its current numeric substitution.</p>
 </div>
 
 <h2>Orbits under repeated application</h2>
@@ -265,6 +266,70 @@ math('math-relations',
   };
   var detDisplay = document.getElementById('det-display');
 
+  // Reactive KaTeX companion for the symbolic γ·τ formula above the figure.
+  // Shows the current numeric substitution for the matrix entries and τ.
+  var liveEl = document.getElementById('math-action-live');
+  var liveRaf = null;
+  function fmtSigned(n) {
+    // "+ 3" / "− 3" with a proper minus sign and space, for readable numerator/denominator.
+    if (n >= 0) return '+ ' + n;
+    return '- ' + Math.abs(n);
+  }
+  function fmtComplex(re, im) {
+    // "a + bi" with 3dp, using "−" for negative imaginary parts.
+    var r = re.toFixed(3);
+    var sign = im >= 0 ? '+' : '-';
+    var mag = Math.abs(im).toFixed(3);
+    return r + ' ' + sign + ' ' + mag + 'i';
+  }
+  function liveTeX(m, t) {
+    var a = m[0][0], b = m[0][1], c = m[1][0], d = m[1][1];
+    // Numerator aτ + b (as a complex number): re = a*re + b, im = a*im
+    var numRe = a * t.re + b, numIm = a * t.im;
+    // Denominator cτ + d: re = c*re + d, im = c*im
+    var denRe = c * t.re + d, denIm = c * t.im;
+    var denMag2 = denRe * denRe + denIm * denIm;
+    var resRe = (numRe * denRe + numIm * denIm) / denMag2;
+    var resIm = (numIm * denRe - numRe * denIm) / denMag2;
+    // Colored τ substitution block, e.g. (0.500 + 1.200i).
+    var tauSub = '\\color{#2563eb}{(' + fmtComplex(t.re, t.im) + ')}';
+    // Colored matrix entries to match the red γ coloring in the static KaTeX above.
+    var aC = '\\color{#dc2626}{' + a + '}';
+    var bC = '\\color{#dc2626}{' + fmtSigned(b) + '}';
+    var cC = '\\color{#dc2626}{' + c + '}';
+    var dC = '\\color{#dc2626}{' + fmtSigned(d) + '}';
+    var result = '\\color{#059669}{' + fmtComplex(resRe, resIm) + '}';
+    return (
+      '\\begin{aligned}' +
+        '\\color{#dc2626}{\\gamma}\\cdot\\color{#2563eb}{\\tau}' +
+        ' &= \\frac{a\\color{#2563eb}{\\tau} + b}{c\\color{#2563eb}{\\tau} + d} ' +
+        ' = \\frac{' + aC + '\\cdot' + tauSub + ' ' + bC + '}' +
+                    '{' + cC + '\\cdot' + tauSub + ' ' + dC + '} ' +
+        ' \\;\\approx\\; ' + result +
+      '\\end{aligned}'
+    );
+  }
+  function renderLive() {
+    if (liveRaf || !liveEl) return;
+    liveRaf = requestAnimationFrame(function () {
+      liveRaf = null;
+      var m = mat, t = tau;
+      var denRe = m[1][0] * t.re + m[1][1];
+      var denIm = m[1][0] * t.im;
+      var denMag2 = denRe * denRe + denIm * denIm;
+      // Fallback: show only the symbolic form if τ is transiently bad or denominator vanishes.
+      var bad = !Number.isFinite(t.re) || !Number.isFinite(t.im) ||
+                t.im <= 0 || !Number.isFinite(denMag2) || denMag2 < 1e-9;
+      if (bad) {
+        katex.render(
+          '\\color{#dc2626}{\\gamma}\\cdot\\color{#2563eb}{\\tau} = \\frac{a\\color{#2563eb}{\\tau} + b}{c\\color{#2563eb}{\\tau} + d}',
+          liveEl, { throwOnError: false, displayMode: true });
+        return;
+      }
+      katex.render(liveTeX(m, t), liveEl, { throwOnError: false, displayMode: true });
+    });
+  }
+
   function setMatInputs(m) {
     matInputs.a.value = m[0][0]; matInputs.b.value = m[0][1];
     matInputs.c.value = m[1][0]; matInputs.d.value = m[1][1];
@@ -329,6 +394,7 @@ math('math-relations',
       document.getElementById('action-status').textContent = det !== 1
         ? 'det ≠ 1 — not in SL₂(ℤ)' : 'Image outside visible range';
     }
+    renderLive();
   }
 
   srcPoint.call(d3.drag().on('drag', function (e) {

@@ -162,6 +162,51 @@ For continuous mappings, constrain drag to the valid range. For discrete mapping
 
 **Pitfall:** Forgetting to sync external controls. If a slider and a draggable handle both control the same value, moving one must update the other.
 
+### Live Formulas (reactive KaTeX)
+
+When a reader drags a handle that has a symbolic counterpart — `τ` in a metric, `k` in a kernel, a learning rate in an update rule — render the formula *beside* the handle and re-render it on drag so the numeric substitution tracks the motion. The formula IS the caption of the motion.
+
+Template the TeX with placeholders for live values, color-match the substituted numbers to the handle, and re-render inside `requestAnimationFrame` to coalesce rapid drags.
+
+```js
+// Template TeX with live values. Color matches the draggable handle.
+const TEX = (ctx) => `
+  ds^2 = \\frac{|d\\color{#2563eb}{\\tau}|^2}{(\\operatorname{Im}\\color{#2563eb}{\\tau})^2}
+  \\;\\approx\\; \\frac{|d\\tau|^2}{\\color{#2563eb}{${ctx.imTau.toFixed(3)}}^2}
+`;
+
+const liveEl = document.getElementById('math-metric-live');
+let rafId = null;
+function renderLive(ctx) {
+  if (rafId) return;
+  rafId = requestAnimationFrame(() => {
+    rafId = null;
+    if (!Number.isFinite(ctx.imTau)) {
+      // Fallback: show the symbolic form only, never "NaN".
+      katex.render('ds^2 = |d\\tau|^2 / (\\operatorname{Im}\\tau)^2', liveEl,
+        { throwOnError: false, displayMode: true });
+      return;
+    }
+    katex.render(TEX(ctx), liveEl, { throwOnError: false, displayMode: true });
+  });
+}
+// Call once on init, then from each drag tick.
+```
+
+Keep the original *static* formula alongside the live one. The reader sees the symbolic form and its numeric instance at once — that pairing is the pedagogical payload.
+
+**When to use:** short formulas whose symbols map 1:1 to a handle the reader is actively manipulating. One or two live values, not a wall of numbers.
+
+**When NOT to use:** long derivations, static theorem statements, anything where re-rendering is visual noise. Reactive math is a spotlight, not wallpaper. If every formula on the page animates, none of them do.
+
+**Pair with color:** match the color of the dragged handle to the color of the corresponding symbol in the formula using the KaTeX `\color{#hex}{}` macro. The visual link between the moving dot and the moving number is the whole point.
+
+**Performance:** coalesce re-renders in `requestAnimationFrame`. One KaTeX render per frame is fine; ten is not. KaTeX's `render()` rebuilds the subtree each call — keep the target element small and don't nest a live formula inside another reactive container.
+
+**Fallback:** if a live value is `NaN` or `undefined` during a transient state (drag outside bounds, before init), render the symbolic form only. Never show `NaN` to a reader.
+
+**Pitfall:** layout jitter when the number's width changes (e.g. `1.5` → `0.875`). Reserve fixed width on the live formula's container, or use `min-width` / `tabular-nums` styling on the host, so the prose below doesn't reflow each frame.
+
 ## Motion
 
 ### Transitions

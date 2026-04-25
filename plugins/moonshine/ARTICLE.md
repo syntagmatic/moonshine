@@ -177,6 +177,8 @@ The template uses CSS custom properties throughout. Reference them in D3 code vi
 
 **Math rendering:** Use KaTeX (`https://cdn.jsdelivr.net/npm/katex/dist/katex.min.js` + CSS) for equations. Render with `katex.render(expression, element)` for display math or `katex.renderToString(expression)` for inline.
 
+**Reactive math:** When a figure has a draggable handle whose value appears in a nearby formula, re-render the formula on each drag tick so the numeric substitution tracks the motion — keep the symbolic form alongside and color-match the substituted number to the handle. Coalesce re-renders with `requestAnimationFrame`. See `VISUALS.md` → "Live Formulas" for the full recipe.
+
 **Hover cross-references:** When a term or variable appears in prose, hovering it can highlight the corresponding element in a nearby figure. Implement with data attributes (`data-ref="variable-name"`) and a shared hover event that both the text and the figure listen to.
 
 **Equations and code:** When pairing an equation with pseudocode, always stack vertically (equation above, code below). Never side by side. Equations are typically wider than they are tall, so horizontal space is the constraint. Color-code variables in the equation and use matching colors in the pseudocode so the reader can trace the connection.
