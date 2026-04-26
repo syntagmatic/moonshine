@@ -109,29 +109,25 @@ svg text { font-family: var(--heading-font); }
   <p class="subtitle">Chapter 6 of 8. Every tree so far has asked "what will happen?" Causal trees ask a subtly different question: "what would change if I intervened?" That shift forces the algorithm to change, in a way that also forces it to split its data in half.</p>
 </div>
 
-<p>Imagine you run an online store. You have a predictive model that tells you which customers are most likely to buy a pair of sneakers. You target the high-probability customers with a 20%-off promo code. Did the code work?</p>
+<p>An online store sends a 20%-off promo to customers a model flags as likely buyers. Did the code work?</p>
 
-<p>Your model tells you who is most likely to buy. But you don't care about the customers who would have bought anyway, the code is just giving away discounts to them. And you don't care about the customers who would never have bought, with or without the code, those are wasted. You care about the customers whose purchase depends on whether they got the code. The <em>persuadables</em>. That's a different group than the high-probability one.</p>
-
-<p>To find them, you need a different kind of tree.</p>
+<p>The model finds high-probability buyers, but those include customers who would have bought anyway and customers who would never buy. The group that matters — the <em>persuadables</em>, whose purchase depends on the code — is different.</p>
 
 <h2>Why standard trees can't answer this</h2>
 
-<p>A standard tree is trained to predict an outcome y from features x. It finds splits that make each leaf's y values as homogeneous as possible. If "age &lt; 30" happens to correlate with "will buy," the tree will find it.</p>
-
-<p>But what you actually want is splits that separate people with <em>different treatment responses</em>. For any single customer, you observe one of two things: their response after receiving the code, or their response after not receiving the code, never both. You can't train directly on individual-level treatment effects, because they're not observable. The tree has to work with a clever surrogate.</p>
+<p>A predictive tree finds splits that make each leaf's outcome homogeneous. What's needed instead are splits that separate people with different treatment responses. For any one customer, only one of "with code" or "without code" is observable, so the tree can't train directly on individual-level treatment effects.</p>
 
 <h2>The causal split criterion</h2>
 
-<p>Here's the Athey–Imbens 2016 idea. Instead of looking for splits that maximise purity of the outcome, look for splits where the two resulting subgroups have <em>different average treatment effects</em>.</p>
+<p>Athey–Imbens 2016: instead of maximizing outcome purity, find splits where the two children have different average treatment effects.</p>
 
-<p>For each candidate split, estimate the uplift in both the left and right children: in each child, (treated group's average outcome) − (control group's average outcome). A good split separates high-uplift from low-uplift subpopulations, a subgroup that responds at +25% and a subgroup that responds at +2% is a split that found where the treatment works.</p>
+<p>For each candidate split, estimate uplift in each child as (treated mean) − (control mean). A good split separates a high-uplift subpopulation from a low-uplift one — say, +25% vs. +2%.</p>
 
-<p>This changes the fundamental logic. A predictive tree asks "who has high Y?" A causal tree asks "who has high Y-under-treatment minus Y-under-control?"</p>
+<p>A predictive tree asks "who has high Y?" A causal tree asks "who has high Y-treated − Y-control?"</p>
 
-<h2>Two objectives on one dataset</h2>
+<h2>Two objectives, one dataset</h2>
 
-<p>The interactive below puts both in the same view. Toggle between <span class="t-pred">Predict outcome</span> (the standard tree) and <span class="t-causal">Maximise uplift</span> (the causal tree) and watch the split jump. The dataset is the same; the objective changes.</p>
+<p>Toggle between <span class="t-pred">Predict outcome</span> and <span class="t-causal">Maximise uplift</span> and watch the split move on the same data.</p>
 
 <div class="figure">
   <div id="fig-causal" class="panel">
@@ -174,22 +170,22 @@ svg text { font-family: var(--heading-font); }
 
 <h2>The double-dipping problem</h2>
 
-<p>There's a subtle statistical issue here. If you use all your training data to pick the best uplift split, you're then using the <em>same</em> data to estimate how big the uplift actually is. Your split-finder was biased toward splits that happen to show high uplift on this sample, so the uplift estimate inside each leaf will be systematically inflated. The more splits you try, the bigger the inflation.</p>
+<p>Using the same data to pick the split and to estimate the uplift inside each leaf inflates the estimate: the split-finder was biased toward splits that happen to show high uplift on this sample. The more splits tried, the bigger the inflation.</p>
 
-<p>This matters a lot if you want confidence intervals. The usual standard-error calculations assume the tree structure was chosen independently of the data, which it wasn't. Your 95% confidence interval might actually be a 70% confidence interval.</p>
+<p>This breaks confidence intervals. Standard-error calculations assume the tree structure was chosen independently of the data, which it wasn't.</p>
 
 <h2>Honest estimation</h2>
 
-<p>Athey and Imbens' fix is called <em>honest estimation</em>, and it's refreshingly simple. Split your training data in half:</p>
+<p>Athey and Imbens' fix: split the training data in half.</p>
 
 <ul style="margin-left: 1.5rem; margin-bottom: 1rem;">
   <li>Use the <span class="t-train">first half</span> to grow the tree: pick splits, decide the structure. Never look at the second half during this phase.</li>
   <li>Use the <span class="t-eval">second half</span> to estimate the uplift in each leaf: for each leaf built from the first half, drop the second-half rows in and compute the average treatment effect. Never touch the structure.</li>
 </ul>
 
-<p>Because the two halves never interact, the leaf-level estimates are honest in the statistical sense. Standard confidence intervals work. Nobody has cheated.</p>
+<p>Because the halves never interact, leaf-level estimates are honest. Standard confidence intervals work.</p>
 
-<p>You pay for this with half your data, which is why causal forests often use hundreds of trees, each tree's two halves combine via the ensemble to recover statistical power.</p>
+<p>The cost is half your data. Causal forests use hundreds of trees so the splits across the ensemble recover the lost statistical power.</p>
 
 <div class="figure">
   <div id="fig-honest" class="panel">
@@ -227,17 +223,17 @@ svg text { font-family: var(--heading-font); }
   <p class="figure-caption"><span class="figure-label">Figure 2.</span> Honest estimation in action. The <span class="t-train">training half</span> grows the tree and finds the persuadable region. The <span class="t-eval">evaluation half</span> drops fresh customers into the same region and computes a fresh uplift estimate — one that has <em>not</em> seen any of the splits being tested. At small N both estimates are noisy; as N grows, the honest estimate converges to the true effect while the naive estimate stays slightly inflated.</p>
 </div>
 
-<h2>What this doesn't buy you</h2>
+<h2>Caveats</h2>
 
-<p>Causal trees only work when your data has <em>randomised</em> treatment assignment, i.e., when who got the treatment was decided by a coin flip, not by who looked like they'd respond. If treatment was assigned based on features (maybe salespeople gave discounts to people who seemed interested), then your "treatment effect" is confounded by selection, and the tree will happily estimate something that is not a causal effect.</p>
+<p>Causal trees only work with randomized treatment assignment. If treatment was assigned by feature (salespeople gave discounts to interested-looking people), the "treatment effect" is confounded by selection, and the tree estimates something that isn't a causal effect.</p>
 
-<p>This is why A/B tests are the gold standard: they randomise by design. Causal trees on A/B test data give you genuine heterogeneous treatment effects, the thing you cannot get from a normal predictive model. For observational data with no randomisation, there are more sophisticated methods (instrumental variables, propensity scores, doubly robust estimation), but the assumptions they require are strong and the methods sit outside this series.</p>
+<p>A/B tests randomize by design. Observational data needs instrumental variables, propensity scores, or doubly robust estimation — outside this series.</p>
 
-<h2>What this buys you</h2>
+<h2>The payoff</h2>
 
-<p>When you do have randomised data, causal trees answer a question that standard ML simply can't: where does the treatment <em>work</em>? Not who will buy, where does the promo code cause a purchase that wouldn't have happened otherwise. Not who will churn, where does the retention campaign change behaviour. Not who will recover, where does the drug genuinely help.</p>
+<p>On randomized data, causal trees answer where the treatment <em>works</em>: where the promo code causes a purchase that wouldn't have happened, where the retention campaign changes behavior, where the drug actually helps.</p>
 
-<p>Targeted marketing moves from "send to high-probability buyers" to "send to persuadable buyers." Personalised medicine moves from "predict outcomes" to "decide who benefits." This is the shift from prediction to intervention, and it's what decision trees become when you ask a different question.</p>
+<p>The shift is from prediction to intervention: from "high-probability buyers" to "persuadables," from "predict outcomes" to "decide who benefits."</p>
 
 <h2>Takeaways</h2>
 

@@ -332,11 +332,11 @@
 <p class="subtitle">Using multiple auditors to produce scores you can trust</p>
 
 <p>
-The <span class="t-audit">auditor</span> produces a <span class="t-score">score</span> of 7.2. Is that good? What if it scored 6.8 yesterday? Same block, same prompt, same model. The only difference is the random seed inside the language model. That 0.4-point swing is not a rounding error. It is the auditor disagreeing with itself.
+The auditor scores 7.2. Yesterday it scored 6.8 on the same block. Same prompt, same model, different seed — the auditor disagreeing with itself.
 </p>
 
 <p>
-Run the same evaluation ten times and you get a distribution, not a number. Our measurements put the standard deviation at roughly 0.25 points on a 10-point scale, which means a single evaluation can easily land anywhere in a range of about 1.0 around the true quality. Most of the time, that noise washes out. But when a block sits near a decision boundary, the noise becomes the decision.
+Ten runs give you a distribution with standard deviation ~0.25 on a 10-point scale, so any single evaluation can land in a range of ~1.0 around the true quality. The noise usually washes out; near a decision boundary, it becomes the decision.
 </p>
 
 <pre>block "radial-tree-nav"
@@ -346,25 +346,21 @@ Run the same evaluation ten times and you get a distribution, not a number. Our 
   same block, different luck</pre>
 
 <p>
-The regression threshold in autoresearch is <code>-0.3</code>. If an experiment's composite drops by more than 0.3 from the previous best, it gets discarded. With measurement noise of plus or minus 0.5, a block that genuinely improved by 0.1 has a real chance of getting thrown away because the second score drew from the low end of its distribution while the first drew from the high end.
+The regression threshold is -0.3. With measurement noise of ±0.5, a block that genuinely improved by 0.1 can be discarded if the second score lands low and the first landed high.
 </p>
 
 <p>
-<strong>The core problem is not that scores are wrong.</strong> It is that a single sample from a noisy distribution gets treated as a precise measurement. A composite of 7.2 does not mean the block is exactly 7.2 quality. It means the block is probably somewhere between 6.7 and 7.7, and the auditor happened to land on 7.2 this time.
+The problem isn't that scores are wrong. A single sample from a noisy distribution gets treated as a precise measurement. A composite of 7.2 means the block is probably between 6.7 and 7.7.
 </p>
 
 <h2>The fix: ask more than once</h2>
 
 <p>
-The simplest version of ensemble auditing is to run the same evaluation multiple times and take the <span class="t-score">median</span>. Three evaluations instead of one. The median of {6.8, 7.2, 7.0} is 7.0. That is a better estimate than any single number in the set. The variance of the median shrinks by roughly a factor of the ensemble size, so three evaluations reduce the effective noise from 0.5 to about 0.3. Not perfect, but enough to stop most spurious decision flips.
+Run the evaluation three times and take the median. {6.8, 7.2, 7.0} → 7.0. The variance of the median shrinks roughly with ensemble size, taking effective noise from 0.5 to ~0.3. Enough to stop most spurious flips.
 </p>
 
 <p>
-This is the same-model, multiple-runs strategy. It costs 3x, it requires no new infrastructure, and it catches the most common failure mode: the auditor having a bad roll.
-</p>
-
-<p>
-But same-model ensembles only fix random variance. They do not fix systematic bias. If Claude consistently underscores radial layouts because its training data had few of them, three Claude evaluations will converge on the same wrong answer. You need different perspectives for that.
+Same-model multiple-runs costs 3× with no new infrastructure. It catches random variance but not systematic bias. If Claude underscores radial layouts because its training data had few of them, three Claude evaluations converge on the same wrong answer.
 </p>
 
 <h2>Four strategies</h2>
@@ -407,15 +403,15 @@ But same-model ensembles only fix random variance. They do not fix systematic bi
 </table>
 
 <p>
-<strong>Different models</strong> means sending the same block to Claude, Gemini, and GPT as independent <span class="t-audit">auditors</span>. Each model has its own aesthetic priors and failure modes. When all three agree, you have high confidence. When they disagree by more than a point, the block is in genuinely ambiguous territory. That disagreement is information, not noise.
+<strong>Different models</strong> sends the same block to Claude, Gemini, and GPT as independent auditors. Agreement is high confidence; disagreement above a point is genuine ambiguity.
 </p>
 
 <p>
-<strong>Different prompts</strong> means keeping the same model but changing the audit's focus. One prompt asks the auditor to concentrate on color and typography. Another focuses on layout and whitespace. A third evaluates interaction responsiveness. Instead of one generalist reviewer, you get three specialists. The specialists often catch problems the generalist glosses over, because a prompt that says "focus on color" actually forces the model to spend tokens on color rather than spreading its attention across everything.
+<strong>Different prompts</strong> keep the same model but change the audit's focus — one auditor on color and typography, one on layout and whitespace, one on interaction responsiveness. Forcing a model to spend tokens on color catches problems the generalist glosses over.
 </p>
 
 <p>
-<strong>Calibrated ensemble</strong> takes it further. Track each auditor's historical accuracy against some ground truth (human ratings, or a held-out test set). If Gemini consistently overscores stress_test by 0.5 and Claude is well-calibrated on visual_critic, weight their contributions accordingly. This requires historical data, which means it only works once you have enough labeled examples to build the calibration table.
+<strong>Calibrated ensemble</strong> tracks each auditor's historical accuracy against ground truth and weights accordingly. Requires labeled examples to build the calibration table.
 </p>
 
 <h2>The simulator</h2>
@@ -435,13 +431,13 @@ But same-model ensembles only fix random variance. They do not fix systematic bi
 </figure>
 
 <p>
-The single auditor's scores jump around. The ensemble median is more stable. That stability is the whole point.
+Single auditor jumps around; ensemble median is stable.
 </p>
 
 <h2>Decision divergence</h2>
 
 <p>
-Noise in individual scores becomes noise in <span class="t-keep">keep</span>/<span class="t-discard">discard</span> decisions. The chart below runs 20 simulated experiments. Each experiment has a "true" quality delta (how much it actually improved or regressed). The single auditor adds noise to that delta. The ensemble of three adds less noise. When the noisy score crosses the <code>-0.3</code> threshold in a different direction than the true delta, the decision flips.
+Noise in scores becomes noise in keep/discard decisions. 20 simulated experiments, each with a true quality delta. Single auditor adds noise; ensemble of three adds less. Decisions flip when the noisy score crosses -0.3 in a different direction than the true delta.
 </p>
 
 <figure>
@@ -457,55 +453,55 @@ Noise in individual scores becomes noise in <span class="t-keep">keep</span>/<sp
 <h2>Disagreement as signal</h2>
 
 <p>
-When three auditors score a block 7.5, 7.3, and 7.1, the block is clearly a 7.3. But when they score 8.2, 6.1, and 7.4, something interesting is happening. The spread is 2.1 points. That is not noise. That is genuine ambiguity about the block's quality.
+{7.5, 7.3, 7.1} is clearly a 7.3. {8.2, 6.1, 7.4} has a 2.1-point spread — not noise, ambiguity.
 </p>
 
 <p>
-High disagreement usually means one of three things. The block does something unusual that one model appreciates and another penalizes. Or the block has a real flaw that only one auditor notices. Or the block's quality depends heavily on which dimension you prioritize, and the auditors are weighting dimensions differently.
+High disagreement means one of: the block does something unusual that one model appreciates and another penalises; a real flaw only one auditor notices; or the auditors are weighting dimensions differently.
 </p>
 
 <p>
-In any of these cases, auto-deciding is risky. A useful heuristic: when the ensemble spread exceeds 1.0 point, flag the block for human review instead of making the keep/discard call automatically. The human can look at the auditor notes, examine the screenshot, and make a judgment that accounts for the ambiguity.
+Auto-deciding is risky in any of these cases. A heuristic: spread above 1.0 → flag for human review. The human reads the notes, looks at the screenshot, and judges with the ambiguity in view.
 </p>
 
 <p>
-<strong>Disagreement is the most valuable output of an ensemble of <span class="t-audit">auditors</span>.</strong> A single auditor gives you a number. Three auditors that agree give you a confident number. Three auditors that disagree give you a question worth investigating.
+<strong>Disagreement is the ensemble's most valuable output.</strong> Agreement gives you a confident number; disagreement gives you a question.
 </p>
 
 <h2>The cost-accuracy tradeoff</h2>
 
 <p>
-Ensemble auditing multiplies cost linearly. Three evaluations at $0.03 each cost $0.09 per experiment. Over 100 experiments, that is $9 instead of $3. Over 1,000, it is $90 instead of $30. The question is whether the accuracy improvement justifies the spend.
+Ensemble cost scales linearly. $0.03 × 3 = $0.09 per experiment. $9 over 100 experiments instead of $3.
 </p>
 
 <p>
-Consider what a wrong decision costs. A false discard throws away a genuine improvement. The proposer has to rediscover that improvement in a later iteration, which costs its own API calls. A false keep accepts a regression, which the next iteration has to fix. Both waste cycles downstream. If wrong decisions cost an average of 2 extra iterations, and each iteration costs $0.15 (proposer + auditor), then preventing one wrong decision saves $0.30. An ensemble that prevents even one wrong decision per 10 experiments pays for itself.
+A false discard throws away an improvement; a false keep accepts a regression. Both cost downstream iterations. If wrong decisions cost ~2 extra iterations at $0.15 each, preventing one saves $0.30. An ensemble that prevents one wrong decision per 10 experiments pays for itself.
 </p>
 
 <p>
-The math depends on your noise level, your threshold, and how often blocks sit near the decision boundary. In our experiments, roughly 15% of blocks are within 0.3 points of the threshold on any given evaluation. Those are the experiments where ensemble auditing changes the outcome. For the other 85%, the single auditor gets it right, and the ensemble just confirms.
+About 15% of evaluations sit within 0.3 of the threshold. Those are the experiments where ensemble auditing changes the outcome.
 </p>
 
 <h2>Calibrating individual auditors</h2>
 
 <p>
-Before you ensemble, you need to know how each auditor behaves on its own. A raw score of 7.0 from Claude, 7.0 from Gemini, and 7.0 from GPT are not the same thing. Each model maps its internal assessment onto the 1-to-10 scale differently. Some models compress scores into a narrow band around 6 to 8. Others use the full range. Some consistently grade high. Others are stingy. If you average these raw numbers without adjustment, the lenient model dominates the ensemble simply because its scores are bigger, not because its judgment is better.
+A raw 7.0 from Claude, Gemini, and GPT mean different things. Each model maps its assessment onto the 1–10 scale differently — some compress into 6–8, some use the full range, some grade lenient, some stingy. Averaged raw, the lenient model dominates.
 </p>
 
 <p>
-The fix is a calibration curve. Take a set of ground-truth blocks, blocks that humans have scored on each quality dimension. Twenty is a reasonable starting set, enough to fit a simple linear relationship without overfitting to quirks. Run each model's auditor against this same set. Plot each model's raw score on the x-axis against the human score on the y-axis. If the model is perfectly calibrated, every dot lands on the diagonal. In practice, dots cluster above the diagonal (the model overscores), below it (the model underscores), or trace a slope that differs from 1.0 (the model's scale is stretched or compressed).
+Fix: a calibration curve. Score 20 ground-truth blocks (humans + each model), plot model score against human score. Perfect calibration is the diagonal; deviations above are over-scoring, below under-scoring, with slope ≠ 1 a stretched/compressed scale.
 </p>
 
 <p>
-A simple linear regression per model gives you two numbers: a slope and an intercept. The adjusted score is <code>slope * raw_score + intercept</code>. After adjustment, all models speak the same language. A 7.0 from any model maps to the same human-equivalent quality.
+Per-model linear regression gives slope and intercept. Adjusted score = <code>slope × raw + intercept</code>. After adjustment, all models speak the same language.
 </p>
 
 <p>
-Different models also excel at different dimensions of evaluation. In our experience, Claude tends to be a strong visual critic. It catches layout imbalance, color contrast issues, and typographic problems that other models underweight. Gemini performs well on encoding integrity, particularly SVG structure and data-binding correctness. GPT is often the most rigorous on stress testing, flagging edge cases around extreme data values, viewport resizing, and interaction failures. These are tendencies rather than rules, and they shift across model versions.
+Different models excel at different dimensions. Claude tends to catch visual layout and typography. Gemini handles encoding integrity and SVG structure. GPT is often most rigorous on stress testing. Tendencies, not rules, and they shift across model versions.
 </p>
 
 <p>
-You can exploit these per-dimension strengths by weighting auditors differently for each dimension rather than applying a single weight across the board. Give Claude 50% of the vote on visual_critic but only 20% on stress_test. Give GPT the reverse. This turns a committee of generalists into a panel of weighted specialists. The calibration data tells you exactly which weights to use: whichever model's adjusted scores correlate most tightly with human scores on a given dimension gets the largest weight for that dimension.
+Per-dimension weights exploit this: Claude 50% on visual_critic but 20% on stress_test, GPT the reverse. The calibration data dictates the weights — whichever model's adjusted scores correlate tightest with human scores gets the largest weight for that dimension.
 </p>
 
 <pre>calibration results (20 ground-truth blocks):
@@ -519,7 +515,7 @@ GPT           stress_test         0.88    +0.73       0.84
 GPT           visual_critic       0.78    +1.60       0.68</pre>
 
 <p>
-The R-squared column is the one that matters for weighting. Claude's 0.87 on visual_critic means its calibrated scores explain 87% of the variance in human scores for that dimension. GPT's 0.68 on the same dimension means it explains less. Weight accordingly.
+R² drives weighting. Claude's 0.87 on visual_critic explains 87% of the variance in human scores; GPT's 0.68 explains less.
 </p>
 
 <figure>
@@ -548,36 +544,36 @@ The R-squared column is the one that matters for weighting. Claude's 0.87 on vis
 </figure>
 
 <p>
-The trend lines in the chart above reveal each model's bias at a glance. A trend line steeper than the diagonal means the model is compressed, assigning a narrow range of scores even when humans see a wide quality spread. A shallow trend line means the model exaggerates differences. A trend line that is parallel to the diagonal but shifted up or down means the model has a constant offset. All of these are correctable with the linear adjustment described above, as long as you have enough ground-truth data to fit the line confidently.
+A steeper-than-diagonal trend line means the model compresses, assigning narrow scores even when humans see wide spread. Shallow exaggerates differences. Parallel-but-shifted is a constant offset. All correctable with the linear adjustment, given enough ground-truth.
 </p>
 
 <p>
-<strong>Calibration turns raw scores into comparable measurements.</strong> Without it, ensembling is just arithmetic on numbers that happen to share a scale but do not share a meaning. With it, you can combine scores from different models and know that the result reflects something closer to human judgment than any single model achieves alone.
+<strong>Calibration turns raw scores into comparable measurements.</strong> Without it, ensembling is arithmetic on scales that don't share meaning.
 </p>
 
 <h2>Risks of calibration and ensembling</h2>
 
 <div class="risk">
 <p>
-<strong>Ground-truth data is expensive and subjective.</strong> Building the calibration set requires humans to score blocks, and human evaluators disagree with each other. Two experienced designers asked to rate the same block on visual_critic can differ by a full point. You are calibrating models against a noisy reference signal, which means the calibration itself has uncertainty. Twenty blocks is the minimum for a rough calibration curve, but you really want 50 or more to get stable regression coefficients. At 15 minutes per block per evaluator, that is over 12 hours of human labor for a single calibration round. If you use multiple human raters and average them (which you should), the cost multiplies again.
+<strong>Ground-truth data is expensive and subjective.</strong> Two designers rating the same block on visual_critic can differ by a full point. You're calibrating against a noisy reference. Twenty blocks is the minimum; 50+ for stable coefficients. At 15 minutes per block per evaluator, a single calibration round is 12+ hours of human labor.
 </p>
 </div>
 
 <div class="risk">
 <p>
-<strong>Calibration curves drift when models update.</strong> A calibration built on Claude Opus 4 does not necessarily hold for the next model release. The model's internal representations, its aesthetic priors, and its scoring tendencies can all shift between versions. Every time a model provider pushes an update, you should at minimum spot-check a handful of ground-truth blocks to see whether the calibration still holds. If the residuals jump, you need to re-run the full calibration. This creates a recurring maintenance cost that most teams underestimate at the start.
+<strong>Calibration drifts when models update.</strong> A calibration built on Claude Opus 4 doesn't hold for the next release. Spot-check ground-truth blocks after every model update; re-run full calibration if the residuals jump.
 </p>
 </div>
 
 <div class="risk">
 <p>
-<strong>Committee conservatism penalizes novelty.</strong> An ensemble of three models will tend to agree on conventional designs and disagree on unconventional ones. A novel radial force-directed layout that genuinely works might confuse two out of three auditors. The median score drags toward the confused majority, penalizing innovation. Over many iterations, this creates a selection pressure toward safe, familiar patterns. The optimization loop converges on designs that all models understand rather than designs that push the craft forward. One mitigation is to treat high disagreement as a flag for human review rather than as an automatic penalty. Another is to include a "novelty bonus" dimension that at least one auditor is prompted to reward, counterbalancing the conservatism of the majority.
+<strong>Committee conservatism penalises novelty.</strong> A novel radial force-directed layout that works might confuse two of three auditors. The median drags toward the confused majority. Mitigations: treat high disagreement as a flag for human review rather than a penalty, or include a "novelty bonus" dimension that at least one auditor rewards.
 </p>
 </div>
 
 <div class="risk">
 <p>
-<strong>Cost compounds at every layer.</strong> The base cost of an ensemble scales linearly: 3 models, 3x cost. But calibration adds a second cost layer. Building the ground truth, running the calibration, re-calibrating after model updates, maintaining per-dimension weight tables. And the operational overhead is a third layer: monitoring for calibration drift, debugging cases where the ensemble gives a confident wrong answer, triaging the high-disagreement queue. The total cost of a calibrated multi-model ensemble is not 3x a single auditor. It is closer to 5 to 8x once you factor in the infrastructure. Budget for that honestly, or start with the simple same-model median approach and upgrade only when you have evidence that systematic bias is costing you decisions.
+<strong>Cost compounds.</strong> 3 models is 3× base. Calibration adds a layer (ground truth, regression, drift recalibration). Operations add another (drift monitoring, confident-wrong-answer debugging, disagreement triage). Total is closer to 5–8× a single auditor. Start with same-model median and upgrade when systematic bias is costing decisions.
 </p>
 </div>
 

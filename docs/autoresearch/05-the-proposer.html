@@ -653,8 +653,7 @@ footer {
 </p>
 
 <p>
-    This creates a learning feedback loop where each proposal is informed by what did not
-    work before. A discard is not wasted. It becomes data.
+    Each proposal is informed by what didn't work before. A discard becomes data.
   </p>
 
 <h2>The information chain</h2>
@@ -707,9 +706,7 @@ Read the file. Change one thing. Write it back.</pre>
 </div>
 
 <p>
-  The <code>{{history}}</code> field is the key. When a previous attempt was discarded, the
-  proposer gets a concrete explanation of what went wrong: which dimensions dropped, by how
-  much, and what the auditor observed. When no discard happened, the field is empty.
+  The <code>{{history}}</code> field carries discard feedback: which dimensions dropped, by how much, what the auditor observed. Empty after a kept change.
 </p>
 
 <h2>A real experiment: hierarchy-bundles</h2>
@@ -724,141 +721,79 @@ Read the file. Change one thing. Write it back.</pre>
 <h2>The separation principle</h2>
 
 <p>
-  There is an important asymmetry in this loop. The proposer writes an explanation of its
-  change ("I consolidated three color scale definitions into one shared scale"). That
-  explanation is saved to the experiment JSON for human review. But the auditor never sees it.
+  The proposer writes an explanation of its change ("consolidated three color scale definitions into one"). That explanation is saved to the experiment JSON for humans. The auditor never sees it.
 </p>
 
 <p>
-  The auditor only sees the rendered result: the modified HTML and its screenshot. It cannot
-  be persuaded by a good-sounding rationale. It can only respond to what it observes. If
-  consolidating color scales broke visual distinction between hierarchy levels, the auditor
-  will catch it in the scores, no matter how reasonable the proposer's reasoning sounded.
+  The auditor sees only the modified HTML and screenshot. It can't be persuaded by a good-sounding rationale. If consolidating color scales broke visual distinction between hierarchy levels, the auditor catches it in the scores no matter how reasonable the proposer's explanation sounded.
 </p>
 
 <p>
-    This separation is deliberate. The proposer's explanation exists for humans who review the
-    experiment later. It never influences the score. The two agents share a codebase but not a
-    conversation.
+    The two agents share a codebase but not a conversation.
   </p>
 
 <h2>Inside the prompt template</h2>
 
 <p>
-  The template shown above is a simplified sketch. The real prompt has six interpolated fields,
-  each carrying a different kind of information. Understanding what goes into each field, and
-  how much of the token budget it consumes, explains many of the proposer's behavioral patterns.
+  The real prompt has six interpolated fields. Each exists for a reason.
 </p>
 
 <p>
-  <code>html_path</code> and the file content itself dominate the prompt. The proposer receives
-  the full text of the current HTML file, which for a typical block runs 400 to 1200 lines. This
-  is the bulk of the context window. The proposer must read and understand the entire file before
-  it can identify a single change worth making. For complex blocks with inline SVG, embedded data,
-  and multiple interacting event handlers, just parsing the file can push the proposer toward
-  superficial changes because the deep structural relationships are hard to hold in context.
+  <code>html_path</code> and the file content dominate the prompt — typically 400–1200 lines. For complex blocks with inline SVG, embedded data, and interacting event handlers, just parsing the file pushes the proposer toward superficial changes because the structural relationships are hard to hold in context.
 </p>
 
 <p>
-  <code>lines_before</code> is a simple integer. It anchors the proposer's sense of the file's
-  current size and gives it a concrete target: make this number smaller without breaking things.
+  <code>lines_before</code> anchors the size and gives a concrete target.
 </p>
 
 <p>
-  <code>composite</code> and the four per-dimension scores tell the proposer where the block
-  stands right now. A block scoring 4 on visual_critic and 8 on encoding_integrity suggests the
-  proposer should avoid changes that risk encoding correctness and focus on visual improvements.
-  The scores act as implicit strategy guidance without naming a strategy directly.
+  <code>composite</code> and the per-dimension scores tell the proposer where the block stands. Visual_critic 4 and encoding_integrity 8 implicitly steer toward visual changes that don't risk encoding correctness.
 </p>
 
 <p>
-  <code>audit_notes</code> is free-text feedback from the auditor. This is where specific
-  problems surface: "cluster layout overlaps labels," "tooltip recalculated on every mousemove,"
-  "color scale rebuilds per frame." The notes are often the most actionable part of the prompt
-  because they point at concrete symptoms rather than abstract scores. A score of 5 on
-  cognitive_load says the code is mediocre. The note "three separate color scale definitions do
-  the same thing" tells the proposer exactly where to look.
+  <code>audit_notes</code> is the auditor's free-text feedback — usually the most actionable part of the prompt. "Three separate color scale definitions do the same thing" points at concrete code; "cognitive_load: 5" doesn't.
 </p>
 
 <p>
-  <code>history</code> is the field that makes the feedback loop work. It is empty on the first
-  round and after any kept change. After a discard, it fills with a structured summary: what the
-  proposer tried, which dimensions dropped, by how much, and what the auditor observed in the
-  regressed version. This is the "do not repeat this mistake" signal. Without it, the proposer
-  would attempt the same failed optimization on consecutive rounds.
+  <code>history</code> is the discard feedback channel: what the proposer tried, which dimensions dropped, what the auditor observed. Empty on first round and after kept changes.
 </p>
 
 <h3>How the prompt evolved</h3>
 
 <p>
-  Early versions of the proposer prompt were short and vague. They said something like "improve
-  this D3 visualization" and let the model decide what to do. The results were unpredictable.
-  The proposer would rewrite large sections of the file, change data bindings and visual
-  encodings simultaneously, or add features that the block never had. Scores would swing wildly
-  between rounds with no clear signal about what helped.
+  Early prompts were vague — "improve this D3 visualization" — and produced unpredictable results: large rewrites, simultaneous data and encoding changes, features added that didn't exist before.
 </p>
 
 <p>
-  The current prompt is structured around constraints. It specifies that the proposer must make
-  exactly one change. It provides scores so the proposer knows what is working. It provides
-  notes so the proposer knows what is not. It provides history so the proposer knows what already
-  failed. Each field exists because its absence caused a specific class of bad proposals during
-  development.
+  The current prompt is structured around constraints. Each field exists because its absence caused a specific class of bad proposals.
 </p>
 
 <p>
-  The "one change" instruction took several iterations to get right. The first version said
-  "make a small change." The proposer interpreted "small" liberally and sometimes made three or
-  four changes that it considered individually small. The second version said "make exactly one
-  change." That helped but the proposer would sometimes package two changes as one ("consolidated
-  the color scale and simplified the legend"). The current version adds "Read the file. Change
-  one thing. Write it back." The imperative phrasing and the explicit file-read step seem to
-  anchor the model on a single modification more reliably.
+  The "one change" instruction took several iterations. "Make a small change" gave three or four small changes. "Make exactly one change" still produced packaged pairs ("consolidated the color scale and simplified the legend"). The current "Read the file. Change one thing. Write it back." anchors on a single modification more reliably.
 </p>
 
 <h3>Why one change matters</h3>
 
 <p>
-  The entire feedback loop depends on attribution. When the auditor scores a modified file, the
-  system needs to know what caused the score change. If the proposer made one change, the delta
-  is attributable: removing the duplicate zoom handler improved stress_test by 1 point. If the
-  proposer made three changes, you cannot tell which one helped and which one hurt. A net
-  improvement of 0.3 might be the sum of +1.5 from one good change and -1.2 from two bad ones.
-  The keep decision preserves the bad changes along with the good one, and the history record
-  gives misleading feedback for future rounds.
+  The feedback loop depends on attribution. One change → one delta: removing the duplicate zoom handler improved stress_test by 1. Three changes and a net +0.3 might hide +1.5 from one good change and -1.2 from two bad ones. The keep decision then preserves the bad changes along with the good.
 </p>
 
 <p>
-  Single-change isolation also makes the experiment log readable to humans. Each round in the
-  JSON log has one proposer explanation mapping to one score delta. A reviewer scanning the log
-  can quickly see which strategies worked and which did not. With multi-change rounds, the log
-  becomes a tangle of confounded effects.
+  Single-change isolation also makes the JSON log readable: one explanation per delta. Multi-change rounds tangle confounded effects.
 </p>
 
 <h3>The explanation field</h3>
 
 <p>
-  After writing the modified file, the proposer also writes a short explanation of what it
-  changed and why. This explanation is saved to the experiment JSON alongside the diff, the
-  before/after scores, and the keep/discard decision. It is the proposer's own account of its
-  reasoning.
+  After writing the file, the proposer writes a short explanation. Saved to the JSON for humans, never sent to the auditor.
 </p>
 
 <p>
-  The explanation never reaches the auditor. This is critical. If the auditor could see "I
-  removed a redundant event listener that was causing double-fire on resize," it might be biased
-  toward scoring the change favorably because the reasoning sounds correct. Instead the auditor
-  sees only the modified HTML and its rendered screenshot. It must judge the result on its own
-  merits.
+  An auditor that saw "removed a redundant event listener causing double-fire on resize" would bias toward accepting because the reasoning sounds correct. The auditor sees only the rendered result.
 </p>
 
 <p>
-  For humans reviewing the experiment afterward, the explanation is the fastest way to understand
-  what happened in a round. Reading a 900-line diff to figure out what changed is slow. Reading
-  "inlined the single-use helper for node positioning" takes two seconds. The explanation also
-  reveals the proposer's intent, which matters when the change was discarded. Knowing that the
-  proposer intended to simplify the color scale but actually broke hierarchy-level distinction
-  is more useful than just seeing that visual_critic dropped from 5 to 4.
+  For humans, the explanation is the fastest way to understand a round. Reading a 900-line diff is slow; reading "inlined the single-use helper for node positioning" takes two seconds. The explanation also reveals intent — useful when a change was discarded.
 </p>
 
 <h2>Prompt anatomy</h2>
@@ -880,11 +815,7 @@ Read the file. Change one thing. Write it back.</pre>
 <h2>Explanation quality</h2>
 
 <p>
-  Not all proposer explanations are equally useful. Some are terse and generic, saying little
-  more than "cleaned up the code." Others are precise and structural, identifying the exact
-  redundancy removed and the design rationale preserved. When reviewing experiment logs, the
-  quality of the explanation determines how quickly a human can understand what happened and
-  whether the keep/discard decision was correct.
+  Some explanations are terse ("cleaned up the code"); others are precise and structural. Explanation quality determines how quickly a human reviewer can understand a round and judge the keep/discard decision.
 </p>
 
 <figure>
@@ -897,44 +828,19 @@ Read the file. Change one thing. Write it back.</pre>
 
 <div class="risk">
   <p>
-    <strong>Multi-change proposals.</strong> The proposer does not always follow the "one change"
-    instruction. LLMs sometimes bundle three or four modifications into a single round, especially
-    when the changes feel related ("consolidated the color scales, updated the legend to match,
-    and removed the now-unused helper"). When this happens, score attribution breaks down. The
-    composite might improve by 0.2, but there is no way to know whether all three changes helped
-    or whether one good change masked two regressions. The keep decision either accepts all of
-    them or none, and the history record conflates their effects. In practice, about 15% of
-    proposals contain more than one distinct change despite the explicit instruction.
+    <strong>Multi-change proposals.</strong> About 15% of proposals bundle more than one change despite the instruction, especially when changes feel related ("consolidated the color scales, updated the legend, removed the now-unused helper"). Attribution breaks down: a +0.2 composite delta might be one good change masking two regressions, and the keep decision accepts all of them.
   </p>
 </div>
 
 <div class="risk">
   <p>
-    <strong>The prompt as leaky abstraction.</strong> The proposer prompt provides scores, notes,
-    and history, but it does not teach D3. When the proposer encounters a complex interaction
-    between <code>d3.zoom</code> behavior and SVG viewBox clipping, it needs to reason about
-    D3 patterns that the prompt never mentions. The prompt assumes the model already understands
-    selection semantics, data joins, transition interruption, and the distinction between SVG
-    coordinate space and screen coordinates. If the model's training data included enough D3
-    examples, this works. If it did not, the prompt cannot compensate. The structured feedback
-    loop helps the proposer avoid repeating specific mistakes, but it cannot supply missing
-    domain knowledge. A proposer that does not understand how <code>.enter().merge()</code>
-    works will keep proposing changes that break data joins, no matter how many discard signals
-    it receives.
+    <strong>The prompt assumes D3 fluency.</strong> Scores, notes, and history don't teach D3. The prompt assumes selection semantics, data joins, transition interruption, and the SVG/screen coordinate distinction. A proposer that doesn't understand <code>.enter().merge()</code> will keep proposing changes that break data joins regardless of how many discard signals it receives.
   </p>
 </div>
 
 <div class="risk">
   <p>
-    <strong>Explanation quality does not predict outcome quality.</strong> A proposer can write a
-    lucid, well-reasoned explanation of a change that turns out to be harmful. "Consolidated
-    three color scale definitions into one shared scale, reducing duplication while preserving
-    per-category distinction" sounds excellent. The change was discarded because it did not, in
-    fact, preserve per-category distinction. Conversely, a terse explanation like "removed unused
-    variable" might accompany a change that improves stress_test by 1 point because the unused
-    variable was shadowing a needed one. Humans reviewing experiment logs should resist using
-    explanation quality as a proxy for change quality. The scores are the ground truth. The
-    explanation is a convenience, not a verdict.
+    <strong>Explanation quality doesn't predict outcome quality.</strong> A lucid "consolidated three color scale definitions into one, preserving per-category distinction" can be a discarded change that broke distinction. "Removed unused variable" can be the change that improves stress_test because the variable was shadowing a needed one. The scores are ground truth.
   </p>
 </div>
 

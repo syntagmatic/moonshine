@@ -122,9 +122,7 @@ svg text { font-family: var(--heading-font); }
   <p class="subtitle">Chapter 4 of 8. Bagging trains trees in parallel and averages them. Boosting trains trees in sequence, each one fixing the previous ensemble's mistakes. It's a completely different recipe, and on tabular data, it usually wins.</p>
 </div>
 
-<p>Random forests work by having many trees vote. Boosting works by having trees cooperate in sequence. The first tree does its best. It gets some things wrong. The second tree's only job is to fix what the first got wrong. The third fixes what the second missed. A chain of small, specialised trees ends up outperforming a forest of independent ones.</p>
-
-<p>This sounds suspiciously like cheating, because each new tree has an easier job than the last. But that's precisely why it works. Errors are often small, structured patterns that a tiny tree can capture easily. A sequence of tiny trees with different specialisations collectively learns things no single tree (or averaged ensemble) could.</p>
+<p>Random forests have trees vote. Boosting has trees cooperate in sequence: the first tree does its best, the second fixes its errors, the third fixes the second's misses. A chain of small specialized trees outperforms a forest of independent ones because errors are usually small structured patterns a tiny tree captures easily.</p>
 
 <h2>The recipe</h2>
 
@@ -138,11 +136,11 @@ svg text { font-family: var(--heading-font); }
   <li>Repeat.</li>
 </ol>
 
-<p>The fraction in step 4 is the <em>learning rate</em> ν. At ν = 1.0 you'd add each new tree at full strength; typically it's much smaller, like 0.1. A lower learning rate means each tree contributes less, you need more trees to reach the same accuracy, but the ensemble generalises better. The rule of thumb: small learning rate, many trees, early stopping.</p>
+<p>The fraction in step 4 is the <em>learning rate</em> ν. At ν = 1.0 each tree adds at full strength; typically it's much smaller, like 0.1. Lower learning rate, more trees needed, better generalization. The rule: small learning rate, many trees, early stopping.</p>
 
-<h2>Step-by-step boosting</h2>
+<h2>Step-by-step</h2>
 
-<p>The best way to build intuition is to watch this happen one tree at a time. The interactive below runs the loop manually: you click to add a tree, it fits the current residuals, the prediction nudges closer to the truth. You can also toggle the growth strategy the internal tree uses, <span class="t-xgb">level-wise</span> (the classic XGBoost approach) or <span class="t-lgb">leaf-wise</span> (LightGBM's trick for faster convergence).</p>
+<p>The interactive runs the loop manually: each click adds a tree fit to the current residuals. The growth toggle switches between <span class="t-xgb">level-wise</span> (XGBoost) and <span class="t-lgb">leaf-wise</span> (LightGBM).</p>
 
 <div class="figure">
   <div id="main" class="panel">
@@ -190,49 +188,45 @@ svg text { font-family: var(--heading-font); }
   <p class="figure-caption"><span class="figure-label">Figure 1.</span> Boosting one tree at a time. Left panel: the <span class="t-pred">current prediction</span> against the <span class="t-truth">true function</span>. Right panel: the <span class="t-resid">residuals</span>, with the <span class="t-new">next tree that would be fit</span> previewed. Click "Add a tree" to commit the preview, which moves the prediction closer and shrinks the residuals. The growth toggle changes how the internal tree is built: <span class="t-xgb">level-wise</span> grows in balanced layers; <span class="t-lgb">leaf-wise</span> always expands whichever leaf would most reduce the loss, producing faster-converging but more lopsided trees. "Tree leaves" is the total number each internal tree is allowed — the total is the same under both strategies; only the <em>shape</em> changes.</p>
 </div>
 
-<p>Try this: set tree leaves high (say 12) and learning rate high (1.0). Add one tree. The prediction nearly matches the training data perfectly, zero residual. Now the test error will get worse with every additional tree. This is the same overfitting pathology from Chapter 2, sped up by big learning rates. The fix is the same: small learning rate, many iterations, stop when test error starts climbing.</p>
+<p>Try setting tree leaves to 12 and learning rate to 1.0. After one tree, training is near-perfect and test error climbs with every additional tree. The overfitting pathology from chapter 2, sped up by a high learning rate. Fix: small learning rate, many iterations, stop when test error rises.</p>
 
-<h2>Why boosting fixes bias, not variance</h2>
+<h2>Bias, not variance</h2>
 
-<p>Think about what bagging and boosting are doing with respect to the bias-variance trade-off. Bagging takes many high-variance (deep, low-bias) trees and averages away the variance. Each tree is trying to capture the full signal; the averaging removes their individual jitter.</p>
-
-<p>Boosting is doing the opposite. Each tree is <em>small</em>, a weak learner that individually captures only a small part of the pattern. The boosting process doesn't average these weak learners; it stacks them, so their contributions add up. The result is a single highly expressive model. Bagging reduces variance; boosting reduces bias. In practice, boosting usually wins on tabular data, because real-world errors come more often from bias (model is too simple) than from variance (model is overfit).</p>
+<p>Bagging averages many high-variance, low-bias trees, killing the variance. Boosting stacks small weak learners — each captures part of the pattern — so their contributions add up into one expressive model. Bagging reduces variance; boosting reduces bias. On tabular data, boosting usually wins because real-world errors come more often from bias than variance.</p>
 
 <h2>Any loss function works</h2>
 
-<p>Everything so far has been squared error, fit residuals, add them back. But boosting works with <em>any</em> differentiable loss function, because "residual" just means the negative gradient of the loss. For classification use log-loss; for robust regression use Huber loss; for count data, Poisson. The algorithm is the same; only the residual formula changes.</p>
+<p>Everything so far used squared error. Boosting works with any differentiable loss because "residual" is the negative gradient. Log-loss for classification, Huber for robust regression, Poisson for counts. Same algorithm, different residual formula.</p>
 
-<p>This generalisation (Friedman's 1999 insight) is what turned boosting into a truly general-purpose algorithm. Before it, different variants looked like different methods. After it, they're all the same algorithm with different losses plugged in.</p>
+<p>This generalization is Friedman's 1999 insight; before it, boosting variants looked like distinct methods.</p>
 
-<h2>Three modern implementations</h2>
+<h2>Modern implementations</h2>
 
-<p>The basic gradient boosting algorithm hasn't changed much since 1999, but turning it into a production-grade library is another story. How do you make it fast on a million rows? How do you stop it from quietly memorising peculiar features of your data? How do you handle missing values and categorical features?</p>
+<p>The basic algorithm is unchanged since 1999. Turning it into a production library means making it fast on a million rows, preventing quiet memorization, and handling missing values and categoricals.</p>
 
-<p>Three libraries dominate here, each with a different engineering focus:</p>
+<p>Three libraries dominate, each with a different engineering focus:</p>
 
 <div class="compare-cards">
   <div class="compare-card xgb">
     <h3 style="color: var(--c-xgb);">XGBoost</h3>
     <div class="signature">careful</div>
-    <p>The first of the three and still the reference. Uses <em>second-order</em> gradient information (not just the slope of the loss, but the curvature) to pick splits more accurately. Adds explicit regularisation on leaf weights and handles missing values by learning a default routing direction. Grows trees level-wise.</p>
+    <p>The reference. Uses second-order gradient information (curvature, not just slope) to pick splits, adds explicit regularization on leaf weights, handles missing values by learning a default routing direction, grows trees level-wise.</p>
   </div>
   <div class="compare-card lgb">
     <h3 style="color: var(--c-lgb);">LightGBM</h3>
     <div class="signature">fast</div>
-    <p>Optimised for speed on big datasets. Bins feature values into a few hundred buckets (turning split search into integer comparisons) and grows trees leaf-wise. Often 5–10× faster than XGBoost on large data. The default choice once your data gets above a million rows.</p>
+    <p>Optimized for big datasets. Bins feature values into hundreds of buckets (turning split search into integer comparisons), grows trees leaf-wise, often 5–10× faster than XGBoost on large data. Default choice above a million rows.</p>
   </div>
   <div class="compare-card cat">
     <h3 style="color: var(--c-cat);">CatBoost</h3>
     <div class="signature">rigorous</div>
-    <p>Focused on category-heavy datasets. Uses <em>ordered boosting</em> to guarantee that earlier trees don't secretly peek at the labels they're trying to predict through target-encoded categorical features. Also uses oblivious (symmetric) trees for blazing-fast inference, the trick returns in chapter 8.</p>
+    <p>Focused on category-heavy datasets. Uses <em>ordered boosting</em> so earlier trees don't peek at labels through target-encoded categoricals, and oblivious (symmetric) trees for fast inference — the trick returns in chapter 8.</p>
   </div>
 </div>
 
-<h2>How to pick between them</h2>
+<h2>Picking one</h2>
 
-<p>For most problems, any of the three will do. Starting from scratch, try LightGBM first, it's fast enough to iterate on features and hyperparameters in minutes. If your data is heavy in categorical features with many levels, CatBoost's defaults will often outperform. If your dataset is small (under a hundred thousand rows) and you want stability, XGBoost's level-wise approach is the conservative choice.</p>
-
-<p>At the end of the day, all three implement the same core algorithm from this chapter. The competition between them is at the engineering margin, and usually won by whoever tuned the hyperparameters more carefully.</p>
+<p>Any of the three works for most problems. Try LightGBM first for fast iteration; CatBoost for category-heavy data; XGBoost for small datasets (under 100k rows) where stability matters. All three implement the same core algorithm — the difference is engineering margin and hyperparameter tuning.</p>
 
 <h2>Takeaways</h2>
 

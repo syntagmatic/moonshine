@@ -346,25 +346,25 @@
 <p class="subtitle">Designing objective functions for the autoresearch iterate loop</p>
 
 <p>
-  The <span class="t-score">composite score</span> is a lie you tell yourself to make a scalar out of a vector.
+  The composite score is a scalar pretending to be a vector.
 </p>
 
 <p>
-  Four dimensions go in: visual_critic at 0.30, encoding_integrity at 0.25, cognitive_load at 0.25, stress_test at 0.20. One number comes out. The system compares this number to the previous number, checks whether the delta exceeds -0.3, and decides: <span class="t-keep">keep</span> or <span class="t-discard">discard</span>. Simple. Legible. And fundamentally lossy.
+  Four dimensions in (visual_critic 0.30, encoding_integrity 0.25, cognitive_load 0.25, stress_test 0.20), one number out. The system checks delta vs. -0.3 and decides keep or discard. Simple, legible, lossy.
 </p>
 
 <p>
-  Consider what the composite hides. A change that raises visual_critic from 6 to 8 while dropping stress_test from 8 to 5 will produce a composite delta near zero. The composite says "nothing changed." The reality is that something changed quite a lot, in two opposite directions, and the weighted sum happened to cancel them out. The system kept the experiment. A human reviewer would have questions.
+  Visual_critic 6 → 8 while stress_test 8 → 5 produces a composite delta near zero. The system keeps it. A human reviewer would have questions.
 </p>
 
 <h2>The problem with a single number</h2>
 
 <p>
-  Fixed <span class="t-score">weights</span> encode a permanent opinion about which dimensions matter most. But "which dimension matters most" depends entirely on where the block currently stands. A block scoring 4 on visual_critic and 9 on stress_test has a clear weakness. Improving visual quality by 2 points is far more valuable than improving stress_test by 2 points. The fixed-weight composite treats them as nearly equal (0.30 vs 0.20 weight).
+  Fixed weights encode a permanent opinion about which dimensions matter most. But which dimension matters depends on where the block stands. A block at 4 visual / 9 stress should weight visual much more heavily than 0.30 vs 0.20.
 </p>
 
 <p>
-  Worse, the composite invites <em>dimension collapse</em>: the optimizer learns to pump one high-weighted dimension at the expense of others. If visual_critic carries 30% of the score, an experiment that gains 1 point on visual quality but loses 0.5 on encoding integrity will show a positive composite delta. Over many rounds, the block drifts toward a local optimum that looks good on one axis and progressively worse on the rest.
+  Worse, the composite invites <em>dimension collapse</em>: the optimiser learns to pump the high-weighted dimension at others' expense. Visual +1 / encoding -0.5 still shows a positive composite delta. Over many rounds, the block looks good on one axis and progressively worse on the rest.
 </p>
 
 <pre>current weights:
@@ -376,17 +376,17 @@
 <h2>Three alternatives</h2>
 
 <p>
-  There are at least three ways to build a better objective function. Each solves a different failure mode, and each introduces its own costs.
+  Three alternatives, each solving a different failure mode.
 </p>
 
 <h3>1. Pareto dominance</h3>
 
 <p>
-  Instead of reducing the four dimensions to a scalar, treat the score as a vector. An experiment is <em class="t-score">Pareto-dominant</em> if it improves at least one dimension without worsening any. If it improves visual quality but degrades stress test robustness, it is not strictly better. It sits on a different point of the Pareto frontier: the set of all configurations where you cannot improve one dimension without hurting another.
+  Treat the score as a vector. An experiment is Pareto-dominant if it improves at least one dimension without worsening any. Improvements with tradeoffs sit on a different point of the frontier rather than dominating.
 </p>
 
 <p>
-  Under Pareto selection, the system would keep an experiment only if it dominates the current state: every dimension at least as good, at least one strictly better. This prevents silent tradeoffs. The human sees the frontier and decides which tradeoff to accept.
+  Under Pareto selection, the system keeps an experiment only if every dimension is at least as good and at least one is strictly better. The human sees the frontier and picks which tradeoffs to accept.
 </p>
 
 <h3>2. Adaptive weighting</h3>
@@ -398,55 +398,55 @@
 <pre>adaptive_weight(dim) = base_weight(dim) * (10 - score(dim)) / normalizer</pre>
 
 <p>
-  When visual_critic is at 4 and stress_test is at 9, the adaptive weights might be 0.42 for visual and 0.08 for stress. The optimization pressure concentrates where the block needs it most. As visual quality climbs, its weight drops, and the next-weakest dimension takes priority. This is a soft version of curriculum learning.
+  At visual 4 / stress 9, the adaptive weights are 0.42 for visual and 0.08 for stress. As visual climbs, its weight drops and the next-weakest dimension takes priority — a soft curriculum.
 </p>
 
 <p>
-  The formula in full: <code>weight_i = (10 - score_i) / sum(10 - score_j)</code>. A block scoring [4, 9, 7, 6] on its four dimensions has gaps of [6, 1, 3, 4]. The normalizer is 6+1+3+4 = 14. So the adaptive weights become [0.43, 0.07, 0.21, 0.29]. The dimension at 4 gets six times the weight of the dimension at 9. No base weights, no hyperparameters, just the raw gap from the ceiling. As a dimension climbs toward 10 its gap shrinks toward zero, and its weight converges to zero. The system cannot over-optimize a dimension that is already strong because the formula will not let it allocate budget there.
+  Formula: <code>weight_i = (10 - score_i) / sum(10 - score_j)</code>. Scores [4, 9, 7, 6] have gaps [6, 1, 3, 4], normaliser 14, weights [0.43, 0.07, 0.21, 0.29]. The system can't over-optimise a strong dimension because the formula won't let it.
 </p>
 
 <p>
-  One subtlety: if all four dimensions score 10, the normalizer is zero and the formula is undefined. In practice this never happens because 10/10 scores are rare and the system would stop iterating before reaching that state. But the implementation needs a fallback: if the sum of gaps falls below some epsilon (say 0.5), revert to uniform weights.
+  Edge case: all dimensions at 10 makes the normaliser zero. Fallback to uniform weights when the sum of gaps falls below epsilon.
 </p>
 
 <h3>3. Threshold constraints</h3>
 
 <p>
-  Set hard <span class="t-score">floors</span>. Stress_test must stay at 6 or above. Encoding_integrity must stay at 5 or above. Any experiment that drops a dimension below its floor is discarded, regardless of gains elsewhere. Above the floors, optimize freely using whatever objective you like.
+  Hard floors: stress_test ≥ 6, encoding_integrity ≥ 5. Any drop below the floor discards the experiment, regardless of gains elsewhere. Above the floors, optimise freely.
 </p>
 
 <p>
-  This separates "acceptable" from "optimal." The floors prevent catastrophic regression in any single dimension. The optimization above the floors can be aggressive because the worst outcomes are gated out.
+  This separates acceptable from optimal. Floors prevent catastrophic regression; aggressive optimisation works above them.
 </p>
 
 <h2>Curriculum: weakest-first scheduling</h2>
 
 <p>
-  Curriculum learning takes <span class="t-score">adaptive weighting</span> to its logical conclusion. Instead of blending all dimensions with shifting weights, focus on one dimension at a time. Identify the weakest dimension. Optimize for it specifically. Once it crosses a threshold, move to the next weakest.
+  Curriculum is adaptive weighting taken further: focus on one dimension at a time. Identify the weakest, optimise for it specifically, advance when it crosses a threshold.
 </p>
 
 <p>
-  This avoids the blurriness of a composite entirely. Each iteration has a single, clear objective. The proposer knows exactly what it is trying to improve. The audit knows exactly what to scrutinize. The decision function is simple: did the target dimension improve without the others collapsing?
+  Each iteration has a single objective. The decision function is simple: did the target dimension improve without the others collapsing?
 </p>
 
 <p>
-  The downside is scheduling. How do you pick the thresholds for advancing? What if improving dimension A necessarily hurts dimension B, so the curriculum oscillates between them? These are hyperparameters of the curriculum, and they themselves need tuning.
+  Downside: scheduling. Threshold values, advancement rules, oscillation when A and B are anti-correlated — all hyperparameters that need tuning.
 </p>
 
 <h2>LOC as a proxy metric</h2>
 
 <p>
-  Lines of code is the compaction track's primary gate. Code must get shorter. But shorter code and better code overlap without coinciding. A 200-line visualization can be worse than a 300-line one if the extra hundred lines are meaningful interaction code, accessible labels, or responsive layout logic. The LOC gate cannot tell the difference between removing dead code and removing necessary complexity.
+  LOC and quality overlap without coinciding. A 200-line visualisation can be worse than a 300-line one if those extra hundred lines are interaction code, accessible labels, or responsive layout. The LOC gate can't tell removed dead code from removed necessary complexity.
 </p>
 
 <p>
-  The same proxy problem applies to every metric in the composite. A stress_test score of 8 means the evaluator found no rendering failures under the test conditions it checked. It does not mean the block is robust. The score is a proxy for robustness, not robustness itself. The composite is a proxy of proxies.
+  Every metric is a proxy. Stress_test 8 means the evaluator found no failures under the conditions it checked, not that the block is robust. The composite is a proxy of proxies.
 </p>
 
 <h2>Asymmetric regression penalties</h2>
 
 <p>
-  The current system applies a uniform -0.3 tolerance. But regressions are not equal. A 1-point drop in visual_critic is immediately visible to any viewer. A 1-point drop in stress_test may only manifest under edge-case data. A 1-point drop in encoding_integrity might mean a missing axis label that 80% of viewers will never notice.
+  Uniform -0.3 treats all regressions equally. But a 1-point drop in visual_critic is immediately visible; in stress_test, only under edge cases; in encoding_integrity, often a missing label that 80% of viewers won't notice.
 </p>
 
 <p>
@@ -460,11 +460,11 @@
   stress_test:         -0.40  # loose: less visible, noisier signal</pre>
 
 <p>
-  This acknowledges that not all regressions are created equal. The system tolerates more noise in dimensions where the signal itself is noisy, while guarding dimensions where even small drops are perceptible.
+  More tolerance for noisy dimensions; tighter gates where small drops are perceptible.
 </p>
 
 <p>
-    <strong>Use the simulator below</strong> to see how composite, Pareto, and adaptive strategies produce different optimization trajectories. Toggle between modes. Each dot is a candidate experiment. The boundary determines which experiments survive. Watch how the accepted set changes shape.
+    <strong>Try the simulator.</strong> Composite, Pareto, and adaptive each accept different sets of experiments.
   </p>
 
 <figure>
@@ -487,47 +487,47 @@
 <h2>What changes in practice</h2>
 
 <p>
-  The composite works. It has shipped 107 blocks through compaction. But it works the way a hammer works: reliably, bluntly, without knowing what it is hitting. The approaches described here are scalpels. They cut more precisely, but they require more setup and more judgment about where to cut.
+  The composite works — it has shipped 107 blocks. But it's a blunt instrument. The alternatives here cut more precisely at the cost of more setup.
 </p>
 
 <p>
-  If the autoresearch loop were running thousands of iterations per block, the composite would be fine. Noise averages out at scale. But the loop typically runs 5 to 15 iterations per block. At that scale, every decision matters. A single bad keep (dimension collapse) or bad discard (rejecting a Pareto improvement because the composite dipped) can shape the entire trajectory.
+  At thousands of iterations per block the composite would be fine; noise averages out. The loop runs 5–15 iterations per block, where one bad keep (dimension collapse) or bad discard (Pareto improvement rejected on a dip) shapes the whole trajectory.
 </p>
 
 <p>
-  The practical path forward is probably layered: threshold constraints as hard gates, adaptive weighting as the optimization signal, Pareto tracking as a diagnostic. Not one strategy replacing the composite, but three strategies working together to compensate for its blind spots.
+  Layered: threshold constraints as hard gates, adaptive weighting as the optimisation signal, Pareto tracking as diagnostic. Three strategies covering the composite's blind spots, not one replacement.
 </p>
 
 <h2>Validating a new reward function</h2>
 
 <p>
-  Designing a better reward function is one problem. Proving it is better is a different problem, and harder. The natural approach is an A/B test: run 10 blocks through the iteration loop with the old composite, run 10 blocks with the new Pareto-based approach, and compare final quality. But what counts as "final quality"? The composite itself is the metric you are trying to improve on. Measuring the new reward by the old reward's yardstick defeats the purpose.
+  Designing a better reward is one problem; proving it's better is harder. A/B comparison runs into circularity: the composite is the metric you're trying to improve on.
 </p>
 
 <p>
-  The protocol: select 10 blocks of comparable starting quality. Run each block through both reward functions, holding the proposer prompt, temperature, and iteration budget constant. The only variable is the keep/discard decision function. After both arms finish, compare the final artifacts on three axes: composite score (the old metric), dimension-floor compliance (the structural metric), and human preference (the ground truth).
+  Protocol: 10 blocks of comparable starting quality, both reward functions with proposer prompt, temperature, and iteration budget held constant. Compare on composite (old metric), dimension-floor compliance (structural), and human preference (ground truth).
 </p>
 
 <p>
-  The cleanest validation uses human judgment as ground truth. Take the final artifacts from both arms. Show them to a reviewer blind to which reward function produced them. Ask: which block is better? If the Pareto arm wins 7 out of 10 pairwise comparisons, you have evidence. If it wins 5 out of 10, you have noise. The human evaluation is expensive but it sidesteps the circularity of using one reward function to evaluate another.
+  Human judgment is cleanest. Show final artifacts to a reviewer blind to which reward produced them. 7-of-10 wins is evidence; 5-of-10 is noise. Expensive but sidesteps circularity.
 </p>
 
 <p>
-  A cheaper proxy is dimension-floor compliance. Count how many blocks in each arm finish with all four dimensions above 6. The composite frequently produces blocks that score 8 on one dimension and 4 on another because it optimizes the average. Pareto selection should produce fewer extreme imbalances. If the Pareto arm has 9/10 blocks with all dimensions above 6, and the composite arm has 6/10, that is a structural improvement even if the composite scores are similar.
+  Dimension-floor compliance is the cheap proxy. Pareto should produce fewer 8/4 imbalances than the composite. 9/10 blocks with all dimensions above 6 vs. 6/10 is a structural improvement even at similar composite scores.
 </p>
 
 <h3>The cost of knowing</h3>
 
 <p>
-  Each experiment in the iteration loop costs roughly $0.10: a proposer call to generate the candidate, an audit call to score it, and occasionally a vision call for screenshot validation. Ten blocks times 10 experiments per arm times two arms is 200 experiments, so $20 for a single A/B comparison. That is cheap by the standards of ML research and expensive by the standards of "I want to test a one-line change to the keep/discard logic."
+  Each experiment is ~$0.10. 10 blocks × 10 experiments × 2 arms = 200 experiments, $20 per A/B comparison. Cheap by ML research standards, expensive for "test a one-line change to keep/discard logic."
 </p>
 
 <p>
-  The cost pressure creates a temptation to reduce the sample size. Five blocks per arm instead of 10. Eight experiments instead of 12. But the iterate loop has high variance: a single lucky proposer output can dominate a trajectory. With five blocks per arm, one outlier shifts the mean by 20%. The A/B comparison becomes a coin flip dressed up as evidence. Ten blocks per arm is the minimum for a claim worth acting on. Twenty would be better but costs $40 and a full afternoon of wall-clock time.
+  The iterate loop has high variance — a single lucky proposer output can dominate a trajectory. Five blocks per arm makes one outlier a 20% shift. Ten is the minimum for a claim worth acting on; twenty would be better at $40.
 </p>
 
 <p>
-  A compromise: run a small pilot (3 blocks per arm) to check for gross differences. If one arm is clearly worse, stop early. If the results are ambiguous, run the full 10-block comparison. This is not rigorous sequential testing, but it catches the obvious failures before committing the full budget.
+  Compromise: 3-block pilot, full 10-block comparison if ambiguous. Not rigorous sequential testing, but catches obvious failures before committing the full budget.
 </p>
 
 <table class="cost-table">

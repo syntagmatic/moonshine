@@ -107,21 +107,19 @@ svg text { font-family: var(--heading-font); }
   <p class="subtitle">Chapter 8 of 8. Two topics here. A structural trick that makes inference extraordinarily fast and connects trees to a 40-year-old idea from hardware verification. And a tour of research that's quietly overturning the forty-year assumption that globally optimal trees are intractable.</p>
 </div>
 
-<p>This chapter closes the series on two notes. The first is a structural observation about how trees are <em>represented</em>: under a simple extra constraint, they collapse into a compressed data structure that makes prediction orders of magnitude faster at deployment. The second is a research update: methods that were considered hopeless for decades are finally within reach, and some of the foundational assumptions of the field are being quietly overturned.</p>
+<p>Two threads close the series: a structural trick that makes inference much faster, and recent results that overturn long-standing assumptions about optimal trees.</p>
 
-<h2>Oblivious trees: same question at every depth</h2>
+<h2>Oblivious trees</h2>
 
-<p>A normal decision tree can split however it wants at every node. Different nodes at the same depth can ask about different features with different thresholds. This flexibility is expensive at inference time: every prediction means walking a branchy, unpredictable path, which is slow on modern CPUs because it defeats branch prediction.</p>
+<p>A normal tree can split on any feature at any node. Inference walks a branchy, unpredictable path that defeats CPU branch prediction.</p>
 
-<p>An <em>oblivious tree</em> adds one rule: every node at the same depth must use the <em>same</em> split predicate. You write down the D questions up front, "is age > 40? is income > 50k? does the row have a phone number?", and the tree is just a mapping from the D-bit answer vector to a leaf value.</p>
+<p>An <em>oblivious tree</em> requires every node at the same depth to use the same split predicate. The D questions are fixed up front, and the tree is a mapping from a D-bit answer vector to a leaf value.</p>
 
-<p>This seems brutal. In exchange you get: predictions that are a single array lookup instead of D branches, no pointer chasing, and an implicit regularising effect on training. CatBoost, the boosting library, uses oblivious trees exclusively, it's the reason its inference is so fast at scale.</p>
+<p>The trade: predictions are a single array lookup instead of D branches, no pointer chasing, and implicit regularization during training. CatBoost uses oblivious trees exclusively for fast inference at scale.</p>
 
-<h2>The structural payoff</h2>
+<h2>OBDDs</h2>
 
-<p>Oblivious trees have an even deeper property. If two subtrees of the tree end up computing the same function (i.e., two different root-to-leaf paths produce the same subsequent predictions), you can <em>merge</em> them: keep one copy of the subtree and point two parents at it. The tree becomes a directed acyclic graph, not a tree at all.</p>
-
-<p>This is exactly what an <em>Ordered Binary Decision Diagram</em> (OBDD) does, a data structure invented by Randal Bryant in 1986 for hardware verification. The decision-tree world independently discovered it was useful for fast inference, but it's the same mathematical object. For functions with lots of redundancy, OBDDs can shrink exponentially, billion-node trees collapse to thousand-node graphs that compute identical functions.</p>
+<p>If two subtrees compute the same function, they can be merged into a DAG. The result is an <em>Ordered Binary Decision Diagram</em> (OBDD), invented by Randal Bryant in 1986 for hardware verification. For redundant functions, OBDDs shrink exponentially: billion-node trees collapse to thousand-node graphs computing identical functions.</p>
 
 <div class="figure">
   <div id="fig-ob" class="panel">
@@ -153,17 +151,17 @@ svg text { font-family: var(--heading-font); }
 
 <h2>Why this isn't the default</h2>
 
-<p>Oblivious trees are strictly less expressive than regular trees for the same depth. A regular tree can reach a given loss with fewer leaves because each branch gets its own splits. The constraint doesn't hurt much in practice (CatBoost is competitive with XGBoost on accuracy) but it does hurt a little, and only matters when you're deploying at scale. Most problems don't need the speedup enough to accept the constraint.</p>
+<p>Oblivious trees are less expressive than regular trees at the same depth. CatBoost is competitive with XGBoost on accuracy, but the constraint hurts a little. Most problems don't need the speedup enough to accept the constraint.</p>
 
-<p>OBDD-style merging also doesn't come automatically from standard tree training. You have to build the tree oblivious-first, then merge identical subtrees as a post-processing step. This is standard in hardware-verification software but rare in ML libraries.</p>
+<p>OBDD-style merging requires building the tree oblivious-first and merging identical subtrees as post-processing. Standard in hardware verification, rare in ML libraries.</p>
 
-<h2>The other frontier: optimal trees</h2>
+<h2>Optimal trees</h2>
 
-<p>We opened chapter 1 with Hyafil and Rivest's 1976 result that finding the globally optimal decision tree is NP-complete. That result is still true. But its practical consequences are eroding.</p>
+<p>Chapter 1 noted Hyafil and Rivest's 1976 result that the globally optimal tree is NP-complete. That result is still true. The practical consequences are eroding.</p>
 
-<p>Since 2017, two lines of work have made globally optimal trees practical for real problems. Bertsimas and Dunn showed that Mixed-Integer Optimisation solvers can find globally optimal trees on datasets with hundreds or thousands of rows. GOSDT (2019) and related algorithms push further with dynamic-programming-style pruning. These methods find optimal sparse trees in seconds where CART has been running for years.</p>
+<p>Since 2017, Bertsimas and Dunn showed Mixed-Integer Optimization can find optimal trees on hundreds-to-thousands-of-row datasets. GOSDT (2019) and related algorithms push further with dynamic-programming-style pruning. Optimal sparse trees in seconds where CART runs for years.</p>
 
-<p>The shocking empirical result: these optimal trees, chosen by exhaustive search, do <em>not</em> overfit more than greedy trees. Often they generalise <em>better</em>, because they can find deep structural patterns (like the classic XOR) that greedy search systematically misses.</p>
+<p>The empirical result: optimal trees do not overfit more than greedy trees. They often generalize better because they find deep structural patterns (XOR, for instance) that greedy search systematically misses.</p>
 
 <div class="figure">
   <div id="fig-opt" class="panel">
@@ -188,33 +186,30 @@ svg text { font-family: var(--heading-font); }
   <p class="figure-caption"><span class="figure-label">Figure 2.</span> The canonical case where greedy fails. An XOR-like pattern: class 1 if exactly one of two features is on (not both, not neither). Neither feature on its own is predictive; the signal lives entirely in the interaction. Greedy splits on one feature first and has to recover; optimal considers the whole tree at once and finds the clean decomposition. On problems where interactions matter, optimal systematically outperforms.</p>
 </div>
 
-<h2>Three more directions worth knowing</h2>
-
-<p>Beyond optimal trees, three other directions are actively shaping what decision-tree software can do.</p>
+<h2>Three more directions</h2>
 
 <div class="frontier-cards">
   <div class="frontier-card">
     <h3>Streaming trees</h3>
-    <p>What if your data doesn't fit in memory? Hoeffding trees grow from infinite data streams, using probability bounds to decide when enough samples have been seen to commit to a split with statistical confidence. Used in real-time fraud detection, network intrusion detection, anywhere data arrives faster than you can retrain.</p>
+    <p>For data that doesn't fit in memory: Hoeffding trees grow from infinite streams, using probability bounds to decide when enough samples have been seen to commit to a split. Used in real-time fraud detection and network intrusion.</p>
   </div>
   <div class="frontier-card">
     <h3>Privacy-preserving trees</h3>
-    <p>Training on sensitive data (medical records, financial records) and publishing the trained tree can leak training examples. Differentially private trees inject calibrated noise during training, enough to hide any single row's influence while keeping the model useful. Used where GDPR/HIPAA requires provable non-identifiability.</p>
+    <p>Training on sensitive data and publishing the model can leak training examples. Differentially private trees inject calibrated noise to hide any single row's influence while keeping the model useful — required where GDPR/HIPAA mandate non-identifiability.</p>
   </div>
   <div class="frontier-card">
     <h3>Fair trees</h3>
-    <p>Training data with historical bias (e.g., credit scoring that under-approved certain zip codes) will train trees that replicate the bias. Fair-tree training modifies the splitting criterion to penalise splits that correlate too strongly with protected attributes, or enforces equal error rates across groups. The definitions of "fair" are contested; the mechanisms are well-understood.</p>
+    <p>Biased training data trains biased trees. Fair-tree training penalizes splits that correlate too strongly with protected attributes, or enforces equal error rates across groups. The definitions of "fair" are contested; the mechanisms are not.</p>
   </div>
   <div class="frontier-card">
-    <h3>Optimal trees become standard</h3>
-    <p>As MIO solvers keep improving, the default for "train a small interpretable tree" may shift from greedy CART to an optimal solver. Already happening in regulated finance and medicine where small optimal trees are preferred for auditability.</p>
+    <h3>Optimal trees as default</h3>
+    <p>As MIO solvers improve, the default for small interpretable trees may shift from greedy CART to optimal solvers. Already happening in regulated finance and medicine where small optimal trees are preferred for auditability.</p>
   </div>
 </div>
 
 <div class="closing-box">
-  <h3>Where we've been</h3>
-  <p>A decision tree is a flowchart. It picks questions greedily, splitting the data one feature at a time, and makes predictions by averaging whatever lands in each leaf. That's the whole basic idea, and forty years of research have filled in every angle of it. Ensembles make it more accurate. Boosting makes it more expressive. SHAP makes it readable again. Causal trees make it answer intervention questions. Soft variants make it trainable with gradient descent. MCTS uses its structure to search instead of fit. Oblivious variants make it fast at scale. And a new generation of solvers is, finally, making it truly optimal.</p>
-  <p>The algorithm is still deceptively simple. There are just a lot of ways to be simple.</p>
+  <h3>Series summary</h3>
+  <p>A decision tree is a flowchart that picks questions greedily, splits one feature at a time, and predicts by averaging what lands in each leaf. Ensembles add accuracy; boosting adds expressiveness; SHAP makes it readable again; causal trees handle interventions; soft variants allow gradient training; MCTS uses the structure to search instead of fit; oblivious variants make it fast; new solvers make it truly optimal.</p>
 </div>
 
 <div class="nav-footer">
