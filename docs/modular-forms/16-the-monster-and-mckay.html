@@ -114,12 +114,19 @@ svg text { font-family: var(--heading-font); }
 .decomp-block .j-part { color: var(--c-j); }
 .decomp-block .m-part { color: var(--c-monster); }
 .decomp-block .s-part { color: var(--c-sum); font-weight: 600; }
+.notation-callout { margin: 1.25rem 0; padding: 0.85rem 1rem; background: var(--c-moon-light); border-left: 3px solid var(--c-moon); border-radius: 0 5px 5px 0; font-family: var(--heading-font); font-size: 0.9rem; color: var(--text-2); line-height: 1.4; }
+.notation-callout strong { color: var(--text); }
 
 .controls { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; }
 
 .btn { font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600; padding: 0.4rem 1rem; border-radius: 5px; border: 1px solid var(--border); background: var(--fig-bg); color: var(--text); cursor: pointer; transition: background 0.15s, border-color 0.15s; user-select: none; }
 .btn:hover { border-color: var(--accent); background: var(--accent-light); }
 .btn.active { background: var(--c-moon); color: white; border-color: var(--c-moon); }
+.decomp-builder { margin-top: 1rem; padding: 0.9rem 1rem; border: 1px solid var(--border); border-radius: 5px; background: #f8fafc; }
+.build-meter { height: 12px; overflow: hidden; border-radius: 999px; background: #e4e1ec; }
+.build-fill { height: 100%; width: 0; background: var(--c-sum); transition: width 0.18s ease; }
+.build-status { font-family: var(--heading-font); font-size: 0.88rem; color: var(--text-2); line-height: 1.4; margin-top: 0.55rem; }
+.build-status strong { color: var(--text); }
 
 .nav-footer { margin-top: 5rem; padding-top: 2rem; border-top: 1px solid var(--border); display: flex; justify-content: space-between; font-family: var(--heading-font); font-size: 0.9rem; }
 
@@ -141,6 +148,8 @@ svg text { font-family: var(--heading-font); }
 
 <p>But in 1978, mathematician John McKay noticed a bizarre numerical coincidence. The dimensions of the Monster group's representations perfectly matched the Fourier coefficients of the j-function. This impossible-seeming connection launched the study of "Monstrous Moonshine".</p>
 
+<div class="notation-callout"><strong>Notation.</strong> In Act IV, <em>j</em>(&tau;) = q<sup>&minus;1</sup> + 744 + &hellip; is the classical modular invariant, while <strong>J(&tau;) = j(&tau;) &minus; 744</strong> = q<sup>&minus;1</sup> + 0 + 196884q + &hellip; is the moonshine-normalised graded dimension. When coefficients become dimensions or traces, read them as coefficients of J unless the text explicitly says otherwise.</div>
+
 <p>Explore this numerical coincidence yourself. Use the buttons below to see how the first few coefficients of the j-function decompose perfectly into the dimensions of the Monster group's representations.</p>
 
 <div class="figure" id="fig-decomp">
@@ -150,6 +159,11 @@ svg text { font-family: var(--heading-font); }
     <button class="btn active" data-n="1" id="btn-n1">c(1) = 196 884</button>
     <button class="btn" data-n="2" id="btn-n2">c(2) = 21 493 760</button>
     <button class="btn" data-n="3" id="btn-n3">c(3) = 864 299 970</button>
+  </div>
+  <div class="decomp-builder" id="decomp-builder">
+    <div class="build-meter"><div class="build-fill" id="build-fill"></div></div>
+    <div class="build-status" id="build-status"></div>
+    <div class="controls" id="build-controls"></div>
   </div>
   <p class="figure-caption"><strong>Play:</strong> Interactive decomposition of <em>j</em>-coefficients into Monster irrep dimensions. Each bar is one term in the decomposition: dim ρ<sub><em>k</em></sub> multiplied by its multiplicity. The bars stack left-to-right and their total equals the exact <em>j</em>-coefficient. Switch between c(1), c(2), c(3) to see how more irreps enter and the multiplicities stay small.</p>
 </div>
@@ -528,6 +542,70 @@ math('math-v-natural',
 
   var irreps = Moon.monster.irreps;
   var heads = Moon.mckay.heads.filter(function (h) { return h.n >= 1; });
+  var buildControls = document.getElementById('build-controls');
+  var buildStatus = document.getElementById('build-status');
+  var buildFill = document.getElementById('build-fill');
+  var buildPicks = {};
+
+  function buildKeys(entry) {
+    return Object.keys(entry.mults).map(Number).sort(function (a, b) { return a - b; });
+  }
+
+  function resetBuild(entry) {
+    buildPicks = {};
+    buildKeys(entry).forEach(function (k) { buildPicks[k] = 0; });
+  }
+
+  function pickedTotal(entry) {
+    return buildKeys(entry).reduce(function (sum, k) {
+      return sum + buildPicks[k] * Number(irreps[k - 1].dim);
+    }, 0);
+  }
+
+  function renderBuilder(entry) {
+    var target = Number(entry.total);
+    var total = pickedTotal(entry);
+    var remaining = target - total;
+    var percent = Math.max(0, Math.min(100, total / target * 100));
+    buildFill.style.width = percent + '%';
+    buildStatus.innerHTML = '<strong>Assemble c(' + entry.n + '):</strong> ' +
+      Moon.fmt.group(total) + ' / ' + Moon.fmt.group(target) +
+      ' &nbsp; remaining ' + Moon.fmt.group(remaining) +
+      (remaining === 0 ? ' &nbsp; exact Monster decomposition.' : '');
+
+    buildControls.innerHTML = '';
+    buildKeys(entry).forEach(function (k) {
+      var dim = Number(irreps[k - 1].dim);
+      var btn = document.createElement('button');
+      btn.className = 'btn';
+      btn.textContent = '+ \u03C1' + k + ' (' + buildPicks[k] + '/' + entry.mults[k] + ')';
+      btn.title = 'Add dim \u03C1' + k + ' = ' + Moon.fmt.group(dim);
+      btn.disabled = buildPicks[k] >= entry.mults[k];
+      btn.addEventListener('click', function () {
+        if (buildPicks[k] < entry.mults[k]) buildPicks[k] += 1;
+        renderBuilder(entry);
+      });
+      buildControls.appendChild(btn);
+    });
+
+    var reset = document.createElement('button');
+    reset.className = 'btn';
+    reset.textContent = 'Reset';
+    reset.addEventListener('click', function () {
+      resetBuild(entry);
+      renderBuilder(entry);
+    });
+    buildControls.appendChild(reset);
+
+    var reveal = document.createElement('button');
+    reveal.className = 'btn';
+    reveal.textContent = 'Reveal';
+    reveal.addEventListener('click', function () {
+      buildKeys(entry).forEach(function (k) { buildPicks[k] = entry.mults[k]; });
+      renderBuilder(entry);
+    });
+    buildControls.appendChild(reveal);
+  }
 
   function buildBars(entry) {
     // Build array of { label, value } for the stacked bars
@@ -554,8 +632,10 @@ math('math-v-natural',
 
     var entry = heads.find(function (h) { return h.n === nVal; });
     if (!entry) return;
+    resetBuild(entry);
     var bars = buildBars(entry);
     var total = Number(entry.total);
+    renderBuilder(entry);
 
     var margin = { top: 30, right: 20, bottom: 50, left: 20 };
     var iw = W - margin.left - margin.right;

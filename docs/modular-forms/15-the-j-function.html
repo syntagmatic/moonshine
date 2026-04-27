@@ -88,11 +88,30 @@ svg text { font-family: var(--heading-font); }
 .coeff-table th.monster-col { text-align: left; }
 .coeff-table tr:hover { background: var(--accent-light); }
 .coeff-table tr.highlight { background: #fef3c7; }
+.j-bridge-grid {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  gap: 1rem;
+  align-items: start;
+}
+.j-bridge-panel {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 0.75rem;
+}
+.j-bridge-readout {
+  font-family: var(--heading-font);
+  font-size: 0.86rem;
+  color: var(--text-2);
+  line-height: 1.45;
+}
+.j-bridge-readout strong { color: var(--text); }
 
 .nav-footer { margin-top: 5rem; padding-top: 2rem; border-top: 1px solid var(--border); display: flex; justify-content: space-between; font-family: var(--heading-font); font-size: 0.9rem; }
 
 @media (prefers-reduced-motion: reduce) {html:not([data-motion="full"]) * { transition-duration: 0s !important; animation-duration: 0s !important; } }
-@media (max-width: 600px) { h1 { font-size: 1.75rem; } .article { padding: 1.5rem 1rem 4rem; } }
+@media (max-width: 600px) { h1 { font-size: 1.75rem; } .article { padding: 1.5rem 1rem 4rem; } .j-bridge-grid { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
@@ -126,6 +145,21 @@ svg text { font-family: var(--heading-font); }
   </div>
   <div id="jmap-status" class="status-bar"></div>
   <p class="figure-caption"><strong>Play:</strong> Drag the blue point &tau; inside the fundamental domain. The readout shows j(&tau;) in real time. The special points &tau; = i (j = 1728) and &tau; = &rho; (j = 0) are marked. As &tau; approaches the cusp (Im &tau; → &infin;), |j(&tau;)| grows without bound. Use the snap buttons to jump to notable positions.</p>
+</div>
+
+<div class="figure" id="fig-j-bridge">
+  <div class="controls" id="j-bridge-controls">
+    <span>Normalisation:</span>
+    <button class="btn active" data-mode="j">j</button>
+    <button class="btn" data-mode="J">J = j − 744</button>
+  </div>
+  <div class="j-bridge-grid">
+    <div class="j-bridge-panel" id="j-bridge-svg-host"></div>
+    <div class="j-bridge-panel">
+      <div class="j-bridge-readout" id="j-bridge-readout"></div>
+    </div>
+  </div>
+  <p class="figure-caption"><strong>Play:</strong> Toggle between the classical modular invariant <em>j</em> and the moonshine-normalised series J = <em>j</em> − 744. Only the constant term changes, but that change is exactly what lets the q-series become the graded dimension of V<sup>♮</sup> with an empty grade 0.</p>
 </div>
 
 <h2>The j-function defined</h2>
@@ -295,6 +329,84 @@ math('math-graded',
   '\\sum_{n=-1}^{\\infty} (\\dim V_n)\\, \\color{#d97706}{q}^n \\;=\\; \\color{#059669}{j}(\\color{#2563eb}{\\tau}) - 744 \\;=\\; \\color{#d97706}{q}^{-1} + 196\\,884\\,\\color{#d97706}{q} + 21\\,493\\,760\\,\\color{#d97706}{q}^2 + \\cdots', true);
 math('math-mckay',
   '\\color{#d97706}{196\\,884} \\;=\\; \\underbrace{\\color{#7c3aed}{1}}_{\\text{trivial}} \\;+\\; \\underbrace{\\color{#7c3aed}{196\\,883}}_{\\text{smallest non-trivial Monster irrep}}', true);
+
+// ────────────────────────────────────────── Figure 0: j versus J bridge ──
+(function () {
+  var coeffs = [
+    { n: -1, label: 'q⁻¹', j: 1, J: 1, note: 'pole at the cusp' },
+    { n: 0, label: 'q⁰', j: 744, J: 0, note: 'constant term' },
+    { n: 1, label: 'q¹', j: 196884, J: 196884, note: 'first Monster-sized grade' },
+    { n: 2, label: 'q²', j: 21493760, J: 21493760, note: 'next graded dimension' }
+  ];
+  var mode = 'j';
+  var host = d3.select('#j-bridge-svg-host');
+  var W = 390, H = 240;
+  var svg = host.append('svg').attr('viewBox', '0 0 ' + W + ' ' + H)
+    .attr('width', '100%').style('max-width', W + 'px');
+  var x = d3.scaleBand().domain(coeffs.map(function (d) { return d.label; })).range([42, W - 18]).padding(0.25);
+  var y = d3.scaleLog().domain([1, 3e7]).range([H - 44, 22]);
+
+  svg.append('g').attr('transform', 'translate(0,' + (H - 44) + ')')
+    .call(d3.axisBottom(x))
+    .call(function (sel) {
+      sel.selectAll('text').attr('font-family', 'Source Code Pro').attr('font-size', 11).attr('fill', 'var(--text-2)');
+      sel.selectAll('path,line').attr('stroke', '#cbd5e1');
+    });
+  svg.append('g').attr('transform', 'translate(42,0)')
+    .call(d3.axisLeft(y).ticks(4, '.0e'))
+    .call(function (sel) {
+      sel.selectAll('text').attr('font-family', 'Source Code Pro').attr('font-size', 10).attr('fill', 'var(--text-2)');
+      sel.selectAll('path,line').attr('stroke', '#cbd5e1');
+    });
+
+  svg.append('text').attr('x', 42).attr('y', 14)
+    .attr('font-size', 12).attr('font-weight', 700).attr('fill', 'var(--text)')
+    .text('coefficient magnitude');
+
+  function fmt(v) {
+    return v === 0 ? '0' : Moon.fmt.group(v);
+  }
+
+  function render() {
+    d3.selectAll('#j-bridge-controls .btn').classed('active', function () {
+      return this.getAttribute('data-mode') === mode;
+    });
+
+    var bars = svg.selectAll('.bridge-bar').data(coeffs, function (d) { return d.n; });
+    bars.enter().append('rect')
+      .attr('class', 'bridge-bar')
+      .attr('x', function (d) { return x(d.label); })
+      .attr('width', x.bandwidth())
+      .attr('rx', 3)
+      .merge(bars)
+      .attr('fill', function (d) { return d[mode] === 0 ? '#cbd5e1' : (mode === 'j' ? 'var(--accent)' : 'var(--c-weight)'); })
+      .attr('y', function (d) { return d[mode] === 0 ? H - 48 : y(Math.abs(d[mode])); })
+      .attr('height', function (d) { return d[mode] === 0 ? 4 : H - 44 - y(Math.abs(d[mode])); });
+
+    var labels = svg.selectAll('.bridge-label').data(coeffs, function (d) { return d.n; });
+    labels.enter().append('text')
+      .attr('class', 'bridge-label')
+      .attr('text-anchor', 'middle')
+      .attr('font-size', 10)
+      .attr('font-family', 'Source Code Pro')
+      .merge(labels)
+      .attr('x', function (d) { return x(d.label) + x.bandwidth() / 2; })
+      .attr('y', function (d) { return d[mode] === 0 ? H - 56 : y(Math.abs(d[mode])) - 6; })
+      .attr('fill', function (d) { return d[mode] === 0 ? '#64748b' : 'var(--text)'; })
+      .text(function (d) { return fmt(d[mode]); });
+
+    var readout = mode === 'j'
+      ? '<strong>Classical j:</strong> q⁻¹ + <strong>744</strong> + 196884q + … The constant term is harmless for modular functions, but it would imply a nonempty grade 0 if read directly as a graded dimension.'
+      : '<strong>Moonshine J:</strong> q⁻¹ + <strong>0</strong> + 196884q + … Subtracting 744 makes the constant term vanish, matching dim V<sub>0</sub><sup>♮</sup> = 0 while leaving every positive Monster-sized coefficient untouched.';
+    document.getElementById('j-bridge-readout').innerHTML = readout;
+  }
+
+  d3.selectAll('#j-bridge-controls .btn').on('click', function () {
+    mode = this.getAttribute('data-mode');
+    render();
+  });
+  render();
+})();
 
 // ────────────────────────────────────────── Figure 1: j(τ) on fundamental domain ──
 (function () {

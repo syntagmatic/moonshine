@@ -89,6 +89,9 @@ svg text { font-family: var(--heading-font); }
 
 .qseries-box { font-family: var(--mono-font); font-size: 0.82rem; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 0.6rem 0.8rem; line-height: 1.6; overflow-x: auto; white-space: nowrap; margin-top: 0.5rem; }
 .qseries-label { font-family: var(--heading-font); font-size: 0.82rem; font-weight: 600; color: var(--text-2); margin-top: 0.75rem; }
+.route-panel { margin-top: 1rem; padding: 0.75rem; background: var(--bg); border: 1px solid var(--border); border-radius: 5px; }
+.route-panel svg { display: block; max-width: 100%; height: auto; }
+.route-note { font-family: var(--heading-font); font-size: 0.82rem; color: var(--text-2); line-height: 1.35; margin-top: 0.35rem; }
 
 @media (prefers-reduced-motion: reduce) {html:not([data-motion="full"]) * { transition-duration: 0s !important; animation-duration: 0s !important; } }
 @media (max-width: 600px) { h1 { font-size: 1.75rem; } .article { padding: 1.5rem 1rem 4rem; } }
@@ -120,6 +123,17 @@ svg text { font-family: var(--heading-font); }
     <button class="btn" data-prime="3">3</button>
     <button class="btn" data-prime="5">5</button>
     <button class="btn" data-prime="7">7</button>
+    <span style="margin-left: 0.5rem;">Coefficient m:</span>
+    <button class="btn active" data-m="1">1</button>
+    <button class="btn" data-m="2">2</button>
+    <button class="btn" data-m="3">3</button>
+    <button class="btn" data-m="4">4</button>
+    <button class="btn" data-m="5">5</button>
+    <button class="btn" data-m="6">6</button>
+  </div>
+  <div class="route-panel">
+    <div id="hecke-route"></div>
+    <div class="route-note" id="hecke-route-note"></div>
   </div>
   <div class="qseries-label" id="calc-f-label">f = </div>
   <div class="qseries-box" id="calc-f-series"></div>
@@ -297,10 +311,82 @@ buildForms();
 (function () {
   var curForm = 'delta';
   var curPrime = 2;
+  var curM = 1;
+  var routeHost = d3.select('#hecke-route');
+  var routeSvg = routeHost.append('svg')
+    .attr('viewBox', '0 0 640 180')
+    .attr('width', '100%')
+    .style('max-width', '640px');
+
+  routeSvg.append('defs').append('marker')
+    .attr('id', 'route-arrow')
+    .attr('markerWidth', 9).attr('markerHeight', 9)
+    .attr('refX', 8).attr('refY', 4.5).attr('orient', 'auto')
+    .append('path').attr('d', 'M0,0 L9,4.5 L0,9 Z').attr('fill', '#64748b');
+
+  function coeffAt(coeffs, idx) {
+    if (idx < 0 || idx >= coeffs.length || idx !== Math.floor(idx)) return 0;
+    return Math.round(coeffs[idx] || 0);
+  }
+
+  function compact(n) {
+    if (n === 0) return '0';
+    return G(n);
+  }
+
+  function drawRoute(f, tp) {
+    var p = curPrime;
+    var m = curM;
+    var aPm = coeffAt(f.coeffs, p * m);
+    var hasBack = (m % p === 0);
+    var aBack = hasBack ? coeffAt(f.coeffs, m / p) : 0;
+    var scale = Math.pow(p, f.k - 1);
+    var scaledBack = scale * aBack;
+    var bM = coeffAt(tp, m);
+    var routeNote = document.getElementById('hecke-route-note');
+
+    routeSvg.selectAll('*:not(defs)').remove();
+
+    var nodes = [
+      { x: 24, y: 28, w: 170, h: 56, title: 'outer coefficient', value: 'a(' + (p * m) + ') = ' + compact(aPm), color: 'var(--c-coeff)' },
+      { x: 24, y: 102, w: 170, h: 56, title: 'inner coefficient', value: hasBack ? 'a(' + (m / p) + ') = ' + compact(aBack) : 'a(' + m + '/' + p + ') = 0', color: hasBack ? 'var(--c-weight)' : '#94a3b8' },
+      { x: 248, y: 102, w: 150, h: 56, title: 'weight factor', value: 'p^(k-1) = ' + compact(scale), color: 'var(--c-gamma)' },
+      { x: 462, y: 62, w: 150, h: 66, title: 'new coefficient', value: 'b(' + m + ') = ' + compact(bM), color: 'var(--c-metric)' }
+    ];
+
+    function box(n) {
+      var g = routeSvg.append('g');
+      g.append('rect').attr('x', n.x).attr('y', n.y).attr('width', n.w).attr('height', n.h)
+        .attr('rx', 6).attr('fill', '#fff').attr('stroke', n.color).attr('stroke-width', 2);
+      g.append('text').attr('x', n.x + 12).attr('y', n.y + 20)
+        .attr('font-size', 10).attr('font-weight', 700).attr('fill', '#64748b')
+        .attr('letter-spacing', '0.08em').text(n.title.toUpperCase());
+      g.append('text').attr('x', n.x + 12).attr('y', n.y + 42)
+        .attr('font-size', 15).attr('font-weight', 700).attr('fill', n.color).text(n.value);
+    }
+    nodes.forEach(box);
+
+    routeSvg.append('line').attr('x1', 196).attr('y1', 56).attr('x2', 454).attr('y2', 86)
+      .attr('stroke', '#64748b').attr('stroke-width', 1.6).attr('marker-end', 'url(#route-arrow)');
+    routeSvg.append('line').attr('x1', 196).attr('y1', 130).attr('x2', 240).attr('y2', 130)
+      .attr('stroke', '#64748b').attr('stroke-width', 1.6).attr('marker-end', 'url(#route-arrow)');
+    routeSvg.append('line').attr('x1', 400).attr('y1', 130).attr('x2', 454).attr('y2', 104)
+      .attr('stroke', '#64748b').attr('stroke-width', 1.6).attr('marker-end', 'url(#route-arrow)');
+
+    routeSvg.append('text').attr('x', 325).attr('y', 52)
+      .attr('text-anchor', 'middle').attr('font-size', 14).attr('font-weight', 700)
+      .attr('fill', 'var(--text)').text('b(' + m + ') = a(' + p + '·' + m + ') + ' + p + '^(' + (f.k - 1) + ') a(' + m + '/' + p + ')');
+    routeSvg.append('text').attr('x', 325).attr('y', 76)
+      .attr('text-anchor', 'middle').attr('font-size', 13).attr('fill', 'var(--text-2)')
+      .text(compact(bM) + ' = ' + compact(aPm) + ' + ' + compact(scaledBack));
+
+    routeNote.textContent = 'The selected output coefficient is built by pulling one coefficient from farther out in the q-series and, only when p divides m, one from closer in. This is the coefficient-level machinery behind the operator.';
+  }
 
   function updateCalc() {
     var f = FORMS[curForm];
     var tp = Mod.hecke.T(curPrime, f.coeffs, f.k);
+    drawRoute(f, tp);
 
     // Show q-series
     document.getElementById('calc-f-label').textContent = 'f = ' + f.name + ', weight ' + f.k;
@@ -352,6 +438,12 @@ buildForms();
     d3.selectAll('#calc-controls .btn[data-prime]').classed('active', false);
     d3.select(this).classed('active', true);
     curPrime = +this.getAttribute('data-prime');
+    updateCalc();
+  });
+  d3.selectAll('#calc-controls .btn[data-m]').on('click', function () {
+    d3.selectAll('#calc-controls .btn[data-m]').classed('active', false);
+    d3.select(this).classed('active', true);
+    curM = +this.getAttribute('data-m');
     updateCalc();
   });
 

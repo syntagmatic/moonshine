@@ -90,6 +90,11 @@ svg text { font-family: var(--heading-font); }
 .ap-table td { padding: 0.3rem 0.6rem; text-align: center; border-bottom: 1px solid var(--border); }
 .ap-table tr:hover td { background: var(--accent-light); }
 .ap-table .bad { color: #94a3b8; font-style: italic; }
+.field-grid-panel { margin-top: 1rem; padding: 0.9rem 1rem; border: 1px solid var(--border); border-radius: 5px; background: #f8fafc; }
+.field-grid-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; flex-wrap: wrap; font-family: var(--heading-font); font-size: 0.9rem; color: var(--text-2); }
+.field-grid-head strong { color: var(--text); }
+.field-grid-panel .controls { margin-top: 0.5rem; }
+.field-grid-status { font-family: var(--heading-font); font-size: 0.86rem; color: var(--text-2); line-height: 1.4; min-height: 1.4em; margin-top: 0.4rem; }
 
 @media (prefers-reduced-motion: reduce) {html:not([data-motion="full"]) * { transition-duration: 0s !important; animation-duration: 0s !important; } }
 @media (max-width: 600px) { h1 { font-size: 1.75rem; } .article { padding: 1.5rem 1rem 4rem; } }
@@ -122,6 +127,20 @@ svg text { font-family: var(--heading-font); }
     <button class="btn" data-a="-1" data-b="0">y&sup2;=x&sup3;&minus;x</button>
     <button class="btn" data-a="0" data-b="-1">y&sup2;=x&sup3;&minus;1</button>
     <button class="btn" data-a="1" data-b="1">y&sup2;=x&sup3;+x+1</button>
+  </div>
+  <div class="field-grid-panel">
+    <div class="field-grid-head">
+      <strong>Finite-field point grid</strong>
+      <span>Lit dots solve the curve equation over &#x1D53D;<sub>p</sub>.</span>
+    </div>
+    <div class="controls" id="field-prime-controls">
+      <span>Prime:</span>
+      <button class="btn" data-p="5">p = 5</button>
+      <button class="btn active" data-p="7">p = 7</button>
+      <button class="btn" data-p="11">p = 11</button>
+    </div>
+    <div id="field-grid-svg"></div>
+    <div id="field-grid-status" class="field-grid-status"></div>
   </div>
   <div class="ap-table-wrap" style="margin-top: 1rem;">
     <table class="ap-table" id="ap-table">
@@ -268,6 +287,92 @@ var valB = document.getElementById('val-B');
 var infoEl = document.getElementById('curve-info');
 var tbody = document.getElementById('ap-tbody');
 var statusEl = document.getElementById('builder-status');
+var fieldGridHost = document.getElementById('field-grid-svg');
+var fieldGridStatus = document.getElementById('field-grid-status');
+var selectedFieldPrime = 7;
+
+function mod(n, p) {
+  return ((n % p) + p) % p;
+}
+
+function finiteFieldPoints(A, B, p) {
+  var pts = [];
+  for (var x = 0; x < p; x++) {
+    for (var y = 0; y < p; y++) {
+      if (mod(y * y - (x * x * x + A * x + B), p) === 0) {
+        pts.push({ x: x, y: y });
+      }
+    }
+  }
+  return pts;
+}
+
+function updateFieldGrid(data) {
+  var p = selectedFieldPrime;
+  var pts = finiteFieldPoints(curveA, curveB, p);
+  var pointSet = {};
+  pts.forEach(function (pt) { pointSet[pt.x + ',' + pt.y] = true; });
+
+  var row = data.rows.find(function (r) { return r.p === p; });
+  var affineCount = pts.length;
+  var totalCount = affineCount + 1;
+  var ap = p + 1 - totalCount;
+
+  fieldGridHost.innerHTML = '';
+  var W = 660, H = 220;
+  var gridSize = 150;
+  var cell = gridSize / p;
+  var originX = 36, originY = 28;
+  var svg = d3.select(fieldGridHost).append('svg')
+    .attr('viewBox', '0 0 ' + W + ' ' + H)
+    .attr('width', '100%').style('max-width', W + 'px');
+
+  for (var gx = 0; gx < p; gx++) {
+    for (var gy = 0; gy < p; gy++) {
+      var active = !!pointSet[gx + ',' + gy];
+      var px = originX + gx * cell;
+      var py = originY + (p - 1 - gy) * cell;
+      svg.append('rect')
+        .attr('x', px).attr('y', py)
+        .attr('width', cell).attr('height', cell)
+        .attr('fill', active ? 'var(--accent-light)' : '#fff')
+        .attr('stroke', '#e2e2e8').attr('stroke-width', 0.7);
+      svg.append('circle')
+        .attr('cx', px + cell / 2).attr('cy', py + cell / 2)
+        .attr('r', active ? Math.max(3.2, cell * 0.22) : 1.4)
+        .attr('fill', active ? 'var(--c-point)' : '#cbd5e1')
+        .attr('fill-opacity', active ? 0.9 : 0.45);
+    }
+  }
+
+  for (var i = 0; i < p; i++) {
+    svg.append('text').attr('x', originX + i * cell + cell / 2).attr('y', originY + gridSize + 15)
+      .attr('text-anchor', 'middle').attr('font-size', 10).attr('fill', 'var(--text-2)').text(i);
+    svg.append('text').attr('x', originX - 10).attr('y', originY + (p - 1 - i) * cell + cell / 2 + 3)
+      .attr('text-anchor', 'end').attr('font-size', 10).attr('fill', 'var(--text-2)').text(i);
+  }
+  svg.append('text').attr('x', originX + gridSize / 2).attr('y', H - 16)
+    .attr('text-anchor', 'middle').attr('font-size', 11).attr('fill', 'var(--text-2)').text('x in F' + p);
+  svg.append('text').attr('x', 16).attr('y', originY + gridSize / 2)
+    .attr('text-anchor', 'middle').attr('font-size', 11).attr('fill', 'var(--text-2)')
+    .attr('transform', 'rotate(-90 16 ' + (originY + gridSize / 2) + ')').text('y in F' + p);
+
+  var textX = 230;
+  svg.append('text').attr('x', textX).attr('y', 48)
+    .attr('font-size', 14).attr('font-weight', 700).attr('fill', 'var(--text)')
+    .text(formatEq(curveA, curveB) + ' mod ' + p);
+  svg.append('text').attr('x', textX).attr('y', 82)
+    .attr('font-size', 13).attr('fill', 'var(--c-point)').attr('font-weight', 700)
+    .text(affineCount + ' affine points + O = ' + totalCount);
+  svg.append('text').attr('x', textX).attr('y', 110)
+    .attr('font-size', 12).attr('fill', 'var(--text-2)')
+    .text('a_p = p + 1 - #E(F_p) = ' + (ap >= 0 ? '+' : '') + ap);
+  svg.append('text').attr('x', textX).attr('y', 140)
+    .attr('font-size', 12).attr('fill', row && row.bad ? '#94a3b8' : 'var(--c-metric)')
+    .text(row && row.bad ? 'bad reduction: p divides the discriminant' : 'good reduction: this a_p enters the modular form');
+
+  fieldGridStatus.textContent = 'The table row for p = ' + p + ' is exactly this count, with the point at infinity included.';
+}
 
 function updateBuilder() {
   curveA = +sliderA.value;
@@ -305,6 +410,7 @@ function updateBuilder() {
     goodCount + ' primes of good reduction out of ' + PRIMES.length;
 
   updateChart(data);
+  updateFieldGrid(data);
 }
 
 sliderA.addEventListener('input', updateBuilder);
@@ -314,6 +420,13 @@ sliderB.addEventListener('input', updateBuilder);
 d3.selectAll('#builder-controls + .controls .btn').on('click', function () {
   sliderA.value = this.getAttribute('data-a');
   sliderB.value = this.getAttribute('data-b');
+  updateBuilder();
+});
+
+d3.selectAll('#field-prime-controls .btn').on('click', function () {
+  d3.selectAll('#field-prime-controls .btn').classed('active', false);
+  d3.select(this).classed('active', true);
+  selectedFieldPrime = parseInt(this.getAttribute('data-p'), 10);
   updateBuilder();
 });
 
