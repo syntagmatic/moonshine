@@ -865,15 +865,37 @@ function abbrev(name, maxLen) {
     d3.select("#mk-status").text(`${trail.length} steps total. Now at: ${pos}`);
   });
 
-  d3.select("#mk-reset").on("click", () => {
-    currentNode = null;
-    trail = [];
-    visitCounts = new Map();
+  function seedWalk(startId, steps) {
+    if (!startId || !nodeMap.get(startId)) return;
+    currentNode = startId;
+    trail = [startId];
+    visitCounts = new Map([[startId, 1]]);
+    let pos = startId;
+    for (let i = 0; i < steps; i++) {
+      const next = pickNext(pos);
+      if (!next) break;
+      pos = next;
+      trail.push(pos);
+      visitCounts.set(pos, (visitCounts.get(pos) || 0) + 1);
+    }
+    currentNode = pos;
     highlightCurrent();
     updateTrail();
     updateSteady();
-    d3.select("#mk-status").text("Click a node to start");
+    d3.select("#mk-status").text(`${trail.length} steps from ${startId} (default). Click any node to walk from there.`);
+  }
+
+  d3.select("#mk-reset").on("click", () => {
+    // Reset returns to the seeded default rather than blanking the figure,
+    // so the steady-state pattern remains visible without a re-walk.
+    seedWalk(defaultStart, 100);
   });
+
+  // Seed: pick a hub-y starting node so the figure teaches the steady-state
+  // pattern before any interaction. Prefer the canonical jam launchpad.
+  const preferredStarts = ["Playing In The Band", "Drums", "The Other One"];
+  const defaultStart = preferredStarts.find(id => outgoing.has(id)) || outKeys[0];
+  seedWalk(defaultStart, 100);
 })();
 
 
@@ -883,58 +905,69 @@ function abbrev(name, maxLen) {
 (function() {
   const container = d3.select("#bars-svg");
   const top20 = segues.slice(0, 20);
-
-  const margin = { top: 10, right: 50, bottom: 10, left: 260 };
   const barH = 24;
-  const W = Math.min(700, container.node().getBoundingClientRect().width);
-  const H = margin.top + margin.bottom + top20.length * barH;
-
-  const svg = container.append("svg")
-    .attr("width", W).attr("height", H)
-    .attr("viewBox", [0, 0, W, H]);
-
-  const x = d3.scaleLinear()
-    .domain([0, d3.max(top20, d => d.count)])
-    .range([0, W - margin.left - margin.right]);
-
-  const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
-
-  // Color scale for bars
+  // Color scale for bars (constant; doesn't depend on layout)
   const barColor = d3.scaleSequential(d3.interpolateWarm)
     .domain([top20[top20.length - 1].count, top20[0].count]);
 
-  top20.forEach((d, i) => {
-    const y = i * barH;
-    const label = `${d.source} > ${d.target}`;
+  function render() {
+    container.selectAll("*").remove();
+    const cw = container.node().getBoundingClientRect().width || 700;
+    const W = Math.min(700, cw);
+    // Narrower viewports get tighter label and right-side budget so the inner
+    // plot area can never collapse to <= 0 (which produced negative rect widths).
+    const narrow = W < 520;
+    const margin = narrow
+      ? { top: 10, right: 36, bottom: 10, left: 140 }
+      : { top: 10, right: 50, bottom: 10, left: 260 };
+    const labelChars = narrow ? 18 : 38;
+    // Final defensive clamp: the bar zone is always at least 60px wide.
+    const inner = Math.max(60, W - margin.left - margin.right);
+    const H = margin.top + margin.bottom + top20.length * barH;
 
-    // Label
-    g.append("text")
-      .attr("x", -6).attr("y", y + barH / 2 + 1)
-      .attr("text-anchor", "end")
-      .attr("font-size", "10px")
-      .attr("fill", "#333")
-      .attr("dy", "0.35em")
-      .text(abbrev(label, 38));
+    const svg = container.append("svg")
+      .attr("width", W).attr("height", H)
+      .attr("viewBox", [0, 0, W, H]);
 
-    // Bar
-    g.append("rect")
-      .attr("x", 0).attr("y", y + 3)
-      .attr("width", x(d.count)).attr("height", barH - 6)
-      .attr("fill", barColor(d.count))
-      .attr("rx", 2)
-      .on("mouseover", (evt) => showTip(evt, `<strong>${label}</strong><br>${d.count} segues`))
-      .on("mousemove", (evt) => tip.style("left", (evt.clientX + 12) + "px").style("top", (evt.clientY - 10) + "px"))
-      .on("mouseout", hideTip);
+    const x = d3.scaleLinear()
+      .domain([0, d3.max(top20, d => d.count)])
+      .range([0, inner]);
 
-    // Count label
-    g.append("text")
-      .attr("x", x(d.count) + 4).attr("y", y + barH / 2 + 1)
-      .attr("dy", "0.35em")
-      .attr("font-size", "10px")
-      .attr("font-family", "var(--mono-font)")
-      .attr("fill", "#666")
-      .text(d.count);
-  });
+    const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+
+    top20.forEach((d, i) => {
+      const y = i * barH;
+      const label = `${d.source} > ${d.target}`;
+
+      g.append("text")
+        .attr("x", -6).attr("y", y + barH / 2 + 1)
+        .attr("text-anchor", "end")
+        .attr("font-size", "10px")
+        .attr("fill", "#333")
+        .attr("dy", "0.35em")
+        .text(abbrev(label, labelChars));
+
+      g.append("rect")
+        .attr("x", 0).attr("y", y + 3)
+        .attr("width", x(d.count)).attr("height", barH - 6)
+        .attr("fill", barColor(d.count))
+        .attr("rx", 2)
+        .on("mouseover", (evt) => showTip(evt, `<strong>${label}</strong><br>${d.count} segues`))
+        .on("mousemove", (evt) => tip.style("left", (evt.clientX + 12) + "px").style("top", (evt.clientY - 10) + "px"))
+        .on("mouseout", hideTip);
+
+      g.append("text")
+        .attr("x", x(d.count) + 4).attr("y", y + barH / 2 + 1)
+        .attr("dy", "0.35em")
+        .attr("font-size", "10px")
+        .attr("font-family", "var(--mono-font)")
+        .attr("fill", "#666")
+        .text(d.count);
+    });
+  }
+
+  render();
+  new ResizeObserver(render).observe(container.node());
 })();
 
 
@@ -961,9 +994,16 @@ function abbrev(name, maxLen) {
       spans: [[1972, 1995]], revivals: [] }
   ];
 
-  const margin = { top: 20, right: 30, bottom: 30, left: 260 };
   const rowH = 50;
-  const W = Math.min(700, container.node().getBoundingClientRect().width);
+  const cw = container.node().getBoundingClientRect().width || 700;
+  const W = Math.min(700, cw);
+  const narrow = W < 520;
+  const margin = narrow
+    ? { top: 20, right: 30, bottom: 30, left: 130 }
+    : { top: 20, right: 30, bottom: 30, left: 260 };
+  const labelChars = narrow ? 16 : 36;
+  const innerLeft = margin.left;
+  const innerRight = Math.max(margin.left + 80, W - margin.right);
   const H = margin.top + margin.bottom + timelinePairs.length * rowH;
 
   const svg = container.append("svg")
@@ -972,7 +1012,7 @@ function abbrev(name, maxLen) {
 
   const x = d3.scaleLinear()
     .domain([1966, 1996])
-    .range([margin.left, W - margin.right]);
+    .range([innerLeft, innerRight]);
 
   const y = d3.scaleBand()
     .domain(timelinePairs.map(d => d.label))
@@ -1010,7 +1050,7 @@ function abbrev(name, maxLen) {
       .attr("dy", "0.35em")
       .attr("font-size", "10px")
       .attr("fill", "#333")
-      .text(abbrev(pair.label, 36));
+      .text(abbrev(pair.label, labelChars));
 
     // Thin background line for the row (full 1966–1996 axis)
     svg.append("line")
@@ -1081,16 +1121,21 @@ function abbrev(name, maxLen) {
   const segueMap = new Map();
   segues.forEach(d => segueMap.set(`${d.source}|||${d.target}`, d.count));
 
-  const margin = { top: 10, right: 20, bottom: 10, left: 160 };
+  const cw = container.node().getBoundingClientRect().width || 700;
+  const W = Math.min(700, cw);
+  const narrow = W < 520;
+  const margin = narrow
+    ? { top: 10, right: 12, bottom: 10, left: 90 }
+    : { top: 10, right: 20, bottom: 10, left: 160 };
   const rowH = 52;
-  const W = Math.min(700, container.node().getBoundingClientRect().width);
   const H = margin.top + margin.bottom + chains.length * rowH;
 
   const svg = container.append("svg")
     .attr("width", W).attr("height", H)
     .attr("viewBox", [0, 0, W, H]);
 
-  const contentW = W - margin.left - margin.right;
+  // Defensive clamp so the chain content never collapses to a non-positive width.
+  const contentW = Math.max(60, W - margin.left - margin.right);
 
   // Arrow width scale based on segue counts
   const allCounts = [];

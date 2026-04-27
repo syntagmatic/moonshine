@@ -301,6 +301,14 @@ svg text {
 .t-song { color: var(--c-song); font-weight: 600; }
 .t-era { color: var(--c-era); font-weight: 600; }
 .t-venue { color: var(--c-venue); font-weight: 600; }
+@media (prefers-reduced-motion: reduce) {
+  html:not([data-motion="full"]) *,
+  html:not([data-motion="full"]) *::before,
+  html:not([data-motion="full"]) *::after {
+    animation-duration: 0s !important;
+    transition-duration: 0s !important;
+  }
+}
 </style>
 </head>
 <body>
@@ -333,7 +341,7 @@ Read the blocks of warm color as packs of songs that travel together. The matrix
 
 <div class="figure figure-wide" id="fig-matrix">
   <div id="matrix-viz"></div>
-  <div class="figure-caption"><span class="figure-label">Figure 1.</span> Symmetric co-occurrence matrix for the top 30 songs. Rows and columns sorted by cluster. Cell color = number of shared shows. Diagonal = total plays. Hover for details.</div>
+  <div class="figure-caption"><span class="figure-label">Figure 1.</span> Symmetric co-occurrence matrix for the top 30 songs (18 on narrow viewports). Rows and columns sorted by cluster. Cell color = number of shared shows. Diagonal = total plays. The matrix scrolls horizontally on small screens. Hover for details.</div>
 </div>
 
 <p>
@@ -645,87 +653,97 @@ function hideTooltip() { tooltip.style("opacity", 0); }
 // ══════════════════════════════════════════
 (function() {
   const container = d3.select("#matrix-viz");
-  const fullW = container.node().getBoundingClientRect().width || 680;
-  const margin = { top: 130, right: 10, bottom: 10, left: 130 };
-  const n = top30.length;
-  const cellSize = Math.max(12, Math.floor((fullW - margin.left - margin.right) / n));
-  const w = cellSize * n;
-  const svg = container.append("svg")
-    .attr("width", w + margin.left + margin.right)
-    .attr("height", w + margin.top + margin.bottom);
+  // Allow horizontal scroll on narrow viewports if the matrix still overflows
+  // after we trim margins and cell size — the user can pan to see all rows.
+  container.style("overflow-x", "auto").style("-webkit-overflow-scrolling", "touch");
 
-  const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
-
-  // Build matrix data
   const maxCount = d3.max(RAW, d => d.count);
   const color = d3.scaleSequential(d3.interpolateYlOrRd).domain([0, maxCount * 0.5]);
 
-  const cells = [];
-  for (let i = 0; i < n; i++) {
-    for (let j = 0; j < n; j++) {
-      const a = top30[i], b = top30[j];
-      let val;
-      if (i === j) {
-        val = songTotals[a] || 0;
-      } else {
-        val = getPair(a, b);
+  function render() {
+    container.selectAll("svg").remove();
+    const fullW = container.node().getBoundingClientRect().width || 680;
+    const narrow = fullW < 520;
+    // On narrow viewports, show fewer songs and pull in the label gutters; on
+    // desktop keep the full top-30 view that the figure caption refers to.
+    const n = narrow ? Math.min(18, top30.length) : top30.length;
+    const songs = top30.slice(0, n);
+    const margin = narrow
+      ? { top: 90, right: 8, bottom: 8, left: 90 }
+      : { top: 130, right: 10, bottom: 10, left: 130 };
+    const minCell = narrow ? 9 : 12;
+    const cellSize = Math.max(minCell, Math.floor((fullW - margin.left - margin.right) / n));
+    const w = cellSize * n;
+    const svgW = w + margin.left + margin.right;
+    const svgH = w + margin.top + margin.bottom;
+
+    const svg = container.append("svg").attr("width", svgW).attr("height", svgH);
+    const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+
+    const cells = [];
+    for (let i = 0; i < n; i++) {
+      for (let j = 0; j < n; j++) {
+        const a = songs[i], b = songs[j];
+        const val = (i === j) ? (songTotals[a] || 0) : getPair(a, b);
+        cells.push({ i, j, a, b, val, diag: i === j });
       }
-      cells.push({ i, j, a, b, val, diag: i === j });
     }
+
+    g.selectAll("rect")
+      .data(cells)
+      .join("rect")
+      .attr("x", d => d.j * cellSize)
+      .attr("y", d => d.i * cellSize)
+      .attr("width", cellSize - 1)
+      .attr("height", cellSize - 1)
+      .attr("rx", 1)
+      .attr("fill", d => d.val === 0 ? "#f5f5f5" : color(d.val))
+      .attr("stroke", d => d.diag ? "#333" : "none")
+      .attr("stroke-width", d => d.diag ? 1.5 : 0)
+      .on("mouseover", (evt, d) => {
+        const label = d.diag
+          ? `<strong>${d.a}</strong><br>${d.val} total shows`
+          : `<strong>${d.a}</strong> + <strong>${d.b}</strong><br>${d.val} shows together`;
+        showTooltip(evt, label);
+      })
+      .on("mousemove", (evt, d) => {
+        const label = d.diag
+          ? `<strong>${d.a}</strong><br>${d.val} total shows`
+          : `<strong>${d.a}</strong> + <strong>${d.b}</strong><br>${d.val} shows together`;
+        showTooltip(evt, label);
+      })
+      .on("mouseout", hideTooltip);
+
+    const labelChars = narrow ? 12 : 18;
+    g.selectAll(".row-label")
+      .data(songs)
+      .join("text")
+      .attr("class", "row-label")
+      .attr("x", -4)
+      .attr("y", (d, i) => i * cellSize + cellSize / 2)
+      .attr("text-anchor", "end")
+      .attr("dominant-baseline", "middle")
+      .attr("font-size", Math.min(10, cellSize - 2))
+      .attr("fill", d => clusterColors[clusterMap[d]] || "#666")
+      .attr("font-weight", 600)
+      .text(d => d.length > labelChars ? d.slice(0, labelChars - 2) + "..." : d);
+
+    g.selectAll(".col-label")
+      .data(songs)
+      .join("text")
+      .attr("class", "col-label")
+      .attr("x", 0)
+      .attr("y", 0)
+      .attr("transform", (d, i) => `translate(${i * cellSize + cellSize / 2},-4) rotate(-55)`)
+      .attr("text-anchor", "start")
+      .attr("font-size", Math.min(10, cellSize - 2))
+      .attr("fill", d => clusterColors[clusterMap[d]] || "#666")
+      .attr("font-weight", 600)
+      .text(d => d.length > labelChars ? d.slice(0, labelChars - 2) + "..." : d);
   }
 
-  g.selectAll("rect")
-    .data(cells)
-    .join("rect")
-    .attr("x", d => d.j * cellSize)
-    .attr("y", d => d.i * cellSize)
-    .attr("width", cellSize - 1)
-    .attr("height", cellSize - 1)
-    .attr("rx", 1)
-    .attr("fill", d => d.val === 0 ? "#f5f5f5" : color(d.val))
-    .attr("stroke", d => d.diag ? "#333" : "none")
-    .attr("stroke-width", d => d.diag ? 1.5 : 0)
-    .on("mouseover", (evt, d) => {
-      const label = d.diag
-        ? `<strong>${d.a}</strong><br>${d.val} total shows`
-        : `<strong>${d.a}</strong> + <strong>${d.b}</strong><br>${d.val} shows together`;
-      showTooltip(evt, label);
-    })
-    .on("mousemove", (evt, d) => {
-      const label = d.diag
-        ? `<strong>${d.a}</strong><br>${d.val} total shows`
-        : `<strong>${d.a}</strong> + <strong>${d.b}</strong><br>${d.val} shows together`;
-      showTooltip(evt, label);
-    })
-    .on("mouseout", hideTooltip);
-
-  // Row labels
-  g.selectAll(".row-label")
-    .data(top30)
-    .join("text")
-    .attr("class", "row-label")
-    .attr("x", -4)
-    .attr("y", (d, i) => i * cellSize + cellSize / 2)
-    .attr("text-anchor", "end")
-    .attr("dominant-baseline", "middle")
-    .attr("font-size", Math.min(10, cellSize - 2))
-    .attr("fill", d => clusterColors[clusterMap[d]] || "#666")
-    .attr("font-weight", 600)
-    .text(d => d.length > 18 ? d.slice(0, 16) + "..." : d);
-
-  // Col labels
-  g.selectAll(".col-label")
-    .data(top30)
-    .join("text")
-    .attr("class", "col-label")
-    .attr("x", 0)
-    .attr("y", 0)
-    .attr("transform", (d, i) => `translate(${i * cellSize + cellSize / 2},-4) rotate(-55)`)
-    .attr("text-anchor", "start")
-    .attr("font-size", Math.min(10, cellSize - 2))
-    .attr("fill", d => clusterColors[clusterMap[d]] || "#666")
-    .attr("font-weight", 600)
-    .text(d => d.length > 18 ? d.slice(0, 16) + "..." : d);
+  render();
+  new ResizeObserver(render).observe(container.node());
 })();
 
 // ══════════════════════════════════════════
