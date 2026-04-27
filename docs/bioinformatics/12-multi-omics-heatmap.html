@@ -110,6 +110,17 @@ svg .group-name { font-size: 10px; font-weight: 700; fill: var(--text); letter-s
 }
 
 @media (max-width: 640px) { .figure-wide { margin-left: 0; margin-right: 0; } h1 { font-size: 1.75rem; } }
+@media (prefers-reduced-motion: reduce) {
+  html:not([data-motion="full"]) *,
+  html:not([data-motion="full"]) *::before,
+  html:not([data-motion="full"]) *::after {
+    transition-duration: 0.001ms !important;
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+  html:not([data-motion="full"]) .figure canvas { outline: 2px dashed var(--border); outline-offset: -2px; }
+}
 </style>
 </head>
 <body>
@@ -372,9 +383,10 @@ function makePatient(rng, cluster, idx) {
     }
   });
 
-  // TMB
-  p.tmb = Object.values(p.mut).filter(m => m && m.type).length
-         + (cluster === 2 ? Math.floor(rn(8, 3)) : Math.floor(rn(1, 1)));
+  // TMB (mutation count + noisy passenger load); clamp to >= 0 since the
+  // normal-noise term can otherwise sample a negative value.
+  p.tmb = Math.max(0, Object.values(p.mut).filter(m => m && m.type).length
+         + (cluster === 2 ? Math.floor(rn(8, 3)) : Math.floor(rn(1, 1))));
   p.tp53_mutant = !!(p.mut.TP53 && p.mut.TP53.type);
   return p;
 }
@@ -388,24 +400,32 @@ for (let c = 0; c < CLUSTER_SIZES.length; c++) {
 
 // ─── Shared mutation-cell glyph renderer (used by Figures 1 & 2) ────────
 function drawGlyph(parent, x, y, w, h, ex) {
-  const inset = Math.max(0.5, Math.min(w, h) * 0.12);
-  const barH = Math.max(3, Math.min(h - 2, h * 0.42));
+  // Sanitize: a stray transient size during transition / responsive layout
+  // can pass w<=0 or h<=0; bail without emitting invalid SVG attrs.
+  const wSafe = Math.max(0, w), hSafe = Math.max(0, h);
   const g = parent.append('g').attr('transform', `translate(${x},${y})`);
   g.append('rect')
-    .attr('x', 0).attr('y', 0).attr('width', w).attr('height', h)
+    .attr('x', 0).attr('y', 0).attr('width', wSafe).attr('height', hSafe)
     .attr('fill', ex.cnv !== 0 ? cnColor(ex.cnv) : PAL.cnNeutral)
     .attr('stroke', '#fff').attr('stroke-width', 0.6);
+  // Below ~3px the type glyph is unreadable anyway; skip it rather than
+  // emit negative width/height rects when the inset eats the whole cell.
+  if (wSafe < 3 || hSafe < 3) return g;
+
+  const inset = Math.min(Math.max(0.5, Math.min(wSafe, hSafe) * 0.12), Math.min(wSafe, hSafe) / 2 - 0.25);
+  const innerW = Math.max(0.5, wSafe - 2 * inset);
+  const barH = Math.max(0.5, Math.min(hSafe - 2 * inset, hSafe * 0.42));
   if (ex.type === 'missense') {
-    g.append('rect').attr('x', inset).attr('y', inset).attr('width', w - 2*inset).attr('height', h - 2*inset)
+    g.append('rect').attr('x', inset).attr('y', inset).attr('width', innerW).attr('height', Math.max(0.5, hSafe - 2 * inset))
       .attr('fill', PAL.missense);
   } else if (ex.type === 'truncating') {
-    g.append('rect').attr('x', inset).attr('y', h / 2 - barH / 2).attr('width', w - 2*inset).attr('height', barH)
+    g.append('rect').attr('x', inset).attr('y', hSafe / 2 - barH / 2).attr('width', innerW).attr('height', barH)
       .attr('fill', PAL.truncating);
   } else if (ex.type === 'inframe') {
-    g.append('rect').attr('x', inset).attr('y', h / 2 - barH / 2).attr('width', w - 2*inset).attr('height', barH)
+    g.append('rect').attr('x', inset).attr('y', hSafe / 2 - barH / 2).attr('width', innerW).attr('height', barH)
       .attr('fill', PAL.inframe);
   } else if (ex.type === 'fusion') {
-    const cx = w / 2, cy = h / 2, r = Math.min(w, h) * 0.32;
+    const cx = wSafe / 2, cy = hSafe / 2, r = Math.min(wSafe, hSafe) * 0.32;
     [0, 60, 120].forEach(a => {
       const t = a * Math.PI / 180;
       g.append('line')
