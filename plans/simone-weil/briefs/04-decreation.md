@@ -14,10 +14,9 @@ The page should connect decreation to attention. If attention is receptive conta
 
 ## Figures
 
-1. **Self/world boundary** (interactive): the reader changes the opacity of self-projections over a scene. Decreation does not erase the scene or the observer; it removes possessive overlays.
-2. **Center shift** (interactive): a coordinate plane initially centered on "me" recenters on reality, need, and the good. The same events take different positions after the shift.
-3. **False decreation warnings** (static cards): self-hatred, passivity, moral vanity, and aestheticized suffering contrasted with actual decreation.
-4. **Attention pipeline** (static/interactive): wound -> ego reaction -> void -> attention -> truthful contact.
+1. **Self/world boundary → center shift** (interactive): two views of the same figure. First view: the reader changes the opacity of self-projections layered over a scene — decreation does not erase the scene or the observer but removes possessive overlays (`WEIL.overlayLayers`). Second view, revealed by a toggle: the same coordinate plane recenters from "me" to reality, need, and the good — the same events take different positions after the shift. Both views are a continuous transform, not separate diagrams.
+2. **False decreation warnings** (static cards): self-hatred, passivity, moral vanity, and aestheticized suffering contrasted with actual decreation.
+3. **Attention pipeline** (static/interactive): wound → ego reaction → void → attention → truthful contact.
 
 ## Key terms
 

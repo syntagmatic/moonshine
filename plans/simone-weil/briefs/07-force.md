@@ -17,7 +17,7 @@ The explainer should connect this to *Oppression and Liberty*: power is not just
 ## Figures
 
 1. **Force network** (interactive): ruler, soldier, worker, prisoner, crowd, and institution nodes exchange force. Dragging power to one node increases its exposure as well as its command.
-2. **Thingification scale** (interactive): person -> instrument -> obstacle -> corpse. The page should handle this soberly, without sensational visual treatment.
+2. **Thingification scale** (interactive): person → instrument → obstacle → corpse. The page should handle this soberly, without sensational visual treatment. At the right end (corpse), the sign ("thing") is fully severed from the referent (the person who was there); render this endpoint with `WEIL.severanceLink` at severance = 1 so the visual convention matches 08, 09, 10, and 11.
 3. **Possession illusion** (interactive): a commander appears to control force, then chance, fear, logistics, and prestige redirect the system.
 4. **Gravity bridge card** (static): force in politics and gravity in the notebooks shown as related but not identical concepts.
 

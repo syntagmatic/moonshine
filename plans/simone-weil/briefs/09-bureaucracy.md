@@ -16,7 +16,7 @@ This explainer should make abstraction visible. Weil is not making a lazy compla
 
 ## Figures
 
-1. **Report/order ladder** (interactive): reality becomes metrics as it moves upward; commands become blunt imperatives as they move downward. Each layer loses some contact. Label each upward rung with the referent lost (concrete particulars → aggregate metric → trend → headline) and each downward rung with the referent lost (purpose → directive → procedure → quota). What travels up and down is signs; the referent does not travel with them.
+1. **Report/order ladder** (interactive): reality becomes metrics as it moves upward; commands become blunt imperatives as they move downward. Each layer loses some contact. Label each upward rung with the referent lost (concrete particulars → aggregate metric → trend → headline) and each downward rung with the referent lost (purpose → directive → procedure → quota). What travels up and down is signs; the referent does not travel with them. Use `WEIL.stackedLadder` for the rung structure and `WEIL.severanceLink` on each rung to show the sign↔referent link attenuating as distance from reality increases.
 2. **Means/end reversal** (interactive): a tool created for a human purpose gradually becomes the purpose. The reader can watch labels swap places.
 3. **Specialist language fog** (interactive): terms clarify when connected to practice and obscure when used as prestige markers.
 4. **Great Beast card** (static): public opinion, collectivity, and social worship explained without overloading the page with theology.

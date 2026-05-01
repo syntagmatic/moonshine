@@ -16,11 +16,12 @@ This ending should also bring in *The Need for Roots*. Weil's late politics begi
 
 ## Figures
 
-1. **Liberty under necessity** (interactive): three models compared: arbitrary choice, domination, and lucid action within constraints. Only the third preserves contact with reality.
-2. **Root system** (interactive concept map): work, place, past, community, truth, responsibility, and liberty shown as roots that can be nourished or cut.
-3. **Consent vs. submission** (interactive): consent to necessity, obedience to domination, and attention to obligation are placed in different relational diagrams.
-4. **Series synthesis** (static/interactive): the full arc in two paths — inner path: gravity (false frame generated) → attention (frame suspended) → decreation (frame cleared) → grace (true contact received); social path: force (false frame coerced) → monsters (false frame institutionalized) → method (frame checked) → liberty (true contact sustained). Both paths converge on the same move: sign kept in contact with thing. The synthesis figure should show both paths and their convergence without flattening them into one.
-5. **Honest reading card** (static): anti-Judaism/reception caution, posthumous editions, and the danger of sanctifying Weil.
+1. **Liberty under necessity** (interactive): three models compared: arbitrary choice, domination, and lucid action within constraints. Only the third preserves contact with reality (`WEIL.splitArrangements`).
+2. **Root system** (interactive concept map): work, place, past, community, truth, responsibility, and liberty shown as roots that can be nourished or cut. Bespoke layout — the only radial figure in the series.
+3. **Series synthesis** (static/interactive): the full arc in two paths — inner path: gravity (false frame generated) → attention (frame suspended) → decreation (frame cleared) → grace (true contact received); social path: force (false frame coerced) → monsters (false frame institutionalized) → method (frame checked) → liberty (true contact sustained). Both paths converge on the same move: sign kept in contact with thing. The synthesis figure should show both paths and their convergence without flattening them into one. Bespoke layout. The Act I synthesis map in 06 is the inner path alone; this figure adds the social path and the convergence point.
+4. **Honest reading card** (static): anti-Judaism/reception caution, posthumous editions, and the danger of sanctifying Weil.
+
+*Note: "Consent vs. submission" is dropped here; the distinction is handled as figure 3 in explainer 06 (consent distinction, Act I, inner emphasis). Reference back to 06 in caption.*
 
 ## Key terms
 

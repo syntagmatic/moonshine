@@ -173,7 +173,8 @@ The `sources/` folder holds quote anchors and source-routing notes for implement
 - [x] **Phase 0** - research grounding and locked series plan recorded.
 - [x] **Phase 1** - write 12 briefs.
 - [x] **Phase 1a** - source packet, critical quote anchors, and vocabulary-connection notes.
-- [ ] **Phase 2** - build shared visual language and series index.
-- [ ] **Phase 3** - build Act I explainers.
-- [ ] **Phase 4** - build Act II explainers.
+- [x] **Phase 1b** - visualization re-evaluation: figure audit, consolidation (~46 figures), and shared lib spec. Six cross-explainer primitives identified for `weil-viz.js`: `severanceLink`, `forceField`, `overlayLayers`, `stackedLadder`, `splitArrangements`, `quoteCard`. Implementation order: `weil-viz.js` → `index.html` → 02 Attention → 11 Technique → 01 Gravity → Act I remainder → Act II remainder → 12 Liberty.
+- [ ] **Phase 2** - build `docs/simone-weil/lib/weil-viz.js` and `docs/simone-weil/index.html`.
+- [ ] **Phase 3** - build Act I explainers (02 first, then 01, 03–06).
+- [ ] **Phase 4** - build Act II explainers (11 first, then 07–10, then 12).
 - [ ] **Phase 5** - root index entry, cross-reference pass, source-caution pass, mobile/browser audit.

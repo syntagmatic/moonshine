@@ -19,7 +19,7 @@ War is also where all three monsters converge. Money funds it; mechanization fig
 1. **Escalation loop** (interactive): threat -> fear -> mobilization -> prestige -> retaliation -> greater threat. The reader can dampen one variable and see why the loop is hard to stop.
 2. **Purpose consumption** (interactive): initial aims shrink as logistics, discipline, propaganda, and survival demands expand.
 3. **Person-to-thing battlefield map** (static/interactive): shows the thingifying effects of death, terror, command, and captivity without graphic imagery.
-4. **Victory trap card** (static): explains how victory can become an idol that justifies the machinery it was supposed to end. Include a short annotation showing victory, honor, prestige, and necessity as signs that have severed contact with the human cost they were supposed to represent — this ties the page explicitly to explainer 11's diagnosis.
+4. **Victory trap card** (static): explains how victory can become an idol that justifies the machinery it was supposed to end. Include a short annotation showing victory, honor, prestige, and necessity as signs that have severed contact with the human cost they were supposed to represent — this ties the page explicitly to explainer 11's diagnosis. Use `WEIL.severanceLink` at severance = 1 for each of the four signs to maintain visual consistency with 07, 08, 09, and 11.
 
 ## Key terms
 

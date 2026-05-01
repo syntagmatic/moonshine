@@ -17,7 +17,7 @@ This page prepares the reader for Weil's way of holding together necessity and g
 ## Figures
 
 1. **Resolution map** (interactive): when a frame meets a reality it cannot absorb, it can be erased by denial, flattened by slogan, escaped by fantasy, or held by attention. Each route changes the diagram differently. Label the first three as false resolutions that preserve the frame at the cost of the real; label the fourth as the move that keeps contact.
-2. **Means/end reversal** (interactive): political tools become ends in themselves. The figure shows how contradiction appears when liberation uses domination's machinery.
+2. **Frame/reality collision examples** (interactive): four short cases of the same structure — means reversing into ends in revolutionary politics; quota decoupling from the worker's actual effort; honor decoupling from the human cost of war; an ideological category failing a concrete person it was supposed to describe. Each is a collision between frame and what it cannot absorb, and each can follow any of the four resolution-map routes. The figure shows the abstract structure from the resolution map made concrete, not a standalone argument about any one case. *[Primary treatment of means/end reversal as an interactive headline figure is in 09 — Bureaucracy.]*
 3. **Necessity/good tension** (static/interactive): two vectors pull on the same point. The page explains why adding them into a simple average loses the problem.
 4. **Logic caution card** (static): contradiction is not permission for sloppy thought.
 

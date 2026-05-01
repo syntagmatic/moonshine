@@ -17,9 +17,9 @@ The central distinction is between methodical action and mechanical obedience. W
 
 ## Figures
 
-1. **Production rhythm** (interactive): a task sequence speeds up while control over method decreases. The figure tracks fatigue, error fear, and attention loss. Surface the quota and the wage as two separate sign-tracks running alongside the task: as the task accelerates, both signs stabilize or grow while their referents (the worker's thought, body, actual labor value) fade. This is the two-monster overlay.
+1. **Production rhythm** (interactive): a task sequence speeds up while control over method decreases. The figure tracks fatigue, error fear, and attention loss. Surface the quota and the wage as two separate sign-tracks running alongside the task: as the task accelerates, both signs stabilize or grow while their referents (the worker's thought, body, actual labor value) fade. This is the two-monster overlay. Use `WEIL.severanceLink` for the quota↔effort and wage↔labor-value links, with severance increasing as the rhythm accelerates.
 2. **Thought/action split** (interactive): in skilled work, perception, judgment, and movement form a loop; in oppressive work, command and execution are separated.
-3. **Factory day layers** (static/interactive): bodily fatigue, social humiliation, economic dependence, and time pressure stack into affliction. Annotate each layer with which monster severs which referent: mechanization severs body feedback; money severs need from wage; humiliation is the social result when both severances hold.
+3. **Factory day layers** (static/interactive): bodily fatigue, social humiliation, economic dependence, and time pressure stack into affliction. Annotate each layer with which monster severs which referent: mechanization severs body feedback; money severs need from wage; humiliation is the social result when both severances hold. Use `WEIL.stackedLadder` for the layer structure.
 4. **Good work / crushed work card** (static): contrast contact with necessity through craft versus domination through speed and command.
 
 ## Key terms
