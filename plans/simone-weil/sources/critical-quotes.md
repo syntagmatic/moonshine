@@ -147,8 +147,6 @@ This is the diagnostic frame for Act II. The "Algebra" chapter of *Gravity and G
 
 **Source-caution:** Weil's algebra-critique is sometimes weaponized by anti-modern conservatives into a wholesale rejection of formal reasoning. The series should make clear: her critique is specific (sign cut from referent), not Luddite. She admired Greek geometry, Pythagorean math, and the parts of formal reasoning that remained in contact with their objects. Flag this in the explainer 11 source card.
 
-**Brief implications:** See `three-monsters-brief-implications.md` for per-figure implications across explainers 08, 09, and 11, including the shared visual convention for severance.
-
 ---
 
 ## Translation note
