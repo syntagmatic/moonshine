@@ -4,7 +4,9 @@
 
 Weil often treats contradiction not as an error to tidy away but as a pressure point where thought meets reality's excess. This does not mean she celebrates confusion or rejects logic. The explainer should show a more exact distinction: some contradictions are bad thinking; others mark a limit where two necessities press on the mind at once and easy synthesis would be dishonest.
 
-This page prepares the reader for Weil's way of holding together necessity and good, gravity and grace, obedience and liberty, action and waiting. The goal is not to turn contradiction into a slogan. It is to show why Weil distrusts premature resolution: ideology, consolation, and moral vanity often work by making contradiction disappear too quickly.
+The series frame makes the structure of these genuine contradictions more precise: they appear when an interpretive frame — an ideology, a consolation, a moral category — collides with what it was supposed to describe and cannot absorb it. The frame says the world is one way; the real is another. Four responses are available: deny the collision (keep the frame), flatten it (merge both into a slogan), escape it (fantasy), or hold it (attention). The resolution map is about those four responses, not about contradiction as a general philosophical category.
+
+This page prepares the reader for Weil's way of holding together necessity and good, gravity and grace, obedience and liberty, action and waiting. The goal is not to turn contradiction into a slogan. It is to show why Weil distrusts premature resolution: ideology, consolation, and moral vanity often work by making contradiction disappear too quickly — by reinstating the false frame rather than revising contact with reality.
 
 ## Source basis
 
@@ -14,7 +16,7 @@ This page prepares the reader for Weil's way of holding together necessity and g
 
 ## Figures
 
-1. **Resolution map** (interactive): a contradiction can be erased by denial, flattened by slogan, escaped by fantasy, or held by attention. Each route changes the diagram differently.
+1. **Resolution map** (interactive): when a frame meets a reality it cannot absorb, it can be erased by denial, flattened by slogan, escaped by fantasy, or held by attention. Each route changes the diagram differently. Label the first three as false resolutions that preserve the frame at the cost of the real; label the fourth as the move that keeps contact.
 2. **Means/end reversal** (interactive): political tools become ends in themselves. The figure shows how contradiction appears when liberation uses domination's machinery.
 3. **Necessity/good tension** (static/interactive): two vectors pull on the same point. The page explains why adding them into a simple average loses the problem.
 4. **Logic caution card** (static): contradiction is not permission for sloppy thought.

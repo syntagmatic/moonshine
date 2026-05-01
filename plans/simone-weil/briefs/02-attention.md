@@ -23,7 +23,7 @@ The page should make attention feel active without making it aggressive. Weil's 
 
 - `attention`: receptive, disciplined availability.
 - `attente`: waiting.
-- `lecture`: reading, the frame through which reality is interpreted.
+- interpretive frame (*lecture*): the lens through which a person or society reads signs in the world; attention restores a true frame by suspending the self's habitual readings.
 - detachment: not indifference, but loosened self-claim.
 
 ## Misreadings to avoid
@@ -35,7 +35,7 @@ The page should make attention feel active without making it aggressive. Weil's 
 
 ## Bridge notes
 
-This page should quietly set up nearly every later page. Attention will be needed to see affliction, to resist force's imposed readings, to keep method joined to work, and to make liberty more than arbitrary choice. The visual language introduced here should recur as the main counter-symbol to gravity and force.
+This page should quietly set up nearly every later page. Attention will be needed to see affliction, to resist force's imposed readings, to keep method joined to work, and to make liberty more than arbitrary choice. The visual language introduced here should recur as the main counter-symbol to gravity and force — and to the three monsters of Act II. The spotlight and reading-layers figures are both interpretive-frame figures. The same visual logic that shows attention dissolving ego-overlays in Act I should reappear in Act II when method, clear thinking, and rootedness restore contact between sign and thing.
 
 ## Reader takeaway
 

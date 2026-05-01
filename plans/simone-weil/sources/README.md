@@ -12,7 +12,9 @@ This folder collects source anchors for the Simone Weil series. It is a working 
 
 Use short quotations on the pages. Prefer close paraphrase, diagrams, and source-aware captions. Before publishing any exact wording, verify it against the edition used for the page.
 
-The English translations of Weil are often copyrighted and vary by edition. The quote fragments here are intentionally brief. Treat them as anchors for finding the passage, not as a substitute for checking the book.
+The English translations of Weil vary significantly by edition. Core translators: Emma Craufurd (1951) for *Waiting for God*; Arthur Wills for *Gravity and Grace* and *The Need for Roots*; Mary McCarthy for "The Iliad, or the Poem of Force." Ros Schwartz's 2022 Penguin translation of *The Need for Roots* updates the language substantially. The quote fragments in `critical-quotes.md` are now mostly Tier B (consistently cited across multiple reputable sources); Tier C fragments are explicitly flagged.
+
+When a passage appears in the public domain French original (*La pesanteur et la grâce*, *L'enracinement*, etc.), the French is worth noting in a tooltip or source card even on English-language pages — it keeps the vocabulary grounded and acknowledges translation distance.
 
 ## Source Tiers
 

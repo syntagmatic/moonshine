@@ -46,18 +46,22 @@
 ## IV. Simone Weil: The Vocabulary of Spiritual Ontology
 
 ### Core Philosophical Operators
-- **Attention** — Not concentration but a *suspension* of the ego; the receptive waiting that allows truth to enter. For Simone, the highest moral and cognitive act.
-- **Decreation** — The voluntary undoing of the self to make room for God/reality; not destruction but *un-selfing*.
-- **Affliction** (*Malheur*) — Extreme suffering that strips away illusion and false consolation; a access point to the real.
-- **Necessity** — The blind, mechanical order of the world (akin to gravity); what simply *is*, without goodness or malice.
-- **The Good** — That which lies beyond necessity; what we orient toward through attention and love.
-- **Metaxu** — The Platonic "in-between": the finite as ladder to the infinite; material reality as both veil and bridge.
-- **Roots** / **Rootedness** (*Enracinement*) — The spiritual need for belonging to a place, tradition, and community.
+- **Attention** — Not concentration but a *suspension* of the ego; the receptive waiting that allows truth to enter without the interference of the self's limited perspective. The highest moral and cognitive act — also the substance of prayer and the capacity for just attention to another person's suffering.
+- **Decreation** (*Décréation*) — The withdrawal of the ego's claim to be the center, making room for God/reality; not destruction but *un-selfing*. Weil describes it paradoxically as "passive activity" and, drawing on the Bhagavad Gita, "non-active action" — the self remains present but relinquishes centerness.
+- **Affliction** (*Malheur*) — Not ordinary suffering; a simultaneous lock across embodied pain, psychological agony, social degradation, and spiritual distress. "There is not real affliction unless the event… attacks it, directly or indirectly, in all its parts, social, psychological, and physical." The social factor is essential — without it, the suffering is not affliction.
+- **Necessity** (*Nécessité*) — The blind, mechanical order of the world (akin to gravity); what simply *is*, without goodness or malice. Necessity is not opposed to liberty but is its condition: clear action within necessity, not escape from it.
+- **The Good** — That which lies beyond necessity; what we orient toward through attention and love. Not a product of willpower — approached through decreation and sustained by grace.
+- **Metaxu** — The Platonic "in-between" (Greek: μεταξύ): finite things that simultaneously separate from and connect to the Good. Weil's examples include beauty, cultural traditions, law, and labor — all of which place us into contact with reality. Metaxu are bridges, not ladders: they do not guarantee ascent but they provide genuine contact.
+- **Roots** / **Rootedness** (*Enracinement*) — "A human being has roots by virtue of his real, active, and natural participation in the life of a community which preserves in living shape certain particular treasures of the past and certain particular expectations for the future." The most important and least recognized need of the soul — structural, not sentimental.
 
 ### Social & Epistemic Terms
-- **Obedience** — Following the real as it presents itself, whether in factory work, intellectual inquiry, or prayer.
-- **The Impersonal** — The transcendence of ego in favor of what is objectively required.
-- **Void** — The experience of absence at the center of desire; not nihilism but the clearing where grace might enter.
+- **Obedience** (*Obéissance*) — Following the real as it presents itself, whether in factory work, intellectual inquiry, or prayer. Distinct from submission to human authority: obedience is owed to necessity, truth, and the Good, not to power.
+- **The Impersonal** — The transcendence of ego in favor of what is objectively required. Related to decreation but wider: the impersonal is a disposition toward any domain (mathematics, justice, neighbor) in which the self's claims become irrelevant to what is true.
+- **Void** (*Vide*) — The experience of absence at the center of desire; not nihilism but the clearing where grace might enter. The imagination constantly works to fill this void, which is why attention — the suspension of imagination's interference — is required for grace.
+- **Interpretive Frame** (*Lecture*) — The lens through which a person or society reads signs in the world. Each interpretive frame is a hypothesis about what signs refer to. A false frame reads signs without checking their referents; a true frame keeps sign and thing in contact. The three monsters of contemporary civilization (money, mechanization, algebra) are three false frames. Restoring a true frame is what `attention` does cognitively and what `decreation` does ethically.
+
+### The Algebra Critique (Distinguishing Note)
+Weil treats *geometry* and *algebra* as morally opposed approaches to formal thought, not as complementary modes of mathematics. **Geometry** retains contact between sign and form (the Pythagorean tradition, Greek mathematics, figures one can inspect); it leads "from ruthless passion to temperate perception." **Algebra**, in Weil's pejorative sense, is symbol manipulation severed from any geometric or physical referent — the signs trade among themselves. It "leads in the reverse direction, to excess and oppression." Her critique is *not* against abstraction or formal reasoning per se. It is against *abstraction uncoupled from reference*. The distinction is load-bearing for the cross-thinker triangle (Section V): when Noether says "Denken statt Rechnen" and André pursues "the analogy," they are doing what Simone calls geometry — finding hidden form. When formalism becomes self-sustaining symbol-exchange (the Bourbaki excess that Simone challenged her brother on), it becomes the algebra-monster.
 
 ---
 

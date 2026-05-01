@@ -4,6 +4,8 @@
 
 Act II begins with force because force is the political and literary ancestor of gravity. In "The Iliad, or the Poem of Force," Weil treats force as the real subject of the epic: the power that turns persons into things, whether by killing them, threatening them, enslaving them, or making them act as extensions of necessity. Force deforms the wielder too. No one fully possesses it; it passes through roles, institutions, weapons, prestige, fear, and chance.
 
+Force is also what makes false frames coercive. The ego's false readings in Act I (gravity, imagination, self-as-center) are internally generated — the person can in principle attend past them. Force applies false frames from outside: the enslaved person is *read* as a thing not by their own ego but by the system that holds them. Thingification is the extreme case of a false interpretive frame imposed externally and made inescapable. This is why force is the hinge into Act II: it shows what happens when gravity is not just internal pressure but organized, coercive misreading at social scale.
+
 The explainer should connect this to *Oppression and Liberty*: power is not just held by rulers and imposed on victims. It becomes a machinery that compels both command and obedience. That is why liberation cannot simply mean seizing the machine unchanged.
 
 ## Source basis
@@ -36,6 +38,8 @@ The explainer should connect this to *Oppression and Liberty*: power is not just
 ## Bridge notes
 
 The first Act II page should feel like a return to politics with Act I vocabulary now available. The reader has already seen gravity as necessity and attention as counter-practice. Here, force should appear as gravity organized through social roles, weapons, fear, and prestige. That bridge keeps the series from splitting into mysticism and politics.
+
+Force is also the mechanism through which the three monsters of Act II operate. Money, mechanization, and algebra are not free-floating pathologies — they require force to become civilizational. The factory compels workers into the mechanization-frame through economic necessity. War organizes all three monsters and makes their false readings inescapable by threat of death. Bureaucracy administers the algebra-of-the-social under the authority of the state. The gravity bridge card should name this, not just the Gravity/Grace parallel.
 
 ## Reader takeaway
 

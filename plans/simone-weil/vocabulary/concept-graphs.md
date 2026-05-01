@@ -113,8 +113,8 @@
                                             ▼
     ┌──────────┐     ┌──────────┐    ┌──────────┐
     │Obedience │────▶│ Attention│───▶│Decreation│
-    │(following│     │(suspend- │    │(un-self- │
-    │the real) │     │ing ego)  │    │   ing)   │
+    │(following│     │(suspend- │    │(passive  │
+    │the real) │     │ing ego)  │    │ activity)│
     └──────────┘     └──────────┘    └──────────┘
                                             │
                                             │ exposes
@@ -138,7 +138,7 @@
                      └─────────────────────────┘
 ```
 
-**Shape:** Two converging arcs. The **upper path** (Rootedness → Void → Attention → Decreation → Impersonal) is the negative way — stripping away. The **lower path** (Affliction → Necessity → Metaxu → Good) is the affirmative way — encountering and bridging. Both converge at The Good, via different terrain. Rootedness and Void are polar opposites holding the entire structure in tension.
+**Shape:** Two converging arcs. The **upper path** (Rootedness → Void → Attention → Decreation → Impersonal) is the negative way — stripping away. Decreation here means "passive activity": the self is present but not pressing, oriented but not grasping. The **lower path** (Affliction → Necessity → Metaxu → Good) is the affirmative way — encountering and bridging. Metaxu includes beauty, cultural traditions, law, and labor (SEP) — worldly things that both separate from and connect to the Good. Both paths converge at The Good via different terrain. Rootedness and Void are polar opposites holding the entire structure in tension: rootedness is not clinging, and void is not uprootedness.
 
 ### Edge Summary
 
@@ -208,4 +208,16 @@ What differs is what each thinker applies this operation to:
 |---------|-----------|-------|
 | Noether | Algebraic expressions | Structural relations |
 | André Weil | Mathematical domains | Hidden correspondences |
-| Simone Weil | The self | Necessity and the Good |
+| Simone Weil | The self and the social | Necessity, the Good, the false interpretive frame |
+
+## VI. Internal Tension: The Algebra-Monster
+
+The convergence above is real, but the triangle is not a happy chord. In *Gravity and Grace* ("Algebra" chapter), Simone names **algebra** — alongside money and mechanization — as one of the "three monsters of contemporary civilization." Her critique was provoked specifically by **Bourbaki**, the formalist program her brother André co-founded. In her 1940 letters to him she questioned whether rarefied algebraic geometry retained any contact with lived reality.
+
+The tension is resolvable but should be acknowledged. Simone's algebra-critique is not against formal reasoning per se. It is against *sign cut loose from referent and trading with other signs*. She venerated Greek geometry as a `metaxu`. So:
+
+- **Noether's "Denken statt Rechnen"** = the warning against algebra-as-monster from inside mathematics. *Agrees with Simone.*
+- **André's "Analogy" at its best** = the recovery of contact between domains; sign rooted in form. *Agrees with Simone.*
+- **Bourbaki at its most formalist** = the algebra-monster Simone names. *The thing she warned her brother about.*
+
+The triangle is therefore not "three siblings of one insight" but "two siblings (and Noether) plus an internal critique of where the move can go wrong when uncoupled from its object." This is what makes the bridge to her political writings load-bearing: the same severance she diagnoses in money and the factory she also names in modern algebra. The pathology is one; the domains are many.

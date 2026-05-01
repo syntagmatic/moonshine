@@ -43,7 +43,7 @@ Introduce the French terms at least once and avoid silently flattening them into
 - `decreation` - decreation, the withdrawal of the ego's claim to be the center.
 - `force` - force, that which turns persons into things or thing-like beings.
 - `puissance` - power, especially command, domination, and social power.
-- `lecture` - reading, the interpretive frame through which a person or society sees reality.
+- `lecture` - Weil's French term for the interpretive frame through which a person or society reads signs in the world.
 - `metaxu` - intermediary or bridge; worldly things that both separate from and connect to the good.
 - `enracinement` / `deracinement` - rootedness / uprootedness.
 - `consentement` - consent, especially consent to necessity; must not be confused with political passivity.

@@ -37,6 +37,8 @@ The explainer should be precise about what a diagram can and cannot show. It can
 
 This is the Act I capstone, so the synthesis figure should be reusable as an index thumbnail or act opener later. It should also prepare for Act II by clarifying that grace does not cancel social analysis. The next pages return to factories, war, and bureaucracy with a sharper sense of how force narrows perception.
 
+There is a structural parallel worth naming in the Act I synthesis map: grace is to Act I what liberty is to Act II. Both are what become possible when the false frame is cleared — one through inner attention and decreation, one through social method and rooted obligation. Neither can be manufactured; both require the prior clearing. The synthesis map should make this parallel visible without overdrawing it.
+
 ## Reader takeaway
 
 Grace is Weil's name for a transformation that cannot be forced. The human work is not to manufacture it, but to stop filling every wound and limit with egoic reaction.

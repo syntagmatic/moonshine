@@ -2,7 +2,7 @@
 
 ## Pitch
 
-Affliction, `malheur`, is one of Weil's hardest terms because ordinary English makes it sound like misfortune. For Weil it is more severe: suffering that reaches the body, social identity, and soul together. Pain alone is not affliction; shame alone is not affliction; sadness alone is not affliction. Affliction crushes a person in a way that can make them disappear from the attention of others and even from their own sense of personhood.
+Affliction, `malheur`, is one of Weil's hardest terms because ordinary English makes it sound like misfortune. For Weil it is more severe: suffering that reaches the body, social identity, and soul together. Pain alone is not affliction; shame alone is not affliction; sadness alone is not affliction. Affliction crushes a person in a way that can make them disappear from the attention of others and even from their own sense of personhood. Part of what makes affliction distinctive is this: the afflicted person is typically caught inside a false reading imposed by others. The factory worker is read as units of labor; the prisoner is read as a body to be controlled; the socially degraded person is read as someone who does not count. Affliction is suffering plus the inability to correct the false frame through which one is seen.
 
 This explainer should be the first hinge between the political and spiritual halves of the series. Weil's factory year matters here. Her early vocabulary of oppression and humiliation deepens into affliction after direct experience of fatigue, obedience, speed, fear of dismissal, and the destruction of attention under industrial rhythm.
 
@@ -17,7 +17,7 @@ This explainer should be the first hinge between the political and spiritual hal
 
 1. **Three-layer pressure diagram** (interactive): body, social standing, and inner life each receive pressure. Affliction appears only when all three are locked together.
 2. **Factory rhythm** (interactive): a repetitive task accelerates while attention narrows. The figure should show fatigue as a transformation of perception, not just a lower stamina bar.
-3. **Visibility threshold** (interactive): bystanders read the afflicted person through stereotypes, utility, fear, or pity. Attention changes what is visible.
+3. **Visibility threshold** (interactive): bystanders read the afflicted person through stereotypes, utility, fear, or pity — each a false interpretive frame. Attention changes what is visible by suspending these frames rather than substituting a better one.
 4. **Pain vs. affliction card** (static): concise distinctions among pain, grief, humiliation, oppression, and affliction.
 
 ## Key terms

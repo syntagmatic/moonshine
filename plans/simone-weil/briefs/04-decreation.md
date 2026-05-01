@@ -2,7 +2,7 @@
 
 ## Pitch
 
-Decreation is Weil's severe name for withdrawing the self's claim to be the center of the world. The term can sound like self-hatred or annihilation, so this explainer needs to be careful. The target is not the existence of a person, but the possessive ego that edits reality so everything refers back to "me": my injury, my virtue, my status, my plan, my interpretation.
+Decreation is Weil's severe name for withdrawing the self's claim to be the center of the world. The term can sound like self-hatred or annihilation, so this explainer needs to be careful. The target is not the existence of a person, but the possessive ego that edits reality so everything refers back to "me": my injury, my virtue, my status, my plan, my interpretation. The ego-as-center is, in the series' terms, the self's deepest false interpretive frame — the one that generates all the compensating pictures that gravity then circulates.
 
 The page should connect decreation to attention. If attention is receptive contact with reality, decreation is the loosening that makes such contact possible. It is also where the series has to show Weil's danger and power together: her language is extreme, but the underlying diagnostic point is precise. Egoic centrality corrupts perception, including moral perception.
 
@@ -36,6 +36,8 @@ The page should connect decreation to attention. If attention is receptive conta
 ## Bridge notes
 
 The visual should avoid making decreation look like shrinking into nothing. A better image is the removal of distortive overlays: reality becomes less organized around self-justification. This page should cross-link conceptually to attention and later to liberty, because lucid action requires a self that is not constantly defending imagined sovereignty.
+
+Decreation is also the inner correlate of method (explainer 11). Both involve the same fundamental move: stop asserting your reading of the situation and contact the real constraints. Method keeps thought in contact with necessity in work; decreation keeps attention in contact with reality in the self's most basic orientation. This connection is the deepest link between Act I and Act II and should be named explicitly in captions or source notes, even if not in the main prose.
 
 ## Reader takeaway
 

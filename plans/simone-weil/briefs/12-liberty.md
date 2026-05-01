@@ -4,6 +4,8 @@
 
 The final explainer should gather the series into Weil's difficult idea of liberty. Freedom is not escape from necessity, fantasy of unlimited choice, or possession of power over others. It is lucid action within limits: the ability to understand necessity, consent to reality without submitting to injustice, and act through attention rather than compulsion.
 
+In the series' terms, liberty is the restoration of the true interpretive frame — the condition in which signs stay in contact with their referents. Method keeps thought in contact with necessity in work; attention keeps perception in contact with reality in the self; rootedness keeps obligation in contact with actual community, place, and past. The three monsters (money, mechanization, algebra) are threats to liberty because they replace true contact with self-sustaining sign-exchange. Liberty requires their opposite: a self and a society that keep checking the sign against the thing.
+
 This ending should also bring in *The Need for Roots*. Weil's late politics begins from obligation and rootedness rather than rights alone. Human beings need order, liberty, responsibility, equality, hierarchy, honor, security, risk, property, truth, and contact with meaningful work and place. The final page should not try to settle every controversy. It should show why liberty requires both social reconstruction and spiritual discipline.
 
 ## Source basis
@@ -17,7 +19,7 @@ This ending should also bring in *The Need for Roots*. Weil's late politics begi
 1. **Liberty under necessity** (interactive): three models compared: arbitrary choice, domination, and lucid action within constraints. Only the third preserves contact with reality.
 2. **Root system** (interactive concept map): work, place, past, community, truth, responsibility, and liberty shown as roots that can be nourished or cut.
 3. **Consent vs. submission** (interactive): consent to necessity, obedience to domination, and attention to obligation are placed in different relational diagrams.
-4. **Series synthesis** (static/interactive): force -> oppression -> affliction -> attention -> decreation -> liberty, with loops back to gravity and grace.
+4. **Series synthesis** (static/interactive): the full arc in two paths — inner path: gravity (false frame generated) → attention (frame suspended) → decreation (frame cleared) → grace (true contact received); social path: force (false frame coerced) → monsters (false frame institutionalized) → method (frame checked) → liberty (true contact sustained). Both paths converge on the same move: sign kept in contact with thing. The synthesis figure should show both paths and their convergence without flattening them into one.
 5. **Honest reading card** (static): anti-Judaism/reception caution, posthumous editions, and the danger of sanctifying Weil.
 
 ## Key terms
@@ -37,6 +39,8 @@ This ending should also bring in *The Need for Roots*. Weil's late politics begi
 ## Bridge notes
 
 The finale should work as a conceptual landing page for the whole series. It needs to preserve the difficulty of Weil's thought while giving the reader a usable synthesis. End with the honest-reading card so the series closes with intellectual responsibility rather than hagiography.
+
+The series argument, stated plainly for the synthesis figure caption: Weil's inner discipline (attention, decreation) and her social diagnosis (force, the three monsters) are the same project at different scales. The false frame that gravity generates in the self is the same structure that money, mechanization, and algebra impose on civilization. Liberty is what remains when both are cleared — not a reward, not a technique, but the fragile condition of truthful contact with what is real.
 
 ## Reader takeaway
 
