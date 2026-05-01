@@ -13,7 +13,8 @@
 // parses), and reload so every simulation re-runs with `Motion.reduced() ===
 // false`. A banner at the top of .article surfaces the toggle.
 //
-// Public API: window.Motion.{reduced, overridden, enable, disable, mountBanner}.
+// Public API: window.Motion.{reduced, overridden, enable, disable, mountBanner,
+// onVisible}.
 
 (function (global) {
   'use strict';
@@ -30,6 +31,21 @@
   var Motion = {
     reduced: function () { return system() && !override(); },
     overridden: override,
+    onVisible: function (element, callback) {
+      if (!element || typeof callback !== 'function') return function () {};
+      if (!global.IntersectionObserver) {
+        callback(true);
+        return function () {};
+      }
+      var visible = true;
+      var observer = new global.IntersectionObserver(function (entries) {
+        visible = !!(entries[0] && entries[0].isIntersecting);
+        callback(visible);
+      }, { rootMargin: '80px 0px 80px 0px', threshold: 0.01 });
+      observer.observe(element);
+      callback(visible);
+      return function () { observer.disconnect(); };
+    },
     enable: function () {
       try { localStorage.setItem(MOTION_KEY, '1'); } catch (e) {}
       if (global.document) global.document.documentElement.dataset.motion = 'full';

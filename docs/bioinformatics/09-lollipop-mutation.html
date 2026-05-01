@@ -25,6 +25,11 @@
   --bg: #fafafa;
   --fig-bg: #ffffff;
   --border: #e2e2e8;
+  --c-gene: #2563eb;
+  --c-sample: #0891b2;
+  --c-expression: #8b5cf6;
+  --c-significance: #ef4444;
+  --c-pathway: #10b981;
   --c-tp53: #ef4444;
   --c-cdkn1a: #2563eb;
 }
@@ -49,6 +54,7 @@ a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px
 .insight p { margin: 0; }
 
 .controls { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); }
+.btn-group { display: inline-flex; gap: 0.3rem; flex-wrap: wrap; }
 .btn { font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600; padding: 0.35rem 0.85rem; border-radius: 4px; border: 1px solid var(--border); background: var(--fig-bg); color: var(--text); cursor: pointer; transition: all 0.15s; user-select: none; }
 .btn:hover { border-color: var(--accent); background: var(--accent-light); }
 .btn.active { border-color: var(--accent); background: var(--accent); color: white; }
@@ -59,6 +65,8 @@ svg text { font-family: var(--heading-font); }
 .domain-legend { display: flex; gap: 1rem; flex-wrap: wrap; font-family: var(--heading-font); font-size: 0.8rem; margin-top: 0.5rem; }
 .domain-legend-item { display: flex; align-items: center; gap: 0.35rem; cursor: pointer; }
 .domain-legend-item .swatch { width: 14px; height: 10px; border-radius: 2px; }
+.detail-panel { font-family: var(--heading-font); font-size: 0.83rem; color: var(--text-2); background: #f8fafc; border: 1px solid var(--border); border-radius: 4px; padding: 0.75rem 1rem; margin-top: 0.75rem; min-height: 3rem; }
+.detail-panel b { color: var(--text); }
 
 @media (max-width: 640px) { .figure-wide { margin-left: 0; margin-right: 0; } h1 { font-size: 1.75rem; } }
 @media (prefers-reduced-motion: reduce) {
@@ -90,11 +98,20 @@ svg text { font-family: var(--heading-font); }
   <p><span class="t-tp53">TP53</span> is the most frequently mutated gene in human cancer. Its protein product, p53, is 393 amino acids long. When p53 carries the R175H mutation in its DNA-binding domain, it loses the ability to bind DNA and activate its targets like <span class="t-cdkn1a">CDKN1A</span>.</p>
 
   <div class="figure figure-wide">
+    <div class="controls">
+      <span>Focus:</span>
+      <div class="btn-group" id="tp53-focus">
+        <button class="btn active" data-focus="all">All mutations</button>
+        <button class="btn" data-focus="dbd">DNA-binding domain</button>
+        <button class="btn" data-focus="hotspots">Hotspots</button>
+      </div>
+    </div>
     <div id="lollipop-tp53"></div>
     <div class="domain-legend" id="tp53-legend"></div>
+    <div class="detail-panel" id="tp53-detail"></div>
     <p class="figure-caption">
       <span class="figure-label">Figure 1.</span> <span class="t-tp53">TP53</span> mutation hotspots. 
-      Lollipop height encodes mutation frequency. The R175H mutation is clearly visible in the DNA-binding domain.
+      Lollipop height encodes mutation frequency. The three canonical hotspots, R175H, R248Q, and R273H, cluster in the DNA-binding domain but break it in different ways.
     </p>
   </div>
 
@@ -123,10 +140,22 @@ svg text { font-family: var(--heading-font); }
 // --- Data & State ---
 const tp53Length = 393;
 const tp53Domains = [
-  { name: 'TAD1', start: 1, end: 40, color: '#ef4444' },
-  { name: 'DBD', start: 102, end: 292, color: '#2563eb' }
+  { name: 'Transactivation', start: 1, end: 61, color: '#ef4444' },
+  { name: 'Proline-rich', start: 64, end: 92, color: '#f59e0b' },
+  { name: 'DNA-binding', start: 102, end: 292, color: '#2563eb' },
+  { name: 'Tetramerization', start: 325, end: 356, color: '#10b981' },
+  { name: 'Regulatory tail', start: 363, end: 393, color: '#8b5cf6' }
 ];
-const hotspots = [{ pos: 175, freq: 42, label: 'R175H' }];
+const cdkn1aDomains = [
+  { name: 'CDK/cyclin inhibition', start: 17, end: 71, color: '#2563eb' },
+  { name: 'PCNA binding', start: 141, end: 160, color: '#10b981' }
+];
+const state = { focus: 'all' };
+const hotspots = [
+  { pos: 175, freq: 42, label: 'R175H', note: 'structural hotspot, destabilizes the DNA-binding fold' },
+  { pos: 248, freq: 36, label: 'R248Q', note: 'contact hotspot, removes a DNA-contacting arginine' },
+  { pos: 273, freq: 31, label: 'R273H', note: 'contact hotspot, weakens direct DNA binding' }
+];
 
 function mulberry32(s) { return () => { s |= 0; s = s + 0x6D2B79F5 | 0; let t = Math.imul(s ^ s >>> 15, 1 | s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 const rng = mulberry32(175);
@@ -136,15 +165,37 @@ function genMuts(len, n) {
   for(let i=0; i<n; i++) muts.push({ pos: Math.floor(rng()*len)+1, freq: 1 + Math.floor(rng()*8) });
   return muts;
 }
-const tp53Muts = [...hotspots, ...genMuts(tp53Length, 40)];
+const hotspotPositions = new Set(hotspots.map(d => d.pos));
+const tp53Muts = [...hotspots, ...genMuts(tp53Length, 40).filter(d => !hotspotPositions.has(d.pos))];
 const cdkn1aMuts = genMuts(198, 10);
 
 const tip = d3.select('#tip');
 
-function drawLollipop(containerId, len, domains, muts) {
+function inDomain(pos, domainName, domains) {
+  const d = domains.find(item => item.name === domainName);
+  return !!d && pos >= d.start && pos <= d.end;
+}
+
+function drawDomainLegend(legendId, domains) {
+  const legend = d3.select('#' + legendId);
+  legend.selectAll('*').remove();
+  domains.forEach(d => {
+    const item = legend.append('div').attr('class', 'domain-legend-item');
+    item.append('span').attr('class', 'swatch').style('background', d.color);
+    item.append('span').text(`${d.name} ${d.start}-${d.end}`);
+  });
+}
+
+function drawLollipop(containerId, len, domains, muts, opts = {}) {
   const container = d3.select('#' + containerId);
   function render() {
     container.selectAll('*').remove();
+    const focus = typeof opts.focus === 'function' ? opts.focus() : 'all';
+    const shown = muts.filter(d => {
+      if (focus === 'dbd') return inDomain(d.pos, 'DNA-binding', domains);
+      if (focus === 'hotspots') return !!d.label;
+      return true;
+    });
     const width = container.node().getBoundingClientRect().width || 700;
     const height = 240;
     const margin = { top: 40, right: 30, bottom: 50, left: 40 };
@@ -152,27 +203,52 @@ function drawLollipop(containerId, len, domains, muts) {
     const svg = container.append('svg').attr('viewBox', `0 0 ${width} ${height}`).style('width', '100%').style('height', 'auto');
     const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
     const x = d3.scaleLinear().domain([1, len]).range([0, w]);
-    const y = d3.scaleLinear().domain([0, 50]).range([h - 20, 0]);
+    const y = d3.scaleLinear().domain([0, Math.max(12, d3.max(shown, d => d.freq) + 6)]).range([h - 20, 0]);
     
     g.append('g').attr('transform', `translate(0,${h})`).call(d3.axisBottom(x).ticks(10));
+    g.append('text').attr('x', w / 2).attr('y', h + 38).attr('text-anchor', 'middle').style('font-size', '11px').style('fill', 'var(--text-2)').text('amino acid position');
     g.append('rect').attr('x', 0).attr('y', h-15).attr('width', w).attr('height', 10).attr('fill', '#e2e2e8').attr('rx', 2);
     domains.forEach(d => {
       g.append('rect').attr('x', x(d.start)).attr('y', h-15).attr('width', x(d.end)-x(d.start)).attr('height', 10).attr('fill', d.color).attr('opacity', 0.8);
     });
     
-    g.selectAll('.stem').data(muts).enter().append('line').attr('x1', d => x(d.pos)).attr('x2', d => x(d.pos)).attr('y1', h-15).attr('y2', d => y(d.freq)).attr('stroke', '#94a3b8');
-    g.selectAll('.head').data(muts).enter().append('circle').attr('cx', d => x(d.pos)).attr('cy', d => y(d.freq)).attr('r', 4)
-      .attr('fill', d => d.label === 'R175H' ? '#ef4444' : '#64748b').attr('stroke', '#fff').attr('stroke-width', 1)
-      .on('mouseenter', (e, d) => { tip.style('opacity', 1).html(`Pos: ${d.pos}<br>Freq: ${d.freq}${d.label ? '<br>'+d.label : ''}`); })
+    g.selectAll('.stem').data(shown).enter().append('line').attr('x1', d => x(d.pos)).attr('x2', d => x(d.pos)).attr('y1', h-15).attr('y2', d => y(d.freq)).attr('stroke', '#94a3b8');
+    g.selectAll('.head').data(shown).enter().append('circle').attr('cx', d => x(d.pos)).attr('cy', d => y(d.freq)).attr('r', d => d.label ? 6 : 4)
+      .attr('fill', d => d.label ? '#ef4444' : '#64748b').attr('stroke', '#fff').attr('stroke-width', 1)
+      .on('mouseenter', (e, d) => {
+        tip.style('opacity', 1).html(`Pos: ${d.pos}<br>Freq: ${d.freq}${d.label ? '<br>'+d.label : ''}`);
+        if (opts.detailId && d.label) document.getElementById(opts.detailId).innerHTML = `<b>${d.label}</b>, residue ${d.pos}. ${d.note}.`;
+      })
       .on('mousemove', e => tip.style('left', (e.clientX+15)+'px').style('top', (e.clientY-10)+'px'))
       .on('mouseleave', () => tip.style('opacity', 0));
+
+    g.selectAll('.hotspot-label').data(shown.filter(d => d.label)).enter().append('text')
+      .attr('x', d => x(d.pos)).attr('y', d => y(d.freq) - 10).attr('text-anchor', 'middle')
+      .style('font-size', '10px').style('font-weight', '700').style('fill', 'var(--c-significance)')
+      .text(d => d.label);
+
+    if (opts.detailId) {
+      const total = d3.sum(shown, d => d.freq);
+      const hotspotTotal = d3.sum(shown.filter(d => d.label), d => d.freq);
+      document.getElementById(opts.detailId).innerHTML = `<b>${shown.length}</b> displayed mutation sites, <b>${total}</b> total observations. Hotspots account for <b>${Math.round((hotspotTotal / Math.max(1, total)) * 100)}%</b> of the displayed burden.`;
+    }
   }
   render();
   new ResizeObserver(render).observe(container.node());
+  return render;
 }
 
-drawLollipop('lollipop-tp53', tp53Length, tp53Domains, tp53Muts);
-drawLollipop('lollipop-cdkn1a', 198, [{name:'CDK', start:12, end:71, color:'#ef4444'}], cdkn1aMuts);
+drawDomainLegend('tp53-legend', tp53Domains);
+drawDomainLegend('cdkn1a-legend', cdkn1aDomains);
+const renderTp53 = drawLollipop('lollipop-tp53', tp53Length, tp53Domains, tp53Muts, { focus: () => state.focus, detailId: 'tp53-detail' });
+drawLollipop('lollipop-cdkn1a', 198, cdkn1aDomains, cdkn1aMuts);
+
+d3.selectAll('#tp53-focus .btn').on('click', function() {
+  state.focus = this.dataset.focus;
+  d3.selectAll('#tp53-focus .btn').classed('active', false);
+  d3.select(this).classed('active', true);
+  renderTp53();
+});
 </script>
 </body>
 </html>

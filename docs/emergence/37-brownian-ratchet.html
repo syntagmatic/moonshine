@@ -9,7 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;500&family=Source+Sans+3:wght@400;600;700&family=Source+Serif+4:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
-<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js" onload="renderMathInElement(document.body);"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js" onload="var __r=function(){renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\[',right:'\\]',display:true},{left:'\\(',right:'\\)',display:false},{left:'$',right:'$',display:false}]});}; if (window.katex) __r(); else document.addEventListener('DOMContentLoaded', __r);"></script>
 <script src="https://d3js.org/d3.v7.min.js"></script>
 <script src="../lib/motion.js"></script>
 <style>
@@ -29,6 +29,10 @@
   --fig-bg: #ffffff;
   --border: #e2e2e8;
   --c-agent: #2563eb;
+  --c-rule: #0891b2;
+  --c-pattern: #8b5cf6;
+  --c-critical: #f59e0b;
+  --c-feedback: #ef4444;
   --c-env: #10b981;
   --c-danger: #ef4444;
 }
@@ -76,6 +80,11 @@ svg text { font-family: var(--heading-font); }
 .eq-overlay { position: absolute; top: 10px; right: 14px; background: rgba(255,255,255,0.9);
   border: 1px solid var(--border); border-radius: 4px; padding: 0.3rem 0.6rem;
   font-size: 0.8rem; color: var(--text-2); pointer-events: none; z-index: 2; }
+.ratchet-chart { display: block; width: 100%; height: 220px; margin: 0.85rem 0 0.35rem; }
+.ratchet-chart .axis path, .ratchet-chart .axis line { stroke: #cbd5e1; }
+.ratchet-chart .axis text { fill: var(--text-2); font-size: 10px; }
+.ratchet-chart .grid-line { stroke: #edf2f7; stroke-width: 1; }
+.chart-note { font-family: var(--heading-font); font-size: 0.82rem; color: var(--text-2); line-height: 1.45; margin: 0 0 1rem; }
 
 @media (prefers-reduced-motion: reduce) {html:not([data-motion="full"]) .figure canvas { outline: 2px dashed var(--border); outline-offset: -2px; }
 }
@@ -159,6 +168,8 @@ asymmetry to bias them.
     <canvas id="canvas-multi"></canvas>
     <div class="eq-overlay">\(\langle v \rangle \propto L/\tau\)</div>
   </div>
+  <svg id="ratchet-chart" class="ratchet-chart" role="img" aria-label="Predicted drift velocity as flashing frequency and potential asymmetry change"></svg>
+  <p class="chart-note" id="ratchet-chart-note"></p>
   <div class="controls">
     <div class="control-group">
       <label>Frequency</label>
@@ -188,7 +199,7 @@ asymmetry to bias them.
     <span>Mean Displacement: <b id="stat-mean">0.00</b> px</span>
     <span>Drift Velocity: <b id="stat-vel">0.00</b> px/s</span>
   </div>
-  <p class="figure-caption"><span class="figure-label">Figure 2.</span> A population of particles in a flashing ratchet. The blue line tracks the average position, showing a steady drift despite the random motion of individual particles.</p>
+  <p class="figure-caption"><span class="figure-label">Figure 2.</span> A population of particles in a flashing ratchet. The blue line tracks the average position, while the chart makes the mechanism legible: drift peaks at an intermediate flashing frequency and collapses toward zero as the landscape becomes symmetric.</p>
 </div>
 
 <p>
@@ -223,6 +234,19 @@ function getForce(x, asym, L=100) {
   return strength / (L - peak);
 }
 
+function crossingChance(distance, offTime, diffusion=45) {
+  const variance = Math.max(1e-6, 4 * diffusion * offTime);
+  return Math.exp(-(distance * distance) / variance);
+}
+
+function predictedRatchetDrift(freq, asym, L=60) {
+  const safeFreq = Math.max(0.001, freq);
+  const offTime = 1 / safeFreq;
+  const pRight = crossingChance(L * (1 - asym), offTime);
+  const pLeft = crossingChance(L * asym, offTime);
+  return L * (safeFreq / 2) * (pRight - pLeft);
+}
+
 // --- Figure 1: Single Ratchet ---
 (function() {
   const container = document.getElementById('fig-ratchet');
@@ -234,7 +258,7 @@ function getForce(x, asym, L=100) {
   const speedVal = document.getElementById('speed-val');
   const btnReset = document.getElementById('btn-reset');
 
-  let x = 150, asym = 0.8, on = true, speed = 1.0;
+  let x = 150, asym = 0.8, on = true, speed = 1.0, visible = true;
   const L = 60;
 
   function draw() {
@@ -276,6 +300,10 @@ function getForce(x, asym, L=100) {
   }
 
   function loop() {
+    if (!visible) {
+      requestAnimationFrame(loop);
+      return;
+    }
     // Sub-stepping: at speed<1 we skip some steps; at speed>1 we run extra.
     let budget = speed;
     while (budget >= 1) { step(); budget -= 1; }
@@ -303,6 +331,7 @@ function getForce(x, asym, L=100) {
     canvas.width = container.clientWidth - 48;
     canvas.height = 200;
   }).observe(container);
+  Motion.onVisible(container, v => { visible = v; });
 
   loop();
 })();
@@ -321,6 +350,8 @@ function getForce(x, asym, L=100) {
   const btnPause = document.getElementById('btn-pause');
   const statMean = document.getElementById('stat-mean');
   const statVel = document.getElementById('stat-vel');
+  const chartSvg = document.getElementById('ratchet-chart');
+  const chartNote = document.getElementById('ratchet-chart-note');
 
   const N = 50, L = 60;
   let asym = 0.85;
@@ -329,10 +360,138 @@ function getForce(x, asym, L=100) {
   // after any particle wraps around the canvas.
   let disp = new Float64Array(N);
   let on = true, paused = false, frame = 0, freq = 1.0, speed = 1.0;
+  let visible = true;
   let startMean = 150, startTime = Date.now();
   // Trace of mean displacement vs time, plotted in the bottom band of the canvas.
   const trace = []; // { t: seconds-since-reset, d: mean unwrapped displacement }
   const TRACE_MAX_SECONDS = 30;
+
+  function drawDriftChart() {
+    const width = Math.max(320, container.clientWidth - 48);
+    const height = 220;
+    const margin = { top: 16, right: 18, bottom: 42, left: 52 };
+    const svg = d3.select(chartSvg);
+    svg.attr('viewBox', `0 0 ${width} ${height}`);
+    svg.selectAll('*').remove();
+
+    const freqs = Array.from({ length: 99 }, (_, i) => 0.1 + i * 0.05);
+    const curves = [
+      { asym: 0.60, label: 'asym 0.60', color: '#94a3b8', width: 1.4, dash: '4 4' },
+      { asym: 0.92, label: 'asym 0.92', color: '#10b981', width: 1.4, dash: '2 3' },
+      { asym, label: `current ${asym.toFixed(2)}`, color: '#2563eb', width: 2.6, dash: null }
+    ].map(c => ({
+      ...c,
+      data: freqs.map(f => ({ f, v: predictedRatchetDrift(f, c.asym, L) }))
+    }));
+
+    const yMax = Math.max(1, d3.max(curves, c => d3.max(c.data, d => d.v)) || 1);
+    const x = d3.scaleLinear().domain([0.1, 5]).range([margin.left, width - margin.right]);
+    const y = d3.scaleLinear().domain([0, yMax * 1.14]).nice().range([height - margin.bottom, margin.top]);
+    const root = svg.append('g');
+
+    root.append('rect')
+      .attr('x', margin.left).attr('y', margin.top)
+      .attr('width', width - margin.left - margin.right)
+      .attr('height', height - margin.top - margin.bottom)
+      .attr('fill', '#fbfdff');
+
+    y.ticks(4).forEach(t => {
+      root.append('line')
+        .attr('class', 'grid-line')
+        .attr('x1', margin.left).attr('x2', width - margin.right)
+        .attr('y1', y(t)).attr('y2', y(t));
+    });
+
+    root.append('g')
+      .attr('class', 'axis')
+      .attr('transform', `translate(0,${y(0)})`)
+      .call(d3.axisBottom(x).ticks(5).tickFormat(d => d.toFixed(1)));
+    root.append('g')
+      .attr('class', 'axis')
+      .attr('transform', `translate(${margin.left},0)`)
+      .call(d3.axisLeft(y).ticks(4));
+
+    const line = d3.line()
+      .x(d => x(d.f))
+      .y(d => y(d.v))
+      .curve(d3.curveMonotoneX);
+
+    curves.forEach(c => {
+      root.append('path')
+        .datum(c.data)
+        .attr('fill', 'none')
+        .attr('stroke', c.color)
+        .attr('stroke-width', c.width)
+        .attr('stroke-dasharray', c.dash)
+        .attr('d', line);
+    });
+
+    const currentData = curves[curves.length - 1].data;
+    const optimum = currentData.reduce((best, d) => d.v > best.v ? d : best, currentData[0]);
+    const currentV = predictedRatchetDrift(freq, asym, L);
+    const currentX = x(freq);
+    const currentY = y(currentV);
+
+    root.append('line')
+      .attr('x1', currentX).attr('x2', currentX)
+      .attr('y1', y(0)).attr('y2', currentY)
+      .attr('stroke', '#ef4444')
+      .attr('stroke-width', 1)
+      .attr('stroke-dasharray', '3 3');
+    root.append('circle')
+      .attr('cx', currentX).attr('cy', currentY).attr('r', 4.5)
+      .attr('fill', '#ef4444')
+      .attr('stroke', '#fff')
+      .attr('stroke-width', 1.5);
+    root.append('circle')
+      .attr('cx', x(optimum.f)).attr('cy', y(optimum.v)).attr('r', 5.5)
+      .attr('fill', 'none')
+      .attr('stroke', '#2563eb')
+      .attr('stroke-width', 1.4);
+
+    const labelX = Math.min(width - margin.right - 78, currentX + 8);
+    const labelY = Math.max(margin.top + 12, currentY - 8);
+    root.append('text')
+      .attr('x', labelX).attr('y', labelY)
+      .attr('fill', '#ef4444')
+      .attr('font-size', 11)
+      .attr('font-weight', 600)
+      .text('live setting');
+
+    const legend = root.append('g')
+      .attr('transform', `translate(${margin.left + 8},${margin.top + 12})`);
+    curves.forEach((c, i) => {
+      const item = legend.append('g').attr('transform', `translate(0,${i * 15})`);
+      item.append('line')
+        .attr('x1', 0).attr('x2', 18).attr('y1', 0).attr('y2', 0)
+        .attr('stroke', c.color).attr('stroke-width', c.width).attr('stroke-dasharray', c.dash);
+      item.append('text')
+        .attr('x', 24).attr('y', 3)
+        .attr('font-size', 10)
+        .attr('fill', '#4a4a6a')
+        .text(c.label);
+    });
+
+    root.append('text')
+      .attr('x', (margin.left + width - margin.right) / 2)
+      .attr('y', height - 8)
+      .attr('text-anchor', 'middle')
+      .attr('fill', '#4a4a6a')
+      .attr('font-size', 11)
+      .text('flashing frequency');
+    root.append('text')
+      .attr('transform', `translate(14,${(margin.top + height - margin.bottom) / 2}) rotate(-90)`)
+      .attr('text-anchor', 'middle')
+      .attr('fill', '#4a4a6a')
+      .attr('font-size', 11)
+      .text('predicted drift');
+
+    if (Math.abs(asym - 0.5) < 1e-6) {
+      chartNote.textContent = 'Capture model: v = (L/T) x [P(cross near barrier) - P(cross far barrier)]. At symmetry the two crossing probabilities match, so the predicted drift stays at 0 px/s for every flashing frequency.';
+    } else {
+      chartNote.textContent = `Capture model: v = (L/T) x [P(cross near barrier) - P(cross far barrier)]. At asymmetry ${asym.toFixed(2)}, the curve peaks near frequency ${optimum.f.toFixed(2)}; the current setting predicts ${currentV.toFixed(1)} px/s.`;
+    }
+  }
 
   function resetTrace() {
     disp = new Float64Array(N);
@@ -446,6 +605,10 @@ function getForce(x, asym, L=100) {
   }
 
   function loop() {
+    if (!visible) {
+      requestAnimationFrame(loop);
+      return;
+    }
     if (!paused) {
       let budget = speed;
       while (budget >= 1) { step(); budget -= 1; }
@@ -467,11 +630,13 @@ function getForce(x, asym, L=100) {
   freqSlider.addEventListener('input', e => {
     freq = +e.target.value;
     freqVal.textContent = freq.toFixed(1);
+    drawDriftChart();
   });
   asym2Slider.addEventListener('input', e => {
     asym = +e.target.value;
     asym2Val.textContent = asym.toFixed(2);
     resetTrace();
+    drawDriftChart();
   });
   speed2Slider.addEventListener('input', e => {
     speed = +e.target.value;
@@ -483,6 +648,7 @@ function getForce(x, asym, L=100) {
     asym2Slider.value = 0.5;
     asym2Val.textContent = '0.50';
     resetTrace();
+    drawDriftChart();
   });
   btnPause.addEventListener('click', () => {
     paused = !paused;
@@ -504,8 +670,11 @@ function getForce(x, asym, L=100) {
   new ResizeObserver(() => {
     canvas.width = container.clientWidth - 48;
     canvas.height = 260;
+    drawDriftChart();
   }).observe(container);
+  Motion.onVisible(container, v => { visible = v; });
 
+  drawDriftChart();
   loop();
 })();
 </script>

@@ -9,7 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;500&family=Source+Sans+3:wght@400;600;700&family=Source+Serif+4:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
-<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js" onload="renderMathInElement(document.body);"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js" onload="var __r=function(){renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\[',right:'\\]',display:true},{left:'\\(',right:'\\)',display:false},{left:'$',right:'$',display:false}]});}; if (window.katex) __r(); else document.addEventListener('DOMContentLoaded', __r);"></script>
 <script src="https://d3js.org/d3.v7.min.js"></script>
 <script src="../lib/motion.js"></script>
 <style>
@@ -29,6 +29,10 @@
   --fig-bg: #ffffff;
   --border: #e2e2e8;
   --c-agent: #2563eb;
+  --c-rule: #0891b2;
+  --c-pattern: #8b5cf6;
+  --c-critical: #f59e0b;
+  --c-feedback: #ef4444;
   --c-env: #10b981;
   --c-danger: #ef4444;
 }
@@ -72,6 +76,16 @@ svg text { font-family: var(--heading-font); }
 
 .stats-row { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 1rem; font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); }
 .stats-row b { color: var(--text); font-family: var(--mono-font); }
+.order-chart { margin: 0.2rem 0 0.75rem; padding-top: 0.85rem; border-top: 1px solid var(--border); font-family: var(--heading-font); }
+.chart-head { display: flex; justify-content: space-between; gap: 1rem; align-items: baseline; margin-bottom: 0.25rem; font-size: 0.85rem; color: var(--text-2); }
+.chart-head strong { color: var(--text); font-weight: 600; }
+.chart-head span:last-child { font-family: var(--mono-font); color: var(--text); white-space: nowrap; }
+.order-chart svg { display: block; width: 100%; height: 160px; overflow: visible; }
+.order-chart .axis-line { stroke: var(--border); shape-rendering: crispEdges; }
+.order-chart .axis-label { fill: var(--text-2); font-size: 11px; }
+.order-chart .order-bar { cursor: pointer; transition: fill 0.15s; }
+.order-chart .order-bar:hover, .order-chart .order-bar:focus { fill: #f59e0b; outline: none; }
+.chart-note { font-size: 0.8rem; color: var(--text-2); margin: 0.1rem 0 0; line-height: 1.35; }
 .fig-rel { position: relative; }
 .eq-overlay { position: absolute; top: 10px; right: 14px; background: rgba(255,255,255,0.92);
   border: 1px solid var(--border); border-radius: 4px; padding: 0.3rem 0.6rem;
@@ -150,6 +164,14 @@ climate.
     <span>Outlets: <b id="stat-basins">0</b></span>
     <span>Mean Relief: <b id="stat-relief">0.00</b></span>
   </div>
+  <div class="order-chart">
+    <div class="chart-head">
+      <strong>Order distribution</strong>
+      <span id="horton-ratio">R_b --</span>
+    </div>
+    <svg id="horton-chart" role="img" aria-label="Stream segment counts by Strahler order"></svg>
+    <p class="chart-note" id="horton-note">Bars count stream segments; gap labels show R_b. Hover a bar to trace that order through the river network.</p>
+  </div>
   <p class="figure-caption"><span class="figure-label">Figure 1.</span> A simulated landscape under uniform rainfall. Watch as water (blue) carves channels into the terrain (brown). The hierarchical network that forms obeys the same scaling laws as real-world rivers.</p>
 </div>
 
@@ -217,29 +239,74 @@ function step() {
   }
 }
 
+function hasUpstreamChannelOfOrder(i, targetOrder) {
+  const r = Math.floor(i / N), c = i % N;
+  for (let dr = -1; dr <= 1; dr++) {
+    for (let dc = -1; dc <= 1; dc++) {
+      if (dr === 0 && dc === 0) continue;
+      const nr = r + dr, nc = c + dc;
+      if (nr < 0 || nr >= N || nc < 0 || nc >= N) continue;
+      const ni = nr * N + nc;
+      if (downstream[ni] === i && order[ni] === targetOrder) return true;
+    }
+  }
+  return false;
+}
+
 // Strahler order along the flow tree. Cells below a flux threshold aren't
-// channels, so they don't count. Process cells from low to high elevation
-// (tree leaves first) using the downstream pointers already computed.
+// channels, so they don't count. Each channel cell aggregates completed
+// upstream channel-child orders; order increments only at equal-order joins.
 function computeStrahler(threshold) {
   order.fill(0);
   const channels = [];
   for (let i = 0; i < N * N; i++) {
-    if (flux[i] >= threshold) { order[i] = 1; channels.push(i); }
+    if (flux[i] >= threshold) channels.push(i);
   }
-  // sort channels from lowest flux (headwaters) to highest (mouths)
+  // Accumulated flux increases downstream, so tributaries are complete before
+  // their confluences are assigned an order.
   channels.sort((a, b) => flux[a] - flux[b]);
+
+  const upstreamMax = new Uint8Array(N * N);
+  const upstreamMaxCount = new Uint8Array(N * N);
   let maxOrder = 0, outlets = 0;
   for (const i of channels) {
+    const oi = upstreamMax[i] === 0
+      ? 1
+      : upstreamMax[i] + (upstreamMaxCount[i] >= 2 ? 1 : 0);
+    order[i] = oi;
+    if (oi > maxOrder) maxOrder = oi;
+
     const d = downstream[i];
     if (d === -1 || flux[d] < threshold) { outlets++; continue; }
-    const oi = order[i], od = order[d];
-    if (oi > od) order[d] = oi;
-    else if (oi === od) order[d] = od + 1;
+    if (oi > upstreamMax[d]) {
+      upstreamMax[d] = oi;
+      upstreamMaxCount[d] = 1;
+    } else if (oi === upstreamMax[d]) {
+      upstreamMaxCount[d]++;
+    }
   }
-  for (let k = 0; k < channels.length; k++) {
-    if (order[channels[k]] > maxOrder) maxOrder = order[channels[k]];
+
+  const segmentCounts = new Array(maxOrder + 1).fill(0);
+  for (const i of channels) {
+    const oi = order[i];
+    if (!hasUpstreamChannelOfOrder(i, oi)) segmentCounts[oi]++;
   }
-  return { maxOrder, outlets };
+
+  const orderCounts = [];
+  const ratios = [];
+  for (let o = 1; o <= maxOrder; o++) {
+    const count = segmentCounts[o] || 0;
+    const next = segmentCounts[o + 1] || 0;
+    const ratio = next > 0 ? count / next : null;
+    if (ratio !== null) ratios.push(ratio);
+    orderCounts.push({ order: o, count, ratio });
+  }
+
+  const meanRb = ratios.length
+    ? ratios.reduce((sum, value) => sum + value, 0) / ratios.length
+    : null;
+
+  return { maxOrder, outlets, orderCounts, meanRb };
 }
 
 // --- Visualization ---
@@ -258,11 +325,17 @@ function computeStrahler(threshold) {
   const statOrder = document.getElementById('stat-order');
   const statBasins = document.getElementById('stat-basins');
   const statRelief = document.getElementById('stat-relief');
+  const hortonRatio = document.getElementById('horton-ratio');
+  const hortonNote = document.getElementById('horton-note');
+  const hortonChart = d3.select('#horton-chart');
 
   const CHANNEL_THRESHOLD = 20;
   let stepsPerFrame = 2;
   let playing = true;
   let frameCount = 0;
+  let highlightedOrder = 0;
+  let latestStats = { orderCounts: [], meanRb: null };
+  let visible = true;
 
   function draw() {
     const cw = canvas.width / N;
@@ -273,7 +346,9 @@ function computeStrahler(threshold) {
       const f = flux[i];
 
       if (f > CHANNEL_THRESHOLD) {
-        ctx.fillStyle = `rgb(37, 99, ${Math.min(255, 150 + f)})`;
+        ctx.fillStyle = (highlightedOrder && order[i] === highlightedOrder)
+          ? '#f59e0b'
+          : `rgb(37, 99, ${Math.min(255, 150 + f)})`;
       } else {
         ctx.fillStyle = `rgb(${100 + h * 100}, ${80 + h * 80}, ${50 + h * 50})`;
       }
@@ -310,20 +385,147 @@ function computeStrahler(threshold) {
     ctx.textAlign = 'left';
   }
 
+  function plural(count, singular, pluralForm) {
+    return count === 1 ? singular : pluralForm;
+  }
+
+  function defaultChartNote() {
+    hortonNote.textContent = 'Bars count stream segments; gap labels show R_b. Hover a bar to trace that order through the river network.';
+  }
+
+  function describeOrder(d) {
+    const ratioText = d.ratio === null ? '' : ` R_b to next order: ${d.ratio.toFixed(1)}.`;
+    hortonNote.textContent = `Order ${d.order}: ${d.count} ${plural(d.count, 'stream segment', 'stream segments')}.${ratioText}`;
+  }
+
+  function drawOrderChart(stats) {
+    latestStats = stats;
+    const data = stats.orderCounts || [];
+    if (highlightedOrder && !data.some(d => d.order === highlightedOrder)) highlightedOrder = 0;
+
+    const width = Math.max(300, Math.round(hortonChart.node().clientWidth || container.clientWidth - 48));
+    const height = 160;
+    const margin = { top: 24, right: 18, bottom: 34, left: 38 };
+    hortonChart.attr('viewBox', `0 0 ${width} ${height}`);
+    hortonChart.selectAll('*').remove();
+
+    if (!data.length) {
+      hortonRatio.textContent = 'R_b --';
+      defaultChartNote();
+      return;
+    }
+
+    const yMax = Math.max(1, d3.max(data, d => d.count));
+    const x = d3.scaleBand()
+      .domain(data.map(d => d.order))
+      .range([margin.left, width - margin.right])
+      .padding(0.32);
+    const y = d3.scaleLinear()
+      .domain([0, yMax]).nice()
+      .range([height - margin.bottom, margin.top]);
+    const baseline = height - margin.bottom;
+
+    hortonChart.append('line')
+      .attr('class', 'axis-line')
+      .attr('x1', margin.left)
+      .attr('x2', width - margin.right)
+      .attr('y1', baseline)
+      .attr('y2', baseline);
+    hortonChart.append('line')
+      .attr('class', 'axis-line')
+      .attr('x1', margin.left)
+      .attr('x2', margin.left)
+      .attr('y1', margin.top)
+      .attr('y2', baseline);
+
+    const highlight = d => {
+      highlightedOrder = d.order;
+      describeOrder(d);
+      draw();
+      hortonChart.selectAll('rect.order-bar')
+        .attr('fill', bar => bar.order === highlightedOrder ? '#f59e0b' : '#2563eb');
+    };
+    const clearHighlight = () => {
+      highlightedOrder = 0;
+      defaultChartNote();
+      draw();
+      hortonChart.selectAll('rect.order-bar').attr('fill', '#2563eb');
+    };
+    hortonChart.on('mouseleave', clearHighlight);
+
+    hortonChart.selectAll('rect.order-bar')
+      .data(data)
+      .join('rect')
+      .attr('class', 'order-bar')
+      .attr('tabindex', 0)
+      .attr('x', d => x(d.order))
+      .attr('y', d => y(d.count))
+      .attr('width', x.bandwidth())
+      .attr('height', d => baseline - y(d.count))
+      .attr('rx', 2)
+      .attr('fill', d => d.order === highlightedOrder ? '#f59e0b' : '#2563eb')
+      .on('mouseenter focus', (event, d) => highlight(d))
+      .on('mouseleave blur', clearHighlight);
+
+    hortonChart.selectAll('text.bar-count')
+      .data(data)
+      .join('text')
+      .attr('class', 'axis-label')
+      .attr('x', d => x(d.order) + x.bandwidth() / 2)
+      .attr('y', d => Math.max(margin.top + 10, y(d.count) - 5))
+      .attr('text-anchor', 'middle')
+      .text(d => d.count);
+
+    hortonChart.selectAll('text.order-label')
+      .data(data)
+      .join('text')
+      .attr('class', 'axis-label')
+      .attr('x', d => x(d.order) + x.bandwidth() / 2)
+      .attr('y', baseline + 18)
+      .attr('text-anchor', 'middle')
+      .text(d => `O${d.order}`);
+
+    hortonChart.append('text')
+      .attr('class', 'axis-label')
+      .attr('x', margin.left)
+      .attr('y', height - 6)
+      .text('Strahler order');
+    hortonChart.append('text')
+      .attr('class', 'axis-label')
+      .attr('x', margin.left - 28)
+      .attr('y', margin.top - 8)
+      .text('segments');
+
+    hortonChart.selectAll('text.ratio-label')
+      .data(data.filter(d => d.ratio !== null))
+      .join('text')
+      .attr('class', 'axis-label')
+      .attr('x', d => x(d.order) + x.bandwidth() + (x.step() - x.bandwidth()) / 2)
+      .attr('y', margin.top - 8)
+      .attr('text-anchor', 'middle')
+      .text(d => `Rb ${d.ratio.toFixed(1)}`);
+
+    hortonRatio.textContent = stats.meanRb === null ? 'R_b --' : `mean R_b ${stats.meanRb.toFixed(1)}`;
+    const highlightedDatum = data.find(d => d.order === highlightedOrder);
+    if (highlightedDatum) describeOrder(highlightedDatum);
+    else defaultChartNote();
+  }
+
   function updateStats() {
-    const { maxOrder, outlets } = computeStrahler(CHANNEL_THRESHOLD);
+    const stats = computeStrahler(CHANNEL_THRESHOLD);
     let lo = Infinity, hi = -Infinity;
     for (let i = 0; i < N * N; i++) {
       if (terrain[i] < lo) lo = terrain[i];
       if (terrain[i] > hi) hi = terrain[i];
     }
-    statOrder.textContent = maxOrder;
-    statBasins.textContent = outlets;
+    statOrder.textContent = stats.maxOrder;
+    statBasins.textContent = stats.outlets;
     statRelief.textContent = (hi - lo).toFixed(2);
+    drawOrderChart(stats);
   }
 
   function loop() {
-    if (playing) {
+    if (playing && visible) {
       for (let s = 0; s < stepsPerFrame; s++) step();
       draw();
       // Stats are O(N^2 log N) via the sort in computeStrahler; run them
@@ -369,7 +571,12 @@ function computeStrahler(threshold) {
   new ResizeObserver(() => {
     canvas.width = canvas.height = container.clientWidth - 48;
     draw();
+    drawOrderChart(latestStats);
   }).observe(container);
+  Motion.onVisible(container, v => {
+    visible = v;
+    if (visible) draw();
+  });
 
   init();
   computeFlow();

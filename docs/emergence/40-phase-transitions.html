@@ -9,7 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;500&family=Source+Sans+3:wght@400;600;700&family=Source+Serif+4:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
-<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js" onload="renderMathInElement(document.body);"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js" onload="var __r=function(){renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\[',right:'\\]',display:true},{left:'\\(',right:'\\)',display:false},{left:'$',right:'$',display:false}]});}; if (window.katex) __r(); else document.addEventListener('DOMContentLoaded', __r);"></script>
 <script src="https://d3js.org/d3.v7.min.js"></script>
 <script src="../lib/motion.js"></script>
 <style>
@@ -29,6 +29,10 @@
   --fig-bg: #ffffff;
   --border: #e2e2e8;
   --c-agent: #2563eb;
+  --c-rule: #0891b2;
+  --c-pattern: #8b5cf6;
+  --c-critical: #f59e0b;
+  --c-feedback: #ef4444;
   --c-env: #10b981;
   --c-danger: #ef4444;
 }
@@ -73,6 +77,13 @@ svg text { font-family: var(--heading-font); }
 .stats-row { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 1rem; font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); align-items: center; }
 .stats-row b { color: var(--text); font-family: var(--mono-font); }
 .stats-row .spark { display: inline-block; vertical-align: middle; }
+.figure svg.sweep-svg { display: block; width: 100%; height: auto; overflow: visible; }
+.sweep-control input[type="range"] { width: 220px; }
+.sweep-readout { font-family: var(--heading-font); font-size: 0.9rem; color: var(--text-2); line-height: 1.45; margin: 0.75rem 0 0; }
+.sweep-readout b { color: var(--text); font-family: var(--mono-font); font-weight: 600; }
+.sweep-svg .axis line, .sweep-svg .axis path { stroke: var(--border); }
+.sweep-svg .axis text, .sweep-svg .plot-label { fill: var(--text-2); font-size: 11px; }
+.sweep-svg .curve-label { font-size: 12px; font-weight: 600; }
 .temp-wrap { position: relative; display: flex; flex-direction: column; gap: 2px; }
 .temp-wrap .tc-mark { font-family: var(--mono-font); font-size: 0.7rem; color: var(--c-danger); position: absolute; top: -14px; transform: translateX(-50%); pointer-events: none; white-space: nowrap; }
 .preset-row { display: flex; gap: 0.35rem; }
@@ -87,6 +98,7 @@ svg text { font-family: var(--heading-font); }
   h1 { font-size: 1.75rem; }
   .controls { gap: 0.6rem; }
   .control-group input[type="range"] { width: 80px; }
+  .sweep-control input[type="range"] { width: 140px; }
 }
 </style>
 </head>
@@ -159,6 +171,29 @@ fluctuations are scale-invariant.
 </div>
 
 <p>
+The lattice is the microscopic view. A temperature sweep turns those flickering
+configurations into macroscopic curves: the expected magnetization $|M|$ stays
+large below $T_c$, while susceptibility $\chi$ peaks where domain-scale
+fluctuations are easiest to excite.
+</p>
+
+<div class="figure" id="fig-sweep">
+  <div class="controls">
+    <div class="control-group sweep-control">
+      <label>Sweep temperature (T)</label>
+      <div class="slider-row temp-wrap">
+        <span class="tc-mark" id="sweep-tc-mark">T<sub>c</sub></span>
+        <input type="range" id="sweep-temp-slider" min="0.1" max="5.0" step="0.01" value="2.27">
+        <span class="val" id="sweep-temp-val">2.27</span>
+      </div>
+    </div>
+  </div>
+  <svg id="sweep-svg" class="sweep-svg" aria-label="Temperature sweep showing magnetization and susceptibility around T_c"></svg>
+  <p class="sweep-readout" id="sweep-readout"></p>
+  <p class="figure-caption"><span class="figure-label">Figure 2.</span> A sweep through temperature. The blue curve tracks expected order, the green curve tracks fluctuation response, and the small lattice samples show why the susceptibility peak corresponds to the large clusters in Figure 1.</p>
+</div>
+
+<p>
 The same dynamics drive phase transitions in any system where local imitation
 competes with noise: bird flocks, opinion dynamics, neural avalanches.
 </p>
@@ -186,6 +221,7 @@ const dispatch = d3.dispatch('update');
 const N = 100;
 let spins = new Int8Array(N * N);
 let T = 2.27;
+const T_C = 2.269;
 
 function init() {
   for (let i = 0; i < N * N; i++) spins[i] = Math.random() > 0.5 ? 1 : -1;
@@ -211,7 +247,6 @@ function step() {
 
 // --- Visualization ---
 (function() {
-  const T_C = 2.269;
   const container = document.getElementById('fig-ising');
   const canvas = document.getElementById('canvas-ising');
   const ctx = canvas.getContext('2d');
@@ -232,6 +267,7 @@ function step() {
   let stepsPerFrame = 1;
   let playing = true;
   let accumulator = 0;
+  let visible = true;
 
   // Magnetization history for the sparkline
   const magHist = [];
@@ -330,16 +366,18 @@ function step() {
   }
 
   function loop() {
-    if (playing) {
-      accumulator += stepsPerFrame;
-      while (accumulator >= 1) {
-        step();
-        accumulator -= 1;
+    if (visible) {
+      if (playing) {
+        accumulator += stepsPerFrame;
+        while (accumulator >= 1) {
+          step();
+          accumulator -= 1;
+        }
+        // Sub-1 speeds: probabilistically step so 0.25x stutters nicely.
+        if (stepsPerFrame < 1 && Math.random() < stepsPerFrame) step();
       }
-      // Sub-1 speeds: probabilistically step so 0.25x stutters nicely.
-      if (stepsPerFrame < 1 && Math.random() < stepsPerFrame) step();
+      draw();
     }
-    draw();
     requestAnimationFrame(loop);
   }
 
@@ -349,10 +387,17 @@ function step() {
     });
   }
 
-  slider.addEventListener('input', e => {
-    T = +e.target.value;
+  function setTemperature(nextT, source, emit = true) {
+    const min = +slider.min, max = +slider.max;
+    T = Math.max(min, Math.min(max, +nextT));
+    slider.value = T;
     valDisp.textContent = T.toFixed(2);
     syncPresetActive();
+    if (emit) dispatch.call('update', null, { source, temperature: T });
+  }
+
+  slider.addEventListener('input', e => {
+    setTemperature(e.target.value, 'ising');
   });
   speedSlider.addEventListener('input', e => {
     const idx = +e.target.value;
@@ -378,11 +423,12 @@ function step() {
   });
   presetBtns.forEach(b => {
     b.addEventListener('click', () => {
-      T = +b.dataset.preset;
-      slider.value = T;
-      valDisp.textContent = T.toFixed(2);
-      syncPresetActive();
+      setTemperature(b.dataset.preset, 'ising');
     });
+  });
+  dispatch.on('update.ising', event => {
+    if (!event || event.source === 'ising') return;
+    setTemperature(event.temperature, 'linked', false);
   });
 
   new ResizeObserver(() => {
@@ -390,6 +436,10 @@ function step() {
     positionTcMark();
     draw();
   }).observe(container);
+  Motion.onVisible(container, v => {
+    visible = v;
+    if (visible) draw();
+  });
 
   // Re-seed speed label from initial slider value
   stepsPerFrame = speedMap[+speedSlider.value];
@@ -398,6 +448,301 @@ function step() {
   init();
   positionTcMark();
   loop();
+})();
+
+// --- Temperature Sweep ---
+(function() {
+  const container = document.getElementById('fig-sweep');
+  const slider = document.getElementById('sweep-temp-slider');
+  const valDisp = document.getElementById('sweep-temp-val');
+  const tcMark = document.getElementById('sweep-tc-mark');
+  const readout = document.getElementById('sweep-readout');
+  const svg = d3.select('#sweep-svg');
+  const width = 720;
+  const height = 430;
+  const margin = { top: 112, right: 40, bottom: 58, left: 52 };
+  const plotW = width - margin.left - margin.right;
+  const plotH = height - margin.top - margin.bottom;
+  const minT = +slider.min;
+  const maxT = +slider.max;
+
+  svg.attr('viewBox', `0 0 ${width} ${height}`);
+
+  const x = d3.scaleLinear().domain([minT, maxT]).range([margin.left, width - margin.right]);
+  const y = d3.scaleLinear().domain([0, 1.05]).range([height - margin.bottom, margin.top]);
+  const temps = d3.range(minT, maxT + 0.001, 0.02).map(temp => ({
+    temp,
+    mag: magnetizationCurve(temp),
+    chi: susceptibilityCurve(temp)
+  }));
+
+  const plot = svg.append('g');
+  plot.append('rect')
+    .attr('x', x(T_C - 0.24))
+    .attr('y', margin.top)
+    .attr('width', x(T_C + 0.24) - x(T_C - 0.24))
+    .attr('height', plotH)
+    .attr('fill', 'var(--accent-light)')
+    .attr('opacity', 0.65);
+
+  plot.selectAll('line.grid')
+    .data(y.ticks(5))
+    .enter().append('line')
+    .attr('class', 'grid')
+    .attr('x1', margin.left)
+    .attr('x2', width - margin.right)
+    .attr('y1', d => y(d))
+    .attr('y2', d => y(d))
+    .attr('stroke', 'var(--border)')
+    .attr('stroke-dasharray', '2 4');
+
+  plot.append('g')
+    .attr('class', 'axis')
+    .attr('transform', `translate(0,${height - margin.bottom})`)
+    .call(d3.axisBottom(x)
+      .tickValues([0.5, 1.5, T_C, 3.5, 4.5])
+      .tickFormat(d => Math.abs(d - T_C) < 0.001 ? 'T_c' : d.toFixed(1)));
+
+  plot.append('g')
+    .attr('class', 'axis')
+    .attr('transform', `translate(${margin.left},0)`)
+    .call(d3.axisLeft(y).ticks(5).tickFormat(d3.format('.1f')));
+
+  plot.append('text')
+    .attr('class', 'plot-label')
+    .attr('x', margin.left + plotW / 2)
+    .attr('y', height - 14)
+    .attr('text-anchor', 'middle')
+    .text('temperature T');
+
+  plot.append('text')
+    .attr('class', 'plot-label')
+    .attr('x', -margin.top - plotH / 2)
+    .attr('y', 14)
+    .attr('transform', 'rotate(-90)')
+    .attr('text-anchor', 'middle')
+    .text('normalized response');
+
+  const magLine = d3.line()
+    .curve(d3.curveMonotoneX)
+    .x(d => x(d.temp))
+    .y(d => y(d.mag));
+  const chiLine = d3.line()
+    .curve(d3.curveMonotoneX)
+    .x(d => x(d.temp))
+    .y(d => y(d.chi));
+
+  plot.append('path')
+    .datum(temps)
+    .attr('d', magLine)
+    .attr('fill', 'none')
+    .attr('stroke', 'var(--accent)')
+    .attr('stroke-width', 3)
+    .attr('stroke-linecap', 'round');
+
+  plot.append('path')
+    .datum(temps)
+    .attr('d', chiLine)
+    .attr('fill', 'none')
+    .attr('stroke', 'var(--c-env)')
+    .attr('stroke-width', 3)
+    .attr('stroke-linecap', 'round');
+
+  plot.append('line')
+    .attr('x1', x(T_C)).attr('x2', x(T_C))
+    .attr('y1', margin.top - 8).attr('y2', height - margin.bottom)
+    .attr('stroke', 'var(--c-danger)')
+    .attr('stroke-width', 1.5)
+    .attr('stroke-dasharray', '5 5');
+
+  plot.append('text')
+    .attr('x', x(T_C) + 7)
+    .attr('y', margin.top - 14)
+    .attr('fill', 'var(--c-danger)')
+    .attr('font-size', 12)
+    .attr('font-family', 'var(--mono-font)')
+    .text('T_c');
+
+  plot.append('text')
+    .attr('class', 'curve-label')
+    .attr('x', x(0.75))
+    .attr('y', y(magnetizationCurve(0.75)) - 12)
+    .attr('fill', 'var(--accent)')
+    .text('|M| order');
+
+  plot.append('text')
+    .attr('class', 'curve-label')
+    .attr('x', x(T_C + 0.24))
+    .attr('y', y(susceptibilityCurve(T_C + 0.24)) - 14)
+    .attr('fill', 'var(--c-env)')
+    .text('susceptibility');
+
+  drawSamples(svg, x);
+
+  const marker = plot.append('g');
+  const markerLine = marker.append('line')
+    .attr('y1', margin.top)
+    .attr('y2', height - margin.bottom)
+    .attr('stroke', 'var(--text)')
+    .attr('stroke-width', 1.25)
+    .attr('opacity', 0.65);
+  const magDot = marker.append('circle')
+    .attr('r', 5)
+    .attr('fill', 'var(--accent)')
+    .attr('stroke', 'white')
+    .attr('stroke-width', 2);
+  const chiDot = marker.append('circle')
+    .attr('r', 5)
+    .attr('fill', 'var(--c-env)')
+    .attr('stroke', 'white')
+    .attr('stroke-width', 2);
+  const markerLabel = marker.append('text')
+    .attr('font-family', 'var(--mono-font)')
+    .attr('font-size', 11)
+    .attr('fill', 'var(--text)');
+
+  svg.append('rect')
+    .attr('x', margin.left)
+    .attr('y', margin.top)
+    .attr('width', plotW)
+    .attr('height', plotH)
+    .attr('fill', 'transparent')
+    .style('cursor', 'crosshair')
+    .on('pointermove', event => {
+      if (event.buttons !== 1) return;
+      setSweepTemperature(pointerToTemp(event), 'sweep');
+    })
+    .on('click', event => setSweepTemperature(pointerToTemp(event), 'sweep'));
+
+  function magnetizationCurve(temp) {
+    if (temp >= T_C) return 0;
+    const s = Math.sinh(2 / temp);
+    return Math.pow(Math.max(0, 1 - Math.pow(s, -4)), 0.125);
+  }
+
+  function susceptibilityCurve(temp) {
+    const z = (temp - T_C) / 0.28;
+    const peak = 1 / (1 + z * z);
+    const hotShoulder = temp > T_C ? 0.18 * Math.exp(-(temp - T_C) / 0.8) : 0;
+    return Math.min(1, 0.06 + 0.92 * peak + hotShoulder);
+  }
+
+  function pointerToTemp(event) {
+    const [mx] = d3.pointer(event, svg.node());
+    return Math.max(minT, Math.min(maxT, x.invert(mx)));
+  }
+
+  function positionTcMark() {
+    const frac = (T_C - minT) / (maxT - minT);
+    const w = slider.getBoundingClientRect().width || 220;
+    tcMark.style.left = (frac * w) + 'px';
+  }
+
+  function setSweepTemperature(nextT, source, emit = true) {
+    const selectedT = Math.max(minT, Math.min(maxT, +nextT));
+    const mag = magnetizationCurve(selectedT);
+    const chi = susceptibilityCurve(selectedT);
+    slider.value = selectedT;
+    valDisp.textContent = selectedT.toFixed(2);
+    markerLine.attr('x1', x(selectedT)).attr('x2', x(selectedT));
+    magDot.attr('cx', x(selectedT)).attr('cy', y(mag));
+    chiDot.attr('cx', x(selectedT)).attr('cy', y(chi));
+    markerLabel
+      .attr('x', Math.min(width - margin.right - 58, x(selectedT) + 8))
+      .attr('y', margin.top + 16)
+      .text(`T=${selectedT.toFixed(2)}`);
+    updateReadout(selectedT, mag, chi);
+    if (emit) dispatch.call('update', null, { source, temperature: selectedT });
+  }
+
+  function updateReadout(selectedT, mag, chi) {
+    let phrase;
+    if (selectedT < T_C - 0.25) {
+      phrase = `the ordered phase dominates. Expected |M| is ${mag.toFixed(2)}, susceptibility is low, and the lattice above tends to settle into one color with defects.`;
+    } else if (selectedT > T_C + 0.35) {
+      phrase = `thermal noise wins. Expected |M| falls to ${mag.toFixed(2)}, susceptibility relaxes, and the lattice breaks into short-lived speckles.`;
+    } else {
+      phrase = `the system sits in the critical window. Susceptibility rises to ${chi.toFixed(2)}, matching the large domains and sign-flips visible in the Ising simulation.`;
+    }
+    readout.innerHTML = `<b>T = ${selectedT.toFixed(2)}</b>: ${phrase}`;
+  }
+
+  function drawSamples(root, scaleX) {
+    const samples = [
+      { key: 'cold', temp: 1.15, label: 'ordered' },
+      { key: 'critical', temp: T_C, label: 'critical clusters' },
+      { key: 'hot', temp: 3.85, label: 'disordered' }
+    ];
+    const size = 54;
+    const cells = 14;
+    const cell = size / cells;
+    const y0 = 22;
+
+    samples.forEach(sample => {
+      const g = root.append('g')
+        .attr('transform', `translate(${scaleX(sample.temp) - size / 2},${y0})`);
+
+      for (let row = 0; row < cells; row++) {
+        for (let col = 0; col < cells; col++) {
+          const spin = sampleSpin(sample.key, col, row);
+          g.append('rect')
+            .attr('x', col * cell)
+            .attr('y', row * cell)
+            .attr('width', cell + 0.15)
+            .attr('height', cell + 0.15)
+            .attr('fill', spin > 0 ? 'rgb(37, 99, 235)' : 'rgb(234, 88, 12)');
+        }
+      }
+
+      g.append('rect')
+        .attr('width', size)
+        .attr('height', size)
+        .attr('fill', 'none')
+        .attr('stroke', 'var(--border)');
+      g.append('line')
+        .attr('x1', size / 2)
+        .attr('x2', size / 2)
+        .attr('y1', size)
+        .attr('y2', margin.top - y0 - 12)
+        .attr('stroke', 'var(--border)')
+        .attr('stroke-dasharray', '2 3');
+      g.append('text')
+        .attr('x', size / 2)
+        .attr('y', size + 15)
+        .attr('text-anchor', 'middle')
+        .attr('fill', 'var(--text-2)')
+        .attr('font-size', 11)
+        .text(sample.label);
+    });
+  }
+
+  function sampleSpin(kind, col, row) {
+    const r = hash(col, row, kind.length);
+    if (kind === 'cold') return r > 0.12 ? 1 : -1;
+    if (kind === 'hot') return r > 0.5 ? 1 : -1;
+
+    const field =
+      Math.sin(col * 0.85 + 0.8) +
+      Math.cos(row * 0.7 - 0.5) +
+      0.75 * Math.sin((col - row) * 0.34) +
+      0.55 * (r - 0.5);
+    return field > 0 ? 1 : -1;
+  }
+
+  function hash(col, row, seed) {
+    const xh = Math.sin(col * 127.1 + row * 311.7 + seed * 74.7) * 43758.5453;
+    return xh - Math.floor(xh);
+  }
+
+  slider.addEventListener('input', e => setSweepTemperature(e.target.value, 'sweep'));
+  dispatch.on('update.sweep', event => {
+    if (!event || event.source === 'sweep') return;
+    setSweepTemperature(event.temperature, 'linked', false);
+  });
+
+  new ResizeObserver(positionTcMark).observe(container);
+  positionTcMark();
+  setSweepTemperature(slider.value, 'sweep-init', false);
 })();
 </script>
 </body>
