@@ -109,11 +109,24 @@ code { font-family: var(--mono-font); font-size: 0.85em; background: #f3f4f6; pa
     <p class="subtitle">The force layout from #1 returns, this time carrying compartments. An indexed sum type labels each node, and a population-level refinement <code>|S| + |I| + |R| = N</code> makes the admissible state space a triangle.</p>
   </header>
 
-  <!-- ────────────── §1 Cold sim ────────────── -->
+  <!-- ────────────── §1 Type first sim ────────────── -->
   <div class="section">
-    <div class="section-tag">§1 · Cold sim</div>
-    <h2>An epidemic spreads across a contact network</h2>
-    <p>Forty nodes, a handful of links per node, the same repulsion + spring + centering we forged in <a href="01-force-directed-graph.html">#1</a>. One patient zero starts infected at the center. Each tick an infected neighbor passes the disease along an edge with probability <code>β·dt</code>; each infected recovers after a fixed duration. Under the graph, a stacked bar tracks the three compartment populations, and always sums to N.</p>
+    <div class="section-tag">§1 · Type first</div>
+    <h2>Three labels, one conserved population</h2>
+    <p>The SIR state is a contact graph whose nodes carry one of three labels: <code>S</code>, <code>I</code>, or <code>R</code>. The labels come from <a href="https://doi.org/10.1098/rspa.1927.0118">Kermack and McKendrick's epidemic model</a>; here they live on vertices, not in a well-mixed population.</p>
+    <div class="haskell-block">data Compartment = S | I | R
+
+data Node = Node { id   :: NodeId
+                 , pos  :: Position
+                 , comp :: Compartment
+                 , t    :: Time }     -- time of last transition
+
+type Population = Map Compartment Int
+
+-- Refinement on the population distribution:
+refined :: { p :: Population | sum p == N }</div>
+    <p>The sum type on <code>Node.comp</code> is local. The refinement on <code>Population</code> is global. The only transitions are <code>S → I</code> and <code>I → R</code>, so each update changes labels without changing the total.</p>
+    <p>The live graph below grounds that type in data. Forty nodes reuse the repulsion, spring, and centering forces from <a href="01-force-directed-graph.html">#1</a>. One patient zero starts infected near the center.</p>
     <div class="figure">
       <svg id="sir-sim" viewBox="0 0 680 340" width="100%" height="340" style="display:block"></svg>
       <div class="conservation-bar">
@@ -141,28 +154,9 @@ code { font-family: var(--mono-font); font-size: 0.85em; background: #f3f4f6; pa
     </div>
   </div>
 
-  <!-- ────────────── §2 Name the types ────────────── -->
+  <!-- ────────────── §2 Signature diagram ────────────── -->
   <div class="section">
-    <div class="section-tag">§2 · Name the types</div>
-    <h2>Three labels, one conservation law</h2>
-    <p>A <code>Compartment</code> is either <code>S</code>, <code>I</code>, or <code>R</code>. Unlike <a href="03-springs-and-constraints.html">#3</a>'s <code>Constraint</code>, these variants carry no payload; they're pure labels. But a second type lives one level up: the population distribution, refined so its three counts sum to the fixed population size.</p>
-    <div class="haskell-block">data Compartment = S | I | R
-
-data Node = Node { id   :: NodeId
-                 , pos  :: Position
-                 , comp :: Compartment
-                 , t    :: Time }     -- time of last transition
-
-type Population = Map Compartment Int
-
--- Refinement on the population distribution:
-refined :: { p :: Population | sum p == N }</div>
-    <p>The sum on <code>Node.comp</code> is the indexed part, where every individual carries its label. The refinement on <code>Population</code> is the geometric part; it lives not on any one node but on the whole system. Conservation isn't enforced by checking it each frame; it's a property of every reachable state because the only transitions are <code>S → I</code> and <code>I → R</code>, both of which leave the sum unchanged.</p>
-  </div>
-
-  <!-- ────────────── §3 Signature diagram ────────────── -->
-  <div class="section">
-    <div class="section-tag">§3 · Signature diagram</div>
+    <div class="section-tag">§2 · Signature diagram</div>
     <h2>Rates in, graph through, graph out</h2>
     <p>The step function is a function of two rates (the transmission probability and the recovery rate) and the current graph, a product of a node list and an edge list. The sum on the left now shows up <em>inside</em> the node record: each node's <code>comp</code> field is a three-way fork.</p>
     <div class="haskell-block">step :: Rates -> Graph -> Graph
@@ -171,13 +165,13 @@ refined :: { p :: Population | sum p == N }</div>
     Graph = { nodes :: [Node], edges :: [Edge] }</div>
     <div class="figure">
       <svg id="step-sig" viewBox="0 0 680 180" width="100%" height="180" style="display:block"></svg>
-      <div class="figure-caption">Left: the <code>Compartment</code> sum living inside each node. Middle: the Graph product (nodes × edges) feeding the step box. Right: the updated graph. A dot flows through on every frame.</div>
+      <div class="figure-caption">Left: the <code>Compartment</code> sum living inside each node. Middle: the Graph product (nodes × edges) feeding the step box. Right: live counts from §1, proving the output still lands in the same population refinement.</div>
     </div>
   </div>
 
-  <!-- ────────────── §4 What it lets you say ────────────── -->
+  <!-- ────────────── §3 What it lets you say ────────────── -->
   <div class="section">
-    <div class="section-tag">§4 · What it lets you say</div>
+    <div class="section-tag">§3 · What it lets you say</div>
     <h2>The admissible states form a triangle</h2>
     <p>The refinement <code>|S| + |I| + |R| = N</code> with non-negative counts is the standard <strong>2-simplex</strong>: a triangle whose vertices are the pure states and whose interior is every legal mixture. Every reachable configuration sits in this triangle.</p>
     <p>Below: the §1 sim, with <code>(|S|, |I|, |R|)</code> rendered as a barycentric point. The dashed boundary is the simplex itself.</p>
@@ -185,7 +179,7 @@ refined :: { p :: Population | sum p == N }</div>
       <svg id="simplex" viewBox="0 0 680 380" width="100%" height="380" style="display:block"></svg>
       <div class="figure-caption">The live trajectory sweeps from the S corner (pre-epidemic) toward the R corner (post-epidemic), bowing into the triangle as I spikes. The wall is the type — no algorithm in this sim needs to check <code>sum == N</code> because no update moves the point off the triangle.</div>
     </div>
-    <p>The conservation law is the type's arithmetic. The graph's topology is a second type parameter. Same β, patient zero, and γ: on a spatial lattice the percolation cluster grows as a roughly circular front; on a regular ring it propagates as a bilateral wave; on a scale-free network hubs fire first and the cluster explodes through high-degree nodes. These differences in cluster <em>morphology</em> are carried by the graph type alone, named as <code>Graph (Topology t)</code>.</p>
+    <p>The conservation law is the type's arithmetic. The graph's topology is a second type parameter. Same β, patient zero, and γ: a lattice tends to grow a spatial front; a regular ring sends a wave around the cycle; a <a href="https://doi.org/10.1126/science.286.5439.509">Barabási-Albert</a> network routes spread through hubs. These differences in morphology are carried by <code>Graph (Topology t)</code>.</p>
 
     <div class="figure">
       <div class="topo-grid">
@@ -211,24 +205,32 @@ refined :: { p :: Population | sum p == N }</div>
       <div class="controls">
         <button id="topo-reseed">reseed all three</button>
       </div>
-      <div class="figure-caption">Three SIR simulations seeded identically. β and γ are shared; only the graph topology differs. The cluster shape — not its population count — is the signature of the topology. A well-typed simulation names the topology in its signature, and a policy whose behavior assumes a circular front refuses to typecheck against a scale-free <code>Graph</code>.</div>
+      <div class="figure-caption">Three SIR simulations seeded identically. β and γ are shared; only the graph topology differs. Work on scale-free epidemic spreading, such as <a href="https://doi.org/10.1103/PhysRevLett.86.3200">Pastor-Satorras and Vespignani</a>, is one reason topology belongs in the signature. A policy whose signature requires a lattice-front model should not accept a scale-free <code>Graph</code> without an explicit adapter.</div>
     </div>
   </div>
 
-  <!-- ────────────── §5 Carry-forward ────────────── -->
+  <!-- ────────────── §4 Carry-forward ────────────── -->
   <div class="section">
-    <div class="section-tag">§5 · Carry-forward</div>
+    <div class="section-tag">§4 · Carry-forward</div>
     <div class="carry-forward">
       <p><strong>We added.</strong> The series' first <em>sim inheritance</em>: #1's force layout returned here specialized with compartment labels, the same repulsion + link-spring + centering physics carrying disease-dynamics state. Three compartment colors (S light-blue, I orange, R teal) named in the extension palette. The idea that a refinement type can carve out a <em>geometry</em> in state space, not just a predicate on a scalar. And a <code>Topology</code> type parameter naming which lattice or network the dynamics live on (spatial lattice, regular ring, scale-free), each producing a qualitatively distinct percolation cluster morphology from identical rates.</p>
       <p><strong>Reused where.</strong> Conservation-as-refinement returns in #7 (n-body total energy) and #12 (Weyl-invariant quantities). The topology-carries-morphology argument picks up the automorphism-group thread from <a href="02-boids.html">#2</a> and hands it forward to <a href="11-type-lattice.html">#11</a>'s crystallographic-classification pivot, a graph's symmetry group, a contact lattice's point group, and a root system's Weyl group are the same kind of structure at different levels of regularity. The state-space-as-simplex geometry sets up #11's parcoords.</p>
     </div>
   </div>
 
+  <div class="back-links" style="margin-top: 3rem;">
+    <a href="05-traffic-flow.html">← previous · Traffic Flow</a>
+    <span class="sep">·</span>
+    <a href="index.html">series index</a>
+    <span class="sep">·</span>
+    <a href="07-n-body-symplectic.html">next · N-Body and Symplectic Integration →</a>
+  </div>
+
 </div>
 
 <script>
 // ────────────────────────────────────────────────────────────── §1 SIR sim ──
-// We also expose the sim state globally to §4 so both figures read the same counts.
+// We also expose the sim state globally to §3 so both figures read the same counts.
 var SIR = (function () {
   var svg = d3.select('#sir-sim');
   var W = 680, H = 340;
@@ -349,9 +351,11 @@ var SIR = (function () {
     d3.select('#ctxt-r').text('|R| ' + counts.R);
     d3.select('#ctxt-n').text(total);
 
-    // Expose last counts on the sim object for §4.
+    // Expose last state on the sim object for §2 and §3.
     sim.counts = counts;
     sim.total = total;
+    sim.nodes = nodes;
+    sim.links = links;
   }
 
   function step(dt) {
@@ -386,7 +390,7 @@ var SIR = (function () {
     render();
   }
 
-  var sim = { counts: { S: N - 1, I: 1, R: 0 }, total: N };
+  var sim = { counts: { S: N - 1, I: 1, R: 0 }, total: N, nodes: nodes, links: links };
 
   var loopHandle = SC.loop(step);
   render();
@@ -407,7 +411,7 @@ var SIR = (function () {
   return sim;
 })();
 
-// ────────────────────────────────────────────────────────────── §3 signature diagram ──
+// ────────────────────────────────────────────────────────────── §2 signature diagram ──
 (function () {
   var svg = d3.select('#step-sig');
   var g = svg.append('g').attr('transform', 'translate(20, 18)');
@@ -460,9 +464,37 @@ var SIR = (function () {
   // Arrow: graph -> step
   var pIn = TV.pipe(g, { kind: 'Position', x1: 330, y1: 50, x2: 360, y2: 50, width: 3 });
 
-  // Output: Graph'
-  var pOut = TV.pipe(g, { kind: 'Position', x1: 450, y1: 50, x2: 560, y2: 50, width: 3 });
-  TV.product(g, { x: 560, y: 10, w: 90, h: 80, label: "Graph'" });
+  // Output: Graph', with live S/I/R counts from §1.
+  var pOut = TV.pipe(g, { kind: 'Position', x1: 450, y1: 50, x2: 540, y2: 50, width: 3 });
+  TV.product(g, { x: 540, y: 0, w: 110, h: 100, label: "Graph'" });
+  var live = g.append('g').attr('transform', 'translate(552, 32)');
+  live.append('rect')
+    .attr('x', 0).attr('y', 0).attr('width', 86).attr('height', 12)
+    .attr('rx', 2).attr('fill', '#f8fafc').attr('stroke', '#e2e8f0');
+  var sSeg = live.append('rect').attr('x', 0).attr('y', 0).attr('height', 12).attr('fill', 'var(--c-s)');
+  var iSeg = live.append('rect').attr('y', 0).attr('height', 12).attr('fill', 'var(--c-i)');
+  var rSeg = live.append('rect').attr('y', 0).attr('height', 12).attr('fill', 'var(--c-r)');
+  var liveLabel = live.append('text')
+    .attr('x', 43).attr('y', 30).attr('text-anchor', 'middle')
+    .attr('font-family', 'Source Code Pro, monospace').attr('font-size', '0.6rem')
+    .attr('fill', '#334155');
+  live.append('text')
+    .attr('x', 43).attr('y', 48).attr('text-anchor', 'middle')
+    .attr('font-family', 'Source Code Pro, monospace').attr('font-size', '0.55rem')
+    .attr('fill', '#64748b').text('sum = N');
+
+  function updateLive() {
+    if (!SIR || !SIR.counts) return;
+    var counts = SIR.counts;
+    var total = SIR.total || 1;
+    var sw = 86 * counts.S / total;
+    var iw = 86 * counts.I / total;
+    var rw = 86 * counts.R / total;
+    sSeg.attr('width', sw);
+    iSeg.attr('x', sw).attr('width', iw);
+    rSeg.attr('x', sw + iw).attr('width', rw);
+    liveLabel.text('S ' + counts.S + ' · I ' + counts.I + ' · R ' + counts.R);
+  }
 
   // Rates label above step box
   g.append('text').attr('x', 405).attr('y', 22)
@@ -480,12 +512,13 @@ var SIR = (function () {
       pIn.feed(0);
       pOut.feed((phase - 0.5) * 2);
     }
+    updateLive();
     requestAnimationFrame(animate);
   }
   animate();
 })();
 
-// ────────────────────────────────────────────────────────────── §4 simplex ──
+// ────────────────────────────────────────────────────────────── §3 simplex ──
 (function () {
   var svg = d3.select('#simplex');
   var W = 680, H = 380;
@@ -589,7 +622,7 @@ var SIR = (function () {
   (function tick() { update(); requestAnimationFrame(tick); })();
 })();
 
-// ────────────────────────────────────────────────────────────── §4b topology comparison ──
+// ────────────────────────────────────────────────────────────── §3b topology comparison ──
 // Three SIR networks — lattice, regular ring, scale-free — same β, γ, and patient-zero protocol.
 // The point is morphological: same rates, different cluster shape. Nothing about λ₁ printed; we let
 // the eye read the cluster.

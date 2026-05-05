@@ -95,12 +95,25 @@ code { font-family: var(--mono-font); font-size: 0.85em; background: #f3f4f6; pa
     <p class="subtitle">A step function's type is not just <code>State → State</code>. It's <code>State → e&nbsp;State</code>, where the effect tag <code>e</code> records what capabilities the function needs to run, and therefore what guarantees you're allowed to expect of it.</p>
   </header>
 
-  <!-- ────────────── §1 Cold sim ────────────── -->
+  <!-- ────────────── §1 Type first sim ────────────── -->
   <div class="section">
-    <div class="section-tag">§1 · Cold sim</div>
-    <h2>Three walkers, three effect profiles</h2>
-    <p>Three trajectories on the same canvas, three different effect tags. The cyan walker traces a Lissajous curve: the output is a closed-form function of time, so no randomness enters and the effect tag is <code>Det</code>. The purple walker is a lattice random walk reading from a seeded PRNG; its effect tag is <code>Rand (Seed&nbsp;s)</code>, and the seed is part of its type. The magenta walker calls <code>Math.random()</code> directly, a reach into the ambient environment, which is <code>IO</code>-flavored <code>Rand</code> with no seed witness.</p>
-    <p>Press <em>replay</em>: the cyan walker retraces itself because time is deterministic; the purple walker retraces itself because it is reseeded with the same number; the magenta walker draws something entirely new because nothing about its type promised otherwise.</p>
+    <div class="section-tag">§1 · Type first</div>
+    <h2>Effects live on the arrow</h2>
+    <p>An effect system adds a static description of what evaluating a function may do. <a href="https://research.ibm.com/publications/polymorphic-effect-systems">Lucassen and Gifford</a> used this idea to track side effects separately from value types.</p>
+    <p>This article uses a tiny teaching lattice: <code>Det ⊂ Rand (Seed s) ⊂ Rand Ambient ⊂ IO</code>. Each step still returns a state, but the arrow records which capabilities the step may use.</p>
+    <div class="haskell-block">data Det a
+data Seed (s :: Nat)
+data Ambient
+data Rand seed a
+data IO a
+
+type Step f = State -&gt; f State
+
+deterministic :: Step Det
+seededWalk    :: State -&gt; Rand (Seed 42) State
+unseeded      :: State -&gt; Rand Ambient State</div>
+    <p>The live figure gives the lattice a behavior. The cyan path is closed-form, so it is <code>Det</code>. The purple path reads a seeded generator. The magenta path reaches into ambient randomness.</p>
+    <p>Press <em>replay</em>: cyan retraces because time is deterministic; purple retraces because it is reseeded; magenta usually draws a different path because no seed witness was supplied.</p>
     <div class="figure">
       <svg id="walk-sim" viewBox="0 0 680 340" width="100%" height="340" style="display:block"></svg>
       <div class="controls">
@@ -112,65 +125,55 @@ code { font-family: var(--mono-font); font-size: 0.85em; background: #f3f4f6; pa
       <div class="effect-swatches">
         <span class="sw"><span class="dot" style="background: var(--c-det)"></span>Det · closed-form, replayable from t=0</span>
         <span class="sw"><span class="dot" style="background: var(--c-rand)"></span>Rand (Seed s) · replayable from s</span>
-        <span class="sw"><span class="dot" style="background: var(--c-io)"></span>IO / unseeded · not replayable</span>
+        <span class="sw"><span class="dot" style="background: var(--c-io)"></span>Rand Ambient / IO · no replay promise</span>
       </div>
     </div>
+    <p>The tag witnesses what the function can do. <code>Det State</code> says the next state was computed without environmental access. <code>Rand (Seed 42) State</code> also names which run you get.</p>
+    <p>Subtyping follows capability. A <code>Det</code> function can run where a random one is allowed because it simply leaves the generator unused. A seeded random function can run where ambient randomness is allowed because it picks one run from the family.</p>
   </div>
 
-  <!-- ────────────── §2 Name the types ────────────── -->
+  <!-- ────────────── §2 Signature diagram ────────────── -->
   <div class="section">
-    <div class="section-tag">§2 · Name the types</div>
-    <h2>The effect tag is a compile-time witness of capability</h2>
-    <p>Until now every step function had the shape <code>State → State</code>. That shape is a lie by omission: a walker reading from <code>Math.random()</code> and one reading from a seeded generator are indistinguishable at that type. An effect system refines <code>→</code> itself, parameterising it by a tag <code>e</code> naming which capabilities the right-hand side may use.</p>
-    <div class="haskell-block">data Det                -- no capabilities
-data Rand               -- needs a PRNG
-data Seed (s :: Nat)    -- carries the seed at the type level
-data IO                 -- the ambient environment (wall clock, Math.random, ...)
-
-type Step e = State -&gt; e State
-
-deterministic :: State -&gt; Det State
-seededWalk    :: State -&gt; Rand (Seed 42) State
-unseeded      :: State -&gt; Rand State          -- no seed witness; effectively IO
-</div>
-    <p><code>e</code> witnesses what the function can do. <code>Det State</code> proves the next state was computed without touching any environment. When parameterised (<code>Rand (Seed 42)</code>) it also names <em>which run</em> you'll get. Two walkers with byte-identical logic can carry different effect types, and the types are what let you replay, audit, or compose them.</p>
-    <p>The subtyping is <code>Det ⊂ Rand (Seed s) ⊂ Rand ⊂ IO</code>. A <code>Det</code> function fits anywhere a <code>Rand</code> one is expected (it simply doesn't use the PRNG); a seeded <code>Rand</code> fits anywhere an unseeded one is expected (it picks a particular run out of the family).</p>
-  </div>
-
-  <!-- ────────────── §3 Signature diagram ────────────── -->
-  <div class="section">
-    <div class="section-tag">§3 · Signature diagram</div>
+    <div class="section-tag">§2 · Signature diagram</div>
     <h2>The arrow carries a color now</h2>
     <p>Two signatures stacked. <code>Step Det :: State → Det State</code> on top; <code>Step (Rand s) :: State → Rand s State</code> below. The input pipe is blue (Position, a pair of coordinates, is the <code>State</code>). The output pipe's effect band is colored by the effect tag: <code>Det</code> cyan, <code>Rand (Seed s)</code> purple. Capability isn't a runtime flag; it's painted onto the arrow.</p>
     <div class="figure">
       <svg id="step-sig" viewBox="0 0 680 260" width="100%" height="260" style="display:block"></svg>
-      <div class="figure-caption">The effect strip sits above the output pipe. For <code>Rand (Seed s)</code> the seed <code>s</code> rides along as a compile-time tag beneath the strip — a witness that this arrow picks one specific run out of the <code>Rand</code> family.</div>
+      <div class="figure-caption">The effect strip sits above the output pipe. For <code>Rand (Seed s)</code> the seed readout follows the live seed control in §1, showing that the arrow has chosen one specific run from the random family.</div>
     </div>
   </div>
 
-  <!-- ────────────── §4 What it lets you say ────────────── -->
+  <!-- ────────────── §3 What it lets you say ────────────── -->
   <div class="section">
-    <div class="section-tag">§4 · What it lets you say</div>
+    <div class="section-tag">§3 · What it lets you say</div>
     <h2>The replay guarantee, visualized</h2>
     <p>Top row: two copies of the seeded walker from the same state with the same seed. Their paths coincide point-for-point: <code>Rand (Seed 42)</code> names one specific walk, so evaluating it twice returns the same path.</p>
-    <p>Bottom row: two copies of the unseeded walker, same state, rule, and step size. They diverge immediately. <code>Rand</code> without a seed makes no promise about which run you get.</p>
+    <p>Bottom row: two copies of the unseeded walker, same state, rule, and step size. They usually diverge at once. <code>Rand Ambient</code> makes no promise about which run you get.</p>
     <div class="figure">
       <svg id="replay-fig" viewBox="0 0 680 380" width="100%" height="380" style="display:block"></svg>
       <div class="controls">
         <button id="replay-rerun">run again</button>
       </div>
-      <div class="figure-caption">Top: <code>Rand (Seed 42)</code> twice — the two paths lie on top of each other. Bottom: <code>Rand</code> (unseeded) twice — they disagree on the very first step. The type is what distinguishes "reproducible" from "not".</div>
+      <div class="figure-caption">Top: <code>Rand (Seed 42)</code> twice, so the two paths lie on top of each other. Bottom: <code>Rand Ambient</code> twice, so the type gives no equality promise between runs.</div>
     </div>
-    <p>The four effects form a poset, a finite lattice with <code>Det</code> at the bottom and <code>IO</code> at the top. Every rung up widens the set of programs and weakens the guarantee. Subtyping turns this poset into a subsumption rule: a seeded run is usable wherever an unseeded one is expected, never the reverse. In a stochastic lattice simulation like the predator-prey lattice of #4 or the contact graph of #6, the <code>Rand (Seed s)</code> type is what makes a percolation cluster <em>reproducible</em>: the cluster you measure at seed 42 is the same one anyone else measures at seed 42. Without the seed in the type, the cluster is a random variable; with it, the cluster is a value. #11 plots this poset height as one axis of the nine-dimensional signature lattice.</p>
+    <p>In this toy lattice, every rung up widens the set of programs and weakens the guarantee. In a stochastic simulation like #4's predator-prey lattice or #6's contact graph, <code>Rand (Seed s)</code> turns one sampled cluster into a reproducible value. Without the seed witness, the cluster remains a random variable. #11 plots this effect height as one axis of the signature lattice.</p>
   </div>
 
-  <!-- ────────────── §5 Carry-forward ────────────── -->
+  <!-- ────────────── §4 Carry-forward ────────────── -->
   <div class="section">
-    <div class="section-tag">§5 · Carry-forward</div>
+    <div class="section-tag">§4 · Carry-forward</div>
     <div class="carry-forward">
       <p><strong>We added.</strong> <code>TV.effectStrip</code> as the new visual vocabulary, with capability tags stacked beside a trajectory in the effect palette (<code>Det</code> cyan, <code>Rand</code> purple, <code>IO</code> magenta). The seed-as-type-parameter pattern: <code>Seed (s :: Nat)</code> is a compile-time witness of which run you'll get, not a runtime value buried in a closure. And the reading that an effect tag is a witness of capability, a property the call site can see without looking inside the function.</p>
       <p><strong>Reused where.</strong> The effect strip returns in #9 when shape becomes a compile-time witness (the same "band next to the arrow" idiom for a different property) and in #10 when traits / contracts become witnesses of what a type can <em>do</em>. In #11 the effect rank (the height of the strip) becomes one axis of the parallel-coordinates view, so every simulation in the series is plotted partly by how much environment it needs.</p>
     </div>
+  </div>
+
+  <div class="back-links" style="margin-top: 3rem;">
+    <a href="07-n-body-symplectic.html">← previous · N-Body and Symplectic Integration</a>
+    <span class="sep">·</span>
+    <a href="index.html">series index</a>
+    <span class="sep">·</span>
+    <a href="09-reaction-diffusion.html">next · Reaction-Diffusion →</a>
   </div>
 
 </div>
@@ -190,8 +193,8 @@ function mulberry32(seed) {
   };
 }
 
-// ────────────────────────────────────────────────────────────── §1 cold sim ──
-(function () {
+// ────────────────────────────────────────────────────────────── §1 type-first sim ──
+var WALKS = (function () {
   var svg = d3.select('#walk-sim');
   var W = 680, H = 340;
 
@@ -357,9 +360,14 @@ function mulberry32(seed) {
     seedCallout.text('s = ' + currentSeed);
     replay();
   });
+
+  return {
+    getSeed: function () { return currentSeed; },
+    getState: function () { return state; }
+  };
 })();
 
-// ────────────────────────────────────────────────────────────── §3 signature diagram ──
+// ────────────────────────────────────────────────────────────── §2 signature diagram ──
 (function () {
   var svg = d3.select('#step-sig');
   var g = svg.append('g').attr('transform', 'translate(20, 20)');
@@ -373,6 +381,7 @@ function mulberry32(seed) {
     { y: 130, effect: 'Rand (Seed s)', color: 'var(--c-rand)', kindIn: 'Position', kindOut: 'Position',
       label: 'Step (Rand s)', eLabel: 'Rand(s)', subTag: 's :: Nat' }
   ];
+  var liveSeedText = null;
 
   rows.forEach(function (R) {
     // Row label on far left.
@@ -405,7 +414,7 @@ function mulberry32(seed) {
                     : R.color, active: true }]
     });
     if (R.subTag) {
-      g.append('text')
+      liveSeedText = g.append('text')
         .attr('x', 432).attr('y', R.y + 70)
         .attr('text-anchor', 'middle').attr('font-family', 'Source Code Pro, monospace')
         .attr('font-size', '0.6rem').attr('fill', R.color)
@@ -429,12 +438,15 @@ function mulberry32(seed) {
       if (phase < 0.5) { R._pIn.feed(phase * 2); R._pOut.feed(0); }
       else             { R._pIn.feed(0); R._pOut.feed((phase - 0.5) * 2); }
     });
+    if (liveSeedText && WALKS && WALKS.getSeed) {
+      liveSeedText.text('s = ' + WALKS.getSeed());
+    }
     requestAnimationFrame(animate);
   }
   animate();
 })();
 
-// ────────────────────────────────────────────────────────────── §4 replay guarantee ──
+// ────────────────────────────────────────────────────────────── §3 replay guarantee ──
 (function () {
   var svg = d3.select('#replay-fig');
   var W = 680, H = 380;
@@ -442,7 +454,7 @@ function mulberry32(seed) {
   // Two rows: "same seed" (top) and "no seed" (bottom). Each runs the walker twice.
   var rows = [
     { y0: 20,  y1: 175, label: 'Rand (Seed 42) — evaluated twice', sub: 'same type ⇒ identical trajectories', kind: 'seeded' },
-    { y0: 205, y1: 360, label: 'Rand — evaluated twice',           sub: 'no seed witness ⇒ divergent trajectories', kind: 'unseeded' }
+    { y0: 205, y1: 360, label: 'Rand Ambient — evaluated twice',    sub: 'no seed witness ⇒ no equality promise', kind: 'unseeded' }
   ];
 
   rows.forEach(function (R) {

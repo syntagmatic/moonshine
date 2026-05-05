@@ -125,11 +125,25 @@ code { font-family: var(--mono-font); font-size: 0.85em; background: #f3f4f6; pa
     <p class="subtitle">Two chemicals on a grid. A 3×3 stencil stirs them every frame. The shapes <code>[128×128]</code> and <code>[3×3]</code> are not runtime checks, they live <em>in the type</em>, and the compiler can see a mismatched convolution before the program runs.</p>
   </header>
 
-  <!-- ────────────── §1 Cold sim ────────────── -->
+  <!-- ────────────── §1 Type first sim ────────────── -->
   <div class="section">
-    <div class="section-tag">§1 · Cold sim</div>
-    <h2>Gray-Scott: two fields, one stencil</h2>
-    <p>Below, a 128×128 torus carries two concentration fields <code>U</code> and <code>V</code>. Each tick, both fields diffuse (a Laplacian stencil smears them into their neighbors) and react (V eats U, U is replenished, V decays). The visible color is <code>V</code>. Different <code>(F, k)</code> feed/kill settings carve the field into spots, stripes, or coral-like growths. Click to seed a new patch of V; the pattern re-organizes.</p>
+    <div class="section-tag">§1 · Type first</div>
+    <h2>Shape lives beside the field</h2>
+    <p><a href="https://doi.org/10.1098/rstb.1952.0012">Turing's reaction-diffusion argument</a> starts with local reactions plus diffusion through space. Here the space is a fixed grid, so the grid shape belongs in the type.</p>
+    <p>The live model is Gray-Scott, a two-chemical system that <a href="https://doi.org/10.1126/science.261.5118.189">Pearson used</a> to show spots, stripes, and self-replicating patterns from finite perturbations.</p>
+    <div class="haskell-block">-- Natural-number parameters: w, h, k live at the type level.
+type Field   (w :: Nat) (h :: Nat) = Array 2 Double  -- dim 0 = w, dim 1 = h
+type Stencil (k :: Nat)           = Array 2 Double  -- k × k, k odd
+
+laplace5 :: Stencil 3       -- the 5-point star
+laplace9 :: Stencil 3       -- the 9-point variant
+laplace5x5 :: Stencil 5     -- a wider Laplacian
+sobelX     :: Stencil 3     -- horizontal edge detector
+
+convolve :: Stencil k -> Field w h -> Field w h
+step     :: ReactionParams -> Stencil 3 -> Field w h -> Field w h</div>
+    <p>The signature says that convolution changes values but preserves shape. A <code>[2×3]</code> stencil is rejected before a multiplication runs. So is adding <code>Field 128 128</code> to <code>Field 64 128</code>.</p>
+    <p>Below, a 128×128 torus carries two concentration fields, <code>U</code> and <code>V</code>. The visible color is <code>V</code>. Different feed and kill settings carve the field into spots, stripes, or coral-like growths.</p>
     <div class="figure">
       <canvas id="rd-canvas" class="rd-canvas" width="128" height="128"></canvas>
       <div class="controls">
@@ -143,31 +157,12 @@ code { font-family: var(--mono-font); font-size: 0.85em; background: #f3f4f6; pa
       </div>
       <div class="figure-caption">Click the canvas to drop a V-patch anywhere. Each rAF frame runs four 1-second substeps, so the pattern develops visibly in a few seconds.</div>
     </div>
+    <p>This is dependent-types lite. Full dependent types let the shape be any expression; shape indexing asks only for natural-number parameters, enough to catch many dimension bugs while staying close to ordinary typed array code.</p>
   </div>
 
-  <!-- ────────────── §2 Name the types ────────────── -->
+  <!-- ────────────── §2 Signature diagram ────────────── -->
   <div class="section">
-    <div class="section-tag">§2 · Name the types</div>
-    <h2>Shapes ride along in the type</h2>
-    <p>Under the hood each field is a flat <code>Float32Array</code> of length <code>128 · 128 = 16384</code>. That's a runtime fact. The <em>type</em> wraps it in two natural-number parameters so the compiler can track what shape the array pretends to be:</p>
-    <div class="haskell-block">-- Natural-number parameters: w, h, k live at the type level.
-type Field   (w :: Nat) (h :: Nat) = Array 2 Double  -- refined: dim 0 = w, dim 1 = h
-type Stencil (k :: Nat)           = Array 2 Double  -- refined: k × k, k odd
-
-laplace5 :: Stencil 3       -- the 5-point star
-laplace9 :: Stencil 3       -- the 9-point (with corners) variant
-laplace5x5 :: Stencil 5     -- a wider isotropic Laplacian
-sobelX     :: Stencil 3     -- edge detector, horizontal
-
-convolve :: Stencil k -> Field w h -> Field w h
-step     :: ReactionParams -> Field w h -> Field w h  -- built on convolve</div>
-    <p><code>convolve</code>'s signature promises: for any odd <code>k</code> and any <code>w,h</code>, take a <code>k×k</code> stencil and a <code>w×h</code> field and return a field of the same shape. The output shape equals the input shape at compile time, no runtime check. A <code>[2×3]</code> stencil is rejected before a single multiplication runs; adding a <code>Field 128 128</code> to a <code>Field 64 128</code> likewise.</p>
-    <p>This is "dependent-types lite". Full dependent types let the shape be any expression; shape-indexing asks only for natural-number parameters, enough to catch dimension-mismatch bugs, cheap enough for Rust, Haskell (with <code>DataKinds</code>), Idris, and Swift.</p>
-  </div>
-
-  <!-- ────────────── §3 Signature diagram ────────────── -->
-  <div class="section">
-    <div class="section-tag">§3 · Signature diagram</div>
+    <div class="section-tag">§2 · Signature diagram</div>
     <h2>Every pipe carries its shape</h2>
     <p>Here is <code>step</code> drawn out. The stencil arrives on its own tagged pipe, a <code>[3×3]</code>. The field arrives on a wider pipe, a <code>[128×128]</code>. The output field's tag is the same as the input field's tag because the signature says so. The shape tags are rendered by <code>TV.shapeIndex</code>; think of them as the type checker's commentary floating over each wire.</p>
     <div class="haskell-block">step :: ReactionParams -> Stencil 3 -> Field 128 128 -> Field 128 128
@@ -175,13 +170,13 @@ step     :: ReactionParams -> Field w h -> Field w h  -- built on convolve</div>
     ReactionParams = { F :: Scalar, k :: Scalar, dU :: Scalar, dV :: Scalar }</div>
     <div class="figure">
       <svg id="step-sig" viewBox="0 0 680 220" width="100%" height="220" style="display:block"></svg>
-      <div class="figure-caption">The purple brackets are the shape index. The wide teal pipes carry the field; the narrower pipe carries the 3×3 stencil. A dot animates through to show that one <code>step</code> consumes a stencil and a field and produces a field of the <em>same</em> shape — a promise visible in the diagram and enforced by the type.</div>
+      <div class="figure-caption">The purple brackets are the shape index. The wider pipe carries the field; the narrower pipe carries the 3×3 stencil. A dot animates through to show that one <code>step</code> consumes a stencil and a field and produces a field of the same shape.</div>
     </div>
   </div>
 
-  <!-- ────────────── §4 What it lets you say ────────────── -->
+  <!-- ────────────── §3 What it lets you say ────────────── -->
   <div class="section">
-    <div class="section-tag">§4 · What it lets you say</div>
+    <div class="section-tag">§3 · What it lets you say</div>
     <h2>A stencil is a type-level value</h2>
     <p>Because the shape is part of the type, we can enumerate stencils of a given shape and treat them as <em>different types</em> rather than different arrays. Four stencils below, all applied to the same seeded blob. A Laplacian smears. An edge-detector emphasizes the boundary. A 5×5 wider kernel blurs farther per step. The field shape stays <code>[64×64]</code> throughout, that's a compile-time fact; the <em>behavior</em> is the thing that changes.</p>
     <div class="figure">
@@ -189,7 +184,7 @@ step     :: ReactionParams -> Field w h -> Field w h  -- built on convolve</div>
       <div class="figure-caption">Every tile runs the same <code>convolve :: Stencil k -> Field 64 64 -> Field 64 64</code>, differing only in which <code>Stencil k</code> they pass. Swap a <code>Stencil 3</code> for a <code>Stencil 5</code>, the buffer layout changes but the signature still type-checks. Swap a <code>[2×3]</code> shape in, and the line wouldn't compile.</div>
     </div>
     <p>The gallery is the expressiveness payoff. You can ship a library of named stencils, each with its own type, and combine them via well-typed combinators, <code>transpose :: Stencil k -> Stencil k</code>, <code>compose :: Stencil k -> Stencil k -> Stencil k</code>, knowing the dimensions will always line up.</p>
-    <p>Shape is the easy guarantee. The harder one is the <em>symmetry group of the lattice itself</em>. Lattice-gas automata confronted this in the 1980s: the Hardy–Pomeau–de Pazzis (<strong>HPP</strong>) model restricted fluid particles to four cardinal directions on a square grid and failed to reproduce Navier–Stokes at the continuum limit. The reason was group-theoretic: the point symmetry group of a square lattice is too small to guarantee a 4th-order isotropic tensor. Frisch, Hasslacher and Pomeau (<strong>FHP</strong>) replaced the square with a hexagonal lattice (<code>C₆ᵥ</code> is large enough) and the macroscopic hydrodynamics fell out. The lattice's group did the work.</p>
+    <p>Shape is the easy guarantee. The harder one is the symmetry group of the lattice itself. Lattice-gas automata exposed this in the 1980s: square-lattice models can leave anisotropic artifacts in the continuum limit. <a href="https://doi.org/10.1103/PhysRevLett.56.1505">Frisch, Hasslacher, and Pomeau</a> used a lattice with enough rotational symmetry to recover Navier-Stokes behavior in their model class. The lattice's group did part of the work.</p>
 
     <div class="figure">
       <div class="aniso-wrap">
@@ -198,33 +193,41 @@ step     :: ReactionParams -> Field w h -> Field w h  -- built on convolve</div>
           <div class="aniso-sub">only the four grid-axis neighbours contribute, the point group <code>D₄</code> is not rich enough</div>
           <div class="stencil-mini" id="mini-5pt"></div>
           <canvas id="rd-5pt" width="128" height="128"></canvas>
-          <div class="aniso-note">The stencil's dihedral group is <em>D₄</em>, not <em>SO(2)</em>. 90° is a symmetry, 60° is not. No matter how you tune <em>F</em>, <em>k</em>, or dt, the long-wavelength limit of this step function is not isotropic Navier-Stokes, it is the HPP failure mode rendered at reaction-diffusion scale.</div>
+          <div class="aniso-note">The stencil's dihedral group is <em>D₄</em>, not <em>SO(2)</em>. 90° is a symmetry, 60° is not. Tuning <em>F</em>, <em>k</em>, or dt can change the chemistry, but it cannot add a missing lattice symmetry.</div>
         </div>
         <div class="aniso-tile">
-          <h4>FHP-style hex-isotropic  ·  Stencil 3</h4>
-          <div class="aniso-sub">diagonal neighbours included with weights that recover the isotropic 4th-order tensor</div>
+          <h4>9-point isotropic-ish  ·  Stencil 3</h4>
+          <div class="aniso-sub">diagonal neighbours included with weights that reduce grid-axis bias</div>
           <div class="stencil-mini" id="mini-9pt"></div>
           <canvas id="rd-9pt" width="128" height="128"></canvas>
-          <div class="aniso-note">Same <code>Stencil 3</code> type, different entries. The weights <code>¼ · 1 · ¼ / 1 · −3 · 1 / ¼ · 1 · ¼</code> stand in for the <em>C₆ᵥ</em> invariance that FHP achieved literally. The pattern curls and branches as the chemistry demands.</div>
+          <div class="aniso-note">Same <code>Stencil 3</code> type, different entries. The weights <code>¼ · 1 · ¼ / 1 · −3 · 1 / ¼ · 1 · ¼</code> are a square-grid approximation to a more isotropic operator. The pattern has fewer grid-axis cues.</div>
         </div>
       </div>
       <div class="aniso-controls">
         <button id="rd-aniso-reseed">re-seed both</button>
         <button id="rd-aniso-pause">pause</button>
       </div>
-      <div class="figure-caption">Both panels run Gray-Scott with identical parameters, identical seed, identical dt. The only difference is the Laplacian stencil — which is to say, the <em>lattice symmetry group</em> that the <code>step</code> function inherits. This is the same argument FHP made for Navier–Stokes, transplanted to Turing patterns. #12 §5d specializes this to a true 7-point hex stencil where the group action is exact, closing the loop.</div>
+      <div class="figure-caption">Both panels run Gray-Scott with identical parameters, identical seed, identical dt. The only difference is the Laplacian stencil, which changes the lattice symmetries inherited by <code>step</code>. This is an analogy to the FHP symmetry lesson, not a proof about these Turing-like patterns. #12 §5d specializes this to a true 7-point hex stencil where the group action is exact.</div>
     </div>
 
-    <p>The type-system move: promote the lattice's point group to a type parameter, <code>Stencil k (PointGroup g)</code>. A diffusion written against <code>PointGroup C₆ᵥ</code> cannot be implemented on a <code>Lattice D₄</code>; the group tag catches the physics that the shape index didn't. Lattice gauge theory does the same when it discretizes SU(3) onto a hypercubic lattice.</p>
+    <p>The type-system move: promote the lattice's point group to a type parameter, <code>Stencil k (PointGroup g)</code>. A diffusion written against <code>PointGroup C₆ᵥ</code> should not silently run on a <code>Lattice D₄</code>. The group tag catches physics that the shape index alone cannot express.</p>
   </div>
 
-  <!-- ────────────── §5 Carry-forward ────────────── -->
+  <!-- ────────────── §4 Carry-forward ────────────── -->
   <div class="section">
-    <div class="section-tag">§5 · Carry-forward</div>
+    <div class="section-tag">§4 · Carry-forward</div>
     <div class="carry-forward">
       <p><strong>We added.</strong> <code>TV.shapeIndex</code>, a compact <code>[w×h]</code> tag that rides on a pipe the way a color does, naming a type-level number. Shape-dependence is now an <em>axis</em> of the visual vocabulary. The teal field palette (<code>--c-field-lo</code> → <code>--c-field-hi</code>) is a per-explainer extension that stays clear of the reserved six.</p>
       <p><strong>Reused where.</strong> Shape indices become a column on #11's parcoords: every prior signature gets re-drawn with its shape tags, so "expressiveness" is visible as how many shape constraints survive. #10's trait bounds are the same kind of type-level reasoning, one level up (constraints on <em>what</em> a type can do, not on <em>how big</em> it is). #12 §5d specializes <em>this</em> sim to a hex-stencil reaction-diffusion where <code>Weyl(A₂)</code> acts on the stencil, a <code>Stencil 3</code> whose entries are forced to be symmetric under the six-fold root-system symmetry.</p>
     </div>
+  </div>
+
+  <div class="back-links" style="margin-top: 3rem;">
+    <a href="08-random-walks.html">← previous · Random Walks</a>
+    <span class="sep">·</span>
+    <a href="index.html">series index</a>
+    <span class="sep">·</span>
+    <a href="10-fitness-ga.html">next · Fitness and Genetic Algorithms →</a>
   </div>
 
 </div>
@@ -233,7 +236,7 @@ step     :: ReactionParams -> Field w h -> Field w h  -- built on convolve</div>
 // ────────────────────────────────────────────────────────────── §1 RD sim ──
 // Gray-Scott on a 128x128 torus. Two Float32Array fields, double-buffered.
 // Renders to a <canvas> via putImageData every frame.
-(function () {
+var RD = (function () {
   var N = 128;
   var canvas = document.getElementById('rd-canvas');
   var ctx = canvas.getContext('2d');
@@ -367,9 +370,21 @@ step     :: ReactionParams -> Field w h -> Field w h  -- built on convolve</div>
   d3.selectAll('.preset-btn').classed('active', function () { return this.dataset.preset === currentPreset; });
   reset();
   requestAnimationFrame(frame);
+
+  return {
+    getParams: function () {
+      return {
+        preset: currentPreset,
+        F: params.F,
+        k: params.k,
+        dU: params.dU,
+        dV: params.dV
+      };
+    }
+  };
 })();
 
-// ────────────────────────────────────────────────────────────── §3 signature diagram ──
+// ────────────────────────────────────────────────────────────── §2 signature diagram ──
 (function () {
   var svg = d3.select('#step-sig');
   var g = svg.append('g').attr('transform', 'translate(20, 24)');
@@ -406,6 +421,9 @@ step     :: ReactionParams -> Field w h -> Field w h  -- built on convolve</div>
   g.append('text').attr('x', stepX + stepW / 2).attr('y', stepY - 6)
     .attr('text-anchor', 'middle').attr('font-family', 'Source Code Pro, monospace')
     .attr('font-size', '0.66rem').attr('fill', 'var(--c-time)').text('ReactionParams = {F, k, dU, dV}');
+  var liveParams = g.append('text').attr('x', stepX + stepW / 2).attr('y', stepY + stepH + 18)
+    .attr('text-anchor', 'middle').attr('font-family', 'Source Code Pro, monospace')
+    .attr('font-size', '0.6rem').attr('fill', '#64748b');
 
   // Output: field pipe out, wide gray with matching shape tag.
   var pFieldOut = TV.pipe(g, { kind: 'Id', x1: stepX + stepW, y1: stepY + stepH / 2, x2: 620, y2: stepY + stepH / 2, width: 4, dotR: 4 });
@@ -439,11 +457,15 @@ step     :: ReactionParams -> Field w h -> Field w h  -- built on convolve</div>
       pFieldIn.feed(0);
       pFieldOut.feed((phase - 0.5) * 2);
     }
+    if (RD && RD.getParams) {
+      var p = RD.getParams();
+      liveParams.text(p.preset + ' · F ' + p.F.toFixed(4) + ' · k ' + p.k.toFixed(4));
+    }
     requestAnimationFrame(animate);
   })();
 })();
 
-// ────────────────────────────────────────────────────────────── §4 anisotropy compare ──
+// ────────────────────────────────────────────────────────────── §3 anisotropy compare ──
 // Two Gray-Scott panels running in lockstep. Shared (F, k, dU, dV) and a shared seed; only the
 // Laplacian stencil differs. 5-point on the left (breaks 60° rotation), 9-point isotropic on the
 // right (approximately preserves it).
@@ -597,7 +619,7 @@ step     :: ReactionParams -> Field w h -> Field w h  -- built on convolve</div>
   frame();
 })();
 
-// ────────────────────────────────────────────────────────────── §4 stencil gallery ──
+// ────────────────────────────────────────────────────────────── §3 stencil gallery ──
 // Four tiles. Each runs a small 64×64 convolution-only simulation on a seeded field.
 // Keeps the fields independent so the reader can see the stencil's effect in isolation.
 (function () {
