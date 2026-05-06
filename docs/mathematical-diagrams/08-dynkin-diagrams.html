@@ -71,6 +71,10 @@ svg text { font-family: var(--heading-font); }
 .cartan-table td { width: 2.2rem; height: 2rem; text-align: center; border: 1px solid var(--border); }
 .cartan-table td.diag { background: var(--accent-light); font-weight: 600; }
 .cartan-table td.neg { color: #dc2626; }
+.cartan-table td.hot { background: #fef3c7; color: #92400e; font-weight: 700; }
+.geometry-note { font-family: var(--heading-font); font-size: 0.84rem; color: var(--text-2); line-height: 1.45; margin-top: 0.75rem; padding: 0.65rem 0.8rem; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; }
+.dynkin-bond.hot { stroke: var(--c-action); stroke-width: 4; }
+.dynkin-hit { pointer-events: stroke; }
 .mckay-table { border-collapse: collapse; width: 100%; margin: 0.75rem 0; font-family: var(--heading-font); font-size: 0.88rem; }
 .mckay-table th, .mckay-table td { padding: 0.5rem 0.75rem; border: 1px solid var(--border); text-align: left; }
 .mckay-table th { background: var(--accent-light); font-weight: 600; }
@@ -90,7 +94,7 @@ svg text { font-family: var(--heading-font); }
 
 <div class="header">
   <h1>Dynkin Diagrams: Classifying Simple Lie Algebras</h1>
-  <p class="subtitle">Part 8 of 15. A handful of dots and lines classify every semisimple Lie algebra &mdash; four infinite families and five exceptional cases, and nothing else.</p>
+  <p class="subtitle">Part 8 of 23. A handful of dots and lines classify the simple complex Lie algebras, then combine componentwise for the semisimple case.</p>
 </div>
 
 <p><strong>Play:</strong> Explore every Dynkin diagram type. Select a classification to see its Dynkin diagram and corresponding Cartan matrix. Notice how the <span style="color: var(--c-structure); font-weight: 600;">green-bordered</span> simply-laced (ADE) types only contain single bonds.</p>
@@ -100,13 +104,14 @@ svg text { font-family: var(--heading-font); }
   <div class="diagram-info" id="diagram-info"></div>
   <svg id="dynkin-svg" width="100%" viewBox="0 0 680 160"></svg>
   <div id="cartan-container" style="overflow-x: auto;"></div>
+  <div class="geometry-note" id="geometry-note">Hover a bond to link the diagram to the two off-diagonal Cartan entries, the root angle, and the relative root lengths.</div>
 </div>
 
 <h2>The Core Concept</h2>
 
 <p>In the 1890s, Wilhelm Killing set out to classify all simple Lie algebras over the complex numbers. The result, refined by Cartan and later distilled into graphical form by Dynkin, is one of the great classification theorems in mathematics.</p>
 
-<p>Every simple Lie algebra corresponds to exactly one <strong>Dynkin diagram</strong>: a small graph whose nodes are simple roots and whose edges encode the angles between them. The root system, representations, and Weyl group are all determined by this picture. The complete list is short: four infinite families and five exceptional cases.</p>
+<p>Every finite-dimensional simple complex Lie algebra corresponds to exactly one connected <strong>Dynkin diagram</strong>: a small graph whose nodes are simple roots and whose edges encode angles and relative root lengths. Semisimple Lie algebras correspond to disjoint unions of these diagrams. The complete connected list is short: four infinite families and five exceptional cases.</p>
 
 <p><strong>Simple roots and the Cartan matrix:</strong> A semisimple Lie algebra has a <strong>root system</strong>. A subset of <strong>simple roots</strong> forms a basis. The geometry of the simple roots is captured by the <strong>Cartan matrix</strong>. The diagram reconstructs the full Cartan matrix and hence the Lie algebra.</p>
 
@@ -287,10 +292,51 @@ math('m-a7', 'A_7');
     return '';
   }
 
+  function clearGeometryHighlight() {
+    svg.selectAll('.dynkin-bond').classed('hot', false);
+    d3.selectAll('.cartan-table td').classed('hot', false);
+    d3.select('#geometry-note')
+      .text('Hover a bond to link the diagram to the two off-diagonal Cartan entries, the root angle, and the relative root lengths.');
+  }
+
+  function showBondGeometry(e, C) {
+    var i = e.from, j = e.to;
+    svg.selectAll('.bond-' + i + '-' + j).classed('hot', true);
+    d3.selectAll('.cartan-cell-' + i + '-' + j + ', .cartan-cell-' + j + '-' + i).classed('hot', true);
+
+    var angle = e.mult === 1 ? 120 : e.mult === 2 ? 135 : 150;
+    var ratio = e.mult === 1 ? '1:1' : '\u221a' + e.mult + ':1';
+    var asym = e.mult === 1
+      ? 'The matching -1 entries mean the adjacent simple roots have equal length.'
+      : 'The unequal entries carry the long-short information; the conventional arrow points toward the shorter root.';
+
+    d3.select('#geometry-note').text(
+      'Bond ' + (i + 1) + '-' + (j + 1) +
+      ': a_' + (i + 1) + (j + 1) + ' = ' + C[i][j] +
+      ', a_' + (j + 1) + (i + 1) + ' = ' + C[j][i] +
+      '. Angle = ' + angle + '\u00b0; root lengths long:short = ' + ratio + '. ' + asym
+    );
+  }
+
+  function addBondHitTarget(gEdges, e, p1, p2, C) {
+    gEdges.append('line')
+      .attr('class', 'dynkin-hit')
+      .attr('x1', p1.x).attr('y1', p1.y)
+      .attr('x2', p2.x).attr('y2', p2.y)
+      .attr('stroke', 'transparent').attr('stroke-width', 18)
+      .attr('stroke-linecap', 'round')
+      .on('mouseenter', function () {
+        clearGeometryHighlight();
+        showBondGeometry(e, C);
+      })
+      .on('mouseleave', clearGeometryHighlight);
+  }
+
   function renderDiagram(diagram, isADE) {
     svg.selectAll('*').remove();
 
     var pos = Diag.dynkin.layout(diagram, W, H, 60);
+    var C = Diag.dynkin.cartanMatrix(diagram);
     var nodeColor = isADE ? 'var(--c-structure)' : 'var(--c-element)';
     var edgeColor = 'var(--c-morphism)';
 
@@ -300,6 +346,7 @@ math('m-a7', 'A_7');
       var p1 = pos[e.from], p2 = pos[e.to];
       if (e.mult === 1) {
         gEdges.append('line')
+          .attr('class', 'dynkin-bond bond-' + e.from + '-' + e.to)
           .attr('x1', p1.x).attr('y1', p1.y)
           .attr('x2', p2.x).attr('y2', p2.y)
           .attr('stroke', edgeColor).attr('stroke-width', 2.5);
@@ -309,10 +356,12 @@ math('m-a7', 'A_7');
         var len = Math.sqrt(dx * dx + dy * dy);
         var nx = -dy / len * 3.5, ny = dx / len * 3.5;
         gEdges.append('line')
+          .attr('class', 'dynkin-bond bond-' + e.from + '-' + e.to)
           .attr('x1', p1.x + nx).attr('y1', p1.y + ny)
           .attr('x2', p2.x + nx).attr('y2', p2.y + ny)
           .attr('stroke', edgeColor).attr('stroke-width', 2);
         gEdges.append('line')
+          .attr('class', 'dynkin-bond bond-' + e.from + '-' + e.to)
           .attr('x1', p1.x - nx).attr('y1', p1.y - ny)
           .attr('x2', p2.x - nx).attr('y2', p2.y - ny)
           .attr('stroke', edgeColor).attr('stroke-width', 2);
@@ -322,18 +371,22 @@ math('m-a7', 'A_7');
         var len = Math.sqrt(dx * dx + dy * dy);
         var nx = -dy / len * 4, ny = dx / len * 4;
         gEdges.append('line')
+          .attr('class', 'dynkin-bond bond-' + e.from + '-' + e.to)
           .attr('x1', p1.x).attr('y1', p1.y)
           .attr('x2', p2.x).attr('y2', p2.y)
           .attr('stroke', edgeColor).attr('stroke-width', 2);
         gEdges.append('line')
+          .attr('class', 'dynkin-bond bond-' + e.from + '-' + e.to)
           .attr('x1', p1.x + nx).attr('y1', p1.y + ny)
           .attr('x2', p2.x + nx).attr('y2', p2.y + ny)
           .attr('stroke', edgeColor).attr('stroke-width', 2);
         gEdges.append('line')
+          .attr('class', 'dynkin-bond bond-' + e.from + '-' + e.to)
           .attr('x1', p1.x - nx).attr('y1', p1.y - ny)
           .attr('x2', p2.x - nx).attr('y2', p2.y - ny)
           .attr('stroke', edgeColor).attr('stroke-width', 2);
       }
+      addBondHitTarget(gEdges, e, p1, p2, C);
     });
 
     // Draw nodes
@@ -393,11 +446,15 @@ math('m-a7', 'A_7');
       var tr = table.append('tr');
       for (var j = 0; j < n; j++) {
         var val = C[i][j];
+        var cls = ['cartan-cell', 'cartan-cell-' + i + '-' + j];
+        if (i === j) cls.push('diag');
+        if (val < 0) cls.push('neg');
         tr.append('td')
-          .attr('class', (i === j ? 'diag' : '') + (val < 0 ? ' neg' : ''))
+          .attr('class', cls.join(' '))
           .text(val);
       }
     }
+    clearGeometryHighlight();
   }
 })();
 </script>

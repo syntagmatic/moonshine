@@ -92,10 +92,10 @@ svg text { font-family: var(--heading-font); }
 
 <div class="header">
   <h1>Young Diagrams and Tableaux</h1>
-  <div class="subtitle">The Shape of Partitions &mdash; Part 2 of 7</div>
+  <div class="subtitle">The Shape of Partitions &mdash; Part 2 of 23</div>
 </div>
 
-<p><strong>Play:</strong> Click the grid below to build a partition. Each click adds or removes a box. Switch modes to explore hook lengths and standard Young tableaux. The formula below calculates the number of standard tableaux for your shape.</p>
+<p><strong>Play:</strong> Click the grid below to build a partition. Each click adds or removes a box while preserving the left-justified Young shape. Switch modes to explore hook lengths and standard Young tableaux. The formula below calculates the number of standard tableaux for your shape.</p>
 
 <div class="figure" id="fig-editor">
   <div style="display:flex;gap:1.5rem;align-items:flex-start;flex-wrap:wrap;">
@@ -121,6 +121,7 @@ svg text { font-family: var(--heading-font); }
     <button class="btn" id="btn-edit" onclick="setMode('edit')">Edit shape</button>
     <button class="btn" id="btn-fill" onclick="setMode('fill')">Fill tableau</button>
     <button class="btn" id="btn-hook" onclick="setMode('hook')">Show hooks</button>
+    <button class="btn" id="btn-walk" onclick="setMode('walk')">Hook walk</button>
   </div>
   <div class="status-bar" id="status">Partition: (empty) &mdash; click the grid to add boxes.</div>
 </div>
@@ -138,7 +139,7 @@ svg text { font-family: var(--heading-font); }
 
 <p><strong>Standard Young Tableaux:</strong> A <strong>standard Young tableau</strong> fills the boxes of a Young diagram with the numbers 1 through <em>n</em>, each used exactly once, so that entries increase along every row (left to right) and down every column (top to bottom).</p>
 
-<p>Standard Young tableaux index a basis for the irreducible representations of the symmetric group. The partition shape determines which representation; the tableau determines which basis vector.</p>
+<p>For the symmetric group, partitions label irreducible representations, and standard Young tableaux of a fixed shape index a natural basis for the corresponding Specht module. The shape tells you which representation; the filling tells you which basis vector.</p>
 
 <p><strong>The Hook-Length Formula:</strong> The <strong>hook</strong> at cell (<em>i</em>, <em>j</em>) consists of the cell itself, everything to its right in the same row (the <em>arm</em>), and everything below it in the same column (the <em>leg</em>). The hook length is arm + leg + 1.</p>
 
@@ -179,8 +180,9 @@ svg text { font-family: var(--heading-font); }
   var partition = [4, 2, 1];
   var filling = [];       // filling[i][j] = number placed, or null
   var nextNum = 1;
-  var mode = 'edit';      // 'edit' | 'fill' | 'hook'
+  var mode = 'edit';      // 'edit' | 'fill' | 'hook' | 'walk'
   var hoveredCell = null;  // {i, j} for hook display
+  var walkPath = [];       // deterministic hook-walk path through the current shape
 
   var CELL = 36, PAD = 16, MAX_ROWS = 7, MAX_COLS = 8;
 
@@ -261,15 +263,24 @@ svg text { font-family: var(--heading-font); }
         var isHookCell = false;
         var isHookArm = false;
         var isHookLeg = false;
+        var walkIdx = -1;
         if (mode === 'hook' && hoveredCell) {
           var hi = hoveredCell.i, hj = hoveredCell.j;
           if (i === hi && j === hj) isHookCell = true;
           else if (i === hi && j > hj && j < partition[hi]) isHookArm = true;
           else if (j === hj && i > hi && i < conj[hj]) isHookLeg = true;
         }
+        if (mode === 'walk' && walkPath.length) {
+          for (var wi = 0; wi < walkPath.length; wi++) {
+            if (walkPath[wi].i === i && walkPath[wi].j === j) walkIdx = wi;
+          }
+        }
 
         var fillColor = '#fff';
-        if (isHookCell) fillColor = '#fbbf24';
+        if (walkIdx === 0) fillColor = '#dbeafe';
+        else if (walkIdx === walkPath.length - 1 && walkIdx > 0) fillColor = '#bbf7d0';
+        else if (walkIdx > 0) fillColor = '#fef3c7';
+        else if (isHookCell) fillColor = '#fbbf24';
         else if (isHookArm) fillColor = '#fef3c7';
         else if (isHookLeg) fillColor = '#fef3c7';
 
@@ -293,6 +304,14 @@ svg text { font-family: var(--heading-font); }
             .attr('text-anchor', 'middle').attr('dominant-baseline', 'central')
             .attr('font-size', '15px').attr('fill', '#1e3a5f').attr('font-weight', 600)
             .text(filling[i][j]);
+        } else if (mode === 'walk' && walkIdx >= 0) {
+          cell.append('text')
+            .attr('x', CELL / 2).attr('y', CELL / 2 + 1)
+            .attr('text-anchor', 'middle').attr('dominant-baseline', 'central')
+            .attr('font-size', '13px')
+            .attr('fill', walkIdx === walkPath.length - 1 ? '#166534' : '#92400e')
+            .attr('font-weight', 700)
+            .text(walkIdx + 1);
         }
 
         // Interaction overlay
@@ -390,8 +409,32 @@ svg text { font-family: var(--heading-font); }
       if (i < partition.length && j < partition[i] && filling[i] && filling[i][j] == null && canFillCell(i, j)) {
         filling[i][j] = nextNum++;
       }
+    } else if (mode === 'walk') {
+      if (i < partition.length && j < partition[i]) startHookWalk(i, j);
     }
     render();
+  }
+
+  function hookMoves(i, j) {
+    var moves = [];
+    var conj = P.conjugate(partition);
+    for (var col = j + 1; col < partition[i]; col++) moves.push({ i: i, j: col });
+    for (var row = i + 1; row < conj[j]; row++) moves.push({ i: row, j: j });
+    return moves;
+  }
+
+  function startHookWalk(i, j) {
+    walkPath = [{ i: i, j: j }];
+    var ci = i, cj = j, guard = 0;
+    while (guard++ < 40) {
+      var moves = hookMoves(ci, cj);
+      if (!moves.length) break;
+      var seed = (ci + 1) * 17 + (cj + 1) * 31 + walkPath.length * 13 + P.sum(partition);
+      var next = moves[seed % moves.length];
+      ci = next.i;
+      cj = next.j;
+      walkPath.push({ i: ci, j: cj });
+    }
   }
 
   // ---- formula display ----
@@ -459,6 +502,14 @@ svg text { font-family: var(--heading-font); }
       var arm = partition[hoveredCell.i] - hoveredCell.j - 1;
       var leg = conj[hoveredCell.j] - hoveredCell.i - 1;
       base += '  |  Hook(' + hoveredCell.i + ',' + hoveredCell.j + '): arm=' + arm + ', leg=' + leg + ', h=' + h;
+    } else if (mode === 'walk') {
+      if (walkPath.length) {
+        var start = walkPath[0];
+        var end = walkPath[walkPath.length - 1];
+        base += '  |  Hook walk: (' + start.i + ',' + start.j + ') -> (' + end.i + ',' + end.j + ') in ' + walkPath.length + ' cells';
+      } else {
+        base += '  |  Hook walk: click any cell to follow arm-or-leg moves to a corner.';
+      }
     }
     el.textContent = base;
   }
@@ -469,7 +520,9 @@ svg text { font-family: var(--heading-font); }
     document.getElementById('btn-edit').classList.toggle('active', m === 'edit');
     document.getElementById('btn-fill').classList.toggle('active', m === 'fill');
     document.getElementById('btn-hook').classList.toggle('active', m === 'hook');
+    document.getElementById('btn-walk').classList.toggle('active', m === 'walk');
     if (m === 'fill') resetFilling();
+    if (m !== 'walk') walkPath = [];
     hoveredCell = null;
     render();
   }
@@ -483,6 +536,7 @@ svg text { font-family: var(--heading-font); }
     else if (name === 'clear') partition = [];
     resetFilling();
     hoveredCell = null;
+    walkPath = [];
     render();
   };
 

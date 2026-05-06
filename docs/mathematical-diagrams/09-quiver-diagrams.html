@@ -68,6 +68,9 @@ svg text { font-family: var(--heading-font); }
 .status-bar .mutation-count { font-weight: 600; color: var(--accent); }
 .reset-btn { font-family: var(--heading-font); font-size: 0.78rem; padding: 0.25rem 0.6rem; border: 1px solid var(--border); border-radius: 4px; background: var(--fig-bg); color: var(--text-2); cursor: pointer; transition: all 0.15s; }
 .reset-btn:hover { border-color: var(--c-action); color: var(--c-action); }
+.mutation-detail { font-family: var(--heading-font); font-size: 0.82rem; color: var(--text-2); background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 0.55rem 0.7rem; margin: 0 0 0.6rem; line-height: 1.45; }
+.mutation-history { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 0.75rem; min-height: 1.4rem; }
+.history-chip { font-family: var(--mono-font); font-size: 0.72rem; color: var(--text); background: #fff; border: 1px solid var(--border); border-radius: 3px; padding: 0.15rem 0.35rem; }
 .sees-list { margin: 1.5rem 0; padding-left: 1.5rem; }
 .sees-list li { margin-bottom: 0.4rem; }
 .sees-list li strong { color: var(--accent); }
@@ -83,7 +86,7 @@ svg text { font-family: var(--heading-font); }
 
 <div class="header">
   <h1>Quiver Diagrams: Arrows, Algebras, and Mutation</h1>
-  <p class="subtitle">Part 9 of 15. Quivers encode the structure of algebras and their representations as directed graphs. Their combinatorics reaches from Gabriel's classification of finite representation type to Fomin and Zelevinsky's cluster algebras.</p>
+  <p class="subtitle">Part 9 of 23. Quivers encode the structure of algebras and their representations as directed graphs. Their combinatorics reaches from Gabriel's classification of finite representation type to Fomin and Zelevinsky's cluster algebras.</p>
 </div>
 
 <p><strong>Play:</strong> Explore quiver mutations. Click a vertex to mutate the quiver there. The amber flash marks the mutated vertex. Drag vertices freely; arrows curve to stay readable. Reset restores the current preset.</p>
@@ -95,14 +98,16 @@ svg text { font-family: var(--heading-font); }
     <span>Mutations: <span class="mutation-count" id="mutation-count">0</span></span>
     <button class="reset-btn" id="reset-btn">Reset</button>
   </div>
+  <div class="mutation-detail" id="mutation-detail">Click a vertex to see the three mutation steps: path arrows added, incident arrows reversed, and 2-cycles cancelled.</div>
+  <div class="mutation-history" id="mutation-history"></div>
   <svg id="quiver-svg" width="100%" viewBox="0 0 480 340"></svg>
 </div>
 
 <h2>The Core Concept</h2>
 
-<p>A <strong>quiver</strong> is a directed graph: a finite set of vertices and a finite set of arrows, with multiple arrows and loops permitted. Every finite-dimensional algebra over an algebraically closed field is Morita equivalent to one built from a quiver, and the representation theory of these <em>path algebras</em> connects graph combinatorics to homological algebra, Lie theory, and cluster algebras.</p>
+<p>A <strong>quiver</strong> is a directed graph: a finite set of vertices and a finite set of arrows, with multiple arrows and, in general, loops permitted. Many finite-dimensional algebras can be presented as path algebras of quivers with relations, and their representation theory connects graph combinatorics to homological algebra, Lie theory, and cluster algebras.</p>
 
-<p><strong>The path algebra:</strong> Given a quiver and a field, the <strong>path algebra</strong> is the algebra whose basis consists of all directed paths in the quiver. Multiplication is concatenation of paths.</p>
+<p><strong>The path algebra:</strong> Given a quiver and a field, the <strong>path algebra</strong> is the algebra whose basis consists of all directed paths in the quiver. Multiplication is concatenation when paths meet and zero when they do not.</p>
 
 <p><strong>Quiver representations:</strong> A <strong>representation</strong> of a quiver assigns a vector space to each vertex and a linear map to each arrow. Gabriel's theorem (1972) proved that a connected quiver has finitely many indecomposable representations if and only if its underlying undirected graph is an ADE Dynkin diagram.</p>
 
@@ -206,6 +211,7 @@ math('m-step1b', 'i \\to j', false);
   var currentQuiver = null;
   var positions = {};  // vertex id -> {x, y}
   var mutationCount = 0;
+  var mutationHistory = [];
 
   // Defs: arrowhead marker
   var defs = svg.append('defs');
@@ -269,16 +275,23 @@ math('m-step1b', 'i \\to j', false);
     currentQuiver = Diag.quiver.presets[key]();
     positions = layoutPositions(currentQuiver);
     mutationCount = 0;
+    mutationHistory = [];
     d3.select('#mutation-count').text('0');
     d3.select('#diagram-name').text(currentQuiver.name);
     bar.selectAll('.preset-btn').classed('active', function () {
       return d3.select(this).attr('data-key') === key;
     });
+    updateMutationDetail(null);
     render();
   }
 
   function mutateAt(k) {
+    var summary = analyzeMutation(currentQuiver, k);
+    var oldLabels = currentQuiver.labels;
+    var oldName = currentQuiver.name;
     currentQuiver = Diag.quiver.mutate(currentQuiver, k);
+    currentQuiver.labels = oldLabels;
+    currentQuiver.name = oldName;
     // Preserve existing positions; add positions for any new vertices
     currentQuiver.vertices.forEach(function (v) {
       if (!positions[v]) {
@@ -288,8 +301,88 @@ math('m-step1b', 'i \\to j', false);
     mutationCount++;
     d3.select('#mutation-count').text(mutationCount);
     d3.select('#diagram-name').text(currentQuiver.name + ' (mutated)');
+    mutationHistory.push(summary);
+    updateMutationDetail(summary);
     render();
     flashVertex(k);
+  }
+
+  function labelVertex(v) {
+    return currentQuiver && currentQuiver.labels ? (currentQuiver.labels[v] || v) : v;
+  }
+
+  function arrowLabel(a) {
+    return labelVertex(a.from) + '\u2192' + labelVertex(a.to);
+  }
+
+  function analyzeMutation(q, k) {
+    var intoK = q.arrows.filter(function (a) { return a.to === k; });
+    var outOfK = q.arrows.filter(function (a) { return a.from === k; });
+    var added = {};
+    var addedList = [];
+    intoK.forEach(function (a1) {
+      outOfK.forEach(function (a2) {
+        var key = a1.from + '>' + a2.to;
+        if (!added[key]) {
+          added[key] = true;
+          addedList.push({ from: a1.from, to: a2.to });
+        }
+      });
+    });
+
+    var newArrows = [];
+    addedList.forEach(function (a) { newArrows.push({ from: a.from, to: a.to, source: 'path' }); });
+    q.arrows.forEach(function (a) {
+      if (a.from === k) newArrows.push({ from: a.to, to: a.from, source: 'reverse' });
+      else if (a.to === k) newArrows.push({ from: a.to, to: a.from, source: 'reverse' });
+      else newArrows.push({ from: a.from, to: a.to, source: 'keep' });
+    });
+
+    var cancelSet = {};
+    var canceledPairs = [];
+    for (var i = 0; i < newArrows.length; i++) {
+      for (var j = i + 1; j < newArrows.length; j++) {
+        if (newArrows[i].from === newArrows[j].to && newArrows[i].to === newArrows[j].from) {
+          if (!cancelSet[i] && !cancelSet[j]) canceledPairs.push([newArrows[i], newArrows[j]]);
+          cancelSet[i] = true;
+          cancelSet[j] = true;
+        }
+      }
+    }
+
+    return {
+      vertex: k,
+      added: addedList,
+      reversed: intoK.length + outOfK.length,
+      canceled: canceledPairs.length
+    };
+  }
+
+  function updateMutationDetail(summary) {
+    var detail = d3.select('#mutation-detail');
+    var history = d3.select('#mutation-history');
+    history.selectAll('*').remove();
+
+    mutationHistory.forEach(function (m, idx) {
+      history.append('span')
+        .attr('class', 'history-chip')
+        .text((idx + 1) + ': \u03bc' + labelVertex(m.vertex) + ' +' + m.added.length + ' rev' + m.reversed + ' cancel' + m.canceled);
+    });
+
+    if (!summary) {
+      detail.text('Click a vertex to see the three mutation steps: path arrows added, incident arrows reversed, and 2-cycles cancelled.');
+      return;
+    }
+
+    var addedText = summary.added.length
+      ? summary.added.map(arrowLabel).join(', ')
+      : 'none';
+    detail.text(
+      'Mutated at vertex ' + labelVertex(summary.vertex) +
+      '. Added path arrows: ' + addedText +
+      '. Reversed incident arrows: ' + summary.reversed +
+      '. 2-cycle cancellations: ' + summary.canceled + '.'
+    );
   }
 
   function flashVertex(k) {

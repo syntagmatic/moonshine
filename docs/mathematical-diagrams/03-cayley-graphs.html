@@ -101,10 +101,10 @@ svg text { font-family: var(--heading-font); }
 
 <div class="header">
   <h1>Cayley Graphs: Groups as Geometry</h1>
-  <p class="subtitle">Part 3 of 7. A group's entire multiplication table, drawn as a directed graph. One node per element, one coloured edge per generator. The geometry you see <em>is</em> the algebra.</p>
+  <p class="subtitle">Part 3 of 23. A group's multiplication rules, drawn as a directed graph. One node per element, one coloured edge per generator. The geometry depends on the generators, but it exposes the algebra you can walk through.</p>
 </div>
 
-<p><strong>Play:</strong> Explore the Cayley graphs of small groups. Edges are coloured by generator. Click a node to set it as the identity (re-root), or use the multiply buttons to walk along the graph. Notice how toggling generators changes the shape.</p>
+<p><strong>Play:</strong> Explore the Cayley graphs of small groups. Edges are coloured by generator. Click a node to choose a starting element, or use the multiply buttons to walk along the graph. Notice how toggling generators changes the shape and can disconnect the graph.</p>
 
 <div class="figure">
   <div class="controls">
@@ -112,14 +112,14 @@ svg text { font-family: var(--heading-font); }
     <span id="gen-checks"></span>
     <label><input type="checkbox" id="edge-labels-toggle"> Edge labels</label>
   </div>
-  <svg id="cayley-svg" width="700" height="480"></svg>
+  <svg id="cayley-svg" width="100%" height="480" viewBox="0 0 700 480"></svg>
   <div class="walk-btns" id="walk-btns"></div>
   <div class="status-bar" id="status-bar">Click a node to set it as identity.</div>
 </div>
 
 <h2>The Core Concept</h2>
 
-<p>A multiplication table hides geometry. Cayley's graph encodes the same information as a directed graph, and structure invisible in the table jumps out: cyclic subgroups are loops, cosets are clusters, the centre is where differently-coloured paths commute.</p>
+<p>A multiplication table hides geometry. A Cayley graph turns chosen generators into moves, and structure that is hard to see in the table becomes visible: cyclic subgroups are loops, cosets are repeated clusters, and commuting generators close coloured squares.</p>
 
 <p>A <strong>group</strong> is a set <em>G</em> together with an associative binary operation, an identity element <em>e</em>, and inverses. A set <em>S</em> of <strong>generators</strong> is a subset of <em>G</em> such that every element of the group can be written as a product of elements of <em>S</em> and their inverses.</p>
 
@@ -139,21 +139,205 @@ svg text { font-family: var(--heading-font); }
   <li><strong>Cosets:</strong> Left cosets of a subgroup partition the graph into isomorphic clusters.</li>
   <li><strong>Commutativity:</strong> Two generators commute if and only if every blue-red square closes.</li>
   <li><strong>The word metric:</strong> Shortest-path distance in the graph gives a left-invariant metric on the group.</li>
-  <li><strong>Group isomorphism:</strong> Two groups are isomorphic if and only if (for appropriate generators) their Cayley graphs are isomorphic as coloured directed graphs.</li>
+  <li><strong>Generator choice:</strong> The same group can draw different Cayley graphs. The graph records the group together with the chosen generating set.</li>
 </ul>
 
 <script>
 (function () {
-  var defEl = document.getElementById('math-def');
-  katex.render(
-    '\\text{Cay}(G, S) : \\quad V = G, \\quad E = \\{\\, g \\xrightarrow{\\,s\\,} gs \\mid g \\in G,\\, s \\in S \\,\\}',
-    defEl, { displayMode: true }
-  );
-  var wordEl = document.getElementById('math-word');
-  katex.render(
-    'd(g, h) = \\min\\{\\, |w| \\mid h = g \\cdot w,\\; w \\in (S \\cup S^{-1})^* \\,\\}',
-    wordEl, { displayMode: true }
-  );
+  var svg = d3.select('#cayley-svg');
+  var W = 700, H = 480;
+  var C = ['#2563eb', '#dc2626', '#059669'];
+  var catalog = Diag.group.catalog();
+  var groupSelect = document.getElementById('group-select');
+  var genChecks = document.getElementById('gen-checks');
+  var walkBtns = document.getElementById('walk-btns');
+  var status = document.getElementById('status-bar');
+  var labelToggle = document.getElementById('edge-labels-toggle');
+  var grp = null;
+  var selectedGens = [];
+  var current = 0;
+  var showEdgeLabels = false;
+
+  catalog.forEach(function (entry) {
+    var opt = document.createElement('option');
+    opt.value = entry.key;
+    opt.textContent = entry.label;
+    groupSelect.appendChild(opt);
+  });
+  groupSelect.value = 'S3';
+
+  function loadGroup(key) {
+    var entry = catalog.find(function (d) { return d.key === key; }) || catalog[0];
+    grp = entry.build();
+    selectedGens = grp.generators.slice();
+    current = 0;
+    renderGeneratorChecks();
+    renderWalkButtons();
+    render();
+  }
+
+  function reachableFrom(start) {
+    var seen = {};
+    var queue = [start];
+    seen[start] = true;
+    while (queue.length) {
+      var g = queue.shift();
+      selectedGens.forEach(function (s) {
+        [s, grp.inv(s)].forEach(function (step) {
+          var h = grp.mult(g, step);
+          if (!seen[h]) {
+            seen[h] = true;
+            queue.push(h);
+          }
+        });
+      });
+    }
+    return Object.keys(seen).map(function (d) { return +d; });
+  }
+
+  function isConnected() {
+    return reachableFrom(0).length === grp.elements.length;
+  }
+
+  function renderGeneratorChecks() {
+    genChecks.innerHTML = '';
+    grp.generators.forEach(function (gen, i) {
+      var label = document.createElement('label');
+      label.style.marginLeft = '0.45rem';
+      var input = document.createElement('input');
+      input.type = 'checkbox';
+      input.checked = true;
+      input.value = gen;
+      input.addEventListener('change', function () {
+        selectedGens = grp.generators.filter(function (g) {
+          var box = genChecks.querySelector('input[value="' + g + '"]');
+          return box && box.checked;
+        });
+        renderWalkButtons();
+        render();
+      });
+      label.appendChild(input);
+      label.appendChild(document.createTextNode(' ' + (grp.generatorLabels[gen] || ('g' + (i + 1)))));
+      genChecks.appendChild(label);
+    });
+  }
+
+  function renderWalkButtons() {
+    walkBtns.innerHTML = '';
+    selectedGens.forEach(function (gen, i) {
+      var btn = document.createElement('button');
+      btn.className = 'btn';
+      btn.textContent = 'multiply by ' + (grp.generatorLabels[gen] || ('g' + (i + 1)));
+      btn.addEventListener('click', function () {
+        current = grp.mult(current, gen);
+        render();
+      });
+      walkBtns.appendChild(btn);
+    });
+  }
+
+  function layoutPositions() {
+    var pos = {};
+    var n = grp.elements.length;
+    var cx = W / 2, cy = H / 2 + 8;
+    var r = n <= 4 ? 125 : 165;
+    grp.elements.forEach(function (el, i) {
+      var a = (i / n) * 2 * Math.PI - Math.PI / 2;
+      pos[el] = { x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) };
+    });
+    if (grp.nameAscii === 'D_4' || grp.nameAscii === 'Q_8') {
+      grp.elements.forEach(function (el, i) {
+        var ring = i < 4 ? 115 : 180;
+        var slot = i % 4;
+        var a = (slot / 4) * 2 * Math.PI - Math.PI / 4;
+        pos[el] = { x: cx + ring * Math.cos(a), y: cy + ring * Math.sin(a) };
+      });
+    }
+    if (grp.nameAscii === 'V_4') {
+      pos = { 0:{x:250,y:150}, 1:{x:450,y:150}, 2:{x:250,y:330}, 3:{x:450,y:330} };
+    }
+    return pos;
+  }
+
+  function render() {
+    svg.selectAll('*').remove();
+    svg.append('defs').selectAll('marker').data(C).enter().append('marker')
+      .attr('id', function (_, i) { return 'cayley-arrow-' + i; })
+      .attr('viewBox', '0 0 8 8')
+      .attr('refX', 7).attr('refY', 4)
+      .attr('markerWidth', 7).attr('markerHeight', 7)
+      .attr('orient', 'auto')
+      .append('path')
+      .attr('d', 'M0,0 L8,4 L0,8 Z')
+      .attr('fill', function (d) { return d; });
+
+    var positions = layoutPositions();
+    var edges = Diag.group.cayleyEdges(grp, selectedGens);
+    var edgeLayer = svg.append('g').attr('class', 'edges');
+    var labelLayer = svg.append('g').attr('class', 'edge-labels');
+    var nodeLayer = svg.append('g').attr('class', 'nodes');
+
+    edgeLayer.selectAll('line').data(edges).enter().append('line')
+      .attr('x1', function (d) { return positions[d.from].x; })
+      .attr('y1', function (d) { return positions[d.from].y; })
+      .attr('x2', function (d) { return positions[d.to].x; })
+      .attr('y2', function (d) { return positions[d.to].y; })
+      .attr('stroke', function (d) { return C[d.genIndex % C.length]; })
+      .attr('stroke-width', 2)
+      .attr('stroke-opacity', 0.64)
+      .attr('marker-end', function (d) { return 'url(#cayley-arrow-' + (d.genIndex % C.length) + ')'; });
+
+    if (showEdgeLabels) {
+      labelLayer.selectAll('text').data(edges).enter().append('text')
+        .attr('x', function (d) { return (positions[d.from].x + positions[d.to].x) / 2; })
+        .attr('y', function (d) { return (positions[d.from].y + positions[d.to].y) / 2 - 5; })
+        .attr('text-anchor', 'middle')
+        .attr('font-size', '0.72rem')
+        .attr('font-weight', 700)
+        .attr('fill', function (d) { return C[d.genIndex % C.length]; })
+        .text(function (d) { return grp.generatorLabels[d.generator] || d.generator; });
+    }
+
+    var reached = reachableFrom(current);
+    var reachSet = {};
+    reached.forEach(function (d) { reachSet[d] = true; });
+
+    var nodes = nodeLayer.selectAll('g').data(grp.elements).enter().append('g')
+      .attr('transform', function (d) { return 'translate(' + positions[d].x + ',' + positions[d].y + ')'; })
+      .style('cursor', 'pointer')
+      .on('click', function (_, d) {
+        current = d;
+        render();
+      });
+
+    nodes.append('circle')
+      .attr('class', 'node-circle')
+      .attr('r', function (d) { return d === current ? 19 : 15; })
+      .attr('fill', function (d) { return d === current ? '#f59e0b' : reachSet[d] ? '#2563eb' : '#cbd5e1'; })
+      .attr('stroke', '#fff')
+      .attr('stroke-width', 2.5);
+
+    nodes.append('text')
+      .attr('text-anchor', 'middle')
+      .attr('dominant-baseline', 'central')
+      .attr('font-size', '0.8rem')
+      .attr('font-weight', 700)
+      .attr('fill', '#fff')
+      .text(function (d) { return grp.labels[d]; });
+
+    var genNames = selectedGens.map(function (g) { return grp.generatorLabels[g] || g; }).join(', ') || 'none';
+    var connected = isConnected();
+    status.textContent = grp.name + ' with generators {' + genNames + '} is ' +
+      (connected ? 'connected' : 'disconnected') +
+      '. Current element: ' + grp.labels[current] + '.';
+  }
+
+  groupSelect.addEventListener('change', function () { loadGroup(this.value); });
+  labelToggle.addEventListener('change', function () {
+    showEdgeLabels = this.checked;
+    render();
+  });
+  loadGroup(groupSelect.value);
 })();
 </script>
 

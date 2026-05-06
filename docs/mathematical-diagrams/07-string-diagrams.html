@@ -64,6 +64,8 @@ svg text { font-family: var(--heading-font); }
 .preset-btn:hover { border-color: var(--c-element); color: var(--c-element); }
 .preset-btn.active { background: var(--c-element); color: #fff; border-color: var(--c-element); }
 .diagram-name { font-family: var(--heading-font); font-size: 0.9rem; font-weight: 600; color: var(--text); margin-bottom: 0.5rem; min-height: 1.4em; }
+.deformation-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 0.55rem; margin: 0.35rem 0 0.75rem; font-family: var(--heading-font); font-size: 0.82rem; color: var(--text-2); }
+.deform-status { font-family: var(--mono-font); font-size: 0.72rem; color: var(--text-2); background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 0.25rem 0.45rem; max-width: 100%; overflow-wrap: anywhere; }
 .sees-list { margin: 1.5rem 0; padding-left: 1.5rem; }
 .sees-list li { margin-bottom: 0.4rem; }
 .sees-list li strong { color: var(--accent); }
@@ -79,7 +81,7 @@ svg text { font-family: var(--heading-font); }
 
 <div class="header">
   <h1>String Diagrams: Wiring Algebra</h1>
-  <p class="subtitle">Part 7 of 15. A graphical calculus for monoidal categories: objects become wires, morphisms become boxes, and the topology of the picture encodes every algebraic equation.</p>
+  <p class="subtitle">Part 7 of 23. A graphical calculus for monoidal categories: objects become wires, morphisms become boxes, and topological deformation records the structural equations.</p>
 </div>
 
 <p><strong>Play:</strong> Build string diagrams. Choose a preset to see its string diagram. Drag any box to rearrange &mdash; the wires follow. See how composition stacks vertically and tensor products sit side-by-side.</p>
@@ -87,14 +89,18 @@ svg text { font-family: var(--heading-font); }
 <div class="figure" id="fig-string">
   <div class="preset-bar" id="preset-bar"></div>
   <div class="diagram-name" id="diagram-name"></div>
+  <div class="deformation-bar">
+    <button class="preset-btn" type="button" id="deform-btn">Deform wiring</button>
+    <span class="deform-status" id="deform-status"></span>
+  </div>
   <svg id="string-svg" width="100%" viewBox="0 0 420 320"></svg>
 </div>
 
 <h2>The Core Concept</h2>
 
-<p>Most mathematical notation is one-dimensional. <em>g</em>&thinsp;&#8728;&thinsp;<em>f</em> means "first <em>f</em>, then <em>g</em>," but the composition is invisible. String diagrams make the wiring explicit. Every wire carries a type (an object in a monoidal category), every box carries a morphism, and the geometry of the picture <em>is</em> the algebra.</p>
+<p>Most mathematical notation is one-dimensional. <em>g</em>&thinsp;&#8728;&thinsp;<em>f</em> means "first <em>f</em>, then <em>g</em>," but the composition is invisible. String diagrams make the wiring explicit. Every wire carries a type (an object in a monoidal category), every box carries a morphism, and the permitted deformations encode the algebraic laws.</p>
 
-<p>A <strong>monoidal category</strong> is a category equipped with a tensor product and a unit object, satisfying coherence conditions. Every equation in a monoidal category can be stated as a topological deformation of a string diagram. Two diagrams represent the same morphism if and only if one can be continuously deformed into the other.</p>
+<p>A <strong>monoidal category</strong> is a category equipped with a tensor product and a unit object, satisfying coherence conditions. For the structural equations of monoidal, braided, compact closed, and traced settings, equality can often be read as a permitted deformation of the diagram. The exact deformation rule depends on which categorical structure is present.</p>
 
 <p><strong>The visual dictionary:</strong> In string diagrams, reading flows <strong>top to bottom</strong>.</p>
 <ul>
@@ -122,7 +128,7 @@ svg text { font-family: var(--heading-font); }
   <li><strong>Braiding:</strong> Wire crossings (the swap isomorphism made visible).</li>
   <li><strong>Duals:</strong> Cups and caps (wires bend to create units and counits).</li>
   <li><strong>Trace:</strong> Feedback loops (output wires routed back to inputs via cup-cap pairs).</li>
-  <li><strong>Equations:</strong> Topology (two diagrams represent the same morphism iff one deforms into the other).</li>
+  <li><strong>Equations:</strong> Topology, within the graphical calculus allowed by the category in use.</li>
   <li><strong>Coherence:</strong> Invisible isomorphisms (associators and unitors are absorbed into the geometry).</li>
 </ul>
 
@@ -205,8 +211,10 @@ math('m-trA', '\\mathrm{Tr}(f) = \\sum_i f_{ii}', false);
   ];
 
   var current = null;
+  var currentKey = 'composition';
   var boxPositions = {};   // id -> {x, y} in SVG coords
   var dragging = null;
+  var deformationStep = 0;
 
   // Layers
   var gWires = svg.append('g').attr('class', 'wires');
@@ -221,10 +229,16 @@ math('m-trA', '\\mathrm{Tr}(f) = \\sum_i f_{ii}', false);
     .text(function (d) { return d.label; })
     .on('click', function (ev, d) { loadPreset(d.key); });
 
+  d3.select('#deform-btn').on('click', function () {
+    deformationStep++;
+    applyDeformation();
+  });
+
   // Initial load
   loadPreset('composition');
 
   function loadPreset(key) {
+    currentKey = key;
     var data = Diag.string.presets[key]();
     current = data;
     // Reset box positions from preset data
@@ -235,7 +249,41 @@ math('m-trA', '\\mathrm{Tr}(f) = \\sum_i f_{ii}', false);
 
     d3.select('#diagram-name').text(data.name);
     bar.selectAll('.preset-btn').classed('active', function (d) { return d.key === key; });
+    d3.select('#deform-btn').classed('active', false);
     render();
+    updateDeformationStatus('canonical');
+  }
+
+  function wiringSignature(data) {
+    if (!data || !data.wires.length) return 'no wires';
+    return data.wires.map(function (w) {
+      return w.from.replace(/:/g, '.') + '->' + w.to.replace(/:/g, '.');
+    }).join(' | ');
+  }
+
+  function updateDeformationStatus(kind) {
+    var prefix = kind === 'canonical' ? 'Connectivity: ' : 'Same connectivity after deformation: ';
+    d3.select('#deform-status').text(prefix + wiringSignature(current));
+  }
+
+  function applyDeformation() {
+    if (!current) return;
+    var offsets = [
+      { dx: -36, dy: 18 },
+      { dx: 34, dy: -14 },
+      { dx: -22, dy: -20 },
+      { dx: 28, dy: 22 }
+    ];
+    current.boxes.forEach(function (box, idx) {
+      var off = offsets[(idx + deformationStep) % offsets.length];
+      boxPositions[box.id] = {
+        x: Math.max(PAD_LR, Math.min(W - PAD_LR, box.x + off.dx)),
+        y: Math.max(PAD_TOP + BOX_H / 2, Math.min(H - PAD_BOT - BOX_H / 2, box.y + off.dy))
+      };
+    });
+    d3.select('#deform-btn').classed('active', true);
+    render();
+    updateDeformationStatus('deformed');
   }
 
   function inputPortPos(data, wireIdx) {
@@ -385,6 +433,7 @@ math('m-trA', '\\mathrm{Tr}(f) = \\sum_i f_{ii}', false);
           var ny = Math.max(PAD_TOP + BOX_H / 2, Math.min(H - PAD_BOT - BOX_H / 2, ev.y));
           boxPositions[box.id] = { x: nx, y: ny };
           render();
+          updateDeformationStatus('deformed');
         })
         .on('end', function () { d3.select(this).style('cursor', 'grab'); });
       g.call(drag);

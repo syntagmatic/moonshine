@@ -69,6 +69,8 @@ svg text { font-family: var(--heading-font); }
 .stat .lbl { font-size: 0.75rem; color: var(--text-2); margin-top: 0.15rem; }
 .diagram-name { font-family: var(--heading-font); font-size: 0.9rem; font-weight: 600; color: var(--text); margin-bottom: 0.5rem; min-height: 1.4em; }
 .hint-text { font-family: var(--heading-font); font-size: 0.78rem; color: var(--text-2); margin-top: 0.5rem; }
+.twist-builder { display: flex; align-items: center; flex-wrap: wrap; gap: 0.45rem; margin: 0.75rem 0 0.25rem; font-family: var(--heading-font); font-size: 0.82rem; color: var(--text-2); }
+.twist-sequence { font-family: var(--mono-font); color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 0.25rem 0.45rem; }
 .sees-list { margin: 1.5rem 0; padding-left: 1.5rem; }
 .sees-list li { margin-bottom: 0.4rem; }
 .sees-list li strong { color: var(--accent); }
@@ -84,7 +86,7 @@ svg text { font-family: var(--heading-font); }
 
 <div class="header">
   <h1>Tangle Diagrams: Open-Ended Knots and Rational Tangles</h1>
-  <p class="subtitle">Part 13 of 15. A tangle is a portion of a knot confined to a ball, with strands escaping through four boundary points. Rational tangles &mdash; built by twisting &mdash; are classified by a single fraction, turning topology into arithmetic.</p>
+  <p class="subtitle">Part 13 of 23. A tangle is a portion of a knot confined to a ball, with strands escaping through four boundary points. Rational tangles &mdash; built by twisting &mdash; are classified by a single fraction, turning topology into arithmetic.</p>
 </div>
 
 <p><strong>Play:</strong> Explore rational tangles and their fractions. Select a preset to see its crossing pattern, Conway notation, and continued-fraction invariant. Toggle "Close (numerator)" to see how a tangle becomes a knot or link.</p>
@@ -97,6 +99,16 @@ svg text { font-family: var(--heading-font); }
     <div class="stat"><div class="val" id="stat-conway">[ ]</div><div class="lbl">Conway notation</div></div>
     <div class="stat"><div class="val" id="stat-crossings">0</div><div class="lbl">Crossings</div></div>
   </div>
+  <div class="twist-builder" id="twist-builder">
+    <span class="figure-label">Twist builder:</span>
+    <button class="preset-btn" type="button" id="twist-h-plus">H +1</button>
+    <button class="preset-btn" type="button" id="twist-h-minus">H -1</button>
+    <button class="preset-btn" type="button" id="twist-v-plus">V +1</button>
+    <button class="preset-btn" type="button" id="twist-v-minus">V -1</button>
+    <button class="preset-btn" type="button" id="twist-undo">Undo</button>
+    <button class="preset-btn" type="button" id="twist-reset">Reset builder</button>
+    <span class="twist-sequence" id="twist-sequence">[0]</span>
+  </div>
   <svg id="tangle-svg" width="100%" viewBox="0 0 460 420"></svg>
   <p class="hint-text" id="hint-text">Select a preset to explore rational tangles and their fractions.</p>
 </div>
@@ -105,13 +117,13 @@ svg text { font-family: var(--heading-font); }
 
 <p>Cut a knot diagram with a circle that crosses it in exactly four points. The portion inside is a <strong>tangle</strong>: a pair of arcs running between four boundary points labelled NW, NE, SW, SE.</p>
 
-<p><strong>Elementary tangles:</strong> The <strong>0-tangle</strong> connects NW to SW and NE to SE (vertical strands). The <strong>&infin;-tangle</strong> connects NW to NE and SW to SE (horizontal strands). Every rational tangle grows from these by twisting.</p>
+<p><strong>Elementary tangles:</strong> The <strong>0-tangle</strong> and <strong>&infin;-tangle</strong> are the two crossing-free pairings of the four boundary points, up to the convention used for labelling the square. Every rational tangle grows from these by twists and rotations.</p>
 
 <p><strong>Rational tangles and continued fractions:</strong> A <strong>rational tangle</strong> is built by alternating horizontal and vertical twists, written in Conway notation as [a&#x2081;, a&#x2082;, &hellip;, a&#x2099;]. Each rational tangle carries a <strong>fraction</strong> p/q computed as a continued fraction from the twist sequence.</p>
 
 <p><strong>Conway's classification theorem (1970):</strong> Two rational tangles are equivalent (ambient isotopic) if and only if they have the same fraction. The fraction is a complete invariant, turning a topological problem into an arithmetic one. Rational tangles are in bijection with &#x211A; &cup; {&infin;}.</p>
 
-<p><strong>Closing tangles into knots:</strong> Connecting boundary points pairwise transforms a tangle into a knot or link. The <strong>numerator closure</strong> connects NW&ndash;NE and SW&ndash;SE. The <strong>denominator closure</strong> connects NW&ndash;SW and NE&ndash;SE. For a tangle with fraction p/q, the numerator closure yields a knot governed by p.</p>
+<p><strong>Closing tangles into knots:</strong> Connecting boundary points pairwise transforms a tangle into a knot or link. The <strong>numerator closure</strong> connects NW&ndash;NE and SW&ndash;SE. The <strong>denominator closure</strong> connects NW&ndash;SW and NE&ndash;SE. For rational tangles, these closures produce the familiar two-bridge knots and links associated with the fraction.</p>
 
 <h2>Concept Summary</h2>
 
@@ -216,6 +228,7 @@ math('m-sees-inf', '\\infty', false);
 
   var currentTangle = null;
   var showClosure = false;
+  var builderOps = [];
 
   // Layers
   var gBg = svg.append('g');
@@ -255,6 +268,7 @@ math('m-sees-inf', '\\infty', false);
       d3.select(this).classed('active', true);
       closureBtn.classed('active', false);
       d3.select('#diagram-name').text(currentTangle.name + ': ' + currentTangle.desc);
+      d3.select('#hint-text').text('Preset loaded. Use the twist builder to grow a rational tangle one horizontal or vertical twist at a time.');
       updateStats();
       render();
     });
@@ -269,10 +283,63 @@ math('m-sees-inf', '\\infty', false);
       render();
     });
 
+  d3.select('#twist-h-plus').on('click', function () { addBuilderOp('H', 1); });
+  d3.select('#twist-h-minus').on('click', function () { addBuilderOp('H', -1); });
+  d3.select('#twist-v-plus').on('click', function () { addBuilderOp('V', 1); });
+  d3.select('#twist-v-minus').on('click', function () { addBuilderOp('V', -1); });
+  d3.select('#twist-undo').on('click', function () {
+    builderOps.pop();
+    loadBuilderTangle();
+  });
+  d3.select('#twist-reset').on('click', function () {
+    builderOps = [];
+    loadBuilderTangle();
+  });
+
   // Initial state
   currentTangle = Diag.tangle.presets.zero();
   bar.selectAll('.preset-btn').filter(function (d) { return d && d.key === 'zero'; }).classed('active', true);
   d3.select('#diagram-name').text(currentTangle.name + ': ' + currentTangle.desc);
+
+  function addBuilderOp(orient, delta) {
+    builderOps.push({ orient: orient, delta: delta });
+    loadBuilderTangle();
+  }
+
+  function builderTwists() {
+    var twists = [];
+    builderOps.forEach(function (op) {
+      var parity = op.orient === 'H' ? 0 : 1;
+      if (twists.length > 0 && (twists.length - 1) % 2 === parity) {
+        twists[twists.length - 1] += op.delta;
+      } else {
+        while (twists.length % 2 !== parity) twists.push(0);
+        twists.push(op.delta);
+      }
+    });
+    while (twists.length > 1 && twists[twists.length - 1] === 0) twists.pop();
+    if (twists.length === 0) twists = [0];
+    return twists;
+  }
+
+  function loadBuilderTangle() {
+    var twists = builderTwists();
+    currentTangle = Diag.tangle.rational(twists);
+    currentTangle.name = 'Builder [' + twists.join(', ') + ']';
+    currentTangle.desc = 'continued-fraction stages, alternating horizontal and vertical twists';
+    showClosure = false;
+    closureBtn.classed('active', false);
+    bar.selectAll('.preset-btn').classed('active', false);
+    d3.select('#diagram-name').text(currentTangle.name + ': ' + currentTangle.desc);
+    d3.select('#hint-text').text('Builder sequence: ' + (builderOps.length ? builderOps.map(function (op) { return op.orient + (op.delta > 0 ? '+' : '-'); }).join(' ') : 'no twists yet') + '. The fraction updates by the continued fraction on the left.');
+    updateStats();
+    updateBuilderReadout(twists);
+    render();
+  }
+
+  function updateBuilderReadout(twists) {
+    d3.select('#twist-sequence').text('[' + twists.join(', ') + ']');
+  }
 
   function updateStats() {
     var t = currentTangle;
@@ -288,7 +355,8 @@ math('m-sees-inf', '\\infty', false);
     }
     d3.select('#stat-fraction').text(fracStr);
     d3.select('#stat-conway').text('[' + twists.join(', ') + ']');
-    d3.select('#stat-crossings').text(t.crossings ? t.crossings.length : 0);
+      d3.select('#stat-crossings').text(t.crossings ? t.crossings.length : 0);
+    updateBuilderReadout(twists);
   }
 
   function render() {
@@ -367,6 +435,16 @@ math('m-sees-inf', '\\infty', false);
         orient: c.orient,
         index: i
       };
+    });
+
+    cxPos.forEach(function (c) {
+      gLabels.append('text')
+        .attr('x', RIGHT_X + 34).attr('y', c.y + 4)
+        .attr('text-anchor', 'start')
+        .attr('font-size', 11)
+        .attr('fill', '#4a4a6a')
+        .attr('font-family', 'var(--mono-font)')
+        .text((c.orient === 'horizontal' ? 'H' : 'V') + (c.sign > 0 ? '+' : '-'));
     });
 
     // Track strand paths: strand A starts at NW, strand B starts at NE
