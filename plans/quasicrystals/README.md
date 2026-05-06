@@ -1,23 +1,23 @@
 # Aperiodic Order: Quasicrystals from Lattice Projections
 
-Twelve-part interactive explainer series on aperiodic order — the geometry that lets you tile space without ever repeating, with exact arithmetic, embedded periodicity in higher dimensions, and a real physical instantiation discovered in 1982.
+Four-article interactive explainer series on aperiodic order — the geometry that lets you tile space without ever repeating, with exact arithmetic, embedded periodicity in higher dimensions, and a real physical instantiation discovered in 1982.
 
 ## Locked plan
 
-**Spine.** Aperiodic order is the cleanest "geometry has surprising depth" story in modern math. A 1D projection of ℤ² along an irrational slope produces a non-repeating sequence with two tile lengths in ratio φ. The same recipe in higher dimensions produces Penrose tilings, the icosahedral H₃ quasicrystal, and Elser–Sloane's 4D H₄ object — all with diffraction patterns whose Bragg peaks live at irrational positions in reciprocal space. Reader endpoint: a working understanding of cut-and-project, the role of exact ℤ[φ] arithmetic, what phason flips are, why icosahedral symmetry is impossible for a periodic crystal but routine for a quasicrystal, and what Shechtman actually saw in 1982.
+**Spine.** Aperiodic order is the cleanest "geometry has surprising depth" story in modern math. A 1D projection of ℤ² along an irrational slope produces a non-repeating sequence with two tile lengths in ratio φ. The same regular cut-and-project recipe in higher dimensions produces Penrose tilings, the icosahedral H₃ quasicrystal, and the icosian Galois-pair H₄ model set — all with pure-point diffraction whose Bragg peaks are indexed by finite-rank Fourier modules rather than by an ordinary reciprocal lattice. Reader endpoint: a working understanding of cut-and-project, the role of exact ℤ[φ] arithmetic, what phason flips are, why icosahedral symmetry is impossible for a periodic crystal but routine for a quasicrystal, and what Shechtman actually saw in 1982.
 
 **Identity.** Slug `quasicrystals`, title *Aperiodic Order: Quasicrystals from Lattice Projections*. Audience is curious generalists with some math comfort but no assumed background in crystallography or Coxeter theory. Voice should be exact and concrete — every claim either has a worked example, a figure, or both. The series should explain the math through small, fully manipulable instances rather than through general theorems quoted from references.
 
-**Shape.** Two acts, 12 explainers, 6/6.
+**Shape.** Two acts, 4 explainers, 2/2. The original twelve briefs remain as source packets, but the shipped reader experience is collapsed into four denser articles.
 
-- **Act I — The geometry of aperiodic order:** the Fibonacci tiling; cut-and-project; the golden ratio as exact arithmetic; Penrose tilings; inflation and self-similarity; phason flips.
-- **Act II — Higher dimensions and matter:** icosahedral symmetry (H₃); the icosian ring inside E8; diffraction; Shechtman and the discovery; substitution and undecidability; the Hat / Spectre and the open questions.
+- **Act I — The geometry of aperiodic order:** Fibonacci/cut-and-project/phasons; Penrose projection/inflation.
+- **Act II — Higher dimensions and matter:** icosahedral diffraction/discovery; beyond cut-and-project.
 
-**Important framing.** "Quasicrystal" has at least four roughly-equivalent definitions: cut-and-project model set, substitution-rule fixed point, matching-rule tiling, and pure-point-diffraction set. The series should treat the cut-and-project definition as primary because it is the most computational and the most visualizable, but every essay should be honest about which definition it is using and where the equivalences are conditional. The mathematical object and the physical alloy are different things and deserve to be kept apart even when the same word is used.
+**Important framing.** "Quasicrystal" has at least four roughly-equivalent definitions: cut-and-project model set, substitution-rule fixed point, matching-rule tiling, and pure-point-diffraction set. Locked decision: articles 1-3 use regular model sets / cut-and-project with pure-point diffraction as the working definition because it is the most computational and the most visualizable. Article 4 compares substitution, matching-rule, and diffraction-first definitions explicitly, including where the equivalences are conditional or fail. The mathematical object and the physical alloy are different things and deserve to be kept apart even when the same word is used.
 
 **Visual style.** Manipulable figures first. The phason slider is the signature interactive: sweep an offset through internal space and watch vertices wink in and out. Inflation should be animated as a fixed-point map. Diffraction should be live: change the window, change the envelope. Penrose and Fibonacci should both be re-projectable from their ambient lattice in real time. Avoid decorative kaleidoscopic imagery; every visual should expose a *parameter*.
 
-**Rendering stack.** Standalone HTML/CSS/JS, no build step. SVG for tilings and lattice diagrams; canvas for diffraction patterns and dense vertex clouds. A shared helper at `docs/quasicrystals/lib/quasi-viz.js` attaches to a single `QUASI` global. Where the library substrate exists, prefer to cite it: squishy-thing's `packages/e8-core/src/cut-and-project.ts` is the implementation reference for `elserSloane`, `h3Quasicrystal`, `penroseFromE8`, `fibonacciScheme`, phason mechanics, and the diffraction oracle. The series can either embed squishy-thing's standalone interactives via `<iframe>` or re-implement the small ones (Fibonacci, phason) directly in `quasi-viz.js`. Pick per-essay; the trade-off is build-step weight vs. inspectability.
+**Rendering stack.** Standalone HTML/CSS/JS, no build step. SVG for tilings and lattice diagrams; canvas for diffraction patterns and dense vertex clouds. A shared helper at `docs/quasicrystals/lib/quasi-viz.js` attaches to a single `QUASI` global. Where the library substrate exists, prefer to cite it: squishy-thing's `packages/e8-core/src/cut-and-project.ts` is the implementation reference for `elserSloane`, `h3Quasicrystal`, `fibonacciScheme`, phason mechanics, and the diffraction oracle. `penroseFromE8` is a related in-house 2D slice, not the canonical 5-fold Penrose construction; article 2 should use a classical Z5 implementation unless a 5-fold-aligned H4 slice ships first. The series can either embed squishy-thing's standalone interactives via `<iframe>` or re-implement the small ones (Fibonacci, phason, classical Penrose) directly in `quasi-viz.js`. Pick per-essay; the trade-off is build-step weight vs. inspectability.
 
 ## Research grounding
 
@@ -41,12 +41,12 @@ Introduce each term once carefully and avoid silently reusing it.
 - `phason` — the internal offset o ∈ E_⊥. Sliding the phason produces vertex-by-vertex flips. Distinct from the dynamical phason mode in physics, which is a low-frequency excitation; the math object is the offset itself.
 - `inflation factor` — the scalar (φ for Penrose, φ for Fibonacci, φ³ for the H₃ quasicrystal) under which the vertex set maps to a subset of itself.
 - `acceptance window` — W ⊂ E_⊥. Different windows give different model sets even from the same lattice and projection.
-- `pure-point spectrum` — a diffraction measure supported on a discrete set; the empirical hallmark of long-range order without periodicity.
+- `pure-point spectrum` — a diffraction measure supported on atoms / Bragg peaks. For aperiodic crystals those peaks lie in a finite-rank Fourier module that may be dense, so "pure point" does not mean "uniformly spaced reciprocal lattice."
 - `Bragg peak` — a delta function in the diffraction measure, located at k_∥ = π_∥(K) for K ∈ Λ*.
 - `H₂, H₃, H₄` — the non-crystallographic Coxeter groups (regular pentagon, icosahedron, 600-cell). None of these are symmetries of any periodic ℤ³ lattice.
-- `icosian ring` — the ring of quaternions over ℤ[φ] generated by the 120 unit icosians (vertices of the 600-cell). Substrate for the H₄ quasicrystal and the bridge to E8.
+- `icosian ring` — the quaternionic order generated by the 120 unit icosians (vertices of the 600-cell). Substrate for the H₄ quasicrystal; Wilson's E8 construction is a nearby metric realization, not the source lattice of `elserSloane()`.
 - `Galois automorphism σ` — the field automorphism of ℚ(φ) sending φ ↦ 1−φ. Relates the physical and internal projections of the icosian Galois-pair embedding.
-- `local-isomorphism class` — the equivalence class of model sets under finite-radius patch matching. The 8-torus T⁸ = ℝ⁸/E₈ parametrizes this class for the Elser–Sloane scheme.
+- `local-isomorphism class` — the equivalence class of model sets under finite-radius patch matching. For cut-and-project schemes, the full hull is torus-parametrized by the ambient lattice quotient; the phason view is the internal offset chart. Do not label the Elser–Sloane parameter torus as an E8 torus.
 - `matching rule` — local constraint on tile adjacency that forces an aperiodic global structure. Equivalent to cut-and-project for many examples; the equivalence is non-trivial.
 - `substitution rule` — an inflation-and-replacement map on tiles that, iterated, produces an aperiodic tiling as a fixed point.
 
@@ -54,21 +54,13 @@ Introduce each term once carefully and avoid silently reusing it.
 
 ### Act I — The geometry of aperiodic order
 
-1. **The Fibonacci tiling.** Open the series with the smallest cut-and-project: ℤ² → ℝ along slope 1/φ with a unit-interval acceptance window. The reader sees two tile lengths (long and short, in ratio φ:1) emerge from a periodic 2D lattice. Figure: live ℤ² lattice with the projection line and the strip; vertices inside the strip project down to the 1D tiling; sliders for slope (irrational vs. rational) and window width.
-2. **Cut-and-project.** Generalize the Fibonacci recipe. The four-part object (Λ, π_∥, π_⊥, W). Why both gates are load-bearing: physical-only pruning never terminates because π_⊥(Λ) is dense in E_⊥. Figure: schematic of ambient → physical/internal split, with the window sketched in internal space.
-3. **The golden ratio is not decoration.** Why exact ℤ[φ] arithmetic matters. The Galois automorphism σ: φ ↔ 1−φ as the bridge between physical and internal projections in the Elser–Sloane / icosian construction. Floating-point breaks aperiodic geometry. Figure: side-by-side comparison of exact ℤ[φ] enumeration vs. naïve floating-point, showing accumulated drift at modest projection radius.
-4. **Penrose tilings as projection.** Kites and darts; thick and thin rhombs; the H₂ tiling as a double-slice descent from the Elser–Sloane 8D scheme. Matching rules vs. cut-and-project as two equivalent definitions for this case. Figure: live cut-and-project with a 5-fold-aligned slice; reader can rotate to see how slice angle picks out the symmetry.
-5. **Inflation and self-similarity.** Multiply the vertex set by φ: vertices map to a subset of themselves. Fractal-but-discrete. The substitution rule perspective. Figure: animated φ-inflation overlaying scaled vertex sets; the reader can step inflation level and see the nesting.
-6. **Phason flips.** The offset parameter o ∈ E_⊥ slides through internal space. Vertices wink in and out as the window shifts. Generic offsets give locally-isomorphic tilings; singular offsets (where the window boundary contains lattice points) produce topology jumps. Figure: the signature phason slider — Fibonacci or Penrose with a dragable o, showing per-vertex acceptance state and a counter for flips.
+1. **Fibonacci, cut-and-project, and phasons.** Merge the smallest model set, exact Z[phi] coordinates, and the offset chart. The reader sees the Z2 lattice, physical projection, internal projection, acceptance window, internal-density buildup, two-gate pruning, and phason boundary crossings in one place.
+2. **Penrose projection and inflation.** Merge the classical five-grid Penrose construction with local matching rules and phi-inflation. `penroseFromE8` remains a related in-house slice, not the public canonical construction.
 
 ### Act II — Aperiodic order in higher dimensions and matter
 
-7. **Three-fold, five-fold, two-fold: icosahedral symmetry.** H₃ as the symmetry group of the regular icosahedron. The crystallographic restriction theorem: no periodic 3D lattice admits 5-fold rotational symmetry. The escape hatch: drop periodicity, keep long-range order. Figure: rotation-axis diagram of the icosahedron with 5-fold, 3-fold, and 2-fold axes, plus a side-by-side of "what 5-fold periodic would have to look like" (impossible) vs. "what 5-fold quasiperiodic looks like" (a real diffraction pattern).
-8. **The icosian ring and E8.** The quaternionic substrate. H₄ as the symmetry of the 600-cell. The icosian ring ℋ as quaternions over ℤ[φ]; the Galois-pair embedding ℋ[φ] ↪ ℝ⁸ as `(g, σ(g))`. Wilson's `E8 = 2ℐ ∪ τ·2ℐ` construction. Quasicrystals as windowed projections of 8-dimensional periodicity. Figure: live 8D → 4D → 3D projection with H₄ acting on the 600-cell; the reader can pick a slicing axis.
-9. **Diffraction: how you actually see aperiodic order.** Pure-point spectrum. Bragg peaks at k_∥ = π_∥(K) for K in the reciprocal lattice. The window's Fourier transform as the amplitude envelope; peak positions are exact, only amplitudes are window-dependent. Figure: live diffraction pattern; reader can swap window (ball, interval, 600-cell), change projection, and see the peak set transform.
-10. **Shechtman and the discovery.** 1982 electron diffraction of an Al-Mn alloy showing 10-fold (i.e., 5-fold with inversion) symmetry. The 1984 paper. The years of rejection — Pauling's "there are no quasicrystals, only quasi-scientists." The 2011 Nobel. What Shechtman actually saw, why crystallography needed years to expand its definition, and what counts as a "natural" quasicrystal (the 2009 Khatyrka meteorite). Figure: reproduction of Shechtman's diffraction image alongside the predicted H₃-quasicrystal pattern.
-11. **Beyond cut-and-project.** Substitution tilings (Robinson, Penrose-from-substitution, the chair tiling). Wang tiles and the undecidability of the domino problem (Berger 1966). Where the four definitions of "quasicrystal" diverge: not every substitution tiling is a model set; not every model set has matching rules; pure-point diffraction is conditional. Figure: a substitution-rule animation for the chair tiling, with annotations marking which essays' definition this object satisfies and which it doesn't.
-12. **The Hat, the Spectre, and what's still open.** Smith–Myers–Kaplan–Goodman-Strauss 2023: a single tile that tiles the plane only aperiodically. Why the chirality question matters and how Spectre resolved it. What's still open: equivalence-of-definitions in full generality, the Pisot conjecture for substitution diffraction, and the long shadow of "natural quasicrystals" — are there more than two? Figure: the Hat tiling next to a Penrose tiling, with a toggle that re-projects each into the other's frame where possible.
+3. **Icosahedral diffraction and discovery.** Merge the crystallographic restriction theorem, H3/H4 and icosian-ring substrate, pure-point diffraction, and Shechtman's historical evidence. The reader sees the difference between multiple twinning and a coherent non-crystallographic Fourier module.
+4. **Beyond cut-and-project.** Merge definitions, substitution/matching-rule examples, Wang tiles, Hat, Spectre, and open questions. The article keeps equivalence claims conditional and avoids presenting monotiles as ordinary regular model sets.
 
 ## Visual approach
 
@@ -98,7 +90,10 @@ Primary anchors:
 - Shechtman, D., Blech, I., Gratias, D., Cahn, J. W., "Metallic Phase with Long-Range Orientational Order and No Translational Symmetry," *Phys. Rev. Lett.* 53, 1951 (1984).
 - Smith, D., Myers, J. S., Kaplan, C. S., Goodman-Strauss, C., "An aperiodic monotile," arXiv:2303.10798 (2023).
 - Smith, D., Myers, J. S., Kaplan, C. S., Goodman-Strauss, C., "A chiral aperiodic monotile" (Spectre), arXiv:2305.17743 (2023).
+- Socolar, J. E. S., "Quasicrystalline structure of the Smith monotile tilings," *Phys. Rev. B* 108, 224109 (2023).
 - Bindi, L., Steinhardt, P. J., et al., "Natural Quasicrystals," *Science* 324, 1306 (2009).
+- Bindi, L., Kolb, W., Eby, G. N., Asimow, P. D., Wallace, T. C., Steinhardt, P. J., "Accidental synthesis of a previously unknown quasicrystal in the first atomic bomb test," *PNAS* 118 (2021).
+- Bindi, L., Pasek, M. A., Ma, C., Hu, J., Cheng, G., Yao, N., Asimow, P. D., Steinhardt, P. J., "Electrical discharge triggers quasicrystal formation in an eolian dune," *PNAS* 120 (2023).
 
 In-house substrates:
 
@@ -110,7 +105,7 @@ In-house substrates:
 
 ## Files
 
-Planned implementation:
+Source packets plus shipped implementation:
 
 ```text
 plans/quasicrystals/
@@ -135,23 +130,17 @@ plans/quasicrystals/
     README.md
     source-map.md
     library-substrate.md
+    figure-risk-register.md
+    visualization-audit.md
 
 docs/quasicrystals/
   lib/
     quasi-viz.js
   index.html
-  01-fibonacci-tiling.html
-  02-cut-and-project.html
-  03-golden-arithmetic.html
-  04-penrose-tilings.html
-  05-inflation-and-self-similarity.html
-  06-phason-flips.html
-  07-icosahedral-symmetry.html
-  08-icosian-ring-and-e8.html
-  09-diffraction.html
-  10-shechtman-and-discovery.html
-  11-beyond-cut-and-project.html
-  12-hat-spectre-and-open.html
+  01-fibonacci-cut-and-project-phasons.html
+  02-penrose-projection-and-inflation.html
+  03-icosahedral-diffraction-and-discovery.html
+  04-beyond-cut-and-project.html
 ```
 
 ## Brief template
@@ -166,13 +155,39 @@ Each brief should be 400–700 words and include:
 - **Library substrate** — squishy-thing functions or research dossiers this essay cites.
 - **Reader takeaway** — what the reader can now distinguish, compute, or predict.
 
-## Phase state
+## UX quality pass state
 
 - [x] **Phase 0** — research grounding and locked series plan recorded.
 - [x] **Phase 1** — write 12 briefs.
-- [ ] **Phase 1a** — source packet, library-substrate cross-references, and vocabulary graph.
-- [ ] **Phase 1b** — visualization audit: figure inventory, identify cross-essay primitives for `quasi-viz.js`, decide iframe-embed vs. re-implementation per figure.
-- [ ] **Phase 2** — build `docs/quasicrystals/lib/quasi-viz.js` and `docs/quasicrystals/index.html`.
-- [ ] **Phase 3** — build Act I explainers (01 Fibonacci first as the visual-grammar opener; then 06 phason; then 02–05).
-- [ ] **Phase 4** — build Act II explainers (08 icosian-and-E8 first as the substrate cite; then 07, 09–11; then 12).
-- [ ] **Phase 5** — root index entry, cross-link pass to `parallel-coordinates/17-quasicrystals.html`, source-caution pass, mobile/browser audit.
+- [x] **Phase 1a** — source packet, library-substrate cross-references, and vocabulary graph.
+- [x] **Phase 1b** — visualization audit: figure inventory, identify cross-essay primitives for `quasi-viz.js`, decide iframe-embed vs. re-implementation per figure.
+- [x] **Phase 2** — first-pass `docs/quasicrystals/lib/quasi-viz.js`, `docs/quasicrystals/style.css`, and `docs/quasicrystals/index.html`.
+- [x] **Phase 3** — first-pass Act I explainers: Fibonacci, cut-and-project, golden arithmetic, Penrose projection, inflation, and phason flips.
+- [x] **Phase 4** — first-pass Act II explainers: icosahedral symmetry, icosian / nearby E8, diffraction, Shechtman, definitions beyond cut-and-project, and Hat / Spectre.
+- [x] **Phase 5a** — root index entry, cross-link pass to `parallel-coordinates/17-quasicrystals.html`, and source-caution pass.
+- [x] **Phase 5b** — collapse to six denser articles and add the six missing signature standalone interactives.
+- [x] **Phase 5c** — combine articles 1-2 and 4-5 into the shipped four-article pass, with a new visual glyph for the final article.
+- [ ] **Phase 5d** — optional full figure build-out from the visualization audit. The shipped docs are a strengthened four-article pass, not the complete 47-figure version.
+
+May 2026 UX pass:
+
+- Article renderer now supports multiple figures per essay.
+- Added load-bearing figures for essay 02 (internal density and two-gate pruning), essay 04 (matching-rule checker and five-direction order), essay 06 (boundary-distance graph), essay 07 (periodic-vs-aperiodic contrast), and essay 11 (substitution / Wang-tile local-rule comparison).
+- Collapsed the public docs from twelve article shells to six, then four denser articles.
+- Added first-pass signature figures for classical pentagrid Penrose, Penrose phi-inflation, H3/H4 substrate, finite diffraction oracle, Shechtman twinning comparison, and Hat/Spectre patch exploration.
+- Replaced the final article's card glyph with a local-rule / monotile glyph instead of the reused projection-strip mark.
+- Replaced the Hat / Spectre decorative placeholder with actual monotile-family outlines.
+- Removed unused D3 script tags from the shipped quasicrystal HTML shells.
+
+Remaining enhancement backlog: replace first-pass H3/H4 and diffraction schematics with audited squishy-thing embeds/oracles; deepen the classical de Bruijn Penrose primitive; source rights-safe historical imagery if desired; replace compact Hat/Spectre patch diagrams with validated larger tiling patches.
+
+## Article-count decision
+
+The shipped experience is collapsed to four stronger articles:
+
+1. **Fibonacci, cut-and-project, and phasons** — merge previous articles 1 and 2.
+2. **Penrose projection and inflation** — keep previous article 3.
+3. **Icosahedral diffraction and discovery** — merge previous articles 4 and 5.
+4. **Beyond cut-and-project: Hat, Spectre, and definitions** — keep previous article 6, with a new local-rule / monotile glyph.
+
+This four-article shape reduces repeated setup prose, gives every article several substantial figures, and makes the series feel intentionally dense rather than thinly serialized. The original twelve briefs remain useful as source packets for a future 47-figure expansion.
