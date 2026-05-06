@@ -127,6 +127,7 @@
     background: #f8fafc; display: flex; align-items: center; justify-content: center;
     overflow: hidden; border: 1px solid #f1f5f9;
   }
+  .card-thumb svg { display: block; width: 100%; height: 100%; }
 
   @media (max-width: 640px) {
     h1 { font-size: 1.75rem; }
@@ -349,16 +350,7 @@ categories.forEach(cat => {
 
 // --- Thumbnails (Small silhouettes) ---
 function createThumb(id, drawFn) {
-  const el = document.getElementById(`thumb-${id}`);
-  if (!el) return;
-  const canvas = document.createElement("canvas");
-  const s = 80, dpr = window.devicePixelRatio || 1;
-  canvas.width = s*dpr; canvas.height = s*dpr;
-  canvas.style.width = s+'px'; canvas.style.height = s+'px';
-  el.appendChild(canvas);
-  const ctx = canvas.getContext("2d");
-  ctx.setTransform(dpr,0,0,dpr,0,0);
-  drawFn(ctx, s);
+  // Superseded by the deterministic SVG glyph pass below.
 }
 
 // Semantic palette
@@ -681,6 +673,393 @@ createThumb('portrait', (ctx, s) => {
   ctx.fillStyle = C_SIG;
   ctx.beginPath(); ctx.arc(34, 14, 2.5, 0, Math.PI*2); ctx.fill();
 });
+
+// --- Article-inspired SVG glyphs ---
+(function drawArticleGlyphs() {
+  const C = {
+    gene: 'var(--c-gene)',
+    sample: 'var(--c-sample)',
+    expr: 'var(--c-expression)',
+    sig: 'var(--c-significance)',
+    path: 'var(--c-pathway)',
+    up: '#ef4444',
+    down: '#2563eb',
+    muted: '#94a3b8',
+    grid: '#e2e8f0',
+    pale: '#f8fafc',
+    text2: 'var(--text-2)',
+    trans: '#d1495b',
+    inv: '#8e44ad',
+    dup: '#2e8540',
+    del: '#1f6feb',
+    cnGain: '#c0392b',
+    cnLoss: '#1f6feb',
+    meth: '#5b21b6',
+    missense: '#16a34a',
+    trunc: '#111827',
+    contact: '#9b4a34',
+    structural: '#6f5b8b',
+    cr: '#0f766e',
+    pr: '#14b8a6',
+    sd: '#64748b',
+    pd: '#b91c1c'
+  };
+
+  function setAttrs(sel, attrs) {
+    Object.entries(attrs || {}).forEach(([key, value]) => sel.attr(key, value));
+    return sel;
+  }
+  function group(parent, attrs) { return setAttrs(parent.append('g'), attrs); }
+  function line(parent, x1, y1, x2, y2, attrs) {
+    return setAttrs(parent.append('line').attr('x1', x1).attr('y1', y1).attr('x2', x2).attr('y2', y2), attrs);
+  }
+  function rect(parent, x, y, w, h, attrs) {
+    return setAttrs(parent.append('rect').attr('x', x).attr('y', y).attr('width', w).attr('height', h), attrs);
+  }
+  function circle(parent, cx, cy, r, attrs) {
+    return setAttrs(parent.append('circle').attr('cx', cx).attr('cy', cy).attr('r', r), attrs);
+  }
+  function path(parent, d, attrs) { return setAttrs(parent.append('path').attr('d', d), attrs); }
+  function polygon(parent, points, attrs) {
+    return setAttrs(parent.append('polygon').attr('points', points.map(p => p.join(',')).join(' ')), attrs);
+  }
+  function label(parent, x, y, value, attrs) {
+    return setAttrs(parent.append('text')
+      .attr('x', x).attr('y', y)
+      .attr('font-family', 'var(--heading-font)')
+      .attr('font-size', 5.4)
+      .attr('font-weight', 700)
+      .attr('fill', C.text2)
+      .attr('text-anchor', 'middle')
+      .text(value), attrs);
+  }
+  function thumb(id, draw) {
+    const host = d3.select(`#thumb-${id}`);
+    if (host.empty()) return;
+    host.selectAll('*').remove();
+    const svg = host.append('svg')
+      .attr('viewBox', '0 0 80 80')
+      .attr('preserveAspectRatio', 'xMidYMid meet')
+      .attr('aria-hidden', 'true')
+      .attr('focusable', 'false');
+    rect(svg, 0, 0, 80, 80, { rx: 4, fill: C.pale });
+    draw(svg);
+  }
+  function heatCell(parent, x, y, w, h, value) {
+    const fill = value >= 0 ? C.up : C.down;
+    const opacity = 0.18 + Math.min(1, Math.abs(value) / 2.2) * 0.74;
+    rect(parent, x, y, w, h, { fill, opacity, stroke: '#fff', 'stroke-width': 0.6 });
+  }
+  function polar(cx, cy, r, a) { return [cx + Math.cos(a) * r, cy + Math.sin(a) * r]; }
+  function arc(parent, cx, cy, r, a0, a1, attrs) {
+    const p0 = polar(cx, cy, r, a0);
+    const p1 = polar(cx, cy, r, a1);
+    const large = Math.abs(a1 - a0) > Math.PI ? 1 : 0;
+    return path(parent, `M ${p0[0]} ${p0[1]} A ${r} ${r} 0 ${large} 1 ${p1[0]} ${p1[1]}`, attrs);
+  }
+  function stepPath(points) {
+    let d = `M ${points[0][0]} ${points[0][1]}`;
+    for (let i = 1; i < points.length; i++) d += ` H ${points[i][0]} V ${points[i][1]}`;
+    return d;
+  }
+  function signalArea(parent, x, base, step, values, scale, attrs) {
+    const pts = values.map((v, i) => [x + i * step, base - v * scale]);
+    const d = `M ${x} ${base} ` + pts.map(p => `L ${p[0]} ${p[1]}`).join(' ') +
+      ` L ${x + (values.length - 1) * step} ${base} Z`;
+    return path(parent, d, attrs);
+  }
+
+  thumb('heatmap', svg => {
+    path(svg, 'M22 18V11H33V18 M33 11V7H48V15 M48 7H62V18 M55 7V11H69V18',
+      { fill: 'none', stroke: C.path, 'stroke-width': 1.4, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' });
+    path(svg, 'M15 27H9V37H15 M9 37H6V51H15 M6 51H9V62H15',
+      { fill: 'none', stroke: C.path, 'stroke-width': 1.4, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' });
+    [C.sample, C.sample, C.sig, C.sig, C.sample, C.sample].forEach((c, i) => {
+      rect(svg, 22 + i * 7, 20, 6.2, 3, { fill: c, opacity: 0.82 });
+    });
+    const values = [
+      [-1.9, -1.4, -0.2,  1.0,  1.7,  1.2],
+      [-1.4, -0.8,  0.1,  1.4,  2.0,  0.8],
+      [ 1.3,  1.0,  0.2, -0.9, -1.8, -1.1],
+      [ 1.6,  0.9, -0.2, -1.2, -1.5, -0.7],
+      [-0.6, -1.2, -1.6,  0.5,  1.1,  1.6]
+    ];
+    values.forEach((row, r) => row.forEach((v, c) => heatCell(svg, 22 + c * 7, 26 + r * 7, 6.2, 6.2, v)));
+    rect(svg, 22, 26, 42, 35, { fill: 'none', stroke: C.grid, 'stroke-width': 0.7 });
+    [C.path, C.path, C.gene, C.gene, C.path].forEach((c, i) => rect(svg, 18, 26 + i * 7, 2.8, 6.2, { fill: c, opacity: 0.8 }));
+  });
+
+  thumb('ma', svg => {
+    line(svg, 9, 42, 71, 42, { stroke: C.grid, 'stroke-width': 1 });
+    line(svg, 11, 13, 11, 69, { stroke: C.grid, 'stroke-width': 1 });
+    [31, 53].forEach((y, i) => line(svg, 11, y, 71, y, {
+      stroke: i === 0 ? C.up : C.down, 'stroke-width': 1, 'stroke-dasharray': '3,3', opacity: 0.55
+    }));
+    for (let i = 0; i < 50; i++) {
+      const x = 12 + i * 1.18;
+      const spread = 19 * Math.exp(-(x - 12) / 38) + 2.5;
+      const y = 42 + Math.sin(i * 1.72) * spread * 0.44 + Math.cos(i * 0.49) * spread * 0.26;
+      const hit = Math.abs(y - 42) > 9.5 && x > 18;
+      circle(svg, x, y, hit ? 1.9 : 1.25, {
+        fill: hit ? (y < 42 ? C.up : C.down) : C.muted,
+        opacity: hit ? 0.92 : 0.52
+      });
+    }
+    label(svg, 66, 17, 'M', { fill: C.sig, 'font-size': 6 });
+    label(svg, 17, 66, 'A', { fill: C.text2, 'font-size': 6 });
+  });
+
+  thumb('volcano', svg => {
+    line(svg, 10, 34, 70, 34, { stroke: C.grid, 'stroke-width': 1, 'stroke-dasharray': '3,3' });
+    [30, 50].forEach((x, i) => line(svg, x, 12, x, 69, {
+      stroke: i === 0 ? C.down : C.up, 'stroke-width': 1, 'stroke-dasharray': '3,3', opacity: 0.55
+    }));
+    for (let i = 0; i < 20; i++) {
+      const x = 28 + (i % 10) * 2.6 + Math.sin(i) * 1.4;
+      const y = 63 - Math.abs(Math.sin(i * 1.7)) * 12;
+      circle(svg, x, y, 1.2, { fill: C.muted, opacity: 0.48 });
+    }
+    [-1, 1].forEach(side => {
+      for (let i = 0; i < 24; i++) {
+        const t = i / 23;
+        const x = 40 + side * (6 + t * 27 + Math.sin(i * 1.3) * 1.4);
+        const y = 65 - Math.pow(t, 1.32) * 46 - Math.cos(i * 0.9) * 2.3;
+        const hit = t > 0.46 && y < 35;
+        circle(svg, x, y, hit ? 1.9 : 1.2, { fill: hit ? (side > 0 ? C.up : C.down) : C.muted, opacity: hit ? 0.94 : 0.48 });
+      }
+    });
+    label(svg, 59, 17, 'FDR', { fill: C.sig, 'font-size': 5.5 });
+  });
+
+  thumb('dimred', svg => {
+    const m = [
+      [-1.4, -0.5, 1.2, 1.7, 0.4],
+      [0.8, 1.5, 0.6, -0.9, -1.4],
+      [-0.7, 0.1, 1.6, 0.9, -0.6],
+      [1.3, 0.8, -1.2, -1.5, -0.2]
+    ];
+    m.forEach((row, r) => row.forEach((v, c) => heatCell(svg, 8 + c * 5, 17 + r * 7, 4.4, 6.2, v)));
+    rect(svg, 7, 16, 26, 30, { fill: 'none', stroke: C.grid, 'stroke-width': 0.8 });
+    rect(svg, 18, 30, 4.4, 6.2, { fill: 'none', stroke: C.sig, 'stroke-width': 1.3 });
+    line(svg, 34, 33, 43, 33, { stroke: C.path, 'stroke-width': 1, 'stroke-dasharray': '2,2' });
+    line(svg, 44, 56, 69, 36, { stroke: C.path, 'stroke-width': 1, opacity: 0.45 });
+    line(svg, 50, 25, 66, 31, { stroke: C.path, 'stroke-width': 1, opacity: 0.45 });
+    const clusters = [
+      { c: C.sample, pts: [[49,24],[54,22],[51,29],[57,28],[46,30],[55,35]] },
+      { c: C.expr, pts: [[63,49],[68,52],[60,56],[69,60],[58,62],[65,57]] },
+      { c: C.path, pts: [[45,55],[50,61],[42,63],[47,67],[52,56]] }
+    ];
+    clusters.forEach(cluster => cluster.pts.forEach(p => circle(svg, p[0], p[1], 2.1, { fill: cluster.c, opacity: 0.86 })));
+    circle(svg, 54, 35, 3.4, { fill: 'none', stroke: C.sig, 'stroke-width': 1.3 });
+  });
+
+  thumb('browser', svg => {
+    line(svg, 8, 12, 72, 12, { stroke: C.text2, 'stroke-width': 1 });
+    [8, 24, 40, 56, 72].forEach((x, i) => {
+      line(svg, x, 9, x, 14, { stroke: C.text2, 'stroke-width': 0.8, opacity: i % 2 ? 0.45 : 0.75 });
+    });
+    label(svg, 23, 8, 'chr17', { fill: C.text2, 'font-size': 5.5, 'text-anchor': 'start' });
+    [23, 39, 55, 68].forEach(y => line(svg, 8, y, 72, y, { stroke: C.grid, 'stroke-width': 1 }));
+    rect(svg, 14, 19, 12, 8, { fill: C.gene });
+    rect(svg, 36, 19, 7, 8, { fill: C.gene });
+    rect(svg, 51, 19, 14, 8, { fill: C.gene });
+    line(svg, 26, 23, 51, 23, { stroke: C.gene, 'stroke-width': 1.2 });
+    signalArea(svg, 9, 41, 3, [1,2,3,4,7,11,14,10,6,4,3,2,3,7,16,22,15,7,4,2,1,1], 0.8,
+      { fill: C.expr, opacity: 0.78 });
+    polygon(svg, [[46,49],[50,49],[48,43]], { fill: '#b45309', opacity: 0.9 });
+    path(svg, 'M10 60 C19 55, 24 64, 32 58 S45 53, 54 59 S65 63, 72 55',
+      { fill: 'none', stroke: C.path, 'stroke-width': 1.8, opacity: 0.82 });
+    rect(svg, 39, 32, 17, 22, { fill: 'none', stroke: C.path, 'stroke-width': 1.1, 'stroke-dasharray': '3,2' });
+  });
+
+  thumb('circos', svg => {
+    const cx = 40, cy = 40;
+    const segs = [
+      [-1.55, -0.65, C.gene], [-0.55, 0.2, C.sample], [0.28, 1.05, C.gene],
+      [1.18, 2.0, C.sample], [2.12, 2.9, C.gene], [3.02, 3.8, C.sample],
+      [3.92, 4.72, C.gene]
+    ];
+    segs.forEach(s => arc(svg, cx, cy, 29, s[0], s[1], { fill: 'none', stroke: s[2], 'stroke-width': 5.2, 'stroke-linecap': 'butt', opacity: 0.88 }));
+    [-1.2, -0.8, -0.2, 0.55, 1.35, 2.4, 3.35, 4.3].forEach((a, i) => {
+      arc(svg, cx, cy, 22, a, a + 0.18, { fill: 'none', stroke: i % 2 ? C.cnLoss : C.cnGain, 'stroke-width': 3, opacity: 0.75 });
+    });
+    [[-0.95, 2.55, C.trans, 4.8], [0.3, 3.85, C.inv, 3.6], [1.35, 4.55, C.dup, 3.2], [2.1, -0.25, C.del, 2.6]].forEach(d => {
+      const p0 = polar(cx, cy, 25, d[0]), p1 = polar(cx, cy, 25, d[1]);
+      path(svg, `M ${p0[0]} ${p0[1]} C ${cx} ${cy} ${cx} ${cy} ${p1[0]} ${p1[1]}`, {
+        fill: 'none', stroke: d[2], 'stroke-width': d[3], opacity: 0.45, 'stroke-linecap': 'round'
+      });
+    });
+    circle(svg, cx, cy, 4, { fill: '#fff', stroke: C.grid, 'stroke-width': 1 });
+  });
+
+  thumb('survival', svg => {
+    line(svg, 12, 68, 70, 68, { stroke: C.grid, 'stroke-width': 1 });
+    line(svg, 12, 12, 12, 68, { stroke: C.grid, 'stroke-width': 1 });
+    const hi = [[12,18],[22,18],[22,24],[36,24],[36,31],[52,31],[52,38],[70,38]];
+    const lo = [[12,18],[18,18],[18,31],[29,31],[29,45],[43,45],[43,58],[70,58]];
+    path(svg, stepPath(hi), { fill: 'none', stroke: C.path, 'stroke-width': 2.3, 'stroke-linejoin': 'round' });
+    path(svg, stepPath(lo), { fill: 'none', stroke: C.sig, 'stroke-width': 2.3, 'stroke-linejoin': 'round' });
+    [[31,24],[60,38],[25,31],[55,58]].forEach((p, i) => {
+      line(svg, p[0] - 2.4, p[1] - 2.4, p[0] + 2.4, p[1] + 2.4, { stroke: i < 2 ? C.path : C.sig, 'stroke-width': 1 });
+      line(svg, p[0] - 2.4, p[1] + 2.4, p[0] + 2.4, p[1] - 2.4, { stroke: i < 2 ? C.path : C.sig, 'stroke-width': 1 });
+    });
+    label(svg, 58, 19, 'KM', { fill: C.text2, 'font-size': 7 });
+  });
+
+  thumb('dotplot', svg => {
+    label(svg, 30, 14, 'TP53', { fill: C.sig, 'font-size': 5.8 });
+    label(svg, 52, 14, 'p21', { fill: C.gene, 'font-size': 5.8 });
+    for (let r = 0; r < 4; r++) {
+      line(svg, 18, 24 + r * 12, 66, 24 + r * 12, { stroke: C.grid, 'stroke-width': 0.7 });
+    }
+    [30, 52].forEach(x => line(svg, x, 20, x, 62, { stroke: C.grid, 'stroke-width': 0.7 }));
+    const vals = [
+      [[5.5, 0.9], [2.2, 0.35]],
+      [[3.5, 0.55], [6.2, 0.95]],
+      [[2.0, 0.3], [4.5, 0.65]],
+      [[4.8, 0.75], [1.8, 0.25]]
+    ];
+    vals.forEach((row, r) => row.forEach((d, c) => {
+      circle(svg, c ? 52 : 30, 24 + r * 12, d[0], { fill: c ? C.gene : C.sig, opacity: 0.22 + d[1] * 0.7 });
+    }));
+    rect(svg, 19, 18, 45, 50, { fill: 'none', stroke: C.grid, 'stroke-width': 0.8 });
+  });
+
+  thumb('lollipop', svg => {
+    const x = pos => 8 + pos / 393 * 64;
+    line(svg, 8, 54, 72, 54, { stroke: C.muted, 'stroke-width': 5, 'stroke-linecap': 'round' });
+    [
+      [1, 61, '#b85c3f'], [64, 92, '#c88a2d'], [102, 292, '#1f6f8b'],
+      [325, 356, '#2f8f67'], [363, 393, '#705c8f']
+    ].forEach(d => rect(svg, x(d[0]), 49, Math.max(2, x(d[1]) - x(d[0])), 10, { fill: d[2], rx: 2 }));
+    [
+      [175, 23, C.structural, 4.5], [248, 32, C.contact, 5.2], [273, 25, C.contact, 4.7],
+      [282, 15, C.structural, 3.3], [84, 11, C.trunc, 2.8]
+    ].forEach(d => {
+      const px = x(d[0]), py = 54 - d[1];
+      line(svg, px, 54, px, py, { stroke: C.muted, 'stroke-width': 1 });
+      circle(svg, px, py, d[3], { fill: d[2], stroke: '#fff', 'stroke-width': 1 });
+    });
+    label(svg, 42, 67, 'TP53 DNA-binding domain', { fill: C.text2, 'font-size': 5.2 });
+  });
+
+  thumb('fiveviews', svg => {
+    const rowY = i => 8 + i * 14;
+    for (let i = 0; i < 25; i++) {
+      const x = 8 + i * 2.5;
+      const peak = Math.abs(i - 18) < 3 ? 8 + (3 - Math.abs(i - 18)) * 3 : 1 + (i % 5);
+      circle(svg, x, rowY(0) + 10 - peak * 0.8, peak > 8 ? 1.6 : 1, { fill: peak > 8 ? C.sig : (i % 2 ? C.gene : C.sample), opacity: 0.86 });
+    }
+    line(svg, 8, rowY(0) + 3, 72, rowY(0) + 3, { stroke: C.sig, 'stroke-width': 0.8, 'stroke-dasharray': '2,2', opacity: 0.6 });
+    for (let r = 0; r < 2; r++) for (let c = 0; c < 13; c++) {
+      rect(svg, 9 + c * 4.7, rowY(1) + r * 5, 4, 4.3, { fill: '#fff', stroke: C.grid, 'stroke-width': 0.4 });
+      if ((r === 0 && c < 6) || (r === 1 && [6,7,8].includes(c))) rect(svg, 9 + c * 4.7, rowY(1) + r * 5, 4, 4.3, { fill: r ? C.expr : C.sig, opacity: 0.86 });
+    }
+    line(svg, 10, rowY(2) + 6, 70, rowY(2) + 6, { stroke: C.grid, 'stroke-width': 4 });
+    line(svg, 40, rowY(2) + 1, 40, rowY(2) + 11, { stroke: C.text2, 'stroke-width': 0.9 });
+    for (let i = 0; i < 12; i++) rect(svg, 12 + i * 4.7, rowY(2) + 2, 3.6, 8, { fill: C.meth, opacity: 0.16 + (i % 5) * 0.15 });
+    const nodes = [[14,rowY(3)+7,'DNA',C.muted],[29,rowY(3)+7,'ATM',C.path],[45,rowY(3)+7,'TP',C.sig],[63,rowY(3)+7,'p21',C.gene]];
+    line(svg, 17, rowY(3)+7, 26, rowY(3)+7, { stroke: C.path, 'stroke-width': 1.2 });
+    line(svg, 32, rowY(3)+7, 42, rowY(3)+7, { stroke: C.path, 'stroke-width': 1.2 });
+    line(svg, 48, rowY(3)+7, 60, rowY(3)+7, { stroke: C.sig, 'stroke-width': 1.2, 'stroke-dasharray': '2,2' });
+    nodes.forEach(n => circle(svg, n[0], n[1], 3.4, { fill: n[3], stroke: '#fff', 'stroke-width': 0.8 }));
+    const cx = 40, cy = rowY(4)+7;
+    for (let i = 0; i < 7; i++) {
+      const a = i / 7 * Math.PI * 2;
+      const px = cx + Math.cos(a) * 17, py = cy + Math.sin(a) * 6;
+      line(svg, cx, cy, px, py, { stroke: C.grid, 'stroke-width': 0.8 });
+      circle(svg, px, py, 2, { fill: i % 2 ? C.sample : C.path, opacity: 0.8 });
+    }
+    circle(svg, cx, cy, 3.4, { fill: C.sig, stroke: '#fff', 'stroke-width': 0.8 });
+  });
+
+  thumb('chip', svg => {
+    line(svg, 8, 23, 72, 23, { stroke: C.grid, 'stroke-width': 1 });
+    line(svg, 8, 49, 72, 49, { stroke: C.grid, 'stroke-width': 1 });
+    signalArea(svg, 8, 39, 3.2, [1,2,2,3,5,9,17,25,32,26,16,9,5,3,2,5,9,7,3,2,1], 0.72,
+      { fill: C.gene, opacity: 0.78 });
+    signalArea(svg, 8, 58, 3.2, [1,1,2,1,2,2,3,3,4,3,3,2,2,3,2,2,3,2,1,1,1], 0.92,
+      { fill: C.sig, opacity: 0.58 });
+    rect(svg, 31, 14, 16, 27, { fill: 'none', stroke: C.path, 'stroke-width': 1.3 });
+    line(svg, 50, 13, 50, 62, { stroke: C.text2, 'stroke-width': 0.8, 'stroke-dasharray': '2,2', opacity: 0.55 });
+    rect(svg, 25, 66, 13, 5, { fill: C.path });
+    rect(svg, 45, 66, 9, 5, { fill: C.path });
+    line(svg, 38, 68.5, 45, 68.5, { stroke: C.path, 'stroke-width': 1 });
+    label(svg, 18, 17, 'WT', { fill: C.gene, 'font-size': 5.6 });
+    label(svg, 19, 52, 'R175H', { fill: C.sig, 'font-size': 5.2 });
+  });
+
+  thumb('multiomics', svg => {
+    const x0 = 9, y0 = 14, cw = 4.5, ch = 6.2;
+    const clusters = ['#dc2626', '#2563eb', '#d97706', '#059669'];
+    for (let c = 0; c < 12; c++) rect(svg, x0 + c * cw, 8, cw - 0.4, 3.5, { fill: clusters[Math.floor(c / 3)], opacity: 0.9 });
+    for (let r = 0; r < 2; r++) for (let c = 0; c < 12; c++) {
+      heatCell(svg, x0 + c * cw, y0 + r * ch, cw - 0.4, ch - 0.4, Math.sin(r * 1.5 + c * 0.65) * 2);
+    }
+    for (let c = 0; c < 12; c++) {
+      rect(svg, x0 + c * cw, y0 + 2 * ch, cw - 0.4, ch - 0.4, { fill: C.meth, opacity: 0.12 + (c % 5) * 0.14, stroke: '#fff', 'stroke-width': 0.5 });
+    }
+    for (let c = 0; c < 12; c++) {
+      const x = x0 + c * cw, y = y0 + 3 * ch;
+      rect(svg, x, y, cw - 0.4, ch - 0.4, { fill: c < 3 ? C.cnLoss : c >= 8 ? C.cnGain : '#f5f5f7', stroke: '#fff', 'stroke-width': 0.5, opacity: 0.9 });
+      if ([0,1,2,7,9].includes(c)) rect(svg, x + 0.8, y + 0.8, cw - 2, ch - 1.8, { fill: c === 2 ? C.trunc : C.missense });
+    }
+    for (let c = 0; c < 12; c++) rect(svg, x0 + c * cw, y0 + 4 * ch, cw - 0.4, ch - 0.4, { fill: c < 3 ? C.cnLoss : c >= 8 ? C.cnGain : '#fff', stroke: '#fff', 'stroke-width': 0.5, opacity: 0.85 });
+    [15, 8, 20, 13, 10].forEach((w, i) => rect(svg, 67, y0 + i * ch + 1, w / 2.2, 3.4, { fill: C.muted, opacity: 0.72 }));
+    line(svg, 6, y0 - 1, 6, y0 + 5 * ch, { stroke: C.text2, 'stroke-width': 1 });
+    rect(svg, x0, y0, 12 * cw, 5 * ch, { fill: 'none', stroke: C.grid, 'stroke-width': 0.7 });
+  });
+
+  thumb('waterfall', svg => {
+    const base = 42;
+    line(svg, 8, base, 72, base, { stroke: C.grid, 'stroke-width': 1 });
+    line(svg, 8, 25, 72, 25, { stroke: C.cr, 'stroke-width': 0.9, 'stroke-dasharray': '3,2', opacity: 0.55 });
+    line(svg, 8, 58, 72, 58, { stroke: C.pd, 'stroke-width': 0.9, 'stroke-dasharray': '3,2', opacity: 0.5 });
+    const vals = [26,22,18,15,12,9,7,4,1,-3,-6,-9,-12,-15,-18,-21,-24,-27];
+    vals.forEach((v, i) => {
+      const x = 10 + i * 3.4, h = Math.abs(v) * 0.78;
+      rect(svg, x, v >= 0 ? base - h : base, 2.8, h, { fill: i > 10 ? C.sig : C.gene, opacity: 0.88 });
+      rect(svg, x, 68, 2.8, 3, { fill: i > 10 ? C.sig : C.gene, opacity: 0.76 });
+    });
+    label(svg, 58, 18, '-30%', { fill: C.cr, 'font-size': 5.4 });
+    label(svg, 60, 65, 'TP53', { fill: C.sig, 'font-size': 5.4 });
+  });
+
+  thumb('forest', svg => {
+    line(svg, 40, 10, 40, 70, { stroke: C.grid, 'stroke-width': 1, 'stroke-dasharray': '3,2' });
+    const rows = [
+      [18, 32, 13, 5], [29, 45, 10, 7], [40, 50, 15, 8],
+      [51, 37, 8, 4.5], [62, 47, 12, 6]
+    ];
+    rows.forEach(r => {
+      line(svg, r[1] - r[2], r[0], r[1] + r[2], r[0], { stroke: C.gene, 'stroke-width': 1.3 });
+      line(svg, r[1] - r[2], r[0] - 2, r[1] - r[2], r[0] + 2, { stroke: C.gene, 'stroke-width': 1 });
+      line(svg, r[1] + r[2], r[0] - 2, r[1] + r[2], r[0] + 2, { stroke: C.gene, 'stroke-width': 1 });
+      rect(svg, r[1] - r[3] / 2, r[0] - r[3] / 2, r[3], r[3], { fill: Math.abs(r[1] - 40) > 5 ? C.sig : C.gene, opacity: 0.9 });
+    });
+    polygon(svg, [[28,72],[39,66],[52,72],[39,78]], { fill: C.sig, opacity: 0.9 });
+    label(svg, 17, 15, 'Study', { fill: C.text2, 'font-size': 5, 'text-anchor': 'start' });
+  });
+
+  thumb('portrait', svg => {
+    const panels = [[7,8],[42,8],[7,31],[42,31],[7,54],[42,54]];
+    panels.forEach(p => rect(svg, p[0], p[1], 31, 18, { fill: '#fff', stroke: C.grid, 'stroke-width': 0.7, rx: 2 }));
+    line(svg, 11, 21, 34, 21, { stroke: C.muted, 'stroke-width': 2 });
+    [17, 24, 29].forEach((x, i) => { line(svg, x, 21, x, 13 + i, { stroke: C.muted, 'stroke-width': 0.8 }); circle(svg, x, 13 + i, 2.4, { fill: i === 1 ? C.contact : C.structural }); });
+    path(svg, 'M47 23 C51 12, 57 12, 61 23 C65 34, 69 34, 73 23', { fill: 'none', stroke: C.expr, 'stroke-width': 1.5 });
+    line(svg, 46, 21, 73, 21, { stroke: C.grid, 'stroke-width': 0.8 });
+    [12, 17, 22, 27, 32].forEach((x, i) => rect(svg, x, 35, 3.6, 10, { fill: C.meth, opacity: 0.18 + i * 0.14 }));
+    const pn = [[47,40,C.sig],[57,40,C.gene],[68,40,C.path]];
+    line(svg, 50, 40, 54, 40, { stroke: C.path, 'stroke-width': 1 });
+    line(svg, 60, 40, 65, 40, { stroke: C.sig, 'stroke-width': 1, 'stroke-dasharray': '2,2' });
+    pn.forEach(p => circle(svg, p[0], p[1], 2.8, { fill: p[2] }));
+    path(svg, stepPath([[12,62],[18,62],[18,64],[27,64],[27,67],[35,67]]), { fill: 'none', stroke: C.gene, 'stroke-width': 1.4 });
+    path(svg, stepPath([[12,62],[16,62],[16,66],[24,66],[24,70],[35,70]]), { fill: 'none', stroke: C.sig, 'stroke-width': 1.4 });
+    line(svg, 56, 58, 56, 72, { stroke: C.grid, 'stroke-width': 0.8, 'stroke-dasharray': '2,2' });
+    [[50,62,6],[61,65,5],[58,70,7]].forEach(r => { line(svg, r[0]-r[2], r[1], r[0]+r[2], r[1], { stroke: C.gene, 'stroke-width': 1 }); rect(svg, r[0]-2, r[1]-2, 4, 4, { fill: C.gene }); });
+    polygon(svg, [[51,76],[58,72],[66,76],[58,80]], { fill: C.sig, opacity: 0.88 });
+  });
+})();
 
 </script>
 </body>
