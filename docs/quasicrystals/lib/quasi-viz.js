@@ -173,6 +173,7 @@
           heading: 'Hat and Spectre close famous problems and open structure questions',
           paragraphs: [
             'The Hat tilings solved the single-tile aperiodic problem when reflections are allowed. The Spectre followed with a chiral monotile that avoids reflection.',
+            'Both tiles belong to a one-parameter polygon family: edges of length a and b alternate around a fixed sequence on a kite grid, and any (a, b) gives a valid combinatorial tiling. Hat sits at (1, sqrt 3), Turtle at (sqrt 3, 1), and Tile(1, 1) is the symmetric member that the Spectre then breaks chirally with curved edges.',
             'These tiles belong in the same aperiodic-order landscape as Penrose tilings, but they should not be presented as ordinary regular model sets unless that structure is actually proven for the object under discussion.'
           ]
         }
@@ -283,7 +284,7 @@
         key: 'hatPatch',
         section: 2,
         label: 'Figure 3.',
-        caption: 'Hat and Spectre patch views use actual monotile-family outlines. The controls compare reflection use, chirality, and open structure questions.'
+        caption: 'Hat, Hurtle, and Turtle are members of the Smith-Myers-Kaplan-Goodman-Strauss Tile(a,b) family. Move the slider to deform every tile in the cluster in lockstep; the Spectre is recovered by enabling chiral edge curves at the symmetric a = b = 1 point.'
       }
     ]
   };
@@ -387,7 +388,7 @@
     appendAct(wrap, 'Act I', 'The geometry of aperiodic order', articles.slice(0, 2));
     appendAct(wrap, 'Act II', 'Higher dimensions and matter', articles.slice(2));
 
-    wrap.appendChild(html('div', { class: 'footer' }, '<p>Source grounding lives in <code>plans/quasicrystals</code>. The shipped pass uses standalone finite figures; audited squishy-thing embeds remain the deeper follow-up.</p>'));
+    wrap.appendChild(html('div', { class: 'footer' }, '<p>Source grounding lives in <code>plans/quasicrystals</code>. The current implementation uses standalone finite figures; squishy-thing embeds remain the deeper follow-up.</p>'));
   }
 
   function appendAct(wrap, label, title, list) {
@@ -472,7 +473,7 @@
       diffractionOracle: 'A live finite diffraction oracle. The peak module stays fixed while the window envelope and threshold change visible amplitudes.',
       timeline: 'Rights-safe schematic timeline and ten-fold diffraction sketch for the discovery story.',
       definitions: 'Four common definitions overlap under hypotheses but should not be collapsed into one unconditional claim.',
-      hat: 'Actual Hat and Spectre outlines from the Smith-Myers-Kaplan-Goodman-Strauss monotile family, shown as single-tile comparisons with an open-problem map.'
+      hat: 'Hat and Spectre outlines from the Smith-Myers-Kaplan-Goodman-Strauss monotile family, shown as single-tile comparisons with an open-problem map.'
     }[key] || '';
   }
 
@@ -528,8 +529,8 @@
     var size = 80, dpr = window.devicePixelRatio || 1;
     canvas.width = size * dpr;
     canvas.height = size * dpr;
-    canvas.style.width = size + 'px';
-    canvas.style.height = size + 'px';
+    canvas.style.width = '100%';
+    canvas.style.height = '100%';
     container.appendChild(canvas);
     var ctx = canvas.getContext('2d');
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -910,11 +911,15 @@
     var current = schemes[0];
     var controls = html('div', { class: 'controls segmented' });
     schemes.forEach(function (scheme, i) {
-      var button = html('button', { type: 'button', class: i === 0 ? 'active' : '' }, scheme.label);
+      var button = html('button', { type: 'button', class: i === 0 ? 'active' : '', 'aria-pressed': i === 0 ? 'true' : 'false' }, scheme.label);
       button.addEventListener('click', function () {
         current = scheme;
-        Array.prototype.forEach.call(controls.querySelectorAll('button'), function (b) { b.classList.remove('active'); });
+        Array.prototype.forEach.call(controls.querySelectorAll('button'), function (b) {
+          b.classList.remove('active');
+          b.setAttribute('aria-pressed', 'false');
+        });
         button.classList.add('active');
+        button.setAttribute('aria-pressed', 'true');
         draw();
       });
       controls.appendChild(button);
@@ -1268,11 +1273,15 @@
       ['valid', 'matching join'],
       ['invalid', 'rule violation']
     ].forEach(function (item, i) {
-      var b = html('button', { type: 'button', class: i === 0 ? 'active' : '' }, item[1]);
+      var b = html('button', { type: 'button', class: i === 0 ? 'active' : '', 'aria-pressed': i === 0 ? 'true' : 'false' }, item[1]);
       b.addEventListener('click', function () {
         state.mode = item[0];
-        Array.prototype.forEach.call(controls.querySelectorAll('button'), function (x) { x.classList.remove('active'); });
+        Array.prototype.forEach.call(controls.querySelectorAll('button'), function (x) {
+          x.classList.remove('active');
+          x.setAttribute('aria-pressed', 'false');
+        });
         b.classList.add('active');
+        b.setAttribute('aria-pressed', 'true');
         draw();
       });
       controls.appendChild(b);
@@ -1413,11 +1422,15 @@
     var selected = '5';
     var controls = html('div', { class: 'controls segmented' });
     ['5', '3', '2'].forEach(function (n, i) {
-      var b = html('button', { type: 'button', class: i === 0 ? 'active' : '' }, n + '-fold axes');
+      var b = html('button', { type: 'button', class: i === 0 ? 'active' : '', 'aria-pressed': i === 0 ? 'true' : 'false' }, n + '-fold axes');
       b.addEventListener('click', function () {
         selected = n;
-        Array.prototype.forEach.call(controls.querySelectorAll('button'), function (x) { x.classList.remove('active'); });
+        Array.prototype.forEach.call(controls.querySelectorAll('button'), function (x) {
+          x.classList.remove('active');
+          x.setAttribute('aria-pressed', 'false');
+        });
         b.classList.add('active');
+        b.setAttribute('aria-pressed', 'true');
         draw();
       });
       controls.appendChild(b);
@@ -1851,11 +1864,15 @@
       ['penrose', 'Penrose'],
       ['h3', 'H3 shell']
     ].forEach(function (item, i) {
-      var b = html('button', { type: 'button', class: i === 1 ? 'active' : '' }, item[1]);
+      var b = html('button', { type: 'button', class: i === 1 ? 'active' : '', 'aria-pressed': i === 1 ? 'true' : 'false' }, item[1]);
       b.addEventListener('click', function () {
         state.system = item[0];
-        Array.prototype.forEach.call(modes.querySelectorAll('button'), function (x) { x.classList.remove('active'); });
+        Array.prototype.forEach.call(modes.querySelectorAll('button'), function (x) {
+          x.classList.remove('active');
+          x.setAttribute('aria-pressed', 'false');
+        });
         b.classList.add('active');
+        b.setAttribute('aria-pressed', 'true');
         draw();
       });
       modes.appendChild(b);
@@ -2179,11 +2196,15 @@
       ['substitution', 'substitution'],
       ['wang', 'Wang tiles']
     ].forEach(function (item, i) {
-      var b = html('button', { type: 'button', class: i === 0 ? 'active' : '' }, item[1]);
+      var b = html('button', { type: 'button', class: i === 0 ? 'active' : '', 'aria-pressed': i === 0 ? 'true' : 'false' }, item[1]);
       b.addEventListener('click', function () {
         state.example = item[0];
-        Array.prototype.forEach.call(controls.querySelectorAll('button'), function (x) { x.classList.remove('active'); });
+        Array.prototype.forEach.call(controls.querySelectorAll('button'), function (x) {
+          x.classList.remove('active');
+          x.setAttribute('aria-pressed', 'false');
+        });
         b.classList.add('active');
+        b.setAttribute('aria-pressed', 'true');
         draw();
       });
       controls.appendChild(b);
@@ -2295,10 +2316,10 @@
     var W = 860, H = 360;
     var s = svg('svg', { viewBox: '0 0 ' + W + ' ' + H, width: '100%', height: H });
     container.appendChild(s);
-    drawHatTile(s, 160, 168, 64, -0.18, css('--c-physical', '#c46f2f'), false, 0.72);
-    drawHatTile(s, 282, 168, 64, 0.18, css('--c-gold', '#b9942f'), true, 0.46);
+    drawHatTile(s, 155, 170, 42, -0.08, css('--c-physical', '#c46f2f'), false, 0.72);
+    drawHatTile(s, 302, 170, 42, 0.08, css('--c-gold', '#b9942f'), true, 0.46);
     append(s, 'text', { x: 221, y: 295, 'text-anchor': 'middle', fill: css('--c-physical', '#c46f2f'), 'font-size': 15, 'font-weight': 700 }, 'Hat uses reflected copies');
-    drawSpectreTile(s, 485, 166, 55, -0.1, css('--c-internal', '#1f7a8c'), 0.7);
+    drawSpectreTile(s, 485, 168, 43, -0.1, css('--c-internal', '#1f7a8c'), 0.7);
     append(s, 'line', { x1: 535, y1: 77, x2: 590, y2: 132, stroke: css('--c-boundary', '#b44a3f'), 'stroke-width': 4, 'stroke-linecap': 'round' });
     append(s, 'line', { x1: 590, y1: 77, x2: 535, y2: 132, stroke: css('--c-boundary', '#b44a3f'), 'stroke-width': 4, 'stroke-linecap': 'round' });
     append(s, 'text', { x: 500, y: 295, 'text-anchor': 'middle', fill: css('--c-internal', '#1f7a8c'), 'font-size': 15, 'font-weight': 700 }, 'Spectre forbids reflection');
@@ -2308,168 +2329,296 @@
       append(s, 'circle', { cx: 665, cy: 136 + i * 25, r: 3.2, fill: css('--c-gold', '#b9942f') });
       append(s, 'text', { x: 678, y: 141 + i * 25, fill: css('--text-2', '#565a68'), 'font-size': 12 }, t);
     });
-    append(s, 'text', { x: 54, y: 38, fill: css('--text', '#1b1d2a'), 'font-size': 17, 'font-weight': 700 }, 'actual monotile outlines, shown as single-tile comparisons');
+    append(s, 'text', { x: 54, y: 38, fill: css('--text', '#1b1d2a'), 'font-size': 17, 'font-weight': 700 }, 'monotile outlines, shown as single-tile comparisons');
   }
 
+  // The Hat, Hurtle, and Turtle are members of a one-parameter family
+  // Tile(a,b) due to Smith, Myers, Kaplan, Goodman-Strauss (arXiv:2303.10798).
+  // Edge lengths alternate a and b around a fixed 13-edge sequence on a kite
+  // grid; every Hat tiling is also a valid Tile(a,b) tiling for any (a,b).
+  // This figure morphs (a,b) along Hat -> Hurtle -> Turtle and applies the
+  // same shape to a fixed cluster of placements, with optional Spectre
+  // edge curves and reflected-tile coloring.
   function mountHatSpectrePatch(container) {
-    var state = { tile: 'hat', count: 8 };
+    var SQRT3 = Math.sqrt(3);
+    var STOPS = [
+      { t: 0,    name: 'Hat',    detail: 'a = 1, b = sqrt 3' },
+      { t: 0.5,  name: 'Hurtle', detail: 'a = 1, b = 1 (Spectre base)' },
+      { t: 1,    name: 'Turtle', detail: 'a = sqrt 3, b = 1' }
+    ];
+    var state = { morph: 0, curvature: 0, showReflected: true };
+
+    function shapeAt(t) {
+      // Two-segment path through (a,b) parameter space so the slider
+      // passes through every named stop exactly:
+      //   t = 0.0 -> Hat    (1, sqrt 3)
+      //   t = 0.5 -> Hurtle (1, 1)
+      //   t = 1.0 -> Turtle (sqrt 3, 1)
+      // Linear Hat -> Turtle would skip Hurtle (it crosses the symmetric
+      // point at a = b = (1 + sqrt 3) / 2 instead).
+      if (t <= 0.5) {
+        var u = t / 0.5;
+        return { a: 1, b: SQRT3 + u * (1 - SQRT3) };
+      }
+      var v = (t - 0.5) / 0.5;
+      return { a: 1 + v * (SQRT3 - 1), b: 1 };
+    }
+    function nearestStop(t) {
+      for (var i = 0; i < STOPS.length; i++) {
+        if (Math.abs(t - STOPS[i].t) < 0.025) return STOPS[i];
+      }
+      return null;
+    }
+    function polyArea(pts) {
+      var a = 0;
+      for (var i = 0; i < pts.length; i++) {
+        var j = (i + 1) % pts.length;
+        a += pts[i][0] * pts[j][1] - pts[j][0] * pts[i][1];
+      }
+      return Math.abs(a) / 2;
+    }
+    var REF_AREA = polyArea(monotileVertices(1, SQRT3));
+
+    // A small, hand-arranged cluster of placements. The (a,b) morph deforms
+    // every tile in lockstep; positions and rotations are fixed. The single
+    // reflected tile shows the lone reflected member of any small Hat patch
+    // and disappears under the Spectre interpretation (when curved edges
+    // are enabled with a = b = 1, reflection becomes forbidden).
+    var PATCH = [
+      { tx:   0.0, ty:  0.0, rot: 210, reflected: true  },
+      { tx:   3.6, ty:  2.1, rot:  90, reflected: false },
+      { tx:  -3.6, ty:  2.1, rot: 330, reflected: false },
+      { tx:   0.0, ty: -4.2, rot: 210, reflected: false },
+      { tx:   7.2, ty:  0.0, rot: 150, reflected: false },
+      { tx:  -7.2, ty:  0.0, rot:  30, reflected: false },
+      { tx:   3.6, ty: -6.3, rot:  90, reflected: false },
+      { tx:  -3.6, ty: -6.3, rot: 330, reflected: false }
+    ];
+
     var controls = html('div', { class: 'controls' });
-    var modes = html('div', { class: 'segmented' });
-    [
-      ['hat', 'Hat'],
-      ['spectre', 'Spectre']
-    ].forEach(function (item, i) {
-      var b = html('button', { type: 'button', class: i === 0 ? 'active' : '' }, item[1]);
+    var sliderLabel = html('label', {}, 'shape morph <input type="range" min="0" max="100" step="1" value="0" style="width:200px"><span class="value" data-v="shape">Hat</span>');
+    controls.appendChild(sliderLabel);
+    var refLabel = html('label', {}, '<input type="checkbox" checked> color reflected');
+    controls.appendChild(refLabel);
+    var curveLabel = html('label', {}, '<input type="checkbox"> Spectre curves');
+    controls.appendChild(curveLabel);
+    container.appendChild(controls);
+
+    var jumpRow = html('div', { class: 'controls segmented' });
+    var jumpButtons = STOPS.map(function (st) {
+      var b = html('button', { type: 'button', class: st.t === 0 ? 'active' : '', 'aria-pressed': st.t === 0 ? 'true' : 'false' }, 'jump to ' + st.name);
       b.addEventListener('click', function () {
-        state.tile = item[0];
-        Array.prototype.forEach.call(modes.querySelectorAll('button'), function (x) { x.classList.remove('active'); });
-        b.classList.add('active');
+        state.morph = st.t;
+        sliderLabel.querySelector('input').value = String(Math.round(st.t * 100));
         draw();
       });
-      modes.appendChild(b);
+      jumpRow.appendChild(b);
+      return { stop: st, btn: b };
     });
-    controls.appendChild(modes);
-    controls.appendChild(html('label', {}, 'patch size <input type="range" min="3" max="12" step="1" value="' + state.count + '"><span class="value" data-v="count"></span>'));
-    container.appendChild(controls);
+    container.appendChild(jumpRow);
+
     var target = html('div');
     container.appendChild(target);
-    container.querySelector('input').addEventListener('input', function (e) { state.count = +e.target.value; draw(); });
+
+    sliderLabel.querySelector('input').addEventListener('input', function (e) {
+      state.morph = +e.target.value / 100;
+      draw();
+    });
+    refLabel.querySelector('input').addEventListener('change', function (e) {
+      state.showReflected = e.target.checked;
+      draw();
+    });
+    curveLabel.querySelector('input').addEventListener('change', function (e) {
+      state.curvature = e.target.checked ? 0.18 : 0;
+      draw();
+    });
+
     function draw() {
-      container.querySelector('[data-v="count"]').textContent = state.count;
       clear(target);
-      var W = 900, H = 430;
+      var W = 900, H = 470;
       var s = svg('svg', { viewBox: '0 0 ' + W + ' ' + H, width: '100%', height: H });
       target.appendChild(s);
-      append(s, 'rect', { x: 44, y: 46, width: 560, height: 318, rx: 6, fill: '#fbfbf8', stroke: '#dedfd8' });
-      append(s, 'rect', { x: 644, y: 74, width: 190, height: 234, rx: 6, fill: '#fbfbf8', stroke: '#dedfd8' });
-      drawMonotilePatch(s, state.tile, 324, 208, state.count);
-      drawMonotileLegend(s, state.tile, 665, 104);
-      append(s, 'text', { x: 64, y: 30, fill: css('--text', '#1b1d2a'), 'font-size': 17, 'font-weight': 700 }, state.tile === 'hat' ? 'Hat patch: reflections allowed' : 'Spectre patch: one chiral outline');
-      append(s, 'text', { x: 64, y: 394, fill: css('--text-2', '#565a68'), 'font-size': 13 }, 'These are compact local patch diagrams using the actual monotile-family outlines. They are not a proof of forced aperiodicity.');
+
+      var shape = shapeAt(state.morph);
+      var stop = nearestStop(state.morph);
+      var displayName = stop ? stop.name : ('Tile(' + shape.a.toFixed(2) + ', ' + shape.b.toFixed(2) + ')');
+      var curveSuffix = state.curvature > 0 ? ' + curves' : '';
+
+      var label = container.querySelector('[data-v="shape"]');
+      if (label) label.textContent = displayName + curveSuffix;
+
+      jumpButtons.forEach(function (j) {
+        var active = stop && stop.name === j.stop.name;
+        j.btn.classList.toggle('active', !!active);
+        j.btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+      });
+
+      append(s, 'rect', { x: 44, y: 56, width: 580, height: 380, rx: 6, fill: '#fbfbf8', stroke: '#dedfd8' });
+      append(s, 'rect', { x: 660, y: 74, width: 200, height: 340, rx: 6, fill: '#fbfbf8', stroke: '#dedfd8' });
+
+      var verts = monotileVertices(shape.a, shape.b);
+      var area = polyArea(verts);
+      var sizeNorm = Math.sqrt(REF_AREA / area);
+      var BASE = 17;
+      var renderScale = BASE * sizeNorm;
+      var cx = 334, cy = 246;
+
+      var REGULAR = css('--c-physical', '#c46f2f');
+      var REFLECTED = css('--c-internal', '#1f7a8c');
+      var CURVED_STROKE = css('--c-boundary', '#b44a3f');
+
+      var nReflected = 0;
+      PATCH.forEach(function (p) {
+        var color = (state.showReflected && p.reflected) ? REFLECTED : REGULAR;
+        if (p.reflected) nReflected++;
+        var rotRad = p.rot * Math.PI / 180;
+        var tx = cx + p.tx * renderScale;
+        var ty = cy + p.ty * renderScale;
+        if (state.curvature > 0) {
+          var d = monotilePath(shape.a, shape.b, state.curvature, tx, ty, renderScale, rotRad, p.reflected);
+          append(s, 'path', {
+            d: d,
+            fill: color,
+            opacity: 0.62,
+            stroke: state.curvature > 0 ? CURVED_STROKE : color,
+            'stroke-width': 1.4,
+            'stroke-linejoin': 'round'
+          });
+        } else {
+          var pts = verts.map(function (v) {
+            return transformPoint(v, tx, ty, renderScale, rotRad, p.reflected);
+          });
+          append(s, 'polygon', {
+            points: pts.map(function (q) { return q.join(','); }).join(' '),
+            fill: color,
+            opacity: 0.62,
+            stroke: color,
+            'stroke-width': 1.4,
+            'stroke-linejoin': 'round'
+          });
+        }
+      });
+
+      append(s, 'text', { x: 64, y: 38, fill: css('--text', '#1b1d2a'), 'font-size': 17, 'font-weight': 700 },
+        'Tile(a,b): one polygon family deforming a fixed cluster');
+
+      var px = 680, py = 96;
+      append(s, 'text', { x: px, y: py, fill: css('--text', '#1b1d2a'), 'font-size': 14, 'font-weight': 700 }, 'Edge lengths');
+      append(s, 'text', { x: px, y: py + 22, fill: css('--text-2', '#565a68'), 'font-size': 13 }, 'a = ' + shape.a.toFixed(3));
+      append(s, 'text', { x: px, y: py + 40, fill: css('--text-2', '#565a68'), 'font-size': 13 }, 'b = ' + shape.b.toFixed(3));
+
+      append(s, 'text', { x: px, y: py + 78, fill: css('--text', '#1b1d2a'), 'font-size': 14, 'font-weight': 700 }, 'Family stops');
+      STOPS.forEach(function (st, i) {
+        var active = stop && stop.name === st.name;
+        var yLine = py + 102 + i * 38;
+        append(s, 'circle', { cx: px + 5, cy: yLine - 4, r: 4.5, fill: active ? css('--c-gold', '#b9942f') : '#dedfd8' });
+        append(s, 'text', { x: px + 18, y: yLine, fill: css('--text', '#1b1d2a'), 'font-size': 13, 'font-weight': active ? 700 : 600 }, st.name);
+        append(s, 'text', { x: px + 18, y: yLine + 16, fill: css('--text-2', '#565a68'), 'font-size': 11 }, st.detail);
+      });
+
+      append(s, 'text', { x: px, y: py + 234, fill: css('--text', '#1b1d2a'), 'font-size': 14, 'font-weight': 700 }, 'Reflected tiles');
+      append(s, 'text', { x: px, y: py + 254, fill: css('--text-2', '#565a68'), 'font-size': 12 }, 'this cluster: ' + nReflected + ' of ' + PATCH.length);
+      append(s, 'text', { x: px, y: py + 272, fill: css('--text-2', '#565a68'), 'font-size': 11 }, 'Hat tilings: 1 in phi^4 + 1');
+      append(s, 'text', { x: px, y: py + 288, fill: css('--text-2', '#565a68'), 'font-size': 11 }, 'Spectre tilings: 0 (chiral)');
+      if (state.curvature > 0) {
+        append(s, 'text', { x: px, y: py + 312, fill: CURVED_STROKE, 'font-size': 11, 'font-style': 'italic' }, 'Spectre edges: reflection forbidden');
+      }
+
+      append(s, 'text', { x: 64, y: 458, fill: css('--text-2', '#565a68'), 'font-size': 12 },
+        'Same combinatorial cluster, three named members of one continuous polygon family. Tile(1,1) admits periodic tilings; chiral edge curves break that and recover the Spectre.');
     }
+
     draw();
   }
 
-  function drawMonotilePatch(s, tile, cx, cy, count) {
-    var placements = [
-      [0, 0, -0.1, false],
-      [1.12, -0.1, 0.56, true],
-      [-1.06, 0.04, -0.72, true],
-      [0.12, 1.02, 1.18, false],
-      [0.02, -1.05, -1.28, false],
-      [1.15, 0.95, -0.22, true],
-      [-1.18, -0.86, 0.28, true],
-      [2.02, 0.08, 1.04, false],
-      [-2.02, -0.02, -1.04, false],
-      [1.03, -1.72, 0.36, tile === 'hat'],
-      [-1.06, 1.7, -0.36, tile === 'hat'],
-      [2.06, 1.16, -0.86, tile === 'hat']
-    ];
-    var colors = [css('--c-physical', '#c46f2f'), css('--c-internal', '#1f7a8c'), css('--c-window', '#78a66f'), css('--c-gold', '#b9942f'), css('--c-violet', '#6e5ca8')];
-    placements.slice(0, count).forEach(function (p, i) {
-      var x = cx + p[0] * 83;
-      var y = cy + p[1] * 72;
-      var rot = p[2];
-      if (tile === 'hat') drawHatTile(s, x, y, 33, rot, colors[i % colors.length], p[3], 0.52);
-      else drawSpectreTile(s, x, y, 29, rot, colors[i % colors.length], 0.52);
-    });
+  // The Hat outline follows the public hatviz hex-grid coordinates. Spectre
+  // uses the Tile(1,1) move list and reference curve formula from the monotile
+  // outline generator.
+  function hatVertices() {
+    var h = Math.sqrt(3) / 2;
+    function hexPoint(x, y) { return [x + 0.5 * y, h * y]; }
+    return centerPoints([
+      hexPoint(0, 0),
+      hexPoint(-1, -1),
+      hexPoint(0, -2),
+      hexPoint(2, -2),
+      hexPoint(2, -1),
+      hexPoint(4, -2),
+      hexPoint(5, -1),
+      hexPoint(4, 0),
+      hexPoint(3, 0),
+      hexPoint(2, 2),
+      hexPoint(0, 3),
+      hexPoint(0, 2),
+      hexPoint(-1, 2)
+    ]);
   }
 
-  function drawMonotileLegend(s, tile, x, y) {
-    append(s, 'text', { x: x, y: y, fill: css('--text', '#1b1d2a'), 'font-size': 15, 'font-weight': 700 }, tile === 'hat' ? 'Hat' : 'Spectre');
-    if (tile === 'hat') {
-      drawHatTile(s, x + 48, y + 74, 34, -0.22, css('--c-physical', '#c46f2f'), false, 0.64);
-      drawHatTile(s, x + 104, y + 74, 34, 0.22, css('--c-gold', '#b9942f'), true, 0.42);
-      append(s, 'text', { x: x, y: y + 154, fill: css('--text-2', '#565a68'), 'font-size': 13 }, 'reflected copies are part');
-      append(s, 'text', { x: x, y: y + 176, fill: css('--text-2', '#565a68'), 'font-size': 13 }, 'of the original Hat result');
-    } else {
-      drawSpectreTile(s, x + 78, y + 76, 31, -0.18, css('--c-internal', '#1f7a8c'), 0.62);
-      append(s, 'line', { x1: x + 114, y1: y + 38, x2: x + 154, y2: y + 78, stroke: css('--c-boundary', '#b44a3f'), 'stroke-width': 3.5, 'stroke-linecap': 'round' });
-      append(s, 'line', { x1: x + 154, y1: y + 38, x2: x + 114, y2: y + 78, stroke: css('--c-boundary', '#b44a3f'), 'stroke-width': 3.5, 'stroke-linecap': 'round' });
-      append(s, 'text', { x: x, y: y + 154, fill: css('--text-2', '#565a68'), 'font-size': 13 }, 'chiral monotile, no');
-      append(s, 'text', { x: x, y: y + 176, fill: css('--text-2', '#565a68'), 'font-size': 13 }, 'reflected copies needed');
-    }
-  }
-
-  // Hat/Spectre outlines follow the public parametric monotile construction.
-  function drawHatTile(s, cx, cy, scale, rot, color, mirror, opacity) {
-    var rt3 = Math.sqrt(3);
-    var r = [1, 0], u = [0.5, rt3 / 2], d = [0.5, -rt3 / 2];
-    var pts = [
-      [0, 0],
-      mul(r, 0.5),
-      u,
-      add(mul(u, 2), mul(d, 0.5)),
-      add(r, u),
-      add(u, mul(r, 1.5)),
-      mul(r, 2),
-      sub(mul(r, 3), mul(u, 0.5)),
-      add(mul(r, 2), d),
-      add(r, d),
-      add(r, mul(d, 0.5)),
-      d,
-      mul(u, -0.5)
-    ];
-    var centered = centerPoints(pts);
-    append(s, 'polygon', {
-      points: centered.map(function (p) { return transformPoint(p, cx, cy, scale, rot, mirror).join(','); }).join(' '),
-      fill: color,
-      opacity: opacity,
-      stroke: color,
-      'stroke-width': 2,
-      'stroke-linejoin': 'round'
-    });
-    centered.forEach(function (p, i) {
-      if (i % 2 === 0) {
-        var q = transformPoint(p, cx, cy, scale, rot, mirror);
-        append(s, 'circle', { cx: q[0], cy: q[1], r: 2.4, fill: '#fbfbf8', opacity: 0.78 });
-      }
-    });
-  }
-
-  function drawSpectreTile(s, cx, cy, scale, rot, color, opacity) {
-    append(s, 'path', {
-      d: monotilePath(1, 1, 0.1, cx, cy, scale, rot, false),
-      fill: color,
-      opacity: opacity,
-      stroke: color,
-      'stroke-width': 2,
-      'stroke-linejoin': 'round'
-    });
-  }
-
-  function monotilePath(a, b, curve, cx, cy, scale, rot, mirror) {
+  function monotileMoves(a, b) {
     var c = Math.cos(Math.PI / 3), sn = Math.sin(Math.PI / 3);
-    var moves = [
+    return [
       [c * b, sn * b], [b, 0], [0, a], [sn * a, c * a],
       [c * b, -sn * b], [-c * b, -sn * b], [sn * a, -c * a], [0, -a],
       [0, -a], [-sn * a, -c * a], [-c * b, sn * b], [-b, 0],
       [0, a], [-sn * a, c * a]
     ];
+  }
+
+  function monotileVertices(a, b) {
+    var moves = monotileMoves(a, b);
     var pts = [[0, 0]], current = [0, 0];
-    moves.forEach(function (m) {
+    for (var i = 0; i < moves.length - 1; i++) {
+      current = add(current, moves[i]);
+      pts.push(current);
+    }
+    return centerPoints(pts);
+  }
+
+  function drawHatTile(s, cx, cy, scale, rot, color, mirror, opacity) {
+    var verts = hatVertices();
+    append(s, 'polygon', {
+      points: verts.map(function (p) { return transformPoint(p, cx, cy, scale, rot, mirror).join(','); }).join(' '),
+      fill: color,
+      opacity: opacity,
+      stroke: color,
+      'stroke-width': 1.5,
+      'stroke-linejoin': 'round'
+    });
+  }
+
+  function drawSpectreTile(s, cx, cy, scale, rot, color, opacity) {
+    append(s, 'path', {
+      d: monotilePath(1, 1, 0.18, cx, cy, scale, rot, false),
+      fill: color,
+      opacity: opacity,
+      stroke: color,
+      'stroke-width': 1.5,
+      'stroke-linejoin': 'round'
+    });
+  }
+
+  // Curved-edge version of Tile(1,1). The control points follow the public
+  // monotile outline generator: each relative move bends around its midpoint.
+  function monotilePath(a, b, curve, cx, cy, scale, rot, mirror) {
+    var moves = monotileMoves(a, b);
+    var pts = [[0, 0]], current = [0, 0];
+    moves.slice(0, -1).forEach(function (m) {
       current = add(current, m);
       pts.push(current);
     });
-    var center = centroid(pts);
-    function local(p) { return [p[0] - center[0], p[1] - center[1]]; }
-    function twiddle(p) {
-      var nx = p[1], ny = -p[0];
-      return [
-        [-curve * nx + p[0] / 2, -curve * ny + p[1] / 2],
-        [curve * nx + p[0] / 2, curve * ny + p[1] / 2],
-        p
-      ];
-    }
-    var d = 'M ' + transformPoint(local([0, 0]), cx, cy, scale, rot, mirror).join(' ');
-    current = [0, 0];
+    var c = centroid(pts);
+    current = sub([0, 0], c);
+    var d = 'M ' + transformPoint(current, cx, cy, scale, rot, mirror).join(' ');
     moves.forEach(function (m) {
-      var t = twiddle(m);
-      var c1 = transformPoint(local(add(current, t[0])), cx, cy, scale, rot, mirror);
-      var c2 = transformPoint(local(add(current, t[1])), cx, cy, scale, rot, mirror);
-      var end = transformPoint(local(add(current, t[2])), cx, cy, scale, rot, mirror);
-      d += ' C ' + c1.join(' ') + ' ' + c2.join(' ') + ' ' + end.join(' ');
-      current = add(current, m);
+      var dx = m[0], dy = m[1];
+      var c1 = [current[0] + dx / 2 - curve * dy, current[1] + dy / 2 + curve * dx];
+      var c2 = [current[0] + dx / 2 + curve * dy, current[1] + dy / 2 - curve * dx];
+      var p1 = [current[0] + dx, current[1] + dy];
+      var c1t = transformPoint(c1, cx, cy, scale, rot, mirror);
+      var c2t = transformPoint(c2, cx, cy, scale, rot, mirror);
+      var end = transformPoint(p1, cx, cy, scale, rot, mirror);
+      d += ' C ' + c1t.join(' ') + ' ' + c2t.join(' ') + ' ' + end.join(' ');
+      current = p1;
     });
     return d + ' Z';
   }

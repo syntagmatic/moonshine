@@ -56,7 +56,7 @@ This is the canonical brief for the shipped quasicrystal series. It replaces the
 
 **Math basis.** The comparison is between four lenses: model sets, substitution tilings, matching rules, and pure-point diffraction. Wang tiles represent the local-rule/undecidability side of the field. Hat and Spectre sit at the monotile frontier: the Hat admits tilings with reflected copies, while the Spectre is chiral. Socolar's 2023 analysis means Hat tilings should not be casually described as unrelated to projection, but regular model-set and diffraction claims need careful wording.
 
-**Figures.** Definitions matrix comparing model set, substitution, matching-rule, and diffraction lenses; substitution/Wang local-rule interactive; Hat/Spectre single-tile comparison using actual monotile-family outlines; Hat/Spectre patch explorer with reflection/chirality controls and an open-question readout; final local-rule / monotile card glyph for the series index.
+**Figures.** Definitions matrix comparing model set, substitution, matching-rule, and diffraction lenses; substitution/Wang local-rule interactive; Hat/Spectre single-tile comparison using monotile-family outlines; Hat/Spectre motif explorer with reflection/chirality controls and an open-question readout; final local-rule / monotile card glyph for the series index.
 
 **Key terms.** `substitution fixed point`, `matching rule`, `Wang tile`, `domino problem`, `aperiodic monotile`, `Hat`, `Spectre`, `einstein problem`, `definition equivalence`.
 

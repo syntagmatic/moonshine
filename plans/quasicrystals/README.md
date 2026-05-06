@@ -113,7 +113,6 @@ plans/quasicrystals/
   brief.md
   sources/
     figure-risk-register.md
-    ux-quality-pass.md
 
 docs/quasicrystals/
   lib/
@@ -136,33 +135,6 @@ The canonical brief is `plans/quasicrystals/brief.md`. It replaces the original 
 - **Misreadings to avoid** — likely distortions or oversimplifications.
 - **Library substrate** — squishy-thing functions or research dossiers this article cites.
 - **Reader takeaway** — what the reader can now distinguish, compute, or predict.
-
-## UX quality pass state
-
-- [x] **Phase 0** — research grounding and locked series plan recorded.
-- [x] **Phase 1** — write the original twelve topic drafts.
-- [x] **Phase 1a** — research packet and term graph. Retired after four-article consolidation.
-- [x] **Phase 1b** — visualization audit: figure inventory, identify cross-article primitives for `quasi-viz.js`, decide iframe-embed vs. re-implementation per figure. Retired after the UX pass.
-- [x] **Phase 2** — first-pass `docs/quasicrystals/lib/quasi-viz.js`, `docs/quasicrystals/style.css`, and `docs/quasicrystals/index.html`.
-- [x] **Phase 3** — first-pass Act I topic drafts: Fibonacci, cut-and-project, golden arithmetic, Penrose projection, inflation, and phason flips.
-- [x] **Phase 4** — first-pass Act II topic drafts: icosahedral symmetry, icosian / nearby E8, diffraction, Shechtman, definitions beyond cut-and-project, and Hat / Spectre.
-- [x] **Phase 5a** — root index entry, cross-link pass to `parallel-coordinates/17-quasicrystals.html`, and source-caution pass.
-- [x] **Phase 5b** — first collapse pass and signature standalone interactives.
-- [x] **Phase 5c** — final four-article collapse from the intermediate pass, with a new visual glyph for the final article.
-- [x] **Phase 5d** — retire the obsolete twelve-file brief set in favor of `brief.md`.
-- [ ] **Phase 5e** — optional full figure build-out. This should start from a fresh four-article audit.
-
-May 2026 UX pass:
-
-- Article renderer now supports multiple figures per article.
-- Added load-bearing figures for article 1 (internal density, two-gate pruning, phason boundary-distance graph), article 2 (matching-rule checker and five-direction order), article 3 (periodic-vs-aperiodic contrast), and article 4 (substitution / Wang-tile local-rule comparison).
-- Collapsed the public docs from twelve article shells to six, then four denser articles.
-- Added first-pass signature figures for classical pentagrid Penrose, Penrose phi-inflation, H3/H4 substrate, finite diffraction oracle, Shechtman twinning comparison, and Hat/Spectre patch exploration.
-- Replaced the final article's card glyph with a local-rule / monotile glyph instead of the reused projection-strip mark.
-- Replaced the Hat / Spectre decorative placeholder with actual monotile-family outlines.
-- Removed unused D3 script tags from the shipped quasicrystal HTML shells.
-
-Remaining enhancement backlog: replace first-pass H3/H4 and diffraction schematics with squishy-thing embeds/oracles; deepen the classical de Bruijn Penrose primitive; source rights-safe historical imagery if desired; replace compact Hat/Spectre patch diagrams with validated larger tiling patches.
 
 ## Article-count decision
 
