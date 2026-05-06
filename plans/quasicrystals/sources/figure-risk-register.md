@@ -4,9 +4,9 @@ Use this before implementation. The goal is not to avoid hard figures; it is to 
 
 ## R1: Classical Penrose vs `penroseFromE8`
 
-Affected essays:
+Affected articles:
 
-- 04, 05, 06, 09, README cross-links.
+- Article 2 and README cross-links.
 
 Risk:
 
@@ -14,7 +14,7 @@ Risk:
 
 Required handling:
 
-- Essay 4 canonical figure must use de Bruijn / pentagrid / Z5 -> R2.
+- Article 2's canonical Penrose figure must use de Bruijn / pentagrid / Z5 -> R2.
 - Any `penroseFromE8()` figure must be labeled "related 8D in-house slice; default 2-fold."
 
 Status:
@@ -23,9 +23,9 @@ Status:
 
 ## R2: E8 Source-Lattice Fog
 
-Affected essays:
+Affected articles:
 
-- 03, 06, 07, 08, 09.
+- Articles 1, 2, and 3.
 
 Risk:
 
@@ -42,9 +42,9 @@ Status:
 
 ## R3: H3 Symmetry Overclaim
 
-Affected essays:
+Affected articles:
 
-- 07, 09, 10.
+- Article 3.
 
 Risk:
 
@@ -62,9 +62,9 @@ Status:
 
 ## R4: Pure-Point Means "Separated Dots"
 
-Affected essays:
+Affected articles:
 
-- 09, 10, 11, 12.
+- Articles 3 and 4.
 
 Risk:
 
@@ -81,9 +81,9 @@ Status:
 
 ## R5: 600-Cell Fourier Transform
 
-Affected essays:
+Affected articles:
 
-- 09, 10.
+- Article 3.
 
 Risk:
 
@@ -100,9 +100,9 @@ Status:
 
 ## R6: Rights-Sensitive History Images
 
-Affected essays:
+Affected articles:
 
-- 10.
+- Article 3.
 
 Risk:
 
@@ -119,9 +119,9 @@ Status:
 
 ## R7: Chair Tiling Classification
 
-Affected essays:
+Affected articles:
 
-- 11.
+- Article 4.
 
 Risk:
 
@@ -138,9 +138,9 @@ Status:
 
 ## R8: Hat Projection Claims
 
-Affected essays:
+Affected articles:
 
-- 12.
+- Article 4.
 
 Risk:
 
@@ -157,9 +157,9 @@ Status:
 
 ## R9: Natural Quasicrystal Census
 
-Affected essays:
+Affected articles:
 
-- 10, 12.
+- Articles 3 and 4.
 
 Risk:
 
@@ -171,13 +171,13 @@ Required handling:
 
 Status:
 
-- Low risk after source packet update.
+- Low risk after the four-article brief update.
 
 ## R10: Exact Arithmetic vs Floating Point
 
-Affected essays:
+Affected articles:
 
-- 03, 04, 05, 08.
+- Articles 1, 2, and 3.
 
 Risk:
 
