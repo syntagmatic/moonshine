@@ -168,8 +168,8 @@ Each brief should be 400–700 words and include:
 
 ## Phase state
 
-- [ ] **Phase 0** — research grounding and locked series plan recorded.
-- [ ] **Phase 1** — write 12 briefs.
+- [x] **Phase 0** — research grounding and locked series plan recorded.
+- [x] **Phase 1** — write 12 briefs.
 - [ ] **Phase 1a** — source packet, library-substrate cross-references, and vocabulary graph.
 - [ ] **Phase 1b** — visualization audit: figure inventory, identify cross-essay primitives for `quasi-viz.js`, decide iframe-embed vs. re-implementation per figure.
 - [ ] **Phase 2** — build `docs/quasicrystals/lib/quasi-viz.js` and `docs/quasicrystals/index.html`.
