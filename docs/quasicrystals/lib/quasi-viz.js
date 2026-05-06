@@ -1448,15 +1448,37 @@
         var p = project(v);
         append(s, 'circle', { cx: p[0], cy: p[1], r: 4.3, fill: css('--c-internal', '#1f7a8c'), opacity: 0.7 + p[2] * 0.05 });
       });
-      var axis = selected === '5' ? [[0, phi, 1], [0, -phi, -1]] : selected === '3' ? [[1, 1, 1], [-1, -1, -1]] : [[phi, 0, 0], [-phi, 0, 0]];
-      var a0 = project(scale3(axis[0], 1.35)), a1 = project(scale3(axis[1], 1.35));
-      append(s, 'line', { x1: a0[0], y1: a0[1], x2: a1[0], y2: a1[1], stroke: css('--c-boundary', '#b44a3f'), 'stroke-width': 3 });
+      var axes = icosaAxes(selected);
+      axes.forEach(function (dir) {
+        var a0 = project(scale3(dir, 1.35)), a1 = project(scale3(dir, -1.35));
+        append(s, 'line', {
+          x1: a0[0], y1: a0[1], x2: a1[0], y2: a1[1],
+          stroke: css('--c-boundary', '#b44a3f'),
+          'stroke-width': 1.6,
+          opacity: 0.55
+        });
+      });
+      // Highlight one canonical axis at full strength to anchor the eye.
+      var primary = axes[0];
+      var p0 = project(scale3(primary, 1.35)), p1 = project(scale3(primary, -1.35));
+      append(s, 'line', {
+        x1: p0[0], y1: p0[1], x2: p1[0], y2: p1[1],
+        stroke: css('--c-boundary', '#b44a3f'),
+        'stroke-width': 3
+      });
+      // Anchor the 5-fold case visually to its vertex pair.
+      if (selected === '5') {
+        [primary, scale3(primary, -1)].forEach(function (v) {
+          var p = project(v);
+          append(s, 'circle', { cx: p[0], cy: p[1], r: 6.4, fill: 'none', stroke: css('--c-boundary', '#b44a3f'), 'stroke-width': 2 });
+        });
+      }
       var n = +selected;
       var trace = 1 + 2 * Math.cos(2 * Math.PI / n);
       append(s, 'text', { x: 470, y: 70, fill: css('--text', '#1b1d2a'), 'font-size': 20, 'font-weight': 700 }, selected + '-fold rotation');
-      append(s, 'text', { x: 470, y: 108, fill: css('--text-2', '#565a68'), 'font-size': 15 }, 'trace = 1 + 2 cos(2*pi/' + n + ') = ' + round(trace, 4));
+      append(s, 'text', { x: 470, y: 108, fill: css('--text-2', '#565a68'), 'font-size': 15 }, 'trace = 1 + 2 cos(2*pi/' + n + ') = ' + round(trace, 4) + (selected === '5' ? ' = phi' : ''));
       append(s, 'text', { x: 470, y: 138, fill: selected === '5' ? css('--c-boundary', '#b44a3f') : css('--c-window', '#78a66f'), 'font-size': 15, 'font-weight': 700 }, selected === '5' ? 'not an integer, so not a periodic 3D lattice symmetry' : 'integer trace, allowed by the restriction test');
-      var counts = selected === '5' ? '6 axes through opposite vertices' : selected === '3' ? '10 axes through opposite faces' : '15 axes through opposite edges';
+      var counts = selected === '5' ? axes.length + ' axes through opposite vertices' : selected === '3' ? axes.length + ' axes through opposite faces' : axes.length + ' axes through opposite edges';
       append(s, 'text', { x: 470, y: 185, fill: css('--text-2', '#565a68'), 'font-size': 15 }, counts);
     }
     draw();
@@ -1465,13 +1487,36 @@
   function mountPeriodicAperiodic(container) {
     var target = html('div');
     container.appendChild(target);
-    var W = 880, H = 360;
+    var W = 920, H = 380;
     var s = svg('svg', { viewBox: '0 0 ' + W + ' ' + H, width: '100%', height: H });
     target.appendChild(s);
-    drawTraceCard(s, 60, 72, 220, 190, 5);
-    drawDiffractionStar(s, 470, 168, 'quasi diffraction');
-    append(s, 'text', { x: 60, y: 298, fill: css('--text-2', '#565a68'), 'font-size': 13 }, 'The trace test blocks order 5 for a periodic 3D lattice.');
-    append(s, 'text', { x: 470, y: 298, fill: css('--text-2', '#565a68'), 'font-size': 13 }, 'A quasicrystal keeps sharp order by using a higher-rank module instead of translations.');
+    drawTraceCard(s, 30, 72, 200, 190, 5);
+    drawHexagonalDiffraction(s, 470, 168, 'periodic reciprocal lattice (6-fold, allowed)');
+    drawDiffractionStar(s, 770, 168, 'quasi 10-fold module');
+    append(s, 'text', { x: 30, y: 298, fill: css('--text-2', '#565a68'), 'font-size': 13 }, 'Trace test blocks order 5 for a periodic 3D lattice.');
+    append(s, 'text', { x: 320, y: 298, fill: css('--text-2', '#565a68'), 'font-size': 13 }, 'Hexagonal lattice passes (trace = 1 + 2 cos(60 deg) = 2, integer).');
+    append(s, 'text', { x: 320, y: 318, fill: css('--text-2', '#565a68'), 'font-size': 13 }, 'A quasicrystal keeps sharp order by using a higher-rank module instead of translations.');
+  }
+
+  function drawHexagonalDiffraction(s, cx, cy, label) {
+    append(s, 'rect', { x: cx - 145, y: cy - 118, width: 290, height: 236, rx: 6, fill: '#fbfbf8', stroke: '#dedfd8' });
+    var basisA = [Math.sqrt(3) / 2 * 32, 0.5 * 32];
+    var basisB = [-Math.sqrt(3) / 2 * 32, 0.5 * 32];
+    for (var i = -4; i <= 4; i++) for (var j = -4; j <= 4; j++) {
+      var x = i * basisA[0] + j * basisB[0];
+      var y = i * basisA[1] + j * basisB[1];
+      var r = Math.hypot(x, y);
+      if (r > 110) continue;
+      var amp = (110 - r) / 110;
+      append(s, 'circle', {
+        cx: cx + x,
+        cy: cy + y,
+        r: 2.6 + 3.4 * amp,
+        fill: i === 0 && j === 0 ? css('--c-lattice', '#353947') : css('--c-physical', '#c46f2f'),
+        opacity: i === 0 && j === 0 ? 0.7 : 0.22 + 0.55 * amp
+      });
+    }
+    append(s, 'text', { x: cx, y: cy - 138, 'text-anchor': 'middle', fill: css('--text', '#1b1d2a'), 'font-size': 14, 'font-weight': 700 }, label);
   }
 
   function mountH3H4Substrate(container) {
@@ -1495,6 +1540,11 @@
       var verts = vertices600();
       append(s, 'rect', { x: 44, y: 52, width: 360, height: 280, rx: 6, fill: '#fbfbf8', stroke: '#dedfd8' });
       append(s, 'rect', { x: 496, y: 52, width: 360, height: 280, rx: 6, fill: '#fbfbf8', stroke: '#dedfd8' });
+      // Axis crosshairs
+      append(s, 'line', { x1: 70, y1: 192, x2: 378, y2: 192, stroke: '#e6e7e1', 'stroke-width': 1 });
+      append(s, 'line', { x1: 224, y1: 78, x2: 224, y2: 306, stroke: '#e6e7e1', 'stroke-width': 1 });
+      append(s, 'line', { x1: 522, y1: 192, x2: 830, y2: 192, stroke: '#e6e7e1', 'stroke-width': 1 });
+      append(s, 'line', { x1: 676, y1: 78, x2: 676, y2: 306, stroke: '#e6e7e1', 'stroke-width': 1 });
       var projected = verts.map(function (v) { return project4(v, state.turn); });
       projected.sort(function (a, b) { return a.z - b.z; }).forEach(function (p) {
         append(s, 'circle', {
@@ -1518,8 +1568,14 @@
       drawIcosaWire(s, 676, 192, 74);
       append(s, 'text', { x: 224, y: 34, 'text-anchor': 'middle', fill: css('--text', '#1b1d2a'), 'font-size': 17, 'font-weight': 700 }, 'H4 / 600-cell vertices');
       append(s, 'text', { x: 676, y: 34, 'text-anchor': 'middle', fill: css('--text', '#1b1d2a'), 'font-size': 17, 'font-weight': 700 }, 'finite H3 slice view');
-      append(s, 'text', { x: 58, y: 358, fill: css('--text-2', '#565a68'), 'font-size': 13 }, 'The cloud is the 120-vertex 600-cell coordinate model.');
-      append(s, 'text', { x: 58, y: 380, fill: css('--text-2', '#565a68'), 'font-size': 13 }, 'The slice panel selects vertices near one internal coordinate; ' + slicePts.length + ' fall inside this finite band.');
+      // Axis labels
+      append(s, 'text', { x: 380, y: 196, 'text-anchor': 'end', fill: css('--text-2', '#565a68'), 'font-size': 11 }, 'screen x  (rotates v_0, v_3 with 4D turn)');
+      append(s, 'text', { x: 232, y: 76, fill: css('--text-2', '#565a68'), 'font-size': 11 }, 'screen y  (rotates v_1, v_2 with 4D turn)');
+      append(s, 'text', { x: 832, y: 196, 'text-anchor': 'end', fill: css('--text-2', '#565a68'), 'font-size': 11 }, 'physical x');
+      append(s, 'text', { x: 684, y: 76, fill: css('--text-2', '#565a68'), 'font-size': 11 }, 'physical y');
+      append(s, 'text', { x: 522, y: 322, fill: css('--text-2', '#565a68'), 'font-size': 11 }, 'wire icosahedron drawn as a fixed reference frame');
+      append(s, 'text', { x: 58, y: 358, fill: css('--text-2', '#565a68'), 'font-size': 13 }, 'Cloud: all 120 vertices of the 600-cell, projected via two 4D rotations whose phase is "4D turn".');
+      append(s, 'text', { x: 58, y: 380, fill: css('--text-2', '#565a68'), 'font-size': 13 }, 'Slice: vertices with |w - ' + round(state.slice, 2) + '| < 0.22 (' + slicePts.length + ' points; orange = within 0.08 of the slice center).');
     }
     draw();
   }
@@ -1626,6 +1682,57 @@
     ps.forEach(function (a) { ps.forEach(function (b) { out.push([0, a, b * phi], [a, b * phi, 0], [a * phi, 0, b]); }); });
     return out;
   }
+  function canonicalDirection(v) {
+    // Pick the antipodal representative whose first nonzero coord is positive.
+    for (var i = 0; i < v.length; i++) {
+      if (Math.abs(v[i]) > 1e-6) return v[i] > 0 ? v.slice() : v.map(function (x) { return -x; });
+    }
+    return v.slice();
+  }
+  function dedupeDirections(vecs) {
+    var seen = {}, out = [];
+    vecs.forEach(function (v) {
+      var c = canonicalDirection(v);
+      var key = c.map(function (x) { return Math.round(x * 1e4) / 1e4; }).join(',');
+      if (!seen[key]) { seen[key] = true; out.push(c); }
+    });
+    return out;
+  }
+  function icosaAxes(fold) {
+    var verts = icosaVerts();
+    if (fold === '5') {
+      // 5-fold axes pass through opposite vertices.
+      return dedupeDirections(verts);
+    }
+    if (fold === '3') {
+      // 3-fold axes pass through face centroids; faces are triangles of mutually adjacent vertices.
+      var centers = [];
+      for (var i = 0; i < verts.length; i++) for (var j = i + 1; j < verts.length; j++) for (var k = j + 1; k < verts.length; k++) {
+        if (Math.abs(dist3(verts[i], verts[j]) - 2) < 0.04 &&
+            Math.abs(dist3(verts[j], verts[k]) - 2) < 0.04 &&
+            Math.abs(dist3(verts[i], verts[k]) - 2) < 0.04) {
+          centers.push([
+            (verts[i][0] + verts[j][0] + verts[k][0]) / 3,
+            (verts[i][1] + verts[j][1] + verts[k][1]) / 3,
+            (verts[i][2] + verts[j][2] + verts[k][2]) / 3
+          ]);
+        }
+      }
+      return dedupeDirections(centers);
+    }
+    // 2-fold axes pass through edge midpoints; edges are vertex pairs at distance 2.
+    var midpoints = [];
+    for (var i = 0; i < verts.length; i++) for (var j = i + 1; j < verts.length; j++) {
+      if (Math.abs(dist3(verts[i], verts[j]) - 2) < 0.04) {
+        midpoints.push([
+          (verts[i][0] + verts[j][0]) / 2,
+          (verts[i][1] + verts[j][1]) / 2,
+          (verts[i][2] + verts[j][2]) / 2
+        ]);
+      }
+    }
+    return dedupeDirections(midpoints);
+  }
   function dist3(a, b) { return Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]); }
   function scale3(v, k) { return [v[0] * k, v[1] * k, v[2] * k]; }
   function rotateX(v, a) { var c = Math.cos(a), s = Math.sin(a); return [v[0], c * v[1] - s * v[2], s * v[1] + c * v[2]]; }
@@ -1653,7 +1760,7 @@
         { x: 45, y: 120, w: 160, h: 92, title: 'H[phi]', body: 'g = a + b phi' },
         { x: 270, y: 65, w: 180, h: 92, title: 'physical', body: 'g = ' + round(state.a + state.b * phi, 3) },
         { x: 270, y: 205, w: 180, h: 92, title: 'internal', body: 'sigma(g) = ' + round((state.a + state.b) - state.b * phi, 3) },
-        { x: 555, y: 120, w: 235, h: 92, title: 'Galois-pair lattice', body: '(g, sigma(g)) in R8' }
+        { x: 555, y: 120, w: 235, h: 92, title: 'Galois pair', body: '(g, sigma(g)) in R^2' }
       ];
       boxes.forEach(function (b, idx) {
         var color = idx === 1 ? css('--c-physical', '#c46f2f') : idx === 2 ? css('--c-internal', '#1f7a8c') : idx === 3 ? css('--c-gold', '#b9942f') : css('--c-lattice', '#353947');
@@ -1665,7 +1772,8 @@
       arrow(s, 205, 166, 270, 251, css('--c-internal', '#1f7a8c'));
       arrow(s, 450, 111, 555, 166, css('--c-gold', '#b9942f'));
       arrow(s, 450, 251, 555, 166, css('--c-gold', '#b9942f'));
-      append(s, 'text', { x: 48, y: 318, fill: css('--text-2', '#565a68'), 'font-size': 14 }, 'Nearby E8 realization: useful comparison, not the source label for this model set.');
+      append(s, 'text', { x: 48, y: 312, fill: css('--text-2', '#565a68'), 'font-size': 13 }, 'Scaling up: an icosian quaternion (q0, q1, q2, q3) in H[phi]^4 embeds as (q, sigma(q)) in R^8.');
+      append(s, 'text', { x: 48, y: 332, fill: css('--text-2', '#565a68'), 'font-size': 13 }, 'Nearby E8 realization: useful comparison, not the source label for this model set.');
     }
     draw();
   }
@@ -1795,26 +1903,48 @@
     var cx = W / 2, cy = 198;
     var peaks = state.system === 'fibonacci' ? fibonacciDiffractionPeaks(state.window) : state.system === 'h3' ? h3DiffractionPeaks(state.window) : penroseDiffractionPeaks(state.window);
     var visible = peaks.filter(function (p) { return p.amp >= state.threshold; });
+    var scale = state.system === 'fibonacci' ? 33 : state.system === 'h3' ? 41 : 50;
     ctx.save();
     ctx.beginPath();
     ctx.rect(42, 38, 816, 315);
     ctx.clip();
     ctx.strokeStyle = '#e6e7e1';
     ctx.lineWidth = 1;
-    for (var gx = -320; gx <= 320; gx += 40) {
+    for (var gx = -320; gx <= 320; gx += scale) {
       ctx.beginPath(); ctx.moveTo(cx + gx, 60); ctx.lineTo(cx + gx, 334); ctx.stroke();
     }
-    for (var gy = -120; gy <= 120; gy += 40) {
+    for (var gy = -120; gy <= 120; gy += scale) {
       ctx.beginPath(); ctx.moveTo(64, cy + gy); ctx.lineTo(836, cy + gy); ctx.stroke();
     }
+    // k=0 axes
+    ctx.strokeStyle = '#cbcdc1';
+    ctx.beginPath(); ctx.moveTo(64, cy); ctx.lineTo(836, cy); ctx.stroke();
+    if (state.system !== 'fibonacci') {
+      ctx.beginPath(); ctx.moveTo(cx, 60); ctx.lineTo(cx, 334); ctx.stroke();
+    }
     peaks.sort(function (a, b) { return a.amp - b.amp; }).forEach(function (p) {
-      var scale = state.system === 'fibonacci' ? 33 : state.system === 'h3' ? 41 : 50;
       var x = cx + p.x * scale;
       var y = cy + p.y * scale;
       if (x < 50 || x > 850 || y < 48 || y > 346) return;
       drawCanvasPeak(ctx, x, y, 1.1 + 7.5 * p.amp, p.amp >= state.threshold ? p.color : '#858998', p.amp >= state.threshold ? 0.18 + 0.72 * p.amp : 0.08);
     });
     ctx.restore();
+    // Reciprocal-space axis labels and scale bar.
+    ctx.fillStyle = css('--text-2', '#565a68');
+    ctx.font = '12px Source Sans 3, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('k_par', 60, cy - 6);
+    if (state.system !== 'fibonacci') ctx.fillText('k_perp', cx + 8, 70);
+    // Scale bar of length one reciprocal-lattice unit.
+    var barX = 70, barY = 338;
+    ctx.strokeStyle = css('--text-2', '#565a68');
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(barX, barY); ctx.lineTo(barX + scale, barY); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(barX, barY - 4); ctx.lineTo(barX, barY + 4); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(barX + scale, barY - 4); ctx.lineTo(barX + scale, barY + 4); ctx.stroke();
+    ctx.fillStyle = css('--text-2', '#565a68');
+    ctx.textAlign = 'left';
+    ctx.fillText(state.system === 'fibonacci' ? '1 (= step in Z + Z*phi)' : '1 module unit', barX + scale + 8, barY + 4);
     ctx.fillStyle = css('--text', '#1b1d2a');
     ctx.font = '700 16px Source Sans 3, sans-serif';
     ctx.textAlign = 'right';
@@ -1842,15 +1972,17 @@
   }
 
   function fibonacciDiffractionPeaks(windowValue) {
+    // Module element a + b*phi sits in physical space; its Galois conjugate
+    // a + b*sigma(phi) = a + b*(1 - phi) controls the window-FT envelope.
     var peaks = [];
     var seen = {};
     for (var a = -13; a <= 13; a++) for (var b = -13; b <= 13; b++) {
-      var x = a + b / phi;
+      var x = a + b * phi;
       var internal = a + b * sigmaPhi;
       if (Math.abs(x) > 10.4) continue;
       var amp = Math.pow(sinc(windowValue * internal), 2) / (1 + 0.018 * x * x);
       var key = x.toFixed(3);
-      if (!seen[key] || seen[key].amp < amp) seen[key] = { x: x, y: 0.18 * Math.sin(1.7 * x), amp: amp, color: css('--c-physical', '#c46f2f') };
+      if (!seen[key] || seen[key].amp < amp) seen[key] = { x: x, y: 0, amp: amp, color: css('--c-physical', '#c46f2f') };
     }
     Object.keys(seen).forEach(function (k) { peaks.push(seen[k]); });
     peaks.push({ x: 0, y: 0, amp: 1, color: css('--c-lattice', '#353947') });
@@ -2071,24 +2203,63 @@
   }
 
   function drawSubstitutionExample(s) {
-    append(s, 'text', { x: 55, y: 42, fill: css('--text', '#1b1d2a'), 'font-size': 17, 'font-weight': 700 }, 'local replacement builds global structure');
-    var x0 = 80, y0 = 85;
-    drawChairTile(s, x0, y0, 58, css('--c-physical', '#c46f2f'), 0.75);
-    arrow(s, 190, 120, 275, 120, css('--c-gold', '#b9942f'));
-    var colors = [css('--c-physical', '#c46f2f'), css('--c-internal', '#1f7a8c'), css('--c-window', '#78a66f'), css('--c-gold', '#b9942f')];
-    [[0, 0], [1, 0], [0, 1], [0, 2]].forEach(function (p, i) {
-      drawChairTile(s, 305 + p[0] * 62, 78 + p[1] * 54, 34, colors[i], 0.62);
+    append(s, 'text', { x: 55, y: 42, fill: css('--text', '#1b1d2a'), 'font-size': 17, 'font-weight': 700 }, 'L-tromino chair: one tile inflates into four');
+    // Parent at unit scale: 2u x 2u with bottom-right u x u corner cut.
+    var u1 = 30, x0 = 80, y0 = 80;
+    drawLTromino(s, x0, y0, u1, 0, false, css('--c-physical', '#c46f2f'), 0.78);
+    append(s, 'text', { x: x0 + u1, y: y0 + 2 * u1 + 22, 'text-anchor': 'middle', fill: css('--text-2', '#565a68'), 'font-size': 12 }, 'parent (scale 1)');
+    arrow(s, x0 + 2 * u1 + 30, y0 + u1, x0 + 2 * u1 + 110, y0 + u1, css('--c-gold', '#b9942f'));
+    append(s, 'text', { x: x0 + 2 * u1 + 70, y: y0 + u1 - 10, 'text-anchor': 'middle', fill: css('--c-gold', '#b9942f'), 'font-size': 13, 'font-weight': 700 }, 'inflate x2');
+    // Inflated parent at 2x scale, tiled by four sub-trominoes at unit scale.
+    var u2 = u1, X = 320, Y = y0;
+    var subs = [
+      { rot: 0, mirror: false, dx: 0, dy: 0, color: css('--c-physical', '#c46f2f') },
+      { rot: 0, mirror: true,  dx: 2, dy: 0, color: css('--c-internal', '#1f7a8c') },
+      { rot: 2, mirror: true,  dx: 0, dy: 2, color: css('--c-window', '#78a66f') },
+      { rot: 0, mirror: false, dx: 1, dy: 1, color: css('--c-gold', '#b9942f') }
+    ];
+    subs.forEach(function (t) {
+      drawLTromino(s, X + t.dx * u2, Y + t.dy * u2, u2, t.rot, t.mirror, t.color, 0.6);
     });
-    append(s, 'text', { x: 495, y: 105, fill: css('--text-2', '#565a68'), 'font-size': 14 }, 'A substitution tiling is controlled by a finite rewrite rule.');
-    append(s, 'text', { x: 495, y: 134, fill: css('--text-2', '#565a68'), 'font-size': 14 }, 'It may have a model-set interpretation, but not always through');
-    append(s, 'text', { x: 495, y: 158, fill: css('--text-2', '#565a68'), 'font-size': 14 }, 'a simple Euclidean acceptance window.');
-    append(s, 'text', { x: 55, y: 304, fill: css('--text-2', '#565a68'), 'font-size': 13 }, 'The chair example is schematic; its p-adic model-set caveat is exactly why essay 11 exists.');
+    // Outline of the inflated parent.
+    var bigPolygon = [[0, 0], [4 * u2, 0], [4 * u2, 2 * u2], [2 * u2, 2 * u2], [2 * u2, 4 * u2], [0, 4 * u2]];
+    append(s, 'polygon', {
+      points: bigPolygon.map(function (p) { return [X + p[0], Y + p[1]].join(','); }).join(' '),
+      fill: 'none',
+      stroke: css('--text-2', '#565a68'),
+      'stroke-width': 1.6,
+      'stroke-dasharray': '4 3'
+    });
+    append(s, 'text', { x: X + 2 * u2, y: Y + 4 * u2 + 22, 'text-anchor': 'middle', fill: css('--text-2', '#565a68'), 'font-size': 12 }, '4 sub-tiles at scale 1 fill the scale-2 chair');
+    append(s, 'text', { x: 540, y: 105, fill: css('--text-2', '#565a68'), 'font-size': 14 }, 'A substitution tiling is controlled by a finite rewrite rule.');
+    append(s, 'text', { x: 540, y: 132, fill: css('--text-2', '#565a68'), 'font-size': 14 }, 'Iterating substitution generates the entire tiling from a seed,');
+    append(s, 'text', { x: 540, y: 156, fill: css('--text-2', '#565a68'), 'font-size': 14 }, 'with no Euclidean window in sight.');
+    append(s, 'text', { x: 540, y: 200, fill: css('--text-2', '#565a68'), 'font-size': 13 }, 'The chair has a model-set description only with a p-adic internal');
+    append(s, 'text', { x: 540, y: 220, fill: css('--text-2', '#565a68'), 'font-size': 13 }, 'space, not a Euclidean one. That is why article 4 exists.');
   }
 
-  function drawChairTile(s, x, y, size, color, opacity) {
-    var u = size / 3;
-    var pts = [[0, 0], [2 * u, 0], [2 * u, u], [3 * u, u], [3 * u, 3 * u], [0, 3 * u], [0, 0]];
-    append(s, 'polygon', { points: pts.map(function (p) { return [x + p[0], y + p[1]].join(','); }).join(' '), fill: color, opacity: opacity, stroke: color, 'stroke-width': 1.5 });
+  // L-tromino with cells (0,0), (1,0), (0,1) at scale u, optionally rotated and mirrored.
+  function drawLTromino(s, x, y, u, rot, mirror, color, opacity) {
+    var pts = [[0, 0], [2 * u, 0], [2 * u, u], [u, u], [u, 2 * u], [0, 2 * u]];
+    var cx = u, cy = u;
+    var rad = rot * Math.PI / 2;
+    var co = Math.cos(rad), si = Math.sin(rad);
+    var transformed = pts.map(function (p) {
+      var px = p[0] - cx;
+      var py = p[1] - cy;
+      if (mirror) px = -px;
+      var nx = px * co - py * si;
+      var ny = px * si + py * co;
+      return [x + cx + nx, y + cy + ny];
+    });
+    append(s, 'polygon', {
+      points: transformed.map(function (p) { return p.join(','); }).join(' '),
+      fill: color,
+      opacity: opacity,
+      stroke: color,
+      'stroke-width': 1.5,
+      'stroke-linejoin': 'round'
+    });
   }
 
   function drawWangExample(s) {
