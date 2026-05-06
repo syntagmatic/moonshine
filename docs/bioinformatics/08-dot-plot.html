@@ -56,7 +56,7 @@ a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px
 .controls { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); }
 
 svg text { font-family: var(--heading-font); }
-.tip { position: fixed; pointer-events: none; background: var(--text); color: white; font-family: var(--heading-font); font-size: 0.75rem; padding: 0.3rem 0.55rem; border-radius: 4px; opacity: 0; transition: opacity 0.12s; z-index: 10; white-space: nowrap; }
+.tip { position: fixed; pointer-events: none; background: var(--text); color: white; font-family: var(--heading-font); font-size: 0.75rem; padding: 0.35rem 0.55rem; border-radius: 4px; opacity: 0; transition: opacity 0.12s; z-index: 10; white-space: nowrap; line-height: 1.35; }
 
 .btn { font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600; padding: 0.35rem 0.85rem; border-radius: 4px; border: 1px solid var(--border); background: var(--fig-bg); color: var(--text); cursor: pointer; transition: all 0.15s; user-select: none; }
 .btn:hover { border-color: var(--accent); background: var(--accent-light); }
@@ -64,8 +64,10 @@ svg text { font-family: var(--heading-font); }
 
 .legend-row { display: flex; align-items: center; gap: 1.5rem; flex-wrap: wrap; font-family: var(--heading-font); font-size: 0.8rem; color: var(--text-2); margin-top: 0.75rem; }
 .legend-row .size-legend, .legend-row .color-legend { display: flex; align-items: center; gap: 0.5rem; }
+.legend-gradient { width: 120px; height: 8px; border-radius: 2px; background: linear-gradient(to right, #f7fbff, #08306b); border: 1px solid var(--border); }
 
-.detail-panel { font-family: var(--heading-font); font-size: 0.85rem; padding: 0.75rem 1rem; background: #f8f8fc; border-radius: 4px; margin-top: 0.75rem; min-height: 2.5rem; color: var(--text-2); }
+.detail-panel { font-family: var(--heading-font); font-size: 0.85rem; padding: 0.75rem 1rem; background: #f8f8fc; border-radius: 4px; margin-top: 0.75rem; min-height: 3.2rem; color: var(--text-2); line-height: 1.45; }
+.detail-panel b { color: var(--text); }
 
 @media (max-width: 640px) { .figure-wide { margin-left: 0; margin-right: 0; } h1 { font-size: 1.75rem; } }
 @media (prefers-reduced-motion: reduce) {
@@ -94,7 +96,7 @@ svg text { font-family: var(--heading-font); }
 
   <p>Once you have clusters and candidate genes, the next question is which cell types actually express each gene. A heatmap encodes one quantity per cell. In single-cell data, that average is misleading: a high mean can mean every cell expresses slightly, or a few express intensely while most stay silent.</p>
 
-  <p>The <strong>dot plot</strong> encodes two quantities per dot. <strong>Size</strong> is the fraction of cells expressing the gene; <strong>color</strong> is the mean expression among those expressing cells. The pair distinguishes broadly expressed housekeeping genes from sporadic but intense markers.</p>
+  <p>The <strong>dot plot</strong> encodes two quantities per dot. <strong>Size</strong> is the fraction of cells expressing the gene; <strong>color</strong> is the average expression for the whole cell group, often scaled within each gene before plotting. The pair distinguishes broadly expressed housekeeping genes from sporadic but intense markers. Hovering here also reports the mean among positive cells, because that hidden number explains many ambiguous dots.</p>
 
   <h2>Reading the plot</h2>
 
@@ -106,7 +108,7 @@ svg text { font-family: var(--heading-font); }
     <p class="figure-caption">
       <span class="figure-label">Figure 1.</span> Dot plot of ten genes across eight cell types. 
       Dot size encodes the fraction of cells expressing the gene. 
-      Color intensity encodes mean expression among expressing cells.
+      Color intensity encodes average expression across the group; the hover readout separates that from the mean among positive cells.
     </p>
   </div>
 
@@ -119,8 +121,8 @@ svg text { font-family: var(--heading-font); }
   <div class="figure figure-wide" id="fig-dot-comparison">
     <div class="controls">
       <div class="btn-group">
-        <button class="btn active" id="btn-side">Side by side</button>
-        <button class="btn" id="btn-overlay">Overlay</button>
+        <button class="btn active" id="btn-side" aria-pressed="true">Side by side</button>
+        <button class="btn" id="btn-overlay" aria-pressed="false">Overlay</button>
       </div>
     </div>
     <div id="dot-comparison"></div>
@@ -158,7 +160,10 @@ const geneNames = genes.map(g => g.name);
 
 function mulberry32(s) { return () => { s |= 0; s = s + 0x6D2B79F5 | 0; let t = Math.imul(s ^ s >>> 15, 1 | s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 const rng = mulberry32(808);
-function rnorm(mu, sig) { const u1 = rng(), u2 = rng(); return mu + sig * Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2); }
+function rnorm(mu, sig) {
+  const u1 = Math.max(rng(), 1e-9), u2 = rng();
+  return mu + sig * Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+}
 
 function generateData(mutantTP53) {
   const nCells = 120;
@@ -178,14 +183,22 @@ function generateData(mutantTP53) {
       } else {
         baseFrac = 0.05; baseMean = 0.5;
       }
-      let nExp = 0, sum = 0;
+      let nExp = 0, sumPositive = 0, sumAll = 0;
       for (let i = 0; i < nCells; i++) {
         const exp = rng() < baseFrac;
         let v = exp ? Math.max(0.1, rnorm(baseMean, 0.8)) : 0;
-        if (exp) { nExp++; sum += v; }
+        if (exp) { nExp++; sumPositive += v; }
+        sumAll += v;
         cells.push(v);
       }
-      data[gene.name + '|' + ct] = { frac: nExp / nCells, mean: nExp > 0 ? sum / nExp : 0, cells, gene: gene.name, ct };
+      data[gene.name + '|' + ct] = {
+        frac: nExp / nCells,
+        mean: sumAll / nCells,
+        positiveMean: nExp > 0 ? sumPositive / nExp : 0,
+        cells,
+        gene: gene.name,
+        ct
+      };
     });
   });
   return data;
@@ -193,14 +206,23 @@ function generateData(mutantTP53) {
 
 const dataWT = generateData(false);
 const dataMut = generateData(true);
-const colorScale = d3.scaleSequential(d3.interpolateBlues).domain([0, 5]);
+const colorScale = d3.scaleSequential(d3.interpolateBlues).domain([0, 3.6]);
 const sizeScale = d3.scaleSqrt().domain([0, 1]).range([0, 14]);
 
 const tip = d3.select('#tip');
 function showTip(evt, d) {
-  tip.style('opacity', 1).html(`<strong>${d.gene}</strong> in ${d.ct}<br>${(d.frac * 100).toFixed(0)}% expressed<br>Mean: ${d.mean.toFixed(2)}`);
+  tip.style('opacity', 1).html(
+    `<strong>${d.gene}</strong> in ${d.ct}<br>` +
+    `${(d.frac * 100).toFixed(0)}% expressing<br>` +
+    `avg group expr: ${d.mean.toFixed(2)}<br>` +
+    `positive-cell mean: ${d.positiveMean.toFixed(2)}`
+  );
   tip.style('left', (evt.clientX + 15) + 'px').style('top', (evt.clientY - 10) + 'px');
 }
+function moveTip(evt) {
+  tip.style('left', (evt.clientX + 15) + 'px').style('top', (evt.clientY - 10) + 'px');
+}
+function hideTip() { tip.style('opacity', 0); }
 
 // --- Viz Utilities ---
 function drawLegend(container) {
@@ -212,6 +234,11 @@ function drawLegend(container) {
     svg.append('circle').attr('cx', 15 + i*40).attr('cy', 15).attr('r', sizeScale(f)).attr('fill', '#94a3b8');
     svg.append('text').attr('x', 15 + i*40).attr('y', 28).attr('text-anchor', 'middle').style('font-size', '8px').text(Math.round(f*100)+'%');
   });
+  const colorLeg = legend.append('div').attr('class', 'color-legend');
+  colorLeg.append('span').text('average expression:');
+  colorLeg.append('span').text('low');
+  colorLeg.append('div').attr('class', 'legend-gradient');
+  colorLeg.append('span').text('high');
 }
 
 // --- Figure 1 ---
@@ -228,12 +255,34 @@ function drawLegend(container) {
     const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
     const x = d3.scaleBand().domain(cellTypes).range([0, w]).padding(0.1);
     const y = d3.scaleBand().domain(geneNames).range([0, h]).padding(0.1);
-    g.append('g').attr('transform', `translate(0,${h})`).call(d3.axisBottom(x)).selectAll('text').attr('transform', 'rotate(-40)').attr('text-anchor', 'end');
-    g.append('g').call(d3.axisLeft(y));
+    g.append('g').attr('transform', `translate(0,${h})`).call(d3.axisBottom(x))
+      .call(ax => ax.selectAll('.domain, line').attr('stroke', '#e2e2e8'))
+      .call(ax => ax.selectAll('text').attr('transform', 'rotate(-40)').attr('text-anchor', 'end').style('font-size', '10px'));
+    g.append('g').call(d3.axisLeft(y))
+      .call(ax => ax.selectAll('.domain, line').attr('stroke', '#e2e2e8'))
+      .call(ax => ax.selectAll('text').style('font-size', '11px').style('font-weight', d => d === 'TP53' || d === 'CDKN1A' ? 700 : 500).attr('fill', d => d === 'TP53' ? '#ef4444' : d === 'CDKN1A' ? '#2563eb' : '#1a1a2e'));
+    const focus = g.append('rect')
+      .attr('fill', 'none').attr('stroke', '#1a1a2e').attr('stroke-width', 1.4)
+      .attr('rx', 3).attr('opacity', 0).attr('pointer-events', 'none');
     geneNames.forEach(gn => cellTypes.forEach(ct => {
       const d = dataWT[gn + '|' + ct];
       g.append('circle').attr('cx', x(ct) + x.bandwidth()/2).attr('cy', y(gn) + y.bandwidth()/2).attr('r', sizeScale(d.frac)).attr('fill', colorScale(d.mean))
-        .on('mouseenter', (e) => showTip(e, d)).on('mousemove', (e) => tip.style('left', (e.clientX + 15) + 'px').style('top', (e.clientY - 10) + 'px')).on('mouseleave', () => tip.style('opacity', 0));
+        .attr('stroke', gn === 'TP53' || gn === 'CDKN1A' ? '#1a1a2e' : '#fff')
+        .attr('stroke-width', gn === 'TP53' || gn === 'CDKN1A' ? 0.8 : 0.5)
+        .on('mouseenter', (e) => {
+          focus.attr('x', x(ct)).attr('y', y(gn)).attr('width', x.bandwidth()).attr('height', y.bandwidth()).attr('opacity', 1);
+          d3.select('#detail-basic').html(
+            `<b>${gn}</b> in <b>${ct}</b>: ${(d.frac * 100).toFixed(0)}% of cells express it; ` +
+            `average group expression is <b>${d.mean.toFixed(2)}</b>; positive-cell mean is <b>${d.positiveMean.toFixed(2)}</b>.`
+          );
+          showTip(e, d);
+        })
+        .on('mousemove', moveTip)
+        .on('mouseleave', () => {
+          focus.attr('opacity', 0);
+          d3.select('#detail-basic').text('Hover over any dot for details.');
+          hideTip();
+        });
     }));
     drawLegend(container);
   }
@@ -245,36 +294,106 @@ function drawLegend(container) {
 (function() {
   const container = d3.select('#dot-comparison');
   let mode = 'side';
+  function compareDetail(gn, ct, d1, d2) {
+    const dFrac = (d2.frac - d1.frac) * 100;
+    const dMean = d2.mean - d1.mean;
+    d3.select('#detail-comparison').html(
+      `<b>${gn}</b> in <b>${ct}</b>: wildtype ${Math.round(d1.frac * 100)}% / ${d1.mean.toFixed(2)} avg, ` +
+      `mutant ${Math.round(d2.frac * 100)}% / ${d2.mean.toFixed(2)} avg. ` +
+      `Change: <b>${dFrac >= 0 ? '+' : ''}${dFrac.toFixed(0)} points</b>, ` +
+      `<b>${dMean >= 0 ? '+' : ''}${dMean.toFixed(2)}</b> expression.`
+    );
+  }
   function render() {
     container.selectAll('*').remove();
     const width = container.node().getBoundingClientRect().width || 660;
-    const height = 400;
+    const height = 440;
     const svg = container.append('svg').attr('viewBox', `0 0 ${width} ${height}`).style('width', '100%').style('height', 'auto');
-    const x = d3.scaleBand().domain(cellTypes).range([80, width-20]).padding(0.1);
-    const y = d3.scaleBand().domain(geneNames).range([30, height-100]).padding(0.1);
+    const y = d3.scaleBand().domain(geneNames).range([54, height-92]).padding(0.1);
+    const axisStyle = ax => ax.selectAll('.domain, line').attr('stroke', '#e2e2e8');
+    const geneTextStyle = ax => ax.selectAll('text')
+      .style('font-size', '11px')
+      .style('font-weight', d => d === 'TP53' || d === 'CDKN1A' ? 700 : 500)
+      .attr('fill', d => d === 'TP53' ? '#ef4444' : d === 'CDKN1A' ? '#2563eb' : '#1a1a2e');
+
     if (mode === 'side') {
-      const half = (width-100)/2;
-      const x1 = d3.scaleBand().domain(cellTypes).range([80, 80+half]).padding(0.1);
-      const x2 = d3.scaleBand().domain(cellTypes).range([100+half, width-20]).padding(0.1);
+      const halfGap = 24;
+      const left = 78;
+      const half = (width - left - 20 - halfGap) / 2;
+      const x1 = d3.scaleBand().domain(cellTypes).range([left, left + half]).padding(0.1);
+      const x2 = d3.scaleBand().domain(cellTypes).range([left + half + halfGap, width - 20]).padding(0.1);
+      svg.append('g').attr('transform', `translate(${left},0)`).call(d3.axisLeft(y))
+        .call(axisStyle).call(geneTextStyle);
+      [
+        { data: dataWT, x: x1, label: 'Wildtype', tint: '#1a1a2e' },
+        { data: dataMut, x: x2, label: 'TP53 R175H', tint: '#ef4444' }
+      ].forEach(panel => {
+        svg.append('text')
+          .attr('x', (panel.x.range()[0] + panel.x.range()[1]) / 2).attr('y', 22)
+          .attr('text-anchor', 'middle').style('font-size', '12px').style('font-weight', 700)
+          .attr('fill', panel.tint).text(panel.label);
+        svg.append('g').attr('transform', `translate(0,${height - 92})`).call(d3.axisBottom(panel.x))
+          .call(axisStyle)
+          .call(ax => ax.selectAll('text').attr('transform', 'rotate(-40)').attr('text-anchor', 'end').style('font-size', '9px'));
+      });
       [dataWT, dataMut].forEach((data, i) => {
         const curX = i === 0 ? x1 : x2;
         geneNames.forEach(gn => cellTypes.forEach(ct => {
           const d = data[gn + '|' + ct];
-          svg.append('circle').attr('cx', curX(ct) + curX.bandwidth()/2).attr('cy', y(gn) + y.bandwidth()/2).attr('r', sizeScale(d.frac) * 0.7).attr('fill', colorScale(d.mean));
+          const dWT = dataWT[gn + '|' + ct];
+          const dMut = dataMut[gn + '|' + ct];
+          svg.append('circle')
+            .attr('cx', curX(ct) + curX.bandwidth()/2).attr('cy', y(gn) + y.bandwidth()/2)
+            .attr('r', sizeScale(d.frac) * 0.72).attr('fill', colorScale(d.mean))
+            .attr('stroke', gn === 'TP53' || gn === 'CDKN1A' ? '#1a1a2e' : '#fff')
+            .attr('stroke-width', 0.7)
+            .on('mouseenter', (e) => { compareDetail(gn, ct, dWT, dMut); showTip(e, d); })
+            .on('mousemove', moveTip)
+            .on('mouseleave', () => { d3.select('#detail-comparison').text('Hover to compare wildtype vs. mutant values.'); hideTip(); });
         }));
       });
     } else {
+      const x = d3.scaleBand().domain(cellTypes).range([80, width-20]).padding(0.1);
+      svg.append('g').attr('transform', `translate(80,0)`).call(d3.axisLeft(y))
+        .call(axisStyle).call(geneTextStyle);
+      svg.append('g').attr('transform', `translate(0,${height - 92})`).call(d3.axisBottom(x))
+        .call(axisStyle)
+        .call(ax => ax.selectAll('text').attr('transform', 'rotate(-40)').attr('text-anchor', 'end').style('font-size', '10px'));
+      svg.append('text')
+        .attr('x', width - 20).attr('y', 22).attr('text-anchor', 'end')
+        .style('font-size', '11px').attr('fill', '#4a4a6a')
+        .text('filled = wildtype, red outline = TP53 R175H');
       geneNames.forEach(gn => cellTypes.forEach(ct => {
         const d1 = dataWT[gn + '|' + ct], d2 = dataMut[gn + '|' + ct];
         const cx = x(ct) + x.bandwidth()/2, cy = y(gn) + y.bandwidth()/2;
-        svg.append('circle').attr('cx', cx).attr('cy', cy).attr('r', sizeScale(d1.frac)).attr('fill', colorScale(d1.mean)).attr('opacity', 0.5);
-        svg.append('circle').attr('cx', cx).attr('cy', cy).attr('r', sizeScale(d2.frac)).attr('fill', 'none').attr('stroke', '#ef4444').attr('stroke-width', 1.5);
+        svg.append('circle')
+          .attr('cx', cx).attr('cy', cy).attr('r', sizeScale(d1.frac))
+          .attr('fill', colorScale(d1.mean)).attr('opacity', 0.52)
+          .on('mouseenter', (e) => { compareDetail(gn, ct, d1, d2); showTip(e, d1); })
+          .on('mousemove', moveTip)
+          .on('mouseleave', () => { d3.select('#detail-comparison').text('Hover to compare wildtype vs. mutant values.'); hideTip(); });
+        svg.append('circle')
+          .attr('cx', cx).attr('cy', cy).attr('r', sizeScale(d2.frac))
+          .attr('fill', 'none').attr('stroke', '#ef4444').attr('stroke-width', 1.7)
+          .on('mouseenter', (e) => { compareDetail(gn, ct, d1, d2); showTip(e, d2); })
+          .on('mousemove', moveTip)
+          .on('mouseleave', () => { d3.select('#detail-comparison').text('Hover to compare wildtype vs. mutant values.'); hideTip(); });
       }));
     }
     drawLegend(container);
   }
-  d3.select('#btn-side').on('click', () => { mode = 'side'; d3.select('#btn-side').classed('active', true); d3.select('#btn-overlay').classed('active', false); render(); });
-  d3.select('#btn-overlay').on('click', () => { mode = 'overlay'; d3.select('#btn-overlay').classed('active', true); d3.select('#btn-side').classed('active', false); render(); });
+  d3.select('#btn-side').on('click', () => {
+    mode = 'side';
+    d3.select('#btn-side').classed('active', true).attr('aria-pressed', 'true');
+    d3.select('#btn-overlay').classed('active', false).attr('aria-pressed', 'false');
+    render();
+  });
+  d3.select('#btn-overlay').on('click', () => {
+    mode = 'overlay';
+    d3.select('#btn-overlay').classed('active', true).attr('aria-pressed', 'true');
+    d3.select('#btn-side').classed('active', false).attr('aria-pressed', 'false');
+    render();
+  });
   render();
   new ResizeObserver(render).observe(container.node());
 })();

@@ -66,6 +66,7 @@ a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px
 }
 .btn:hover { border-color: var(--accent); color: var(--accent); }
 .btn.active { border-color: var(--accent); background: var(--accent); color: white; }
+.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .toggle-group { display: flex; gap: 0; }
 .toggle-group .btn { border-radius: 0; }
@@ -138,9 +139,11 @@ svg .group-name { font-size: 10px; font-weight: 700; fill: var(--text); letter-s
     </p>
   </header>
 
-  <p>A gene can be silenced by mutation, promoter hypermethylation, deletion of its chromosome region, or overactivation of its negative regulator. A <strong>multi-omics heatmap</strong> stacks these modalities on one shared column axis (patients) and reads the patterns across layers.</p>
+  <p>A gene can be inactivated by mutation, promoter hypermethylation, deletion of its chromosome region, or overactivation of its negative regulator. A <strong>multi-omics heatmap</strong> stacks these modalities on one shared column axis (patients) and reads the patterns across layers.</p>
 
-  <p>Two ideas drive the figure. Layers share a column axis: every panel indexes the same patients in the same order, so each column is a multi-modal profile. The column ordering — typically a consensus cluster — is the integrative hypothesis.</p>
+  <p>Two ideas drive the figure. Layers share a column axis: every panel indexes the same patients in the same order, so each column is a multi-modal profile. Each row is normalized within its own measurement scale before it is drawn. Expression is not comparable to methylation in raw units, but their aligned patterns can still be read side by side.</p>
+
+  <p>The column ordering is the integrative hypothesis. In a real analysis it might come from consensus clustering or another multi-view clustering method. Here the synthetic clusters are planted so the visual grammar is easier to inspect.</p>
 
   <h2>Why stack modalities</h2>
 
@@ -155,7 +158,7 @@ svg .group-name { font-size: 10px; font-weight: 700; fill: var(--text); letter-s
 
   <h2>The cohort matrix</h2>
 
-  <p>The full oncoprint: 80 synthetic patients across four modality row-groups, clinical ribbons above, summary bars alongside. Column ordering is a <strong>consensus cluster</strong> of the full multi-omics profile, not a sort by any single variable.</p>
+  <p>The full matrix is an oncoprint-like view: 80 synthetic patients across four modality row-groups, clinical ribbons above, summary bars alongside. Column ordering is a <strong>consensus-cluster</strong> stand-in based on the full multi-omics profile, not a sort by any single variable.</p>
 
   <p>Consensus clustering asks what integrative subtypes the cohort falls into; single-variable sorts ask how one variable shapes the rest.</p>
 
@@ -177,7 +180,7 @@ svg .group-name { font-size: 10px; font-weight: 700; fill: var(--text); letter-s
       <div class="dc-hint">Every column is a multi-modal profile of one sample. The consensus cluster assignment on the top strip is the integrative subtype, a combination of which mutations, CNVs, expression changes, and methylation states co-occur across the four modalities.</div>
     </div>
     <p class="figure-caption">
-      <span class="figure-label">Figure 2.</span> Row groups (top-down): expression (log₂ FC), promoter methylation (β), somatic alterations (mutation × copy-number glyphs), and driver-locus copy number. Along the top: consensus cluster, age, sex, stage, mutation burden, vital status. Along the right: per-row alteration frequency. Hover any column or row label for details; switch the sort to see how different orderings shape the visible pattern.
+      <span class="figure-label">Figure 2.</span> Row groups (top-down): expression (log₂ FC), promoter methylation (β, from 0 unmethylated to 1 methylated), somatic alterations (mutation × copy-number glyphs), and driver-locus copy number. Along the top: consensus cluster, age, sex, stage, mutation burden, vital status. Along the right: per-row alteration frequency. Hover or focus any column for details; switch the sort to see how different orderings shape the visible pattern.
     </p>
   </div>
 
@@ -194,7 +197,9 @@ svg .group-name { font-size: 10px; font-weight: 700; fill: var(--text); letter-s
     </p>
   </div>
 
-  <p>Cluster A is TP53-mutant with CDKN1A silencing and promoter hypermethylation. Cluster B has wildtype TP53 but amplified MDM2 — functionally equivalent, mechanically distinct. Cluster C is hypermutated with high TMB and heterogeneous downstream state. Cluster D is quiet wildtype with better outcome.</p>
+  <p>Cluster A is TP53-mutant with low CDKN1A expression and promoter hypermethylation. Cluster B has wildtype TP53 but amplified MDM2, a different route to suppressing the same pathway. Cluster C is hypermutated with high TMB and a heterogeneous downstream state. Cluster D is quiet wildtype with better outcome.</p>
+
+  <p>Clinical ribbons are useful context, but they should not silently drive the discovery step unless that is the study design. If survival status or stage leaks into clustering, the subtype labels can become a circular explanation of the outcome they later claim to predict.</p>
 
   <h2>When to use it</h2>
 
@@ -402,6 +407,8 @@ let pid = 0;
 for (let c = 0; c < CLUSTER_SIZES.length; c++) {
   for (let i = 0; i < CLUSTER_SIZES[c]; i++) patients.push(makePatient(rngGlobal, c, pid++));
 }
+const randomRankRng = mulberry32(12013);
+const randomRanks = new Map(patients.map(p => [p.id, randomRankRng()]));
 
 // ─── Shared mutation-cell glyph renderer (used by Figures 1 & 2) ────────
 function drawGlyph(parent, x, y, w, h, ex) {
@@ -636,8 +643,7 @@ window.__drawMutGlyph = (parent, x, y, w, h, cnv, type) => drawGlyph(parent, x, 
     } else if (sortMode === 'burden') {
       arr.sort((a, b) => b.tmb - a.tmb);
     } else {
-      const r = mulberry32(Math.floor(Math.random() * 1e6));
-      arr.sort(() => r() - 0.5);
+      arr.sort((a, b) => randomRanks.get(a.id) - randomRanks.get(b.id));
     }
     return arr;
   }
@@ -862,12 +868,25 @@ window.__drawMutGlyph = (parent, x, y, w, h, cnv, type) => drawGlyph(parent, x, 
         .attr('x', colX(i)).attr('y', overlayY)
         .attr('width', cellW).attr('height', overlayH)
         .attr('fill', 'transparent').style('cursor', 'crosshair')
+        .attr('tabindex', 0)
+        .attr('role', 'img')
+        .attr('aria-label', `${p.id}, ${PAL.clusterNames[p.cluster]}, CDKN1A ${p.expr.CDKN1A.toFixed(2)}, TMB ${p.tmb}`)
         .on('mouseenter', (ev) => {
           hoveredIdx = i;
           drawHighlight();
           updateCard(p);
         })
+        .on('focus', () => {
+          hoveredIdx = i;
+          drawHighlight();
+          updateCard(p);
+        })
         .on('mouseleave', () => {
+          hoveredIdx = -1;
+          drawHighlight();
+          resetCard();
+        })
+        .on('blur', () => {
           hoveredIdx = -1;
           drawHighlight();
           resetCard();
@@ -912,9 +931,12 @@ window.__drawMutGlyph = (parent, x, y, w, h, cnv, type) => drawGlyph(parent, x, 
   d3.selectAll('#sort-toggle .btn').on('click', function() {
     d3.selectAll('#sort-toggle .btn').classed('active', false);
     d3.select(this).classed('active', true);
+    d3.selectAll('#sort-toggle .btn').attr('aria-pressed', 'false');
+    d3.select(this).attr('aria-pressed', 'true');
     sortMode = this.dataset.sort;
     render();
   });
+  d3.selectAll('#sort-toggle .btn').attr('aria-pressed', function() { return this.classList.contains('active') ? 'true' : 'false'; });
 
   render();
   new ResizeObserver(render).observe(container.node());

@@ -83,6 +83,7 @@ svg text { font-family: var(--heading-font); }
 .gene-table td { padding: 0.25rem 0.5rem; border-bottom: 1px solid var(--border); }
 .gene-table tr.up td:first-child { color: var(--c-up); }
 .gene-table tr.down td:first-child { color: var(--c-down); }
+.figure-stat { margin-left: auto; font-variant-numeric: tabular-nums; font-size: 0.8rem; color: var(--text-2); }
 
 @media (max-width: 640px) { .figure-wide { margin-left: 0; margin-right: 0; } h1 { font-size: 1.75rem; } }
 @media (prefers-reduced-motion: reduce) {
@@ -104,42 +105,43 @@ svg text { font-family: var(--heading-font); }
     <a href="index.html" style="font-family: var(--heading-font); font-size: 0.85rem; text-decoration: none; color: var(--text-2); display: inline-block; margin-bottom: 1rem;">&larr; Bioinformatics Series</a>
     <h1>MA Plot</h1>
     <p style="font-family: var(--heading-font); font-size: 1.15rem; color: var(--text-2); max-width: 600px;">
-      How to visualize differential expression by separating magnitude of change from the average intensity of the signal.
+      How to visualize differential expression by separating magnitude of change from average abundance.
     </p>
   </header>
 
-  <p>When comparing gene expression between two conditions, a raw difference is misleading: genes with low expression show high variability and produce large fold changes by chance. The MA plot separates real biological signal from intensity-dependent noise.</p>
+  <p>When comparing gene expression between two conditions, a raw difference is misleading: genes with low counts have less information, so their fold-change estimates can swing widely. The MA plot puts change next to average abundance, which makes that mean-variance relationship visible.</p>
 
-  <p>The MA plot transforms the data into two components:</p>
+  <p>For a two-condition sketch, the MA plot transforms normalized counts into two components:</p>
 
   <p>
-    \[ M = \log_2(C_1) - \log_2(C_2) \]
-    \[ A = \frac{1}{2}(\log_2(C_1) + \log_2(C_2)) \]
+    \[ M = \log_2(\text{treated}) - \log_2(\text{control}) \]
+    \[ A = \frac{1}{2}(\log_2(\text{treated}) + \log_2(\text{control})) \]
   </p>
 
-  <p>\( M \) (minus) is the log fold change; \( A \) (average) is the mean log intensity. The rotation shows how change behaves across expression levels.</p>
+  <p>\( M \) is the log2 fold change. \( A \) is average log abundance. RNA-seq tools often put mean normalized counts on the horizontal axis instead, usually on a log scale, but the reading is the same: look for large changes that remain credible at their abundance level.</p>
 
   <h2>Intensity and variation</h2>
 
-  <p>In a typical experiment, most genes don't change and cluster around \( M = 0 \). As \( A \) decreases, the spread increases, producing a funnel shape. A given fold change is more significant in a highly expressed gene than in a rarely expressed one.</p>
+  <p>In a typical experiment, most genes do not change and cluster around \( M = 0 \). As \( A \) decreases, the spread increases, producing a funnel shape. A given fold change is usually estimated more precisely for a well-counted gene than for a rarely observed transcript.</p>
 
   <div class="figure figure-wide">
     <div class="controls">
       <label>Fold-change threshold: <input type="range" id="fc-slider" min="0.2" max="3" value="1" step="0.1"> <span id="fc-val" style="min-width: 3em; font-variant-numeric: tabular-nums;">1.0</span></label>
-      <span id="gene-count" style="margin-left: auto; font-variant-numeric: tabular-nums;"></span>
+      <label>FDR threshold: <input type="range" id="q-slider" min="0.01" max="0.25" value="0.10" step="0.01"> <span id="q-val" style="min-width: 3em; font-variant-numeric: tabular-nums;">0.10</span></label>
+      <span id="gene-count" class="figure-stat"></span>
     </div>
     <div id="ma-scatter"></div>
     <p class="figure-caption">
       <span class="figure-label">Figure 1.</span> An MA plot of simulated gene expression.
-      Points are genes; highlighting marks those above a fold-change threshold.
+      Points are genes; highlighting marks those that pass both the fold-change threshold and the adjusted p-value threshold.
     </p>
   </div>
 
-  <p>The funnel is a sequencing artifact. Low-intensity measurements are noisier, so visualizing them prevents over-interpreting rare transcripts.</p>
+  <p>The funnel is not just a visual artifact. It reflects the mean-dependent uncertainty of count data and the limited evidence carried by low-abundance genes. Visualizing it helps prevent over-interpreting rare transcripts with unstable fold changes.</p>
 
   <h2>Comparing perspectives</h2>
 
-  <p>A direct scatter of two conditions also shows differences but obscures outliers. The MA transformation flattens the diagonal, making deviations easier to see.</p>
+  <p>A direct scatter of two conditions also shows differences, but most points sit near the diagonal and outliers compete with the large dynamic range of expression. The MA transformation flattens that diagonal, making deviations easier to compare across abundance levels.</p>
 
   <div class="figure figure-wide">
     <div id="raw-scatter"></div>
@@ -151,7 +153,7 @@ svg text { font-family: var(--heading-font); }
 
   <h2>Identifying candidates</h2>
 
-  <p>Filtering for both high expression and large fold change yields the most reproducible candidates.</p>
+  <p>Filtering by fold change alone favors noisy extremes. Filtering by adjusted p-value alone can keep tiny but precisely estimated changes. Candidate lists are usually more useful when the statistical threshold and the effect-size threshold are read together.</p>
 
   <div class="figure figure-wide">
     <div id="ma-brush"></div>
@@ -174,6 +176,7 @@ svg text { font-family: var(--heading-font); }
 // --- State & Dispatch ---
 const state = {
   fcThresh: 1.0,
+  qThresh: 0.10,
   brushSelection: null
 };
 const dispatch = d3.dispatch('update', 'brush');
@@ -182,27 +185,47 @@ const dispatch = d3.dispatch('update', 'brush');
 function mulberry32(s) { return () => { s |= 0; s = s + 0x6D2B79F5 | 0; let t = Math.imul(s ^ s >>> 15, 1 | s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 const rng = mulberry32(123);
 function rnorm(mu, sigma) { const u1 = rng(), u2 = rng(); return mu + sigma * Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2); }
+function normalCdf(x) {
+  const t = 1 / (1 + 0.2316419 * Math.abs(x));
+  const d = 0.3989423 * Math.exp(-x * x / 2);
+  const p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
+  return x > 0 ? 1 - p : p;
+}
+function bhAdjust(rows) {
+  const sorted = rows.slice().sort((a, b) => a.pval - b.pval);
+  let prev = 1;
+  for (let i = sorted.length - 1; i >= 0; i--) {
+    const q = Math.min(prev, sorted[i].pval * sorted.length / (i + 1));
+    sorted[i].qval = Math.min(1, q);
+    prev = sorted[i].qval;
+  }
+}
 
 const nGenes = 500;
 const prefixes = ['BRCA','TP53','MYC','EGFR','KRAS','PIK3','AKT','VEGF','PTEN','CDK','RB','STAT','JAK','MAPK','RAF','ERBB','NOTCH','WNT','FGF','IGF','HIF','MDM','BCL','BAX','CASP','TNF','IL','TGFB','SMAD','FOXP'];
 const genes = d3.range(nGenes).map(i => {
   const name = prefixes[i % prefixes.length] + Math.floor(i / prefixes.length + 1);
   const baseMean = Math.exp(rnorm(3, 1.5));
-  let logFC;
-  if (i < 30) logFC = rnorm(2.2, 0.5);
-  else if (i < 50) logFC = rnorm(-1.8, 0.4);
-  else if (i < 80) logFC = rnorm(0.8, 0.3);
-  else if (i < 110) logFC = rnorm(-0.6, 0.3);
-  else logFC = rnorm(0, 0.3 + 2 / Math.sqrt(baseMean));
+  let trueLogFC;
+  if (i < 30) trueLogFC = rnorm(2.2, 0.5);
+  else if (i < 50) trueLogFC = rnorm(-1.8, 0.4);
+  else if (i < 80) trueLogFC = rnorm(0.8, 0.3);
+  else if (i < 110) trueLogFC = rnorm(-0.6, 0.3);
+  else trueLogFC = rnorm(0, 0.12);
 
-  const ctrl = baseMean;
-  const treated = baseMean * Math.pow(2, logFC);
-  const A = Math.log2(Math.sqrt(ctrl * Math.max(0.01, treated)));
-  const M = logFC + rnorm(0, 0.8 / Math.sqrt(Math.max(1, baseMean)));
-  return { name, ctrl, treated, A, M };
+  const se = 0.18 + 1.5 / Math.sqrt(baseMean + 1);
+  const M = trueLogFC + rnorm(0, se);
+  const ctrl = Math.max(0.05, baseMean * Math.pow(2, rnorm(0, se / 2)));
+  const treated = Math.max(0.05, baseMean * Math.pow(2, trueLogFC + rnorm(0, se / 2)));
+  const A = Math.log2(Math.sqrt(ctrl * treated));
+  const z = Math.abs(M) / se;
+  const pval = Math.max(1e-12, Math.min(1, 2 * (1 - normalCdf(z))));
+  return { name, ctrl, treated, A, M, se, pval };
 });
+bhAdjust(genes);
 
 const tip = d3.select('#tip');
+function isCandidate(d) { return Math.abs(d.M) >= state.fcThresh && d.qval <= state.qThresh; }
 
 // --- Figure 1: MA Plot with Threshold ---
 (function() {
@@ -214,7 +237,7 @@ const tip = d3.select('#tip');
     const w = width - margin.left - margin.right;
     const h = height - margin.top - margin.bottom;
 
-    const svg = container.append('svg').attr('viewBox', `0 0 ${width} ${height}`).style('width', '100%').style('height', 'auto');
+    const svg = container.append('svg').attr('viewBox', `0 0 ${width} ${height}`).attr('role', 'img').attr('aria-label', 'MA plot with fold-change and FDR thresholds').style('width', '100%').style('height', 'auto');
     const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
 
     const x = d3.scaleLinear().domain(d3.extent(genes, d => d.A)).nice().range([0, w]);
@@ -223,7 +246,7 @@ const tip = d3.select('#tip');
     g.append('g').attr('transform', `translate(0,${h})`).call(d3.axisBottom(x).ticks(8)).attr('font-family', null);
     g.append('g').call(d3.axisLeft(y).ticks(8)).attr('font-family', null);
 
-    g.append('text').attr('x', w/2).attr('y', h + 40).attr('text-anchor', 'middle').style('font-size', '12px').style('fill', 'var(--text-2)').text('Average Expression (A)');
+    g.append('text').attr('x', w/2).attr('y', h + 40).attr('text-anchor', 'middle').style('font-size', '12px').style('fill', 'var(--text-2)').text('Average abundance (A, log2 scale)');
     g.append('text').attr('transform', 'rotate(-90)').attr('x', -h/2).attr('y', -45).attr('text-anchor', 'middle').style('font-size', '12px').style('fill', 'var(--text-2)').text('Log Fold Change (M)');
 
     g.append('line').attr('x1', 0).attr('x2', w).attr('y1', y(0)).attr('y2', y(0)).attr('stroke', varColor('--border')).attr('stroke-dasharray', '4,4');
@@ -233,16 +256,16 @@ const tip = d3.select('#tip');
 
     g.selectAll('.dot').data(genes).enter().append('circle')
       .attr('cx', d => x(d.A)).attr('cy', d => y(Math.max(-5, Math.min(5, d.M)))).attr('r', 3)
-      .attr('fill', d => d.M > state.fcThresh ? 'var(--c-up)' : d.M < -state.fcThresh ? 'var(--c-down)' : 'var(--c-neutral)')
-      .attr('opacity', d => Math.abs(d.M) > state.fcThresh ? 0.8 : 0.3)
+      .attr('fill', d => isCandidate(d) ? (d.M > 0 ? 'var(--c-up)' : 'var(--c-down)') : 'var(--c-neutral)')
+      .attr('opacity', d => isCandidate(d) ? 0.85 : 0.28)
       .on('mouseenter', (e, d) => {
-        tip.style('opacity', 1).html(`<strong>${d.name}</strong><br>M: ${d.M.toFixed(2)}<br>A: ${d.A.toFixed(2)}`);
+        tip.style('opacity', 1).html(`<strong>${d.name}</strong><br>M: ${d.M.toFixed(2)}<br>A: ${d.A.toFixed(2)}<br>FDR q: ${d.qval.toFixed(3)}`);
       })
       .on('mousemove', e => tip.style('left', (e.clientX + 15) + 'px').style('top', (e.clientY - 10) + 'px'))
       .on('mouseleave', () => tip.style('opacity', 0));
 
-    const upCount = genes.filter(d => d.M > state.fcThresh).length;
-    const downCount = genes.filter(d => d.M < -state.fcThresh).length;
+    const upCount = genes.filter(d => isCandidate(d) && d.M > 0).length;
+    const downCount = genes.filter(d => isCandidate(d) && d.M < 0).length;
     d3.select('#gene-count').html(`<span style="color:var(--c-up)">${upCount} up</span> &middot; <span style="color:var(--c-down)">${downCount} down</span>`);
   }
   function varColor(name) { return getComputedStyle(document.documentElement).getPropertyValue(name); }
@@ -261,7 +284,7 @@ const tip = d3.select('#tip');
     const w = width - margin.left - margin.right;
     const h = height - margin.top - margin.bottom;
 
-    const svg = container.append('svg').attr('viewBox', `0 0 ${width} ${height}`).style('width', '100%').style('height', 'auto').style('max-width', '500px').style('margin', '0 auto').style('display', 'block');
+    const svg = container.append('svg').attr('viewBox', `0 0 ${width} ${height}`).attr('role', 'img').attr('aria-label', 'Direct scatter plot of control and treated expression').style('width', '100%').style('height', 'auto').style('max-width', '500px').style('margin', '0 auto').style('display', 'block');
     const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
 
     const maxVal = d3.max(genes, d => Math.max(d.ctrl, d.treated)) * 1.1;
@@ -278,10 +301,16 @@ const tip = d3.select('#tip');
 
     g.selectAll('.dot').data(genes).enter().append('circle')
       .attr('cx', d => x(Math.max(0.1, d.ctrl))).attr('cy', d => y(Math.max(0.1, d.treated))).attr('r', 3)
-      .attr('fill', d => d.M > 1 ? 'var(--c-up)' : d.M < -1 ? 'var(--c-down)' : 'var(--c-neutral)')
-      .attr('opacity', 0.6);
+      .attr('fill', d => isCandidate(d) ? (d.M > 0 ? 'var(--c-up)' : 'var(--c-down)') : 'var(--c-neutral)')
+      .attr('opacity', d => isCandidate(d) ? 0.75 : 0.35)
+      .on('mouseenter', (e, d) => {
+        tip.style('opacity', 1).html(`<strong>${d.name}</strong><br>control: ${d.ctrl.toFixed(1)}<br>treated: ${d.treated.toFixed(1)}<br>FDR q: ${d.qval.toFixed(3)}`);
+      })
+      .on('mousemove', e => tip.style('left', (e.clientX + 15) + 'px').style('top', (e.clientY - 10) + 'px'))
+      .on('mouseleave', () => tip.style('opacity', 0));
   }
   render();
+  dispatch.on('update.raw', render);
   new ResizeObserver(render).observe(container.node());
 })();
 
@@ -295,7 +324,7 @@ const tip = d3.select('#tip');
     const w = width - margin.left - margin.right;
     const h = height - margin.top - margin.bottom;
 
-    const svg = container.append('svg').attr('viewBox', `0 0 ${width} ${height}`).style('width', '100%').style('height', 'auto');
+    const svg = container.append('svg').attr('viewBox', `0 0 ${width} ${height}`).attr('role', 'img').attr('aria-label', 'Brushable MA plot for selecting genes').style('width', '100%').style('height', 'auto');
     const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
 
     const x = d3.scaleLinear().domain(d3.extent(genes, d => d.A)).nice().range([0, w]);
@@ -303,16 +332,32 @@ const tip = d3.select('#tip');
 
     g.append('g').attr('transform', `translate(0,${h})`).call(d3.axisBottom(x).ticks(8)).attr('font-family', null);
     g.append('g').call(d3.axisLeft(y).ticks(8)).attr('font-family', null);
+    g.append('text').attr('x', w/2).attr('y', h + 40).attr('text-anchor', 'middle').style('font-size', '12px').style('fill', 'var(--text-2)').text('Average abundance (A, log2 scale)');
+    g.append('text').attr('transform', 'rotate(-90)').attr('x', -h/2).attr('y', -45).attr('text-anchor', 'middle').style('font-size', '12px').style('fill', 'var(--text-2)').text('Log2 fold change (M)');
 
     const dots = g.selectAll('.dot').data(genes).enter().append('circle')
       .attr('cx', d => x(d.A)).attr('cy', d => y(Math.max(-5, Math.min(5, d.M)))).attr('r', 3)
-      .attr('fill', 'var(--c-neutral)').attr('opacity', 0.4);
+      .attr('fill', d => isCandidate(d) ? (d.M > 0 ? 'var(--c-up)' : 'var(--c-down)') : 'var(--c-neutral)')
+      .attr('opacity', d => isCandidate(d) ? 0.7 : 0.3);
+
+    function renderTable(selected, note) {
+      const sorted = selected.slice().sort((a, b) => a.qval - b.qval || Math.abs(b.M) - Math.abs(a.M)).slice(0, 20);
+      let html = '<table class="gene-table"><thead><tr><th>Gene</th><th>M (log₂ FC)</th><th>A</th><th>FDR q</th></tr></thead><tbody>';
+      sorted.forEach(d => {
+        html += `<tr class="${d.M > 0 ? 'up' : 'down'}"><td>${d.name}</td><td>${d.M.toFixed(2)}</td><td>${d.A.toFixed(2)}</td><td>${d.qval.toFixed(3)}</td></tr>`;
+      });
+      html += '</tbody></table>';
+      if (selected.length > 20) html += `<div style="font-family: var(--heading-font); font-size: 0.8rem; color: var(--text-2); margin-top: 0.5rem;">${selected.length - 20} more genes not shown</div>`;
+      if (!selected.length) html += `<div style="font-family: var(--heading-font); font-size: 0.8rem; color: var(--text-2); margin-top: 0.5rem;">${note}</div>`;
+      d3.select('#brush-table-container').html(html);
+    }
 
     const brush = d3.brush().extent([[0, 0], [w, h]]).on('brush end', (event) => {
       const sel = event.selection;
       if (!sel) {
-        dots.attr('fill', 'var(--c-neutral)').attr('opacity', 0.4);
-        d3.select('#brush-table-container').html('');
+        dots.attr('fill', d => isCandidate(d) ? (d.M > 0 ? 'var(--c-up)' : 'var(--c-down)') : 'var(--c-neutral)')
+          .attr('opacity', d => isCandidate(d) ? 0.7 : 0.3);
+        renderTable(genes.filter(isCandidate), 'No genes pass the current thresholds.');
         return;
       }
       const [[x0, y0], [x1, y1]] = sel;
@@ -330,19 +375,14 @@ const tip = d3.select('#tip');
         return (px >= x0 && px <= x1 && py >= y0 && py <= y1) ? 0.8 : 0.2;
       });
 
-      const sorted = selected.sort((a, b) => Math.abs(b.M) - Math.abs(a.M)).slice(0, 20);
-      let html = '<table class="gene-table"><thead><tr><th>Gene</th><th>M (log₂ FC)</th><th>A (mean)</th></tr></thead><tbody>';
-      sorted.forEach(d => {
-        html += `<tr class="${d.M > 0 ? 'up' : 'down'}"><td>${d.name}</td><td>${d.M.toFixed(2)}</td><td>${d.A.toFixed(2)}</td></tr>`;
-      });
-      html += '</tbody></table>';
-      if (selected.length > 20) html += `<div style="font-family: var(--heading-font); font-size: 0.8rem; color: var(--text-2); margin-top: 0.5rem;">${selected.length - 20} more genes not shown</div>`;
-      d3.select('#brush-table-container').html(html);
+      renderTable(selected, 'Brush another region to select genes.');
     });
 
     g.append('g').attr('class', 'brush').call(brush);
+    renderTable(genes.filter(isCandidate), 'No genes pass the current thresholds.');
   }
   render();
+  dispatch.on('update.brush', render);
   new ResizeObserver(render).observe(container.node());
 })();
 
@@ -350,6 +390,12 @@ const tip = d3.select('#tip');
 d3.select('#fc-slider').on('input', function() {
   state.fcThresh = +this.value;
   d3.select('#fc-val').text(state.fcThresh.toFixed(1));
+  dispatch.call('update');
+});
+
+d3.select('#q-slider').on('input', function() {
+  state.qThresh = +this.value;
+  d3.select('#q-val').text(state.qThresh.toFixed(2));
   dispatch.call('update');
 });
 

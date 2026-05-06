@@ -124,16 +124,24 @@ svg text { font-family: var(--heading-font); }
 
   <h2>When linear methods fail</h2>
 
-  <p><strong>Principal component analysis</strong> (PCA) projects onto the top two directions of maximum variance: exact, fast, linear. When signal lies on a curved manifold inside a noisy high-D space, PCA picks the noise. <strong>UMAP</strong> and <strong>t-SNE</strong> build a local-neighbourhood graph and optimise for adjacency, recovering non-linear structure that PCA cannot.</p>
+  <p><strong>Principal component analysis</strong> (PCA) projects onto directions of maximum variance: exact, fast, linear. It is often the first denoising step before a single-cell UMAP or t-SNE, but it can miss a curved signal when higher-variance directions come from batch effects, technical noise, or biology unrelated to the question. <strong>UMAP</strong> and <strong>t-SNE</strong> optimise neighbourhood relationships instead. They can reveal non-linear structure, but they are visual summaries, not measurements of distance, density, or cluster area.</p>
 
   <div class="figure figure-wide">
+    <div class="controls">
+      <span class="stat">Nonlinear panel:</span>
+      <div class="btn-group" id="nonlinear-method">
+        <button class="btn active" data-method="umap" aria-pressed="true">UMAP</button>
+        <button class="btn" data-method="tsne" aria-pressed="false">t-SNE</button>
+      </div>
+      <span class="stat" id="nonlinear-note">UMAP keeps a little more of the moon ordering in this synthetic example.</span>
+    </div>
     <div id="fig-methods"></div>
     <p class="figure-caption">
-      <span class="figure-label">Figure 2.</span> 200 cells arranged as two interlocking half-moons in 2D, then embedded in 12D by adding 10 noise dimensions with higher variance than the signal. PCA's top-2 directions are dominated by noise; UMAP's neighbourhood graph recovers the moons cleanly. Hover any point — it highlights in all three panels.
+      <span class="figure-label">Figure 2.</span> 200 cells arranged as two interlocking half-moons in 2D, then embedded in 12D by adding 10 higher-variance noise dimensions. The PCA panel follows the highest-variance directions, which are not the moon coordinates here. UMAP and t-SNE recover local neighbours, but the apparent spacing between the two islands is a layout choice. Hover any point; it highlights in all three panels.
     </p>
   </div>
 
-  <p>PCA is the right tool when the interesting axes coincide with high linear variance. For exploratory single-cell work the non-linear methods dominate, because biological state tends to live on curved manifolds.</p>
+  <p>PCA is the right tool when the interesting axes are approximately linear, and it remains useful as a preprocessing representation. Non-linear embeddings are usually better as maps for exploration. Treat them as a prompt to ask which genes, samples, or neighbours explain the shape.</p>
 
   <h2>Reading the embedding</h2>
 
@@ -150,11 +158,12 @@ svg text { font-family: var(--heading-font); }
       </div>
     </div>
     <div class="controls" style="margin-bottom: 0.6rem;">
-      <span class="stat" id="neighbor-stats">Hover a cell to see its ten high-dim nearest neighbours.</span>
+      <label>Neighbourhood size: <input type="range" id="neighbor-k" min="5" max="20" value="10" step="1"> <span id="neighbor-k-val" class="stat"><b>10</b></span></label>
+      <span class="stat" id="neighbor-stats">Hover a cell to see its high-dimensional nearest neighbours.</span>
     </div>
     <div id="fig-markers"></div>
     <p class="figure-caption">
-      <span class="figure-label">Figure 3.</span> 200 cells across five cell types. Cluster colouring is the default; click a gene button to recolour by expression. Hovering draws neighbourhood edges (green = in-cluster, red = cross-cluster). Selective markers like <em>CD3D</em> light one cluster; pan-leukocyte <em>PTPRC</em> glows everywhere. Faithfulness of 8 ⁄ 10 is typical inside a cluster; cells on cluster boundaries drop to 5 ⁄ 10.
+      <span class="figure-label">Figure 3.</span> 200 cells across five cell types. Cluster colouring is the default; click a gene button to recolour by expression. Hovering draws high-dimensional neighbour edges (green = same annotated type, red = different annotated type). Selective markers like <em>CD3D</em> light one cluster; pan-leukocyte <em>PTPRC</em> glows everywhere. The slider changes how strict the local neighbourhood question is.
     </p>
   </div>
 
@@ -306,8 +315,8 @@ function computeKNN(cells, k) {
   }
   return out;
 }
-const K = 10;
-const KNN = computeKNN(ALL_CELLS, K);
+const K_MAX = 20;
+const KNN = computeKNN(ALL_CELLS, K_MAX);
 
 // ─────────────────────────────────────────────────────────────────────────
 // Figure 1 — matrix ↔ scatter
@@ -507,6 +516,7 @@ const KNN = computeKNN(ALL_CELLS, K);
   const container = d3.select('#fig-methods');
 
   let selected = null;
+  let nonlinearMethod = 'umap';
   // Pre-create panel refs
   let panels = {};
 
@@ -525,8 +535,8 @@ const KNN = computeKNN(ALL_CELLS, K);
       { key: 'tsne', title: 't-SNE (NONLINEAR)',       sub: 'neighbourhood-preserving, spherical clusters',     data: tsne },
       { key: 'umap', title: 'UMAP (NONLINEAR)',        sub: 'neighbourhood-preserving, more global structure',   data: umap }
     ];
-    // Show 3 at a time: raw, pca, and selected nonlinear
-    const showKeys = ['raw', 'pca', 'umap'];
+    // Show 3 at a time: raw, PCA, and the reader-selected nonlinear method.
+    const showKeys = ['raw', 'pca', nonlinearMethod];
     const panes = showKeys.map(k => paneDefs.find(p => p.key === k));
 
     panels = {};
@@ -591,6 +601,19 @@ const KNN = computeKNN(ALL_CELLS, K);
         .attr('opacity', d => selected === null ? 0.72 : (d.id === selected ? 1 : 0.18));
     }
   }
+  d3.selectAll('#nonlinear-method .btn').on('click', function() {
+    nonlinearMethod = this.dataset.method;
+    d3.selectAll('#nonlinear-method .btn')
+      .classed('active', false)
+      .attr('aria-pressed', 'false');
+    d3.select(this).classed('active', true).attr('aria-pressed', 'true');
+    d3.select('#nonlinear-note').text(
+      nonlinearMethod === 'umap'
+        ? 'UMAP keeps a little more of the moon ordering in this synthetic example.'
+        : 't-SNE separates neighbours strongly, but cluster spacing and area are especially hard to read.'
+    );
+    render();
+  });
   render();
   new ResizeObserver(render).observe(container.node());
 })();
@@ -610,6 +633,7 @@ const KNN = computeKNN(ALL_CELLS, K);
   const container = d3.select('#fig-markers');
   let mode = 'cluster';
   let selectedGene = null;
+  let currentK = 10;
 
   function render() {
     container.selectAll('*').remove();
@@ -681,12 +705,12 @@ const KNN = computeKNN(ALL_CELLS, K);
       if (id === null) {
         halo.attr('opacity', 0);
         dots.attr('opacity', 0.78).attr('r', 4.5);
-        d3.select('#neighbor-stats').text('Hover a cell to see its ten high-dim nearest neighbours.');
+        d3.select('#neighbor-stats').text('Hover a cell to see its high-dimensional nearest neighbours.');
         return;
       }
       const src = ALL_CELLS[id];
       halo.attr('cx', x(src.x)).attr('cy', y(src.y)).attr('opacity', 1);
-      const neighs = KNN[id];
+      const neighs = KNN[id].slice(0, currentK);
       let faithful = 0;
       neighs.forEach(ni => {
         const tgt = ALL_CELLS[ni];
@@ -700,7 +724,7 @@ const KNN = computeKNN(ALL_CELLS, K);
       });
       d3.select('#neighbor-stats').html(
         `Cell <b>c${id.toString().padStart(3, '0')}</b> (${src.typeName}) — `
-        + `<b>${faithful}</b> of <b>${K}</b> true neighbours stayed in-cluster`
+        + `<b>${faithful}</b> of <b>${currentK}</b> nearest neighbours share the annotation`
       );
       const neighSet = new Set([...neighs, id]);
       dots.attr('opacity', d => neighSet.has(d.id) ? 1 : 0.18)
@@ -726,6 +750,11 @@ const KNN = computeKNN(ALL_CELLS, K);
     mode = this.dataset.mode;
     selectedGene = this.dataset.gene || null;
     d3.select('#grad-scale').style('display', mode === 'marker' ? 'flex' : 'none');
+    render();
+  });
+  d3.select('#neighbor-k').on('input', function() {
+    currentK = +this.value;
+    d3.select('#neighbor-k-val').html(`<b>${currentK}</b>`);
     render();
   });
 

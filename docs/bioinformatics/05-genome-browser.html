@@ -36,6 +36,7 @@
   --c-up: #ef4444;
   --c-down: #2563eb;
   --c-neutral: #94a3b8;
+  --c-variant: #b45309;
 }
 
 body {
@@ -77,6 +78,11 @@ a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px
 
 .track-toggle { display: flex; align-items: center; gap: 0.4rem; font-family: var(--heading-font); font-size: 0.8rem; cursor: pointer; }
 .track-toggle input { accent-color: var(--accent); }
+.browser-readout { font-family: var(--heading-font); font-size: 0.82rem; color: var(--text-2); margin-top: 0.65rem; line-height: 1.45; min-height: 2.35rem; }
+.browser-readout b { color: var(--text); }
+.mini-legend { display: flex; flex-wrap: wrap; gap: 0.85rem; margin-bottom: 0.75rem; font-family: var(--heading-font); font-size: 0.78rem; color: var(--text-2); }
+.mini-legend span { display: inline-flex; align-items: center; gap: 0.32rem; }
+.mini-legend i { width: 14px; height: 8px; border-radius: 2px; display: inline-block; }
 
 svg text { font-family: var(--heading-font); }
 .tip { position: fixed; pointer-events: none; background: var(--text); color: white; font-family: var(--heading-font); font-size: 0.75rem; padding: 0.3rem 0.55rem; border-radius: 4px; opacity: 0; transition: opacity 0.12s; z-index: 10; max-width: 280px; white-space: normal; }
@@ -107,22 +113,32 @@ svg text { font-family: var(--heading-font); }
     </p>
   </header>
 
-  <p>A genome browser shows a stretch of DNA with multiple <strong>tracks</strong> of information at the same coordinates: gene models, regulatory regions, expression, conservation, and more.</p>
+  <p>A genome browser shows a stretch of DNA with multiple <strong>tracks</strong> of information at the same coordinates: gene models, regulatory regions, expression, conservation, variants, and more.</p>
 
-  <p>The horizontal axis is genomic position in base pairs. Alignment is the point: when an expression peak lines up with a gene, a conserved region, and an open chromatin signal, the evidence converges.</p>
+  <p>The horizontal axis is genomic position in base pairs. In a browser search box, coordinates are usually displayed as <strong>1-based, fully closed</strong> intervals, like <code>chr7:55,000,001-55,500,000</code>. Many file formats underneath the browser, especially BED and bedGraph, use <strong>0-based, half-open</strong> intervals, where the same 500 kb span is written as <code>chr7 55000000 55500000</code>. That one-base shift at the left edge is small enough to miss and large enough to break an analysis.</p>
+
+  <p>Alignment is the point: when an expression peak lines up with a gene, a promoter feature, a conserved segment, and a variant, the evidence begins to converge. The browser does not decide what it means. It gives each piece of evidence the same coordinate ruler.</p>
 
   <h2>A simulated locus</h2>
 
   <div class="figure figure-wide" id="fig-browser">
     <div class="controls">
-      <button class="btn" id="btn-zoom-in">Zoom in</button>
-      <button class="btn" id="btn-zoom-out">Zoom out</button>
-      <button class="btn" id="btn-reset">Reset</button>
+      <button class="btn" id="btn-zoom-in" aria-label="Zoom in on the locus">Zoom in</button>
+      <button class="btn" id="btn-zoom-out" aria-label="Zoom out from the locus">Zoom out</button>
+      <button class="btn" id="btn-reset" aria-label="Reset to the full locus">Reset</button>
       <span id="coord-label" style="margin-left: auto; font-family: var(--mono-font); font-size: 0.8rem;"></span>
+    </div>
+    <div class="mini-legend" aria-label="Track legend">
+      <span><i style="background: var(--c-gene);"></i>gene model</span>
+      <span><i style="background: #e74c3c;"></i>RNA signal</span>
+      <span><i style="background: #2ecc71;"></i>CpG island</span>
+      <span><i style="background: #9b59b6;"></i>conservation</span>
+      <span><i style="background: var(--c-variant);"></i>variant</span>
     </div>
     <div class="controls" id="track-toggles"></div>
     <div id="browser-main"></div>
-    <p class="figure-caption"><span class="figure-label">Figure 1.</span> Interactive genome browser. Drag to pan, scroll to zoom. Click any gene or feature for details. Toggle tracks to reduce visual clutter.</p>
+    <div class="browser-readout" id="browser-selection" aria-live="polite"></div>
+    <p class="figure-caption"><span class="figure-label">Figure 1.</span> Interactive genome browser. Drag to pan, scroll to zoom, or use the buttons. Hover the panel for a crosshair and click any gene, CpG island, or variant for details. The label above uses browser-style 1-based coordinates; the simulated intervals are stored internally as half-open spans.</p>
   </div>
 
   <p>Genes, regulatory elements, variants, and epigenetic marks all live at specific coordinates. Aligning them on a common axis reveals relationships no single dataset can show alone.</p>
@@ -130,10 +146,11 @@ svg text { font-family: var(--heading-font); }
   <h2>Reading the tracks</h2>
 
   <ul style="margin: 0 0 1rem 1.5rem;">
-    <li><strong>Gene models</strong> (blue arrows): The location and structure of genes. Thick blocks are exons (protein-coding), thin lines are introns. Arrows show transcription direction.</li>
-    <li><strong>Expression</strong> (area chart): How much RNA is produced at each position. Peaks over genes mean the gene is active.</li>
-    <li><strong>CpG islands</strong> (green): Clusters of CG dinucleotides, often near gene promoters. Methylation of CpG islands silences genes.</li>
-    <li><strong>Conservation</strong> (purple): How similar this DNA is across species. High conservation means the sequence is functionally important and hasn't changed much over millions of years.</li>
+    <li><strong>Gene models</strong> (blue arrows): Thick blocks are exons, thin lines are introns, and paler blocks are untranslated regions. Exons are retained in mature RNA; only the coding part becomes protein.</li>
+    <li><strong>Expression</strong> (area chart): RNA-seq coverage across the locus. A peak over a transcript is evidence that RNA from that transcript is abundant in the sample, not proof of protein abundance.</li>
+    <li><strong>CpG islands</strong> (green): CG-rich regions, often near promoters. Promoter CpG methylation can be associated with lower transcription, but the island itself is not a switch.</li>
+    <li><strong>Conservation</strong> (purple): Similarity across species. High conservation is evidence of constraint, not a direct annotation of function.</li>
+    <li><strong>Variants</strong> (brown ticks): Sample or population differences at precise positions. The browser can show where they land, but interpretation needs allele frequency, predicted effect, and context.</li>
   </ul>
 
   <div class="figure" id="fig-anatomy">
@@ -147,7 +164,7 @@ svg text { font-family: var(--heading-font); }
 
   <div class="figure" id="fig-convergence">
     <div id="convergence-browser"></div>
-    <p class="figure-caption"><span class="figure-label">Figure 3.</span> A zoomed-in region where signals converge: expression peak over the gene, CpG island at the promoter, high conservation across the gene body.</p>
+    <p class="figure-caption"><span class="figure-label">Figure 3.</span> A zoomed-in region where signals converge: expression over the transcript, a CpG island at the promoter, and higher conservation over exons. The highlighted span is clipped to the visible window, as a real browser track would be.</p>
   </div>
 
   <p>Genome browsers show one chromosome at a time. Inter-chromosomal events (translocations, fusions, long-range contacts) need the <a href="06-circos-plot.html">circos plot</a>.</p>
@@ -190,6 +207,14 @@ const genes = [
   { name: 'CCT6A', start: 55_440_000, end: 55_480_000, strand: '-', exons: [[55_440_000,55_447_000],[55_460_000,55_468_000],[55_475_000,55_480_000]], desc: 'Chaperonin containing TCP1 subunit. Protein folding.' }
 ];
 
+const variants = [
+  { pos: 55_090_250, gene: 'EGFR', label: 'missense SNV', effect: 'coding exon, nonsynonymous', af: '3.2%' },
+  { pos: 55_142_100, gene: 'EGFR', label: 'splice-region SNV', effect: 'near exon boundary', af: '0.4%' },
+  { pos: 55_202_500, gene: 'EGFR', label: 'intronic SNV', effect: 'inside gene body', af: '12.8%' },
+  { pos: 55_338_200, gene: 'VOPP1', label: 'promoter indel', effect: 'near upstream CpG island', af: '1.1%' },
+  { pos: 55_461_600, gene: 'CCT6A', label: 'synonymous SNV', effect: 'coding exon, synonymous', af: '6.5%' }
+];
+
 // CpG islands near promoters
 const cpgIslands = [
   { start: 55_082_000, end: 55_089_000 },
@@ -229,6 +254,15 @@ const consData = d3.range(exprBins).map(i => {
 });
 
 const tip = document.getElementById('tip');
+const selection = d3.select('#browser-selection');
+function browserCoord(start, end = start) {
+  if (start === end) return `chr7:${Math.round(start + 1).toLocaleString()}`;
+  return `chr7:${Math.round(start + 1).toLocaleString()}-${Math.round(end).toLocaleString()}`;
+}
+function setSelection(html) {
+  selection.html(html);
+}
+setSelection('<b>Selected:</b> EGFR gene model. Blue exons are drawn as half-open intervals, while the coordinate readout above is displayed in browser-style 1-based coordinates.');
 
 // ─── State & Dispatch ───
 const state = {
@@ -238,7 +272,8 @@ const state = {
     genes: { label: 'Genes', visible: true, h: 80 },
     expr: { label: 'Expression', visible: true, h: 70 },
     cpg: { label: 'CpG Islands', visible: true, h: 25 },
-    cons: { label: 'Conservation', visible: true, h: 50 }
+    cons: { label: 'Conservation', visible: true, h: 50 },
+    variants: { label: 'Variants', visible: true, h: 32 }
   }
 };
 const dispatch = d3.dispatch('update');
@@ -270,6 +305,7 @@ const dispatch = d3.dispatch('update');
     container.selectAll('svg').remove();
     const H = totalH();
     const svg = container.append('svg').attr('width', W).attr('height', H)
+      .attr('role', 'img').attr('aria-label', 'Interactive genome browser tracks for a simulated chromosome 7 locus')
       .attr('viewBox', `0 0 ${W} ${H}`).style('max-width', '100%').style('height', 'auto')
       .style('cursor', 'grab');
 
@@ -296,7 +332,7 @@ const dispatch = d3.dispatch('update');
 
     // Update coord label
     d3.select('#coord-label').text(
-      `chr7:${Math.round(state.viewStart).toLocaleString()}-${Math.round(state.viewEnd).toLocaleString()} (${((state.viewEnd - state.viewStart) / 1000).toFixed(0)} kb)`
+      `${browserCoord(state.viewStart, state.viewEnd)} (${((state.viewEnd - state.viewStart) / 1000).toFixed(0)} kb)`
     );
 
     // Gene track
@@ -330,7 +366,7 @@ const dispatch = d3.dispatch('update');
             .style('cursor', 'pointer')
             .on('mouseenter', (event) => {
               tip.style.opacity = 1;
-              tip.innerHTML = `<strong>${gene.name}</strong><br>${gene.desc}`;
+              tip.innerHTML = `<strong>${gene.name}</strong><br>${browserCoord(gene.start, gene.end)}<br>${gene.desc}`;
               tip.style.left = (event.clientX + 12) + 'px';
               tip.style.top = (event.clientY - 10) + 'px';
             })
@@ -338,7 +374,10 @@ const dispatch = d3.dispatch('update');
               tip.style.left = (event.clientX + 12) + 'px';
               tip.style.top = (event.clientY - 10) + 'px';
             })
-            .on('mouseleave', () => { tip.style.opacity = 0; });
+            .on('mouseleave', () => { tip.style.opacity = 0; })
+            .on('click', () => {
+              setSelection(`<b>Selected:</b> ${gene.name}, ${browserCoord(gene.start, gene.end)} on the ${gene.strand} strand. ${gene.desc}`);
+            });
         });
 
         // Direction arrow
@@ -403,7 +442,7 @@ const dispatch = d3.dispatch('update');
           .attr('fill', '#2ecc71').attr('opacity', 0.6).attr('rx', 3)
           .on('mouseenter', (event) => {
             tip.style.opacity = 1;
-            tip.innerHTML = `CpG Island<br>${cpg.start.toLocaleString()} - ${cpg.end.toLocaleString()} (${((cpg.end - cpg.start) / 1000).toFixed(1)} kb)`;
+            tip.innerHTML = `CpG island<br>${browserCoord(cpg.start, cpg.end)}<br>${((cpg.end - cpg.start) / 1000).toFixed(1)} kb`;
             tip.style.left = (event.clientX + 12) + 'px';
             tip.style.top = (event.clientY - 10) + 'px';
           })
@@ -411,7 +450,10 @@ const dispatch = d3.dispatch('update');
             tip.style.left = (event.clientX + 12) + 'px';
             tip.style.top = (event.clientY - 10) + 'px';
           })
-          .on('mouseleave', () => { tip.style.opacity = 0; });
+          .on('mouseleave', () => { tip.style.opacity = 0; })
+          .on('click', () => {
+            setSelection(`<b>Selected:</b> CpG island at ${browserCoord(cpg.start, cpg.end)}. CpG-rich promoter regions are often inspected with methylation tracks, not interpreted from the island track alone.`);
+          });
       });
 
       yOff += state.tracks.cpg.h + gap;
@@ -437,7 +479,64 @@ const dispatch = d3.dispatch('update');
         .attr('fill', '#9b59b6').attr('opacity', 0.3);
       sG.append('path').datum(visible).attr('d', d3.line().x(d => x(d.pos)).y(d => yScale(d.val)).curve(d3.curveStep))
         .attr('fill', 'none').attr('stroke', '#9b59b6').attr('stroke-width', 1);
+
+      yOff += state.tracks.cons.h + gap;
     }
+
+    // Variant track
+    if (state.tracks.variants.visible) {
+      const vG = svg.append('g').attr('transform', `translate(0,${yOff})`);
+      vG.append('text').attr('x', margin.left - 6).attr('y', state.tracks.variants.h / 2 + 3)
+        .attr('text-anchor', 'end').style('font-size', '9px').style('fill', 'var(--text-2)').style('font-weight', '600')
+        .text('Vars');
+
+      vG.append('line')
+        .attr('x1', margin.left).attr('x2', margin.left + w)
+        .attr('y1', state.tracks.variants.h / 2).attr('y2', state.tracks.variants.h / 2)
+        .attr('stroke', 'var(--border)');
+
+      variants.forEach(v => {
+        const vx = x(v.pos);
+        if (vx < margin.left || vx > margin.left + w) return;
+        vG.append('path')
+          .attr('d', `M${vx},5 l5,9 l-5,9 l-5,-9 z`)
+          .attr('fill', 'var(--c-variant)').attr('opacity', 0.86)
+          .style('cursor', 'pointer')
+          .on('mouseenter', (event) => {
+            tip.style.opacity = 1;
+            tip.innerHTML = `<strong>${v.label}</strong><br>${browserCoord(v.pos)}<br>${v.effect}`;
+            tip.style.left = (event.clientX + 12) + 'px';
+            tip.style.top = (event.clientY - 10) + 'px';
+          })
+          .on('mousemove', (event) => {
+            tip.style.left = (event.clientX + 12) + 'px';
+            tip.style.top = (event.clientY - 10) + 'px';
+          })
+          .on('mouseleave', () => { tip.style.opacity = 0; })
+          .on('click', () => {
+            setSelection(`<b>Selected:</b> ${v.label} at ${browserCoord(v.pos)} near ${v.gene}. Effect annotation: ${v.effect}; synthetic allele frequency ${v.af}.`);
+          });
+      });
+    }
+
+    // Crosshair across visible tracks
+    const panelTop = margin.top + trackH_coord + gap;
+    const panelBottom = H - margin.bottom;
+    const cross = svg.append('line')
+      .attr('y1', panelTop).attr('y2', panelBottom)
+      .attr('stroke', 'var(--text-2)').attr('stroke-dasharray', '2,3').attr('opacity', 0);
+    svg.on('mousemove.crosshair', (event) => {
+      const [mx, my] = d3.pointer(event, svg.node());
+      if (mx < margin.left || mx > margin.left + w || my < panelTop || my > panelBottom) {
+        cross.attr('opacity', 0);
+        return;
+      }
+      const pos = Math.max(state.viewStart, Math.min(state.viewEnd, x.invert(mx)));
+      cross.attr('x1', x(pos)).attr('x2', x(pos)).attr('opacity', 1);
+    }).on('mouseleave.crosshair', () => {
+      cross.attr('opacity', 0);
+      tip.style.opacity = 0;
+    });
 
     // Pan interaction
     let dragStart = null, domainStart = null;
@@ -504,6 +603,7 @@ const dispatch = d3.dispatch('update');
   const container = d3.select('#anatomy-diagram');
   const W = 600, H = 100;
   const svg = container.append('svg').attr('width', W).attr('height', H)
+    .attr('role', 'img').attr('aria-label', 'Gene model anatomy showing UTRs, exons, introns, and transcription direction')
     .attr('viewBox', `0 0 ${W} ${H}`).style('max-width', '100%').style('height', 'auto');
 
   const y = 40;
@@ -550,6 +650,7 @@ const dispatch = d3.dispatch('update');
   const w = W - margin.left - margin.right;
 
   const svg = container.append('svg').attr('width', W).attr('height', H)
+    .attr('role', 'img').attr('aria-label', 'Stacked tracks showing convergent gene expression, CpG, and conservation evidence')
     .attr('viewBox', `0 0 ${W} ${H}`).style('max-width', '100%').style('height', 'auto');
 
   // Zoom into EGFR region
@@ -594,7 +695,7 @@ const dispatch = d3.dispatch('update');
     .attr('fill', '#9b59b6').attr('opacity', 0.3);
 
   // Highlight box
-  svg.append('rect').attr('x', x(55_047_000)).attr('width', x(55_075_000) - x(55_047_000))
+  svg.append('rect').attr('x', Math.max(margin.left, x(55_047_000))).attr('width', x(55_075_000) - Math.max(margin.left, x(55_047_000)))
     .attr('y', 0).attr('height', H)
     .attr('fill', 'var(--accent)').attr('opacity', 0.06)
     .attr('stroke', 'var(--accent)').attr('stroke-width', 1).attr('stroke-dasharray', '4,3');

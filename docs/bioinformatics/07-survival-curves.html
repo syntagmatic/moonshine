@@ -74,6 +74,7 @@ a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px
 }
 .btn:hover { border-color: var(--accent); background: var(--accent-light); }
 .btn.active { border-color: var(--accent); background: var(--accent); color: white; }
+.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 svg text { font-family: var(--heading-font); }
 svg .axis text { font-size: 11px; fill: var(--text-2); }
@@ -87,6 +88,8 @@ svg .grid path { stroke: none; }
 .stat-row { display: flex; justify-content: space-between; padding: 0.15rem 0; }
 .stat-label { color: var(--text-2); }
 .stat-val { font-weight: 600; font-variant-numeric: tabular-nums; }
+.risk-table text { font-size: 10px; fill: var(--text-2); }
+.risk-table .risk-label { font-weight: 700; }
 
 @media (max-width: 640px) { .figure-wide { margin-left: 0; margin-right: 0; } h1 { font-size: 1.75rem; } }
 @media (prefers-reduced-motion: reduce) {
@@ -116,7 +119,7 @@ svg .grid path { stroke: none; }
 
   <p>The previous visualizations answer molecular questions: which genes changed, where they sit, how cells cluster. The clinical question is whether any of that predicts patient outcomes.</p>
 
-  <p>The <strong>Kaplan-Meier survival curve</strong> tracks a group of patients over time, plotting the fraction still alive at each time point. Splitting patients by a molecular marker (high vs. low gene expression) and reading the gap between the curves tells you whether the marker predicts survival.</p>
+  <p>The <strong>Kaplan-Meier survival curve</strong> tracks a group of patients over time, estimating the fraction who have not yet had an event. Splitting patients by a molecular marker (high vs. low gene expression) lets you ask whether the marker is associated with different survival, but the plot itself is descriptive. The test and the effect size do the inferential work.</p>
 
   <h2>The step function</h2>
 
@@ -126,10 +129,10 @@ svg .grid path { stroke: none; }
 
   <div class="figure figure-wide" id="fig-basic">
     <div id="km-basic"></div>
-    <p class="figure-caption"><span class="figure-label">Figure 1.</span> A single Kaplan-Meier curve for 80 simulated patients. Each step is an event. Tick marks (+) are censored observations. The shaded band is the 95% confidence interval, which widens over time as fewer patients remain at risk.</p>
+    <p class="figure-caption"><span class="figure-label">Figure 1.</span> A single Kaplan-Meier curve for 80 simulated patients. Cross marks are censored observations. The shaded band is the 95% confidence interval, which widens over time as fewer patients remain at risk.</p>
   </div>
 
-  <p>Without censoring, patients still alive at study end would either be dropped (biasing results) or counted as events (underestimating survival). The Kaplan-Meier estimator handles censoring by adjusting the denominator at each time point.</p>
+  <p>Without censoring, patients still alive at study end would either be dropped, which wastes information and can bias results, or counted as events, which underestimates survival. The Kaplan-Meier estimator keeps them in the risk set until their last known follow-up, then removes them from later denominators. This depends on a non-informative censoring assumption: censored patients should have similar future risk to those still being followed at that time.</p>
 
   <h2>Splitting by a gene</h2>
 
@@ -148,9 +151,9 @@ svg .grid path { stroke: none; }
 
   <h2>The log-rank test</h2>
 
-  <p>A visual gap is suggestive, not proof. The <strong>log-rank test</strong> is the standard test for comparing survival curves: under the null hypothesis of identical survival, how surprising is the observed difference?</p>
+  <p>A visual gap is suggestive, not proof. The <strong>log-rank test</strong> compares the observed and expected number of events across the whole follow-up period. It answers a narrow question: under the null hypothesis of identical survival distributions, how surprising is this separation?</p>
 
-  <p>A small p-value (\( p < 0.05 \)) means the curves are significantly different. But test 20,000 genes and ~1,000 will reach \( p < 0.05 \) by chance. Bonferroni or FDR correction adjusts for multiple testing.</p>
+  <p>A small p-value (\( p < 0.05 \)) is evidence that the curves differ, not a measure of how large the difference is. The hazard ratio provides that companion effect size, usually from a Cox model. But test 20,000 genes and about 1,000 will reach \( p < 0.05 \) by chance. Bonferroni or FDR correction adjusts for multiple testing.</p>
 
   <div class="figure figure-wide" id="fig-multi">
     <div class="controls">
@@ -223,13 +226,13 @@ const patients = d3.range(nPatients).map(i => {
     if (genes[name] > 5) baseHazard += info.effect * 0.01 * (genes[name] - 5);
   });
 
-  const survTime = Math.min(maxTime, rexp(baseHazard));
-  const censorTime = rng() < 0.25 ? survTime * rng() : maxTime + 1;
-  const observed = survTime <= censorTime && survTime <= maxTime;
+  const trueEventTime = rexp(baseHazard);
+  const censorTime = rng() < 0.25 ? trueEventTime * rng() : maxTime;
+  const observed = trueEventTime <= censorTime;
 
   return {
     id: i,
-    time: observed ? survTime : Math.min(censorTime, maxTime),
+    time: observed ? trueEventTime : censorTime,
     event: observed,
     genes
   };
@@ -249,31 +252,47 @@ const dispatch = d3.dispatch('update');
 // ─── Kaplan-Meier Estimator ───
 function kaplanMeier(pts) {
   const sorted = pts.slice().sort((a, b) => a.time - b.time);
-  const steps = [{ time: 0, survival: 1, nRisk: pts.length, ci_lower: 1, ci_upper: 1 }];
+  const steps = [{ time: 0, survival: 1, nRisk: pts.length, events: 0, censoredCount: 0, ci_lower: 1, ci_upper: 1 }];
 
   let nRisk = pts.length;
   let survival = 1;
   let varSum = 0; // Greenwood's formula
+  let i = 0;
 
-  sorted.forEach(p => {
-    if (p.event) {
-      const d = 1; // one event at this time
+  while (i < sorted.length) {
+    const t = sorted[i].time;
+    const tied = [];
+    while (i < sorted.length && Math.abs(sorted[i].time - t) < 1e-9) tied.push(sorted[i++]);
+    const d = tied.filter(p => p.event).length;
+    const c = tied.length - d;
+
+    if (d > 0 && nRisk > 0) {
       survival *= (nRisk - d) / nRisk;
       if (nRisk > d) varSum += d / (nRisk * (nRisk - d));
-      const se = survival * Math.sqrt(varSum);
+      let ciLower = survival;
+      let ciUpper = survival;
+      if (survival > 0 && survival < 1 && varSum > 0) {
+        // Greenwood standard error on the complementary log-log scale.
+        const theta = Math.log(-Math.log(survival));
+        const seTheta = Math.sqrt(varSum) / Math.abs(Math.log(survival));
+        ciLower = Math.exp(-Math.exp(theta + 1.96 * seTheta));
+        ciUpper = Math.exp(-Math.exp(theta - 1.96 * seTheta));
+      }
       steps.push({
-        time: p.time,
+        time: t,
         survival,
         nRisk,
-        censored: false,
-        ci_lower: Math.max(0, survival - 1.96 * se),
-        ci_upper: Math.min(1, survival + 1.96 * se)
+        events: d,
+        censoredCount: c,
+        ci_lower: Math.max(0, Math.min(ciLower, ciUpper)),
+        ci_upper: Math.min(1, Math.max(ciLower, ciUpper))
       });
-    } else {
-      steps.push({ time: p.time, survival, nRisk, censored: true, ci_lower: steps[steps.length - 1].ci_lower, ci_upper: steps[steps.length - 1].ci_upper });
+    } else if (c > 0) {
+      const last = steps[steps.length - 1];
+      steps.push({ time: t, survival, nRisk, events: 0, censoredCount: c, ci_lower: last.ci_lower, ci_upper: last.ci_upper });
     }
-    nRisk--;
-  });
+    nRisk -= tied.length;
+  }
 
   return steps;
 }
@@ -322,12 +341,51 @@ function logRankStats(group1, group2) {
   return { O1, E1, V, chi2, pval: chi2Pval1df(chi2) };
 }
 
+function coxBinaryHR(high, low) {
+  const rows = [
+    ...high.map(p => ({ ...p, x: 1 })),
+    ...low.map(p => ({ ...p, x: 0 }))
+  ].sort((a, b) => a.time - b.time);
+  let beta = 0;
+  for (let iter = 0; iter < 25; iter++) {
+    let score = 0;
+    let info = 0;
+    rows.filter(r => r.event).forEach(ev => {
+      const risk = rows.filter(r => r.time >= ev.time);
+      const weights = risk.map(r => Math.exp(beta * r.x));
+      const s0 = d3.sum(weights);
+      const s1 = d3.sum(risk.map((r, i) => r.x * weights[i]));
+      const mean = s1 / s0;
+      score += ev.x - mean;
+      info += mean * (1 - mean);
+    });
+    if (info <= 0) break;
+    const step = score / info;
+    beta += Math.max(-1, Math.min(1, step));
+    if (Math.abs(step) < 1e-6) break;
+  }
+  const info = rows.filter(r => r.event).reduce((acc, ev) => {
+    const risk = rows.filter(r => r.time >= ev.time);
+    const weights = risk.map(r => Math.exp(beta * r.x));
+    const s0 = d3.sum(weights);
+    const s1 = d3.sum(risk.map((r, i) => r.x * weights[i]));
+    const mean = s1 / s0;
+    return acc + mean * (1 - mean);
+  }, 0);
+  const se = info > 0 ? Math.sqrt(1 / info) : NaN;
+  return { hr: Math.exp(beta), lo: Math.exp(beta - 1.96 * se), hi: Math.exp(beta + 1.96 * se) };
+}
+
+function riskAt(pts, t) {
+  return pts.filter(p => p.time >= t).length;
+}
+
 // ─── Draw KM Curve ───
 function drawKM(container, opts) {
   const { groups, showCI, showCensor } = opts;
   const W = container.node().clientWidth || 660;
-  const H = W * 0.58;
-  const margin = { top: 15, right: 30, bottom: 50, left: 60 };
+  const H = W * 0.68;
+  const margin = { top: 15, right: 76, bottom: 88, left: 60 };
   const w = W - margin.left - margin.right;
   const h = H - margin.top - margin.bottom;
 
@@ -349,17 +407,17 @@ function drawKM(container, opts) {
 
   groups.forEach(grp => {
     const steps = grp.km;
-    const eventSteps = steps.filter(s => !s.censored);
+    const curveSteps = steps.filter(s => s.events > 0 || s.time === 0);
 
     // Confidence interval
-    if (showCI && eventSteps.length > 1) {
+    if (showCI && curveSteps.length > 1) {
       const ciArea = d3.area()
         .x(d => x(d.time))
         .y0(d => y(d.ci_lower))
         .y1(d => y(d.ci_upper))
         .curve(d3.curveStepAfter);
 
-      g.append('path').datum(eventSteps).attr('d', ciArea)
+      g.append('path').datum(curveSteps).attr('d', ciArea)
         .attr('fill', grp.color).attr('opacity', 0.1);
     }
 
@@ -369,23 +427,28 @@ function drawKM(container, opts) {
       .y(d => y(d.survival))
       .curve(d3.curveStepAfter);
 
-    g.append('path').datum(eventSteps).attr('d', stepLine)
+    g.append('path').datum(curveSteps).attr('d', stepLine)
       .attr('fill', 'none').attr('stroke', grp.color).attr('stroke-width', 2.5);
 
-    // Censor marks (Prominent tick marks)
     if (showCensor) {
-      const censored = steps.filter(s => s.censored);
+      const censored = steps.filter(s => s.censoredCount > 0);
       censored.forEach(c => {
-        g.append('line')
-          .attr('x1', x(c.time)).attr('x2', x(c.time))
-          .attr('y1', y(c.survival) - 4).attr('y2', y(c.survival) + 4)
-          .attr('stroke', grp.color).attr('stroke-width', 1.2);
+        for (let j = 0; j < c.censoredCount; j++) {
+          g.append('line')
+            .attr('x1', x(c.time) - 4).attr('x2', x(c.time) + 4)
+            .attr('y1', y(c.survival) - 4).attr('y2', y(c.survival) + 4)
+            .attr('stroke', grp.color).attr('stroke-width', 1.2);
+          g.append('line')
+            .attr('x1', x(c.time) - 4).attr('x2', x(c.time) + 4)
+            .attr('y1', y(c.survival) + 4).attr('y2', y(c.survival) - 4)
+            .attr('stroke', grp.color).attr('stroke-width', 1.2);
+        }
       });
     }
 
     // Label
     if (grp.label) {
-      const last = eventSteps[eventSteps.length - 1];
+      const last = curveSteps[curveSteps.length - 1];
       g.append('text')
         .attr('x', x(last.time) + 6)
         .attr('y', y(last.survival) + 4)
@@ -396,8 +459,8 @@ function drawKM(container, opts) {
 
   // Median survival lines
   groups.forEach(grp => {
-    const eventSteps = grp.km.filter(s => !s.censored);
-    const median = eventSteps.find(s => s.survival <= 0.5);
+    const curveSteps = grp.km.filter(s => s.events > 0 || s.time === 0);
+    const median = curveSteps.find(s => s.survival <= 0.5);
     if (median) {
       g.append('line').attr('x1', 0).attr('x2', x(median.time))
         .attr('y1', y(0.5)).attr('y2', y(0.5))
@@ -407,6 +470,21 @@ function drawKM(container, opts) {
         .attr('stroke', grp.color).attr('stroke-width', 1).attr('stroke-dasharray', '3,3');
     }
   });
+
+  const riskTimes = [0, 12, 24, 36, 48, 60];
+  const rt = g.append('g').attr('class', 'risk-table').attr('transform', `translate(0,${h + 58})`);
+  rt.append('text').attr('x', -50).attr('y', 0).attr('class', 'risk-label').text('At risk');
+  riskTimes.forEach(t => {
+    rt.append('text').attr('x', x(t)).attr('y', 0).attr('text-anchor', 'middle').text(t);
+  });
+  groups.forEach((grp, gi) => {
+    rt.append('text').attr('x', -8).attr('y', 16 + gi * 14).attr('text-anchor', 'end').attr('fill', grp.color).text(grp.shortLabel || grp.label);
+    riskTimes.forEach(t => {
+      rt.append('text')
+        .attr('x', x(t)).attr('y', 16 + gi * 14).attr('text-anchor', 'middle')
+        .text(riskAt(grp.points, t));
+    });
+  });
 }
 
 // ─── Figure 1: Basic KM ───
@@ -415,7 +493,7 @@ function drawKM(container, opts) {
   function render() {
     const km = kaplanMeier(patients);
     drawKM(container, {
-      groups: [{ km, color: 'var(--accent)', label: 'All patients' }],
+      groups: [{ km, points: patients, color: 'var(--accent)', label: 'All patients', shortLabel: 'All' }],
       showCI: true, showCensor: true
     });
   }
@@ -437,20 +515,22 @@ function drawKM(container, opts) {
 
     drawKM(container, {
       groups: [
-        { km: kmHigh, color: 'var(--c-up)', label: `High (n=${high.length})` },
-        { km: kmLow, color: 'var(--c-down)', label: `Low (n=${low.length})` }
+        { km: kmHigh, points: high, color: 'var(--c-up)', label: `High (n=${high.length})`, shortLabel: 'High' },
+        { km: kmLow, points: low, color: 'var(--c-down)', label: `Low (n=${low.length})`, shortLabel: 'Low' }
       ],
       showCI: state.showCI, showCensor: state.showCensor
     });
 
     const stats = logRankStats(high, low);
     const pval = stats.pval;
+    const hr = coxBinaryHR(high, low);
 
-    const medianHigh = kmHigh.filter(s => !s.censored).find(s => s.survival <= 0.5);
-    const medianLow = kmLow.filter(s => !s.censored).find(s => s.survival <= 0.5);
+    const medianHigh = kmHigh.filter(s => s.events > 0 || s.time === 0).find(s => s.survival <= 0.5);
+    const medianLow = kmLow.filter(s => s.events > 0 || s.time === 0).find(s => s.survival <= 0.5);
 
     d3.select('#stats-box').html(`
       <div class="stat-row"><span class="stat-label">Log-rank p (uncorrected, single split)</span><span class="stat-val">${pval < 0.001 ? pval.toExponential(2) : pval.toFixed(3)}</span></div>
+      <div class="stat-row"><span class="stat-label">Hazard ratio, high vs. low (Cox)</span><span class="stat-val">${hr.hr.toFixed(2)} (${hr.lo.toFixed(2)}-${hr.hi.toFixed(2)})</span></div>
       <div class="stat-row"><span class="stat-label">Median survival (high)</span><span class="stat-val" style="color:var(--c-up)">${medianHigh ? medianHigh.time.toFixed(1) + ' mo' : '> ' + maxTime + ' mo'}</span></div>
       <div class="stat-row"><span class="stat-label">Median survival (low)</span><span class="stat-val" style="color:var(--c-down)">${medianLow ? medianLow.time.toFixed(1) + ' mo' : '> ' + maxTime + ' mo'}</span></div>
     `);
@@ -499,8 +579,8 @@ function drawKM(container, opts) {
 
     drawKM(container, {
       groups: [
-        { km: kaplanMeier(high), color: 'var(--c-up)', label: `High ${state.selectedMultiGene}` },
-        { km: kaplanMeier(low), color: 'var(--c-down)', label: `Low ${state.selectedMultiGene}` }
+        { km: kaplanMeier(high), points: high, color: 'var(--c-up)', label: `High ${state.selectedMultiGene}`, shortLabel: 'High' },
+        { km: kaplanMeier(low), points: low, color: 'var(--c-down)', label: `Low ${state.selectedMultiGene}`, shortLabel: 'Low' }
       ],
       showCI: true, showCensor: true
     });

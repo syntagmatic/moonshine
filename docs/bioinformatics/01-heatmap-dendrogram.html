@@ -77,6 +77,8 @@ a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px
 .toggle-group .btn:first-child { border-radius: 4px 0 0 4px; }
 .toggle-group .btn:last-child { border-radius: 0 4px 4px 0; }
 .toggle-group .btn + .btn { border-left: none; }
+.control-note { flex-basis: 100%; font-size: 0.8rem; color: var(--text-2); }
+.figure-stat { margin-left: auto; font-variant-numeric: tabular-nums; font-size: 0.8rem; color: var(--text-2); }
 
 svg text { font-family: var(--heading-font); }
 .tip { position: fixed; pointer-events: none; background: var(--text); color: white; font-family: var(--heading-font); font-size: 0.75rem; padding: 0.3rem 0.55rem; border-radius: 4px; opacity: 0; transition: opacity 0.12s; z-index: 10; white-space: nowrap; }
@@ -105,32 +107,37 @@ svg text { font-family: var(--heading-font); }
     </p>
   </header>
 
-  <p>A gene expression experiment measures activity across thousands of genes and dozens of samples (tumor vs. healthy, treated vs. untreated, different patients). The result is a matrix: rows of genes, columns of samples, expression level in each cell.</p>
+  <p>A gene expression experiment measures activity across thousands of genes and dozens of samples: tumor vs. healthy, treated vs. untreated, or different patients. After normalization, the result is a matrix: rows of genes, columns of samples, one abundance estimate in each cell.</p>
 
-  <p>The matrix is too large to read as a table. A <strong>heatmap</strong> replaces numbers with colors so patterns become visible.</p>
+  <p>The matrix is too large to read as a table. A <strong>heatmap</strong> replaces numbers with colors so patterns become visible. In genomics, the most useful first view is often row-scaled: each gene is centered against its own average, so the color shows that gene's pattern across samples, not its absolute abundance.</p>
 
   <div class="figure figure-wide">
     <div class="controls">
       <div class="toggle-group" id="colorscale-toggle">
-        <button class="btn active" data-scale="blue-red">Blue-Red</button>
-        <button class="btn" data-scale="viridis">Viridis</button>
-        <button class="btn" data-scale="yellow-blue">Yellow-Blue</button>
+        <button class="btn active" data-scale="blue-red" aria-label="Use a blue to red color scale">Blue-Red</button>
+        <button class="btn" data-scale="viridis" aria-label="Use the viridis color scale">Viridis</button>
+        <button class="btn" data-scale="yellow-blue" aria-label="Use a yellow to blue color scale">Yellow-Blue</button>
       </div>
-      <span style="margin-left: auto; font-size: 0.8rem; color: var(--text-2);">Hover for expression values</span>
+      <div class="toggle-group" id="value-toggle" aria-label="Choose heatmap value transform">
+        <button class="btn active" data-mode="zscore">Row z-score</button>
+        <button class="btn" data-mode="abundance">Abundance</button>
+      </div>
+      <span class="figure-stat">Hover for values</span>
+      <div class="control-note" id="scale-note">Row z-score: red means above that gene's average, blue means below.</div>
     </div>
     <div id="heatmap-raw"></div>
     <p class="figure-caption">
-      <span class="figure-label">Figure 1.</span> A raw expression matrix. 
-      Without ordering, the data looks like noise. 
-      Red indicates high expression (upregulation), while blue indicates low expression (downregulation).
+      <span class="figure-label">Figure 1.</span> An unordered expression matrix.
+      Without a meaningful row or column order, even real structure can look like noise.
+      In the row-scaled view, color means relative expression within a gene, not up- or downregulation by itself.
     </p>
   </div>
 
   <h2>Clustering</h2>
 
-  <p>Hierarchical clustering measures how similar each pair of genes is and groups the most similar ones. The result is a tree called a <strong>dendrogram</strong> with similar expression patterns on nearby branches.</p>
+  <p>Hierarchical clustering starts with a distance between expression profiles, then repeatedly joins the closest genes or clusters. The result is a tree called a <strong>dendrogram</strong>. Nearby leaves have similar profiles under the chosen distance and linkage rule.</p>
 
-  <p>The same data can look like noise or like clear structure depending on the row and column ordering.</p>
+  <p>The same data can look like noise or like clear structure depending on the row and column ordering. Here the clustering uses row-scaled expression and an average-linkage correlation distance, a common choice when the pattern across samples matters more than a gene's absolute abundance.</p>
 
   <div class="figure figure-wide">
     <div class="controls">
@@ -148,22 +155,23 @@ svg text { font-family: var(--heading-font); }
 
   <h2>Reading the Dendrogram</h2>
 
-  <p>The tree on the left of the heatmap is a dendrogram. Each leaf is a gene. The height where two branches merge tells you how dissimilar they are. Low merges mean tight, coherent groups.</p>
+  <p>The tree on the left of the heatmap is a dendrogram. Each leaf is a gene. The height where two branches merge is the dissimilarity at which those groups were joined. Low merges mean tight groups; high merges mean groups that were kept separate until late in the agglomeration.</p>
 
   <div class="figure">
     <div class="controls">
       <label>Cut height: <input type="range" id="cut-slider" min="0" max="100" value="50"> <span id="cut-val" style="min-width: 2.5em; font-variant-numeric: tabular-nums;">50%</span></label>
+      <span id="cluster-count" class="figure-stat"></span>
     </div>
     <div id="dendro-interactive"></div>
     <p class="figure-caption">
       <span class="figure-label">Figure 3.</span> Slicing the dendrogram.
-      Lowering the cut height increases the number of clusters.
+      Lowering the cut height asks for tighter groups, so the same tree breaks into more clusters.
     </p>
   </div>
 
   <h2>Annotation</h2>
 
-  <p>Heatmaps are often paired with metadata: sample conditions, patient ages, gene functions. When clusters align with these annotations, the expression patterns are likely driven by the underlying biology rather than noise.</p>
+  <p>Heatmaps are often paired with metadata: sample conditions, patient ages, gene functions. When clusters align with these annotations, that is evidence that the expression pattern is related to the experimental design or biology. It is a cue for follow-up, not proof by itself.</p>
 
   <div class="figure">
     <div id="heatmap-annotated"></div>
@@ -186,6 +194,7 @@ svg text { font-family: var(--heading-font); }
 const state = {
   clustered: true,
   colorScale: 'blue-red',
+  valueMode: 'zscore',
   cutPct: 50
 };
 const dispatch = d3.dispatch('update', 'colorChange');
@@ -208,35 +217,68 @@ const data = d3.range(nGenes).map(g => d3.range(nSamples).map(s => {
   return Math.max(0, v);
 }));
 
+const rowStats = data.map(row => {
+  const mean = d3.mean(row);
+  const sd = d3.deviation(row) || 1;
+  return { mean, sd };
+});
+const zData = data.map((row, g) => row.map(v => (v - rowStats[g].mean) / rowStats[g].sd));
+
 const pathways = d3.range(nGenes).map(i => i < 10 ? 'Cell Proliferation' : i < 20 ? 'Immune Response' : 'Housekeeping');
 const pathwayColors = { 'Cell Proliferation': '#ef4444', 'Immune Response': '#2563eb', 'Housekeeping': '#94a3b8' };
 
 // --- Color Scales ---
-const extent = [d3.min(data, r => d3.min(r)), d3.max(data, r => d3.max(r))];
-const scales = {
-  'blue-red': d3.scaleSequential(d3.interpolateRdBu).domain([extent[1], extent[0]]),
-  'viridis': d3.scaleSequential(d3.interpolateViridis).domain(extent),
-  'yellow-blue': d3.scaleSequential(d3.interpolateYlGnBu).domain(extent)
-};
+const abundanceExtent = [d3.min(data, r => d3.min(r)), d3.max(data, r => d3.max(r))];
+const zExtent = [-2.5, 2.5];
+function scaleFor(mode, palette) {
+  const extent = mode === 'zscore' ? zExtent : abundanceExtent;
+  if (palette === 'viridis') return d3.scaleSequential(d3.interpolateViridis).domain(extent);
+  if (palette === 'yellow-blue') return d3.scaleSequential(d3.interpolateYlGnBu).domain(mode === 'zscore' ? [extent[1], extent[0]] : extent);
+  return d3.scaleSequential(d3.interpolateRdBu).domain([extent[1], extent[0]]);
+}
+function valueFor(g, s) { return state.valueMode === 'zscore' ? zData[g][s] : data[g][s]; }
+function colorFor(g, s) { return scaleFor(state.valueMode, state.colorScale)(valueFor(g, s)); }
+function valueLabel(g, s) {
+  const raw = data[g][s].toFixed(2);
+  const z = zData[g][s].toFixed(2);
+  return state.valueMode === 'zscore' ? `z: ${z}<br>abundance: ${raw}` : `abundance: ${raw}<br>z: ${z}`;
+}
 
 // --- Clustering ---
 function euclidean(a, b) { return Math.sqrt(d3.sum(a, (v, i) => Math.pow(v - b[i], 2))); }
-function hclust(vectors) {
+function correlationDistance(a, b) {
+  const ma = d3.mean(a), mb = d3.mean(b);
+  let num = 0, da = 0, db = 0;
+  for (let i = 0; i < a.length; i++) {
+    const xa = a[i] - ma, xb = b[i] - mb;
+    num += xa * xb; da += xa * xa; db += xb * xb;
+  }
+  const corr = da && db ? num / Math.sqrt(da * db) : 0;
+  return 1 - Math.max(-1, Math.min(1, corr));
+}
+function hclust(vectors, distanceFn = euclidean) {
   const n = vectors.length;
-  let clusters = vectors.map((v, i) => ({ id: i, members: [i], center: v.slice() }));
+  let clusters = vectors.map((v, i) => ({ id: i, members: [i] }));
   const merges = [];
+  function clusterDistance(a, b) {
+    let total = 0, count = 0;
+    a.members.forEach(i => b.members.forEach(j => {
+      total += distanceFn(vectors[i], vectors[j]);
+      count += 1;
+    }));
+    return total / count;
+  }
   while (clusters.length > 1) {
     let minDist = Infinity, mi, mj;
     for (let i = 0; i < clusters.length; i++) {
       for (let j = i + 1; j < clusters.length; j++) {
-        const d = euclidean(clusters[i].center, clusters[j].center);
+        const d = clusterDistance(clusters[i], clusters[j]);
         if (d < minDist) { minDist = d; mi = i; mj = j; }
       }
     }
     const a = clusters[mi], b = clusters[mj];
     const members = [...a.members, ...b.members];
-    const center = a.center.map((v, k) => (v * a.members.length + b.center[k] * b.members.length) / members.length);
-    const node = { id: n + merges.length, members, center, merge: { left: a, right: b, height: minDist } };
+    const node = { id: n + merges.length, members, merge: { left: a, right: b, height: minDist } };
     merges.push(node);
     clusters.splice(mj, 1); clusters.splice(mi, 1); clusters.push(node);
   }
@@ -245,8 +287,8 @@ function hclust(vectors) {
 
 function getOrder(node) { return node.merge ? [...getOrder(node.merge.left), ...getOrder(node.merge.right)] : node.members; }
 
-const rowClust = hclust(data);
-const colClust = hclust(d3.range(nSamples).map(s => d3.range(nGenes).map(g => data[g][s])));
+const rowClust = hclust(zData, correlationDistance);
+const colClust = hclust(d3.range(nSamples).map(s => d3.range(nGenes).map(g => zData[g][s])), correlationDistance);
 const rowOrder = getOrder(rowClust.root);
 const colOrder = getOrder(colClust.root);
 
@@ -254,23 +296,41 @@ const tip = d3.select('#tip');
 
 // --- Shared Viz Utilities ---
 function drawDendrogram(node, x, y, w, h, maxH, orient, g, order, cellSize) {
-  if (!node.merge) return;
   const hScale = d3.scaleLinear().domain([0, maxH]).range([0, orient === 'left' ? w : h]);
-  const nodeDist = hScale(node.merge.height);
-  const leftMid = d3.mean(node.merge.left.members, l => (orient === 'left' ? y : x) + order.indexOf(l) * cellSize + cellSize/2);
-  const rightMid = d3.mean(node.merge.right.members, r => (orient === 'left' ? y : x) + order.indexOf(r) * cellSize + cellSize/2);
-
-  if (orient === 'left') {
-    const nx = x + w - nodeDist;
-    g.append('path').attr('d', `M${x+w},${leftMid} H${nx} V${rightMid} H${x+w}`).attr('fill', 'none').attr('stroke', '#cbd5e1');
-    drawDendrogram(node.merge.left, x, y, w, h, maxH, orient, g, order, cellSize);
-    drawDendrogram(node.merge.right, x, y, w, h, maxH, orient, g, order, cellSize);
-  } else {
-    const ny = y + h - nodeDist;
-    g.append('path').attr('d', `M${leftMid},${y+h} V${ny} H${rightMid} V${y+h}`).attr('fill', 'none').attr('stroke', '#cbd5e1');
-    drawDendrogram(node.merge.left, x, y, w, h, maxH, orient, g, order, cellSize);
-    drawDendrogram(node.merge.right, x, y, w, h, maxH, orient, g, order, cellSize);
+  function mergeHeight(d) { return d.merge ? d.merge.height : 0; }
+  function draw(d) {
+    if (!d.merge) {
+      const pos = order.indexOf(d.members[0]) * cellSize + cellSize / 2;
+      return orient === 'left'
+        ? { x: x + w, y: y + pos, height: 0 }
+        : { x: x + pos, y: y + h, height: 0 };
+    }
+    const left = draw(d.merge.left);
+    const right = draw(d.merge.right);
+    if (orient === 'left') {
+      const nx = x + w - hScale(d.merge.height);
+      const lx = x + w - hScale(mergeHeight(d.merge.left));
+      const rx = x + w - hScale(mergeHeight(d.merge.right));
+      g.append('path')
+        .attr('d', `M${lx},${left.y} H${nx} V${right.y} H${rx}`)
+        .attr('fill', 'none').attr('stroke', '#cbd5e1');
+      return { x: nx, y: (left.y + right.y) / 2, height: d.merge.height };
+    }
+    const ny = y + h - hScale(d.merge.height);
+    const ly = y + h - hScale(mergeHeight(d.merge.left));
+    const ry = y + h - hScale(mergeHeight(d.merge.right));
+    g.append('path')
+      .attr('d', `M${left.x},${ly} V${ny} H${right.x} V${ry}`)
+      .attr('fill', 'none').attr('stroke', '#cbd5e1');
+    return { x: (left.x + right.x) / 2, y: ny, height: d.merge.height };
   }
+  draw(node);
+}
+
+function updateScaleNote() {
+  d3.select('#scale-note').text(state.valueMode === 'zscore'
+    ? "Row z-score: red means above that gene's average, blue means below."
+    : 'Abundance: color shows the normalized expression value before row-centering.');
 }
 
 // --- Figure 1: Raw Heatmap ---
@@ -283,7 +343,7 @@ function drawDendrogram(node, x, y, w, h, maxH, orient, g, order, cellSize) {
     const width = margin.left + nSamples * cellW + margin.right;
     const height = margin.top + nGenes * cellH + margin.bottom;
 
-    const svg = container.append('svg').attr('viewBox', `0 0 ${width} ${height}`).style('width', '100%').style('height', 'auto');
+    const svg = container.append('svg').attr('viewBox', `0 0 ${width} ${height}`).attr('role', 'img').attr('aria-label', 'Unordered gene expression heatmap').style('width', '100%').style('height', 'auto');
     const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
 
     g.selectAll('.col-label').data(d3.range(nSamples)).enter().append('text')
@@ -300,9 +360,9 @@ function drawDendrogram(node, x, y, w, h, maxH, orient, g, order, cellSize) {
 
     g.selectAll('rect').data(cells).enter().append('rect')
       .attr('x', d => d.s * cellW).attr('y', d => d.g * cellH).attr('width', cellW-1).attr('height', cellH-1)
-      .attr('fill', d => scales[state.colorScale](d.v))
+      .attr('fill', d => colorFor(d.g, d.s))
       .on('mouseenter', (e, d) => {
-        tip.style('opacity', 1).html(`<strong>${geneNames[d.g]}</strong><br>${sampleNames[d.s]}: ${d.v.toFixed(2)}`);
+        tip.style('opacity', 1).html(`<strong>${geneNames[d.g]}</strong><br>${sampleNames[d.s]}<br>${valueLabel(d.g, d.s)}`);
       })
       .on('mousemove', e => tip.style('left', (e.clientX + 15) + 'px').style('top', (e.clientY - 10) + 'px'))
       .on('mouseleave', () => tip.style('opacity', 0));
@@ -322,7 +382,7 @@ function drawDendrogram(node, x, y, w, h, maxH, orient, g, order, cellSize) {
     const width = margin.left + nSamples * cellW + margin.right;
     const height = margin.top + nGenes * cellH + margin.bottom;
 
-    const svg = container.append('svg').attr('viewBox', `0 0 ${width} ${height}`).style('width', '100%').style('height', 'auto');
+    const svg = container.append('svg').attr('viewBox', `0 0 ${width} ${height}`).attr('role', 'img').attr('aria-label', 'Gene expression heatmap with optional hierarchical clustering').style('width', '100%').style('height', 'auto');
     const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
 
     const curRows = state.clustered ? rowOrder : d3.range(nGenes);
@@ -340,7 +400,12 @@ function drawDendrogram(node, x, y, w, h, maxH, orient, g, order, cellSize) {
     curRows.forEach((gi, i) => {
       curCols.forEach((si, j) => {
         g.append('rect').attr('x', j*cellW).attr('y', i*cellH).attr('width', cellW-1).attr('height', cellH-1)
-          .attr('fill', scales[state.colorScale](data[gi][si]));
+          .attr('fill', colorFor(gi, si))
+          .on('mouseenter', (e) => {
+            tip.style('opacity', 1).html(`<strong>${geneNames[gi]}</strong><br>${sampleNames[si]}<br>${valueLabel(gi, si)}`);
+          })
+          .on('mousemove', e => tip.style('left', (e.clientX + 15) + 'px').style('top', (e.clientY - 10) + 'px'))
+          .on('mouseleave', () => tip.style('opacity', 0));
       });
     });
 
@@ -362,7 +427,7 @@ function drawDendrogram(node, x, y, w, h, maxH, orient, g, order, cellSize) {
     const width = 660, height = 300, margin = { top: 20, right: 40, bottom: 50, left: 40 };
     const w = width - margin.left - margin.right, h = height - margin.top - margin.bottom;
 
-    const svg = container.append('svg').attr('viewBox', `0 0 ${width} ${height}`).style('width', '100%').style('height', 'auto');
+    const svg = container.append('svg').attr('viewBox', `0 0 ${width} ${height}`).attr('role', 'img').attr('aria-label', 'Dendrogram cut by adjustable height').style('width', '100%').style('height', 'auto');
     const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
 
     const x = d3.scaleLinear().domain([0, nGenes - 1]).range([0, w]);
@@ -370,19 +435,39 @@ function drawDendrogram(node, x, y, w, h, maxH, orient, g, order, cellSize) {
 
     function drawNode(node) {
       if (!node.merge) return;
-      const lx = x(rowOrder.indexOf(node.merge.left.members[0])), rx = x(rowOrder.indexOf(node.merge.right.members[0])); // Simple proxy for mid
       const leftMid = d3.mean(node.merge.left.members, m => x(rowOrder.indexOf(m)));
       const rightMid = d3.mean(node.merge.right.members, m => x(rowOrder.indexOf(m)));
+      const leftBase = node.merge.left.merge ? y(node.merge.left.merge.height) : h;
+      const rightBase = node.merge.right.merge ? y(node.merge.right.merge.height) : h;
       const ny = y(node.merge.height);
-      g.append('path').attr('d', `M${leftMid},${h} V${ny} H${rightMid} V${h}`).attr('fill', 'none').attr('stroke', '#64748b').attr('stroke-width', 1.5);
+      g.append('path').attr('d', `M${leftMid},${leftBase} V${ny} H${rightMid} V${rightBase}`).attr('fill', 'none').attr('stroke', '#64748b').attr('stroke-width', 1.5);
       drawNode(node.merge.left); drawNode(node.merge.right);
     }
     drawNode(rowClust.root);
 
-    const cutY = y(rowClust.maxH * (state.cutPct / 100));
+    const cutHeight = rowClust.maxH * (state.cutPct / 100);
+    const cutY = y(cutHeight);
     g.append('line').attr('x1', -10).attr('x2', w+10).attr('y1', cutY).attr('y2', cutY).attr('stroke', 'var(--accent)').attr('stroke-dasharray', '4,4').attr('stroke-width', 2);
-    
-    // Cluster coloring logic... (omitted for brevity in Establish Phase, but fully implemented in final)
+
+    function clustersAtCut(node) {
+      if (!node.merge) return [node.members];
+      if (node.merge.height <= cutHeight) return [node.members];
+      return [...clustersAtCut(node.merge.left), ...clustersAtCut(node.merge.right)];
+    }
+    const clusters = clustersAtCut(rowClust.root)
+      .map(members => members.slice().sort((a, b) => rowOrder.indexOf(a) - rowOrder.indexOf(b)))
+      .sort((a, b) => rowOrder.indexOf(a[0]) - rowOrder.indexOf(b[0]));
+    const palette = d3.schemeTableau10;
+    clusters.forEach((members, i) => {
+      const xs = members.map(m => x(rowOrder.indexOf(m)));
+      const x0 = d3.min(xs), x1 = d3.max(xs);
+      g.append('rect')
+        .attr('x', x0 - 4).attr('y', h + 16)
+        .attr('width', Math.max(8, x1 - x0 + 8)).attr('height', 10)
+        .attr('rx', 2).attr('fill', palette[i % palette.length]).attr('opacity', 0.85);
+    });
+    g.append('text').attr('x', 0).attr('y', h + 42).style('font-size', '11px').style('fill', 'var(--text-2)').text('Genes grouped by this cut');
+    d3.select('#cluster-count').text(`${clusters.length} clusters`);
   }
   render();
   dispatch.on('update.dendro', render);
@@ -398,7 +483,7 @@ function drawDendrogram(node, x, y, w, h, maxH, orient, g, order, cellSize) {
     const width = margin.left + nSamples * cellW + margin.right;
     const height = margin.top + nGenes * cellH + margin.bottom + 40;
 
-    const svg = container.append('svg').attr('viewBox', `0 0 ${width} ${height}`).style('width', '100%').style('height', 'auto');
+    const svg = container.append('svg').attr('viewBox', `0 0 ${width} ${height}`).attr('role', 'img').attr('aria-label', 'Annotated gene expression heatmap with sample and pathway metadata').style('width', '100%').style('height', 'auto');
     const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
 
     rowOrder.forEach((gi, i) => {
@@ -406,8 +491,29 @@ function drawDendrogram(node, x, y, w, h, maxH, orient, g, order, cellSize) {
       g.append('text').attr('x', -aw-10).attr('y', i*cellH + cellH/2).attr('dy', '0.35em').attr('text-anchor', 'end').style('font-size', '8px').style('fill', 'var(--text-2)').text(geneNames[gi]);
       colOrder.forEach((si, j) => {
         if(i === 0) g.append('rect').attr('x', j*cellW).attr('y', -16).attr('width', cellW-1).attr('height', 8).attr('fill', conditions[si] === 'treated' ? 'var(--c-up)' : 'var(--c-down)').attr('rx', 2);
-        g.append('rect').attr('x', j*cellW).attr('y', i*cellH).attr('width', cellW-1).attr('height', cellH-1).attr('fill', scales[state.colorScale](data[gi][si]));
+        g.append('rect').attr('x', j*cellW).attr('y', i*cellH).attr('width', cellW-1).attr('height', cellH-1).attr('fill', colorFor(gi, si))
+          .on('mouseenter', (e) => {
+            tip.style('opacity', 1).html(`<strong>${geneNames[gi]}</strong><br>${sampleNames[si]}<br>${valueLabel(gi, si)}`);
+          })
+          .on('mousemove', e => tip.style('left', (e.clientX + 15) + 'px').style('top', (e.clientY - 10) + 'px'))
+          .on('mouseleave', () => tip.style('opacity', 0));
       });
+    });
+
+    const legend = g.append('g').attr('transform', `translate(0,${nGenes * cellH + 24})`);
+    const items = [
+      { label: 'control sample', color: 'var(--c-down)' },
+      { label: 'treated sample', color: 'var(--c-up)' },
+      { label: 'cell proliferation', color: pathwayColors['Cell Proliferation'] },
+      { label: 'immune response', color: pathwayColors['Immune Response'] },
+      { label: 'housekeeping', color: pathwayColors.Housekeeping }
+    ];
+    let offset = 0;
+    items.forEach(item => {
+      const group = legend.append('g').attr('transform', `translate(${offset},0)`);
+      group.append('rect').attr('width', 10).attr('height', 10).attr('rx', 2).attr('fill', item.color);
+      group.append('text').attr('x', 14).attr('y', 9).style('font-size', '10px').style('fill', 'var(--text-2)').text(item.label);
+      offset += item.label.length * 5.5 + 26;
     });
   }
   render();
@@ -419,6 +525,14 @@ d3.selectAll('#colorscale-toggle .btn').on('click', function() {
   d3.selectAll('#colorscale-toggle .btn').classed('active', false);
   d3.select(this).classed('active', true);
   state.colorScale = this.dataset.scale;
+  dispatch.call('colorChange');
+});
+
+d3.selectAll('#value-toggle .btn').on('click', function() {
+  d3.selectAll('#value-toggle .btn').classed('active', false);
+  d3.select(this).classed('active', true);
+  state.valueMode = this.dataset.mode;
+  updateScaleNote();
   dispatch.call('colorChange');
 });
 
@@ -441,6 +555,8 @@ d3.select('#cut-slider').on('input', function() {
   d3.select('#cut-val').text(state.cutPct + '%');
   dispatch.call('update');
 });
+
+updateScaleNote();
 
 </script>
 </body>

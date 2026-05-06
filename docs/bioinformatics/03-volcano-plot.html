@@ -81,6 +81,7 @@ svg text { font-family: var(--heading-font); }
 .gene-table { font-family: var(--heading-font); font-size: 0.8rem; width: 100%; border-collapse: collapse; margin-top: 0.75rem; }
 .gene-table th { text-align: left; padding: 0.3rem 0.5rem; border-bottom: 2px solid var(--border); font-weight: 600; color: var(--text-2); }
 .gene-table td { padding: 0.25rem 0.5rem; border-bottom: 1px solid var(--border); }
+.figure-stat { margin-left: auto; font-variant-numeric: tabular-nums; font-size: 0.8rem; color: var(--text-2); }
 
 @media (max-width: 640px) { .figure-wide { margin-left: 0; margin-right: 0; } h1 { font-size: 1.75rem; } }
 @media (prefers-reduced-motion: reduce) {
@@ -102,42 +103,42 @@ svg text { font-family: var(--heading-font); }
     <a href="index.html" style="font-family: var(--heading-font); font-size: 0.85rem; text-decoration: none; color: var(--text-2); display: inline-block; margin-bottom: 1rem;">&larr; Bioinformatics Series</a>
     <h1>Volcano Plot</h1>
     <p style="font-family: var(--heading-font); font-size: 1.15rem; color: var(--text-2); max-width: 600px;">
-      Combining effect size and statistical significance to reveal the most influential genes in a biological system.
+      Combining effect size and multiple-testing evidence to identify genes worth following up.
     </p>
   </header>
 
-  <p>The volcano plot summarizes a differential expression analysis. The <a href="02-ma-plot.html">MA plot</a> shows intensity vs. change; the volcano plot adds statistical confidence, so a gene is judged on both effect size and reliability.</p>
+  <p>The volcano plot summarizes a differential expression analysis. The <a href="02-ma-plot.html">MA plot</a> shows abundance vs. change; the volcano plot puts change next to statistical evidence, so a gene is judged on both effect size and reliability.</p>
 
   <p>Two axes:</p>
   <ul style="margin: 0 0 1rem 1.5rem;">
-    <li><strong>Horizontal:</strong> \(\log_2(\text{fold change})\) — magnitude and direction of change.</li>
-    <li><strong>Vertical:</strong> \(-\log_{10}(p\text{-value})\) — higher means more significant.</li>
+    <li><strong>Horizontal:</strong> \(\log_2(\text{fold change})\), the magnitude and direction of change.</li>
+    <li><strong>Vertical:</strong> \(-\log_{10}(\text{adjusted }p\text{-value})\), often called an FDR or \(q\)-value. Higher means stronger evidence after accounting for many tests.</li>
   </ul>
 
   <p>Most genes cluster at the base; interesting ones rise into the upper corners, hence the volcano shape.</p>
 
   <h2>Significance</h2>
 
-  <p>A candidate must usually pass two filters: a minimum fold change and a maximum p-value. The pair eliminates both noisy low-intensity changes and statistically significant but trivially small differences.</p>
+  <p>A candidate usually has to pass two filters: a minimum fold change and a maximum adjusted p-value. The pair filters out both noisy large changes and tiny changes that become statistically detectable only because the experiment is precise.</p>
 
   <div class="figure figure-wide">
     <div class="controls">
       <label>FC threshold: <input type="range" id="fc-thresh" min="0.3" max="3" value="1" step="0.1"> <span id="fc-val" style="min-width: 2.5em; font-variant-numeric: tabular-nums;">1.0</span></label>
-      <label>p-value: <input type="range" id="pval-thresh" min="1" max="10" value="2" step="0.5"> <span id="pval-val" style="min-width: 3em; font-variant-numeric: tabular-nums;">0.01</span></label>
-      <span id="sig-count" style="margin-left: auto; font-variant-numeric: tabular-nums;"></span>
+      <label>FDR q: <input type="range" id="pval-thresh" min="1" max="10" value="2" step="0.5"> <span id="pval-val" style="min-width: 3em; font-variant-numeric: tabular-nums;">0.01</span></label>
+      <span id="sig-count" class="figure-stat"></span>
     </div>
     <div id="volcano-main"></div>
     <p class="figure-caption">
       <span class="figure-label">Figure 1.</span> Volcano plot of 800 simulated genes.
-      Upper-right: significantly upregulated; upper-left: significantly downregulated.
+      Upper-right: up in treated and FDR-significant; upper-left: down in treated and FDR-significant.
     </p>
   </div>
 
-  <p>High fold change without significance usually means measurement noise. A very low p-value with tiny fold change may be statistically real but biologically irrelevant.</p>
+  <p>High fold change without FDR support often means there is too much uncertainty. A very small adjusted p-value with tiny fold change may be statistically real but still not biologically meaningful for the question at hand.</p>
 
   <h2>Comparing filters</h2>
 
-  <p>Each filter alone is insufficient: fold change alone captures noisy outliers; p-value alone may include thousands of genes with negligible expression changes.</p>
+  <p>Each filter alone is insufficient: fold change alone captures noisy outliers; FDR alone may include genes with negligible expression changes.</p>
 
   <div class="figure figure-wide">
     <div id="compare-panels"></div>
@@ -149,7 +150,7 @@ svg text { font-family: var(--heading-font); }
 
   <h2>Top hits</h2>
 
-  <p>The most significant genes are usually labeled directly. They become the first candidates for follow-up experiments.</p>
+  <p>Labels are most helpful when they are selective. Here the labeled genes are ranked among those that pass both filters, so the labels point to candidates rather than merely the smallest adjusted p-values.</p>
 
   <div class="figure figure-wide">
     <div class="controls">
@@ -183,6 +184,15 @@ const dispatch = d3.dispatch('update');
 function mulberry32(s) { return () => { s |= 0; s = s + 0x6D2B79F5 | 0; let t = Math.imul(s ^ s >>> 15, 1 | s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 const rng = mulberry32(789);
 function rnorm(mu, sigma) { const u1 = rng(), u2 = rng(); return mu + sigma * Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2); }
+function bhAdjust(rows) {
+  const sorted = rows.slice().sort((a, b) => a.pval - b.pval);
+  let prev = 1;
+  for (let i = sorted.length - 1; i >= 0; i--) {
+    const q = Math.min(prev, sorted[i].pval * sorted.length / (i + 1));
+    sorted[i].qval = Math.min(1, q);
+    prev = sorted[i].qval;
+  }
+}
 
 const nGenes = 800;
 const prefixes = ['BRCA','TP53','MYC','EGFR','KRAS','PIK3','AKT','VEGF','PTEN','CDK','RB','STAT','JAK','MAPK','BRAF','ERBB','NOTCH','WNT','FGF','IGF','HIF','MDM','BCL','BAX','CASP','TNF','IL','TGFB','SMAD','FOXP'];
@@ -195,14 +205,23 @@ const genes = d3.range(nGenes).map(i => {
   else if (i < 130) { logFC = rnorm(-0.8, 0.4); pval = Math.pow(10, rnorm(-2, 1)); }
   else { logFC = rnorm(0, 0.4); pval = Math.pow(10, rnorm(-0.8, 0.8)); }
   pval = Math.max(1e-12, Math.min(1, pval));
-  return { name, logFC, pval, negLogP: -Math.log10(pval) };
+  return { name, logFC, pval };
+});
+bhAdjust(genes);
+genes.forEach(d => {
+  d.negLogQ = -Math.log10(d.qval);
 });
 
 const tip = d3.select('#tip');
+function passesThresholds(d, fcT, qT) {
+  return d.negLogQ >= (qT || 0) && Math.abs(d.logFC) >= (fcT || 0);
+}
 
 // --- Shared Render Logic ---
 function drawVolcano(g, data, x, y, w, h, config) {
   const { fcT, pT, interactive } = config;
+  const hasFC = fcT != null;
+  const hasQ = pT != null;
   
   g.append('line').attr('x1', x(0)).attr('x2', x(0)).attr('y1', 0).attr('y2', h).attr('stroke', '#e2e2e8');
   
@@ -215,22 +234,22 @@ function drawVolcano(g, data, x, y, w, h, config) {
   }
 
   g.selectAll('.dot').data(data).enter().append('circle')
-    .attr('cx', d => x(Math.max(-5, Math.min(5, d.logFC)))).attr('cy', d => y(Math.min(14, d.negLogP))).attr('r', interactive ? 3 : 2)
+    .attr('cx', d => x(Math.max(-5, Math.min(5, d.logFC)))).attr('cy', d => y(Math.min(14, d.negLogQ))).attr('r', interactive ? 3 : 2)
     .attr('fill', d => {
-      const sig = d.negLogP >= (pT || 0);
-      const big = Math.abs(d.logFC) >= (fcT || 0);
-      if (sig && big) return d.logFC > 0 ? 'var(--c-up)' : 'var(--c-down)';
-      if (sig) return '#f39c12';
+      const sig = !hasQ || d.negLogQ >= pT;
+      const big = !hasFC || Math.abs(d.logFC) >= fcT;
+      if (hasFC && big && sig) return d.logFC > 0 ? 'var(--c-up)' : 'var(--c-down)';
+      if (hasQ && sig) return '#f39c12';
       return 'var(--c-neutral)';
     })
     .attr('opacity', d => {
-      const sig = d.negLogP >= (pT || 0);
-      const big = Math.abs(d.logFC) >= (fcT || 0);
-      return (sig && big) ? 0.8 : 0.3;
+      const sig = !hasQ || d.negLogQ >= pT;
+      const big = !hasFC || Math.abs(d.logFC) >= fcT;
+      return ((hasFC && big && sig) || (!hasFC && hasQ && sig)) ? 0.8 : 0.3;
     })
     .on('mouseenter', (e, d) => {
       if (!interactive) return;
-      tip.style('opacity', 1).html(`<strong>${d.name}</strong><br>FC: ${d.logFC.toFixed(2)}<br>p: ${d.pval.toExponential(2)}`);
+      tip.style('opacity', 1).html(`<strong>${d.name}</strong><br>log₂ FC: ${d.logFC.toFixed(2)}<br>p: ${d.pval.toExponential(2)}<br>FDR q: ${d.qval.toExponential(2)}`);
     })
     .on('mousemove', e => tip.style('left', (e.clientX + 15) + 'px').style('top', (e.clientY - 10) + 'px'))
     .on('mouseleave', () => tip.style('opacity', 0));
@@ -246,7 +265,7 @@ function drawVolcano(g, data, x, y, w, h, config) {
     const w = width - margin.left - margin.right;
     const h = height - margin.top - margin.bottom;
 
-    const svg = container.append('svg').attr('viewBox', `0 0 ${width} ${height}`).style('width', '100%').style('height', 'auto');
+    const svg = container.append('svg').attr('viewBox', `0 0 ${width} ${height}`).attr('role', 'img').attr('aria-label', 'Volcano plot with fold-change and FDR thresholds').style('width', '100%').style('height', 'auto');
     const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
 
     const x = d3.scaleLinear().domain([-5, 5]).range([0, w]);
@@ -255,13 +274,13 @@ function drawVolcano(g, data, x, y, w, h, config) {
     g.append('g').attr('transform', `translate(0,${h})`).call(d3.axisBottom(x)).attr('font-family', null);
     g.append('g').call(d3.axisLeft(y)).attr('font-family', null);
 
-    g.append('text').attr('x', w/2).attr('y', h + 40).attr('text-anchor', 'middle').style('font-size', '12px').style('fill', 'var(--text-2)').text('Log Fold Change');
-    g.append('text').attr('transform', 'rotate(-90)').attr('x', -h/2).attr('y', -45).attr('text-anchor', 'middle').style('font-size', '12px').style('fill', 'var(--text-2)').text('-Log10 p-value');
+    g.append('text').attr('x', w/2).attr('y', h + 40).attr('text-anchor', 'middle').style('font-size', '12px').style('fill', 'var(--text-2)').text('Log2 fold change');
+    g.append('text').attr('transform', 'rotate(-90)').attr('x', -h/2).attr('y', -45).attr('text-anchor', 'middle').style('font-size', '12px').style('fill', 'var(--text-2)').text('-Log10 FDR q-value');
 
     drawVolcano(g, genes, x, y, w, h, { fcT: state.fcThresh, pT: state.pThresh, interactive: true });
 
-    const upSig = genes.filter(d => d.negLogP >= state.pThresh && d.logFC >= state.fcThresh).length;
-    const downSig = genes.filter(d => d.negLogP >= state.pThresh && d.logFC <= -state.fcThresh).length;
+    const upSig = genes.filter(d => passesThresholds(d, state.fcThresh, state.pThresh) && d.logFC > 0).length;
+    const downSig = genes.filter(d => passesThresholds(d, state.fcThresh, state.pThresh) && d.logFC < 0).length;
     d3.select('#sig-count').html(`<span style="color:var(--c-up)">${upSig} up</span> &middot; <span style="color:var(--c-down)">${downSig} down</span>`);
   }
   render();
@@ -281,7 +300,7 @@ function drawVolcano(g, data, x, y, w, h, config) {
 
     const panels = [
       { title: 'FC only', fcT: 1, pT: null },
-      { title: 'p-value only', fcT: null, pT: 2 },
+      { title: 'FDR only', fcT: null, pT: 2 },
       { title: 'Both', fcT: 1, pT: 2 }
     ];
 
@@ -315,7 +334,7 @@ function drawVolcano(g, data, x, y, w, h, config) {
     const w = width - margin.left - margin.right;
     const h = height - margin.top - margin.bottom;
 
-    const svg = container.append('svg').attr('viewBox', `0 0 ${width} ${height}`).style('width', '100%').style('height', 'auto');
+    const svg = container.append('svg').attr('viewBox', `0 0 ${width} ${height}`).attr('role', 'img').attr('aria-label', 'Volcano plot with labeled genes that pass both filters').style('width', '100%').style('height', 'auto');
     const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
 
     const x = d3.scaleLinear().domain([-5, 5]).range([0, w]);
@@ -323,24 +342,28 @@ function drawVolcano(g, data, x, y, w, h, config) {
 
     g.append('g').attr('transform', `translate(0,${h})`).call(d3.axisBottom(x)).attr('font-family', null);
     g.append('g').call(d3.axisLeft(y)).attr('font-family', null);
+    g.append('text').attr('x', w/2).attr('y', h + 40).attr('text-anchor', 'middle').style('font-size', '12px').style('fill', 'var(--text-2)').text('Log2 fold change');
+    g.append('text').attr('transform', 'rotate(-90)').attr('x', -h/2).attr('y', -45).attr('text-anchor', 'middle').style('font-size', '12px').style('fill', 'var(--text-2)').text('-Log10 FDR q-value');
 
     drawVolcano(g, genes, x, y, w, h, { fcT: 1, pT: 2, interactive: true });
 
-    const ranked = genes.slice().sort((a, b) => (Math.abs(b.logFC) * b.negLogP) - (Math.abs(a.logFC) * a.negLogP));
+    const ranked = genes.filter(d => passesThresholds(d, 1, 2))
+      .sort((a, b) => (Math.abs(b.logFC) * b.negLogQ) - (Math.abs(a.logFC) * a.negLogQ));
     const top = ranked.slice(0, state.topN);
 
     const labels = g.append('g');
     top.forEach(d => {
-      const cx = x(Math.max(-5, Math.min(5, d.logFC))), cy = y(Math.min(14, d.negLogP));
+      const cx = x(Math.max(-5, Math.min(5, d.logFC))), cy = y(Math.min(14, d.negLogQ));
       labels.append('text').attr('x', cx + (d.logFC > 0 ? 6 : -6)).attr('y', cy + 3)
         .attr('text-anchor', d.logFC > 0 ? 'start' : 'end').style('font-size', '9px').style('font-weight', '500').text(d.name);
     });
 
-    let html = '<table class="gene-table"><thead><tr><th>Gene</th><th>log₂ FC</th><th>p-value</th></tr></thead><tbody>';
+    let html = '<table class="gene-table"><thead><tr><th>Gene</th><th>log₂ FC</th><th>FDR q</th><th>p-value</th></tr></thead><tbody>';
     top.forEach(d => {
-      html += `<tr><td>${d.name}</td><td>${d.logFC.toFixed(2)}</td><td>${d.pval.toExponential(2)}</td></tr>`;
+      html += `<tr><td>${d.name}</td><td>${d.logFC.toFixed(2)}</td><td>${d.qval.toExponential(2)}</td><td>${d.pval.toExponential(2)}</td></tr>`;
     });
     html += '</tbody></table>';
+    if (!top.length) html += '<div style="font-family: var(--heading-font); font-size: 0.8rem; color: var(--text-2); margin-top: 0.5rem;">No genes pass both filters.</div>';
     d3.select('#top-genes-table').html(html);
   }
   render();
