@@ -5,10 +5,10 @@
 //
 // Basis convention for Octonions: e0, e1, e2, e3, e4, e5, e6, e7
 // e0 is the real unit.
-// Fano Plane (1,2,3) cycle: e1*e2 = e3, etc. (cyclic convention from Baez,
-// "The Octonions" Bull. AMS 2002). The doubling formula below is the Baez
-// sign variant, which is the specific Cayley-Dickson formulation under
-// which the cyclic Fano triples on e_1..e_7 give +e_k rather than -e_k.
+// The generic Cayley-Dickson helper below uses the recursive binary basis
+// ordering, so e1*e2 = e3 in the 8D stage. The public OCT.oct product later
+// uses Baez's Fano-plane basis convention, where directed lines such as
+// (1,2,4) give +e_k cyclically. Keep these conventions separate.
 
 (function (global) {
   'use strict';
@@ -43,13 +43,10 @@
   }
 
   // ───────────────────────────────────────────── Cayley-Dickson ─────
-  // Baez convention: (a, b)(c, d) = (ac - conj(d)*b, d*a + b*conj(c))
-  //
-  // This is the specific Cayley-Dickson sign convention under which the
-  // cyclic Fano triples on e_1..e_7 listed in explainer #04 give +e_k
-  // along the cyclic direction (rather than -e_k). Other common choices
-  // in the literature differ by an anti-isomorphism — they produce an
-  // isomorphic algebra but flip basis-product signs.
+  // Cayley-Dickson convention: (a, b)(c, d) = (ac - conj(d)*b, d*a + b*conj(c)).
+  // This recursive basis is useful for the doubling-machine narrative. The
+  // octonion multiplication table exposed as OCT.oct.mul is the direct Baez
+  // Fano table below, not this binary-basis table.
 
   function cdMul(p1, p2) {
     // Base case: Reals
