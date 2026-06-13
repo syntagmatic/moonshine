@@ -57,6 +57,17 @@ Colours are keyed to recurring mathematical types, not per-diagram ad hoc names.
 - [x] **Phase 2.7** — explainers 13–14 (tangles, Penrose notation)
 - [ ] **Phase 3** — audit pass, cross-series links, SPH standard sweep
 
+## Interactivity deepening (2026-06-10)
+
+A series-wide audit classified every explainer's best interactive as BUILDER / EXPLORER / VIEWER against the spine's "build-it-yourself, not just view" bar. The four weakest (VIEWER-class, plan promised builders) were upgraded:
+
+- **04 commutative diagrams** — Build mode added (Explore | Build toggle): click to place objects, drag a node's outer ring to another node to create morphisms, arrow popover for rename/style-cycle/delete, declared-equality relations feeding the existing path checker (green ✓ / amber "you decide"), two goal challenges. Equality rewriting is one substitution deep.
+- **06 knot diagrams** — Draw mode added: click points, close to a spline, self-intersections become crossings with alternating over/under; live Kauffman bracket (state sum, ≤12 crossings) and writhe-normalised X(D) with a knotted/unknot verdict on every diagram. Validated against trefoil, figure-eight, Hopf, 5₁. Also fixed two pre-existing preset bugs: the Hopf circles never actually intersected (showed a split unlink) and the trefoil preset was secretly descending (an unknot).
+- **08 Dynkin diagrams** — "Why the list stops" builder added: click to add nodes, cycle bonds single/double/triple, live finite/affine/indefinite verdict via the symmetrized Gram matrix (eigenvalues + determinant shown), component naming (products supported), near-miss challenge presets (D̃₄, Ã₂, E₈, E₈+1). Arrow direction not tracked, so B/C are named jointly.
+- **18 spectral sequences** — "Write your own chart" sandbox added: editable E₂ page over ℚ (click/shift-click dimensions), clickable d_r arrows defaulting to zero, page-turning with d²=0-consistent ranks, E∞ antidiagonal readout, three presets including a genuine choice point with two different E∞ outcomes. Cohomological convention (flagged in prose; main figure is homological).
+
+Remaining VIEWER/weak-EXPLORER articles by the same audit, in rough priority order: 10 (dessins: drag-only), 14 (Penrose: preset + cosmetic drag), 07 (string diagrams: cosmetic drag, plan promised builder), 03 (Cayley: cosets toggle promised but missing), 01 (Hasse: builder + lattice checker promised but missing), 16 (Coxeter rank-3 preset-only).
+
 ## Explainer list
 
 Seven explainers. Each entry includes the mathematical content, the key objects, and the intended interactive.

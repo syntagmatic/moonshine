@@ -70,6 +70,15 @@ svg text { font-family: var(--heading-font); }
 .stat { padding: 0.5rem 0.8rem; background: var(--bg); border-radius: 4px; border: 1px solid var(--border); }
 .stat .val { font-family: var(--mono-font); font-size: 1.15rem; font-weight: 600; color: var(--accent); }
 .stat .lbl { font-size: 0.75rem; color: var(--text-2); margin-top: 0.15rem; }
+.invariant-panel { margin: 0.75rem 0 0; padding: 0.6rem 0.9rem; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; font-family: var(--heading-font); overflow-x: auto; }
+.invariant-row { display: flex; align-items: baseline; gap: 0.75rem; margin: 0.3rem 0; font-size: 0.95rem; }
+.invariant-row .inv-lbl { font-size: 0.72rem; color: var(--text-2); min-width: 6.5rem; flex-shrink: 0; }
+.verdict { font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600; }
+.verdict.nontrivial { color: var(--c-structure); }
+.verdict.trivial { color: var(--text-2); font-weight: 400; }
+.draw-status { font-family: var(--heading-font); font-size: 0.8rem; color: var(--text-2); align-self: center; margin-left: 0.25rem; }
+.draw-status.warn { color: #b45309; font-weight: 600; }
+#knot-svg.drawing { cursor: crosshair; }
 .closing-list { margin: 1.5rem 0; padding-left: 1.5rem; }
 .closing-list li { margin-bottom: 0.5rem; }
 .r-move-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-top: 0.75rem; }
@@ -90,13 +99,24 @@ svg text { font-family: var(--heading-font); }
   <p class="subtitle">Part 6 of 23. Crossings, invariants, and the Reidemeister moves that tell us when two tangles are secretly the same knot.</p>
 </div>
 
-<p><strong>Play:</strong> Explore interactive knot diagrams. Click any crossing to toggle which strand goes over and which goes under. Watch how the crossing number and writhe update dynamically. Try to unknot the trefoil by changing its crossings.</p>
+<p><strong>Play:</strong> Pick a preset and click any crossing to toggle which strand goes over and which goes under &mdash; the crossing number, writhe, and Kauffman bracket below the diagram update as you do. Or press <em>Draw your own</em>, click out any loop you like, and close it: every self-intersection becomes a crossing and the same invariants are computed on the spot. Try to unknot the trefoil by flipping its crossings; the bracket will tell you the moment you succeed.</p>
 
 <div class="figure">
   <div class="btn-row" id="knot-presets"></div>
+  <div class="btn-row" id="draw-controls" style="display:none;">
+    <button id="close-curve-btn">Close curve</button>
+    <button id="clear-curve-btn">Start over</button>
+    <span class="draw-status" id="draw-status"></span>
+  </div>
   <svg id="knot-svg" width="100%" viewBox="0 0 440 340"></svg>
   <div class="stats-panel" id="knot-stats"></div>
+  <div class="invariant-panel" id="knot-invariant"></div>
+  <div class="figure-caption"><span class="figure-label">Knot workspace.</span> Dashed amber circles are clickable crossings: the solid strand passes over, the pale stub passes under, and the small +/&minus; is the crossing's sign. The panel below shows the Kauffman bracket &lang;D&rang; and its writhe-corrected form X(D), recomputed after every change.</div>
 </div>
+
+<p><strong>Drawing a knot:</strong> In draw mode each click drops a point and a smooth curve threads through them. Click near your first point (or double-click, or press <em>Close curve</em>) to close the loop. Every place the curve crosses itself becomes a crossing, and over/under is assigned <em>alternately</em>: walking along the strand you go over, under, over, under. This default is generous to your scribble. By a century-old conjecture of Tait &mdash; proved in the 1980s using exactly the polynomial computed below &mdash; an alternating diagram with no removable kinks is as knotted as it looks, so almost anything you draw is a genuine knot, and the bracket will say so.</p>
+
+<p><strong>Unknotting by click:</strong> Now flip crossings so the strand always goes over on its <em>first</em> visit to each crossing. A diagram like that is called <em>descending</em>, and a descending diagram is always the unknot, however tangled it looks. Watch the verdict line: the moment your diagram becomes descending, X(D) collapses to 1, the unknot's value. You have untied your scribble without moving a single strand.</p>
 
 <h2>The Core Concept</h2>
 
@@ -104,7 +124,9 @@ svg text { font-family: var(--heading-font); }
 
 <p><strong>Knots versus links:</strong> A <strong>knot</strong> is a single closed loop embedded in 3-space. A <strong>link</strong> is a collection of such loops, possibly intertwined.</p>
 
-<p><strong>Crossings and writhe:</strong> At each crossing, one strand passes over and one passes under. Each crossing has a <strong>sign</strong> (+1 or &minus;1). The <strong>crossing number</strong> is the minimum number of crossings over all possible diagrams, and the <strong>writhe</strong> is the sum of all crossing signs.</p>
+<p><strong>Crossings and writhe:</strong> At each crossing, one strand passes over and one passes under. Each crossing has a <strong>sign</strong> (+1 or &minus;1). The <strong>crossing number</strong> is the minimum number of crossings over all possible diagrams, and the <strong>writhe</strong> is the sum of all crossing signs:</p>
+
+<div id="katex-writhe"></div>
 
 <p><strong>Reidemeister moves:</strong> Reidemeister's theorem says two diagrams represent the same knot if and only if one can be obtained from the other by a sequence of three local moves:</p>
 
@@ -114,7 +136,15 @@ svg text { font-family: var(--heading-font); }
 
 <p><strong>R1 (Twist):</strong> A single loop can be added or removed. <strong>R2 (Poke):</strong> Two strands can be pushed across each other. <strong>R3 (Slide):</strong> A strand can slide over or under a crossing.</p>
 
-<p><strong>The Kauffman bracket:</strong> A more powerful invariant computed from the diagram. At each crossing, sum over all 2<sup>n</sup> possible smoothings. A normalised version gives the <strong>Jones polynomial</strong>.</p>
+<p><strong>The Kauffman bracket:</strong> A more powerful invariant computed from the diagram. Each crossing can be smoothed in two ways, called A and B; choosing one smoothing at every crossing gives a <em>state</em> s, and a diagram with n crossings has 2<sup>n</sup> states. Writing &sigma;(s) for the number of A-smoothings minus B-smoothings and |s| for the number of loops left after all crossings are smoothed, the bracket is the sum</p>
+
+<div id="katex-bracket"></div>
+
+<p>This is exactly the sum the workspace evaluates, state by state, each time you close a curve or flip a crossing. A normalised version gives the <strong>Jones polynomial</strong>.</p>
+
+<div class="insight">
+  <p>An <strong>invariant</strong> is a quantity that survives all three Reidemeister moves. The writhe is not quite one: an R1 twist changes it by &plusmn;1. The bracket fails R1 in exactly the same way, picking up a factor of &minus;A<sup>&plusmn;3</sup> per twist. The trick is to play the two failures against each other: X(D) = (&minus;A&sup3;)<sup>&minus;w</sup>&sdot;&lang;D&rang; survives all three moves. Substituting A = t<sup>&minus;1/4</sup> turns it into the Jones polynomial &mdash; an invariant you can compute by hand, or by click, in the workspace above.</p>
+</div>
 
 <h2>Concept Summary</h2>
 
@@ -124,13 +154,9 @@ svg text { font-family: var(--heading-font); }
   <li><strong>The crossing number:</strong> A coarse but fundamental measure of knot complexity.</li>
   <li><strong>The writhe:</strong> Counts signed crossings and feeds into more powerful invariants.</li>
   <li><strong>The Kauffman bracket:</strong> Turns crossing data into a polynomial, connecting the visual diagram to algebra.</li>
+  <li><strong>The normalised bracket X(D):</strong> Cancelling the writhe's R1 misbehaviour against the bracket's turns it into a genuine invariant &mdash; the Jones polynomial up to a change of variable.</li>
   <li><strong>Recognition:</strong> The core problem of determining when two different-looking diagrams encode the same knot.</li>
 </ul>
-
-<div style="display:none;">
-  <div id="katex-writhe"></div>
-  <div id="katex-bracket"></div>
-</div>
 
 <nav class="nav-footer">
   <a href="05-braid-diagrams.html">&larr; 05 &middot; Braid Diagrams</a>
@@ -153,72 +179,71 @@ svg text { font-family: var(--heading-font); }
     document.getElementById('katex-bracket'), { displayMode: true }
   );
 
-  // ── Parametric curves for preset knots ──
+  /* ═══════════════════════════════════════════════════════════════════
+     Invariant core. Validated in node against known values:
+       unknot <D> = 1, X = 1;  R1 kink (limacon) X = 1 either way up;
+       alternating trefoil X = A^4 + A^12 - A^16 (mirror of the usual
+       A^-4 + A^-12 - A^-16, i.e. the Jones polynomial at t = A^-4);
+       descending trefoil X = 1;  figure-eight X = A^8 - A^4 + 1 - A^-4 + A^-8;
+       Hopf link <D> = -A^4 - A^-4.
+     ═══════════════════════════════════════════════════════════════════ */
+  /* CORE-START */
 
-  function trefoilCurve(t) {
-    var x = Math.sin(t) + 2 * Math.sin(2 * t);
-    var y = Math.cos(t) - 2 * Math.cos(2 * t);
-    return [x, y];
+  // Proper intersection of segment p1→p2 with p3→p4, else null.
+  // s, u in [0,1) half-open, so a hit at a shared sample vertex counts once.
+  function segIntersect(p1, p2, p3, p4) {
+    var rx = p2.x - p1.x, ry = p2.y - p1.y;
+    var qx = p4.x - p3.x, qy = p4.y - p3.y;
+    var denom = rx * qy - ry * qx;
+    if (Math.abs(denom) < 1e-12) return null;
+    var dx = p3.x - p1.x, dy = p3.y - p1.y;
+    var s = (dx * qy - dy * qx) / denom;
+    var u = (dx * ry - dy * rx) / denom;
+    if (s < 0 || s >= 1 || u < 0 || u >= 1) return null;
+    return { x: p1.x + s * rx, y: p1.y + s * ry, s: s, u: u };
   }
 
-  function figureEightCurve(t) {
-    var x = (2 + Math.cos(2 * t)) * Math.cos(3 * t);
-    var y = (2 + Math.cos(2 * t)) * Math.sin(3 * t);
-    return [x, y];
-  }
-
-  function unknotCurve(t) {
-    return [Math.cos(t), Math.sin(t)];
-  }
-
-  function hopfComponent(t, comp) {
-    // Two interlocking circles offset in 3D, projected
-    var r = 1, offset = 0.65;
-    if (comp === 0) {
-      return [r * Math.cos(t) - offset, r * Math.sin(t)];
-    }
-    // Second circle tilted and offset
-    return [r * Math.cos(t) * 0.6 + offset, r * Math.sin(t)];
-  }
-
-  // ── Build smooth point arrays ──
-
-  function sampleCurve(fn, n, scale, cx, cy) {
-    var pts = [];
-    for (var i = 0; i < n; i++) {
-      var t = (i / n) * 2 * Math.PI;
-      var p = fn(t);
-      pts.push({ x: p[0] * scale + cx, y: p[1] * scale + cy, t: t });
-    }
-    return pts;
-  }
-
-  // ── Crossing detection for parametric knots ──
-  // Find self-intersection points of a closed curve (sampled)
-  function findCrossings(pts, threshold) {
-    threshold = threshold || 12;
+  // All self/mutual intersections of sampled polylines.
+  // comps: array of point arrays; closed curves unless `open` is true.
+  // Returns crossings { x, y, p0: {comp,t}, p1: {comp,t}, d0, d1, grazing }
+  // with t the fractional sample parameter and d the unit tangent there.
+  // Hits within mergeRadius of an earlier hit are dropped (sampling dupes).
+  function findIntersections(comps, mergeRadius, open) {
+    mergeRadius = mergeRadius || 5;
     var crossings = [];
-    var n = pts.length;
-    for (var i = 0; i < n; i++) {
-      for (var j = i + Math.floor(n * 0.1); j < n; j++) {
-        if (Math.abs(j - i) < n * 0.08 || Math.abs(j - i) > n * 0.92) continue;
-        var dx = pts[i].x - pts[j].x;
-        var dy = pts[i].y - pts[j].y;
-        var dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist < threshold) {
-          // Check not too close to an existing crossing
-          var tooClose = crossings.some(function (c) {
-            return Math.abs(c.i - i) < n * 0.06 || Math.abs(c.j - j) < n * 0.06 ||
-                   Math.abs(c.i - j) < n * 0.06 || Math.abs(c.j - i) < n * 0.06;
-          });
-          if (!tooClose) {
-            crossings.push({
-              i: i, j: j,
-              x: (pts[i].x + pts[j].x) / 2,
-              y: (pts[i].y + pts[j].y) / 2,
-              sign: 1, // default; will be set per preset
-              overIdx: i // which segment index goes over
-            });
+    function segDir(pts, i) {
+      var a = pts[i], b = pts[(i + 1) % pts.length];
+      var dx = b.x - a.x, dy = b.y - a.y;
+      var len = Math.sqrt(dx * dx + dy * dy) || 1;
+      return { x: dx / len, y: dy / len };
+    }
+    function addHit(ca, ia, cb, ib, hit) {
+      for (var k = 0; k < crossings.length; k++) {
+        var dx = crossings[k].x - hit.x, dy = crossings[k].y - hit.y;
+        if (Math.sqrt(dx * dx + dy * dy) < mergeRadius) return;
+      }
+      var d0 = segDir(comps[ca], ia), d1 = segDir(comps[cb], ib);
+      var sinAng = Math.abs(d0.x * d1.y - d0.y * d1.x);
+      crossings.push({
+        x: hit.x, y: hit.y,
+        p0: { comp: ca, t: ia + hit.s },
+        p1: { comp: cb, t: ib + hit.u },
+        d0: d0, d1: d1,
+        grazing: sinAng < 0.18 // within ~10 degrees of tangency
+      });
+    }
+    for (var ca = 0; ca < comps.length; ca++) {
+      for (var cb = ca; cb < comps.length; cb++) {
+        var A = comps[ca], B = comps[cb];
+        var iMax = open ? A.length - 1 : A.length;
+        var jMax = open ? B.length - 1 : B.length;
+        for (var i = 0; i < iMax; i++) {
+          var a1 = A[i], a2 = A[(i + 1) % A.length];
+          var jStart = (ca === cb) ? i + 2 : 0;
+          for (var j = jStart; j < jMax; j++) {
+            if (!open && ca === cb && i === 0 && j === B.length - 1) continue;
+            var hit = segIntersect(a1, a2, B[j], B[(j + 1) % B.length]);
+            if (hit) addHit(ca, i, cb, j, hit);
           }
         }
       }
@@ -226,208 +251,468 @@ svg text { font-family: var(--heading-font); }
     return crossings;
   }
 
+  // Crossing sign from the tangent frame of (over strand, under strand).
+  // Screen coordinates (y down); paired with the smoothing convention below
+  // so that X(D) is genuinely Reidemeister-invariant.
+  function recomputeSign(c) {
+    var dO = c.over === 0 ? c.d0 : c.d1;
+    var dU = c.over === 0 ? c.d1 : c.d0;
+    c.sign = (dO.x * dU.y - dO.y * dU.x) > 0 ? -1 : 1;
+  }
+
+  // Build the diagram as a 4-valent graph: visit order, strand-end wiring,
+  // and the cyclic order of the four ends at each crossing. Assigns
+  // over/under ALTERNATING along the curve where possible (second visits
+  // are forced by the first), then signs. Mutates the crossing objects.
+  function buildDiagram(comps, crossings) {
+    var m = crossings.length;
+    var visitsByComp = comps.map(function () { return []; });
+    crossings.forEach(function (c, k) {
+      c.over = -1;
+      visitsByComp[c.p0.comp].push({ k: k, pass: 0, t: c.p0.t });
+      visitsByComp[c.p1.comp].push({ k: k, pass: 1, t: c.p1.t });
+    });
+    visitsByComp.forEach(function (vs) { vs.sort(function (a, b) { return a.t - b.t; }); });
+
+    var wantOver = true;
+    visitsByComp.forEach(function (vs) {
+      vs.forEach(function (v) {
+        var c = crossings[v.k];
+        var isOver;
+        if (c.over === -1) { c.over = wantOver ? v.pass : 1 - v.pass; isOver = wantOver; }
+        else isOver = (c.over === v.pass);
+        wantOver = !isOver;
+      });
+    });
+    crossings.forEach(recomputeSign);
+
+    // Strand-end ids: crossing k, pass p → in-end 4k+2p, out-end 4k+2p+1.
+    // edgePartner wires each end to the end its arc leads to.
+    var edgePartner = new Array(4 * m);
+    var freeLoops = 0;
+    visitsByComp.forEach(function (vs) {
+      if (!vs.length) { freeLoops++; return; }
+      for (var r = 0; r < vs.length; r++) {
+        var a = vs[r], b = vs[(r + 1) % vs.length];
+        edgePartner[4 * a.k + 2 * a.pass + 1] = 4 * b.k + 2 * b.pass;
+        edgePartner[4 * b.k + 2 * b.pass] = 4 * a.k + 2 * a.pass + 1;
+      }
+    });
+
+    // Cyclic order of the four ends around each crossing: pass p enters
+    // from -dp and leaves along +dp; sort the four by angle.
+    crossings.forEach(function (c, k) {
+      var ends = [
+        { id: 4 * k + 0, ang: Math.atan2(-c.d0.y, -c.d0.x) },
+        { id: 4 * k + 1, ang: Math.atan2(c.d0.y, c.d0.x) },
+        { id: 4 * k + 2, ang: Math.atan2(-c.d1.y, -c.d1.x) },
+        { id: 4 * k + 3, ang: Math.atan2(c.d1.y, c.d1.x) }
+      ];
+      ends.sort(function (a, b) { return a.ang - b.ang; });
+      c.endsCyclic = ends.map(function (e) { return e.id; });
+    });
+
+    return { crossings: crossings, edgePartner: edgePartner,
+             freeLoops: freeLoops, nComponents: comps.length };
+  }
+
+  // ── Laurent polynomials in A, as {exponent: coefficient} ──
+  function polyAdd(p, q) {
+    for (var e in q) {
+      var v = (p[e] || 0) + q[e];
+      if (v === 0) delete p[e]; else p[e] = v;
+    }
+    return p;
+  }
+  function polyShift(p, dExp, scale) {
+    var out = {};
+    for (var e in p) out[Number(e) + dExp] = p[e] * scale;
+    return out;
+  }
+  function polyEquals(p, q) {
+    var e;
+    for (e in p) if ((q[e] || 0) !== p[e]) return false;
+    for (e in q) if ((p[e] || 0) !== q[e]) return false;
+    return true;
+  }
+  // delta^k where delta = -A^2 - A^-2 (the value of one extra loop)
+  function deltaPower(k) {
+    var p = { 0: 1 };
+    for (var i = 0; i < k; i++) {
+      var nxt = {};
+      polyAdd(nxt, polyShift(p, 2, -1));
+      polyAdd(nxt, polyShift(p, -2, -1));
+      p = nxt;
+    }
+    return p;
+  }
+
+  // Kauffman bracket: state sum over all 2^m smoothings.
+  // The A-smoothing joins each end of the OVER pass to its neighbour one
+  // step clockwise on screen (counterclockwise in maths coordinates,
+  // because the y-axis points down); the B-smoothing is the other pairing.
+  function kauffmanBracket(diag) {
+    var m = diag.crossings.length;
+    var nEnds = 4 * m;
+    var pairA = [], pairB = [];
+    diag.crossings.forEach(function (c, k) {
+      var cyc = c.endsCyclic;
+      var overPos = [];
+      for (var i = 0; i < 4; i++) {
+        if ((((cyc[i] - 4 * k) >> 1) & 1) === c.over) overPos.push(i);
+      }
+      pairA.push([cyc[overPos[0]], cyc[(overPos[0] + 1) % 4],
+                  cyc[overPos[1]], cyc[(overPos[1] + 1) % 4]]);
+      pairB.push([cyc[overPos[0]], cyc[(overPos[0] + 3) % 4],
+                  cyc[overPos[1]], cyc[(overPos[1] + 3) % 4]]);
+    });
+    var deltaPow = [];
+    for (var d = 0; d <= m + diag.freeLoops + 1; d++) deltaPow.push(deltaPower(d));
+    var arcPartner = new Array(nEnds);
+    var seen = new Array(nEnds);
+    var bracket = {};
+    for (var s = 0; s < (1 << m); s++) {
+      var aCount = 0, k2, e;
+      for (k2 = 0; k2 < m; k2++) {
+        var pr;
+        if ((s >> k2) & 1) { pr = pairA[k2]; aCount++; } else { pr = pairB[k2]; }
+        arcPartner[pr[0]] = pr[1]; arcPartner[pr[1]] = pr[0];
+        arcPartner[pr[2]] = pr[3]; arcPartner[pr[3]] = pr[2];
+      }
+      var loops = diag.freeLoops;
+      for (e = 0; e < nEnds; e++) seen[e] = false;
+      for (e = 0; e < nEnds; e++) {
+        if (seen[e]) continue;
+        loops++;
+        var cur = e;
+        while (!seen[cur]) {
+          seen[cur] = true;
+          var mate = arcPartner[cur];
+          seen[mate] = true;
+          cur = diag.edgePartner[mate];
+        }
+      }
+      polyAdd(bracket, polyShift(deltaPow[loops - 1], 2 * aCount - m, 1));
+    }
+    return bracket;
+  }
+
+  // X(D) = (-A^3)^(-w) <D>
+  function normalizedBracket(bracket, w) {
+    return polyShift(bracket, -3 * w, (w % 2 === 0) ? 1 : -1);
+  }
+
+  // Closed/open uniform Catmull-Rom spline through control points.
+  function catmullRomSample(ctrl, closed, subdiv) {
+    var n = ctrl.length;
+    if (n < 2) return ctrl.slice();
+    var pts = [];
+    var segs = closed ? n : n - 1;
+    for (var i = 0; i < segs; i++) {
+      var p0 = ctrl[closed ? (i - 1 + n) % n : Math.max(i - 1, 0)];
+      var p1 = ctrl[i];
+      var p2 = ctrl[(i + 1) % n];
+      var p3 = ctrl[closed ? (i + 2) % n : Math.min(i + 2, n - 1)];
+      for (var j = 0; j < subdiv; j++) {
+        var t = j / subdiv, t2 = t * t, t3 = t2 * t;
+        pts.push({
+          x: 0.5 * (2 * p1.x + (-p0.x + p2.x) * t +
+               (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * t2 +
+               (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * t3),
+          y: 0.5 * (2 * p1.y + (-p0.y + p2.y) * t +
+               (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * t2 +
+               (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * t3)
+        });
+      }
+    }
+    if (!closed) pts.push({ x: ctrl[n - 1].x, y: ctrl[n - 1].y });
+    return pts;
+  }
+
+  /* CORE-END */
+
   // ── State ──
   var W = 440, H = 340;
+  var MAX_CROSSINGS = 12;
   var svg = d3.select('#knot-svg');
-  var currentKnot = null;
-  var currentCrossings = [];
-  var currentPts = [];
-  var currentPts2 = null; // for Hopf link second component
+  var mode = 'preset';        // 'preset' | 'draw'
+  var comps = [];             // closed sampled curves of the current diagram
+  var crossings = [];
+  var diagram = null;
+  var drawPoints = [];        // control points while drawing
+  var drawClosed = false;
+  var compColors = ['var(--c-dual-a)', '#2563eb'];
+  var underHintColors = ['var(--c-dual-b)', '#93b4f0'];
 
-  // ── Knot presets ──
+  // ── Parametric presets ──
+  function sampleParam(fn, n, scale, cx, cy) {
+    var pts = [];
+    for (var i = 0; i < n; i++) {
+      var t = (i / n) * 2 * Math.PI;
+      var p = fn(t);
+      pts.push({ x: p[0] * scale + cx, y: p[1] * scale + cy });
+    }
+    return pts;
+  }
+
+  function presetComponents(key) {
+    var cx = W / 2, cy = H / 2;
+    if (key === 'unknot') {
+      return [sampleParam(function (t) { return [Math.cos(t), Math.sin(t)]; }, 200, 80, cx, cy)];
+    }
+    if (key === 'trefoil') {
+      return [sampleParam(function (t) {
+        return [Math.sin(t) + 2 * Math.sin(2 * t), Math.cos(t) - 2 * Math.cos(2 * t)];
+      }, 400, 40, cx, cy)];
+    }
+    if (key === 'figureEight') {
+      return [sampleParam(function (t) {
+        return [(2 + Math.cos(2 * t)) * Math.cos(3 * t), (2 + Math.cos(2 * t)) * Math.sin(3 * t)];
+      }, 600, 35, cx, cy)];
+    }
+    // Hopf link: two genuinely overlapping circles
+    return [
+      sampleParam(function (t) { return [Math.cos(t), Math.sin(t)]; }, 200, 62, cx - 40, cy),
+      sampleParam(function (t) { return [Math.cos(t), Math.sin(t)]; }, 200, 62, cx + 40, cy)
+    ];
+  }
+
+  // ── Buttons ──
   var presets = [
     { name: 'Unknot', key: 'unknot' },
     { name: 'Trefoil', key: 'trefoil' },
     { name: 'Figure-eight', key: 'figureEight' },
-    { name: 'Hopf link', key: 'hopfLink' }
+    { name: 'Hopf link', key: 'hopfLink' },
+    { name: 'Draw your own', key: 'draw' }
   ];
 
-  // ── Preset buttons ──
   var btnRow = d3.select('#knot-presets');
   btnRow.selectAll('button').data(presets).enter().append('button')
     .text(function (d) { return d.name; })
     .on('click', function (ev, d) {
       btnRow.selectAll('button').classed('active', false);
       d3.select(this).classed('active', true);
-      loadPreset(d.key);
+      if (d.key === 'draw') enterDrawMode();
+      else loadPreset(d.key);
     });
 
   function loadPreset(key) {
-    currentPts2 = null;
-    var cx = W / 2, cy = H / 2;
-    if (key === 'unknot') {
-      currentPts = sampleCurve(unknotCurve, 80, 80, cx, cy);
-      currentCrossings = [];
-    } else if (key === 'trefoil') {
-      currentPts = sampleCurve(trefoilCurve, 120, 40, cx, cy);
-      currentCrossings = findCrossings(currentPts, 14);
-      // Set signs for trefoil: all positive
-      currentCrossings.forEach(function (c) { c.sign = 1; });
-    } else if (key === 'figureEight') {
-      currentPts = sampleCurve(figureEightCurve, 160, 35, cx, cy);
-      currentCrossings = findCrossings(currentPts, 14);
-      // Alternate signs for figure-eight
-      currentCrossings.forEach(function (c, i) { c.sign = (i % 2 === 0) ? 1 : -1; });
-    } else if (key === 'hopfLink') {
-      currentPts = sampleCurve(function (t) { return hopfComponent(t, 0); }, 80, 70, cx - 20, cy);
-      currentPts2 = sampleCurve(function (t) { return hopfComponent(t, 1); }, 80, 70, cx + 20, cy);
-      // Two crossings for Hopf link
-      currentCrossings = [];
-      // Find approximate intersection between the two circles
-      for (var i = 0; i < currentPts.length; i++) {
-        for (var j = 0; j < currentPts2.length; j++) {
-          var dx = currentPts[i].x - currentPts2[j].x;
-          var dy = currentPts[i].y - currentPts2[j].y;
-          if (Math.sqrt(dx * dx + dy * dy) < 12) {
-            var tooClose = currentCrossings.some(function (c) {
-              return Math.abs(c.i - i) < 15 || Math.abs(c.j - j) < 15;
-            });
-            if (!tooClose) {
-              currentCrossings.push({
-                i: i, j: j,
-                x: (currentPts[i].x + currentPts2[j].x) / 2,
-                y: (currentPts[i].y + currentPts2[j].y) / 2,
-                sign: 1, overIdx: i, isLink: true
-              });
-            }
-          }
-        }
-      }
-    }
-    currentKnot = key;
-    draw();
+    mode = 'preset';
+    drawPoints = [];
+    drawClosed = false;
+    d3.select('#draw-controls').style('display', 'none');
+    svg.classed('drawing', false);
+    comps = presetComponents(key);
+    finalizeDiagram();
   }
 
-  // ── Drawing ──
+  function finalizeDiagram() {
+    crossings = findIntersections(comps, 5);
+    diagram = buildDiagram(comps, crossings);
+    draw();
+    scheduleInvariant();
+  }
 
-  function buildPath(pts) {
-    if (pts.length < 2) return '';
-    var line = d3.line().x(function (d) { return d.x; }).y(function (d) { return d.y; }).curve(d3.curveBasisClosed);
+  // ── Draw mode ──
+  function setStatus(msg, warn) {
+    d3.select('#draw-status').text(msg || '').classed('warn', !!warn);
+  }
+
+  function enterDrawMode() {
+    mode = 'draw';
+    drawPoints = [];
+    drawClosed = false;
+    comps = [];
+    crossings = [];
+    diagram = null;
+    d3.select('#draw-controls').style('display', 'flex');
+    svg.classed('drawing', true);
+    setStatus('Click anywhere on the canvas to start.');
+    renderPreview(null);
+    updateStats();
+    updateInvariant();
+  }
+
+  function handleDrawClick(ev) {
+    if (mode !== 'draw' || drawClosed) return;
+    var p = d3.pointer(ev, svg.node());
+    var pt = { x: p[0], y: p[1] };
+    if (drawPoints.length >= 3 && dist(pt, drawPoints[0]) < 14) { closeCurve(); return; }
+    // Ignore clicks on top of existing points (also swallows double-click dupes)
+    for (var i = 0; i < drawPoints.length; i++) {
+      if (dist(pt, drawPoints[i]) < 8) return;
+    }
+    var trial = drawPoints.concat([pt]);
+    if (trial.length >= 3) {
+      var sampled = catmullRomSample(trial, false, 12);
+      var hits = findIntersections([sampled], 5, true);
+      if (hits.some(function (c) { return c.grazing; })) {
+        setStatus('That point makes the curve graze itself almost tangentially — aim for a clearer crossing.', true);
+        return;
+      }
+      if (hits.length > MAX_CROSSINGS) {
+        setStatus('That would exceed ' + MAX_CROSSINGS + ' crossings — the bracket sums 2ⁿ states, so the workspace stops there.', true);
+        return;
+      }
+    }
+    drawPoints.push(pt);
+    setStatus(drawPoints.length < 3
+      ? 'Keep clicking — three points minimum.'
+      : 'Click near the first point, double-click, or press “Close curve” to finish.');
+    renderPreview(null);
+  }
+
+  function closeCurve() {
+    if (mode !== 'draw' || drawClosed) return;
+    if (drawPoints.length < 3) { setStatus('Three points minimum before closing.', true); return; }
+    var pts = catmullRomSample(drawPoints, true, 16);
+    var hits = findIntersections([pts], 5);
+    if (hits.some(function (c) { return c.grazing; })) {
+      setStatus('The closing stretch grazes another strand almost tangentially — add a point to steer it, or start over.', true);
+      return;
+    }
+    drawClosed = true;
+    svg.classed('drawing', false);
+    comps = [pts];
+    finalizeDiagram();
+    setStatus(crossings.length === 0
+      ? 'Closed: no self-crossings — a round unknot at heart.'
+      : 'Closed with ' + crossings.length + ' crossing' + (crossings.length === 1 ? '' : 's') +
+        ', alternating over/under. Click any crossing to flip it.');
+  }
+
+  function renderPreview(cursor) {
+    svg.selectAll('*').remove();
+    var g = svg.append('g');
+    var ctrl = (cursor && drawPoints.length) ? drawPoints.concat([cursor]) : drawPoints.slice();
+    if (ctrl.length >= 2) {
+      var pts = catmullRomSample(ctrl, false, 12);
+      g.append('path')
+        .attr('d', pathOf(pts, false))
+        .attr('fill', 'none')
+        .attr('stroke', 'var(--c-dual-a)')
+        .attr('stroke-width', 2.5)
+        .attr('stroke-linecap', 'round')
+        .attr('opacity', 0.85);
+    }
+    drawPoints.forEach(function (p, i) {
+      var isFirst = (i === 0);
+      g.append('circle')
+        .attr('cx', p.x).attr('cy', p.y)
+        .attr('r', isFirst ? 5 : 3)
+        .attr('fill', isFirst ? 'var(--fig-bg)' : 'var(--c-action)')
+        .attr('stroke', 'var(--c-action)')
+        .attr('stroke-width', isFirst ? 2 : 0);
+    });
+    if (!drawPoints.length) {
+      g.append('text')
+        .attr('x', W / 2).attr('y', H / 2)
+        .attr('text-anchor', 'middle')
+        .attr('fill', 'var(--text-2)')
+        .attr('font-size', '13px')
+        .text('Click anywhere to start your knot');
+    }
+  }
+
+  svg.on('click', handleDrawClick);
+  svg.on('dblclick', function (ev) {
+    if (mode === 'draw' && !drawClosed && drawPoints.length >= 3) {
+      ev.preventDefault();
+      closeCurve();
+    }
+  });
+  svg.on('mousemove', function (ev) {
+    if (mode !== 'draw' || drawClosed || !drawPoints.length) return;
+    var p = d3.pointer(ev, svg.node());
+    renderPreview({ x: p[0], y: p[1] });
+  });
+  svg.on('mouseleave', function () {
+    if (mode !== 'draw' || drawClosed) return;
+    renderPreview(null);
+  });
+  d3.select('#close-curve-btn').on('click', closeCurve);
+  d3.select('#clear-curve-btn').on('click', enterDrawMode);
+
+  // ── Drawing the diagram ──
+  function dist(a, b) {
+    return Math.hypot(a.x - b.x, a.y - b.y);
+  }
+
+  function pathOf(pts, closed) {
+    var line = d3.line()
+      .x(function (d) { return d.x; })
+      .y(function (d) { return d.y; })
+      .curve(closed ? d3.curveLinearClosed : d3.curveLinear);
     return line(pts);
   }
 
-  // Break a closed curve into segments that skip crossing gaps
-  function drawKnotCurve(g, pts, crossings, color, gapRadius, isSecondComponent) {
-    gapRadius = gapRadius || 10;
-    if (!crossings.length) {
-      g.append('path')
-        .attr('d', buildPath(pts))
-        .attr('fill', 'none')
-        .attr('stroke', color)
-        .attr('stroke-width', 3)
-        .attr('stroke-linecap', 'round');
-      return;
+  // Sub-polyline of a closed curve around fractional parameter t,
+  // extending ~radius px of arc length each way. Used to redraw the
+  // over-strand on top of the crossing gap.
+  function subCurve(pts, t, radius) {
+    var n = pts.length;
+    var i0 = ((Math.floor(t)) % n + n) % n;
+    var frac = t - Math.floor(t);
+    var a = pts[i0], b = pts[(i0 + 1) % n];
+    var ctr = { x: a.x + (b.x - a.x) * frac, y: a.y + (b.y - a.y) * frac };
+    var fwd = [], bwd = [], d, prev, steps, q;
+    d = 0; prev = ctr;
+    for (steps = 0; steps < n && d < radius; steps++) {
+      q = pts[(i0 + 1 + steps) % n];
+      d += dist(prev, q); prev = q;
+      fwd.push(q);
     }
-
-    // Draw the full curve as the over-strand (dark)
-    g.append('path')
-      .attr('d', buildPath(pts))
-      .attr('fill', 'none')
-      .attr('stroke', color)
-      .attr('stroke-width', 3)
-      .attr('stroke-linecap', 'round');
-
-    // Draw gap masks for under-crossings
-    crossings.forEach(function (c) {
-      var underIdx = isSecondComponent ? c.j : (c.overIdx === c.i ? c.j : c.i);
-      if (isSecondComponent && !c.isLink) return;
-      if (!isSecondComponent && c.isLink) {
-        // For link crossings on the first component, check if first component goes under
-        underIdx = c.i;
-      }
-
-      var isUnder;
-      if (c.isLink) {
-        isUnder = isSecondComponent ? (c.overIdx === c.i) : (c.overIdx !== c.i);
-      } else {
-        isUnder = false; // handled per-segment below
-      }
-
-      // The under-strand gets a white gap + lighter redraw
-      var idxInPts = isSecondComponent ? c.j : underIdx;
-      var thePts = isSecondComponent ? pts : pts;
-      if (idxInPts >= 0 && idxInPts < thePts.length) {
-        g.append('circle')
-          .attr('cx', c.x).attr('cy', c.y)
-          .attr('r', gapRadius)
-          .attr('fill', 'var(--fig-bg)')
-          .attr('stroke', 'none')
-          .attr('class', 'gap-mask');
-      }
-    });
+    d = 0; prev = ctr;
+    for (steps = 0; steps < n && d < radius; steps++) {
+      q = pts[((i0 - steps) % n + n) % n];
+      d += dist(prev, q); prev = q;
+      bwd.push(q);
+    }
+    bwd.reverse();
+    return bwd.concat([ctr], fwd);
   }
 
   function draw() {
     svg.selectAll('*').remove();
     var g = svg.append('g');
 
-    if (!currentPts.length && !currentPts2) {
-      updateStats();
-      return;
-    }
-
-    // Determine which segments are over vs under at each crossing
-    // Draw the base curves
-    var overColor = 'var(--c-dual-a)';
-    var underColor = 'var(--c-dual-b)';
-
-    if (currentPts2) {
-      // Link: two components
-      // Draw both components fully
+    // Base curves
+    comps.forEach(function (pts, ci) {
       g.append('path')
-        .attr('d', buildPath(currentPts))
-        .attr('fill', 'none').attr('stroke', overColor).attr('stroke-width', 3.5).attr('stroke-linecap', 'round');
-      g.append('path')
-        .attr('d', buildPath(currentPts2))
-        .attr('fill', 'none').attr('stroke', '#2563eb').attr('stroke-width', 3.5).attr('stroke-linecap', 'round');
+        .attr('d', pathOf(pts, true))
+        .attr('fill', 'none')
+        .attr('stroke', compColors[ci % compColors.length])
+        .attr('stroke-width', 3.5)
+        .attr('stroke-linecap', 'round');
+    });
 
-      // At each crossing, draw a gap on the under-strand
-      currentCrossings.forEach(function (c) {
-        // The component whose index matches overIdx goes over
-        // Gap on the OTHER component
-        var gapOnSecond = (c.overIdx === c.i); // first component is over -> gap on second
-        g.append('circle')
-          .attr('cx', c.x).attr('cy', c.y).attr('r', 8)
-          .attr('fill', 'var(--fig-bg)').attr('stroke', 'none');
-        // Redraw the under-strand segment lighter through the gap
-        var underPts = gapOnSecond ? currentPts2 : currentPts;
-        var underIdx = gapOnSecond ? c.j : c.i;
-        var uColor = gapOnSecond ? '#93b4f0' : underColor;
-        var p0 = underPts[(underIdx - 3 + underPts.length) % underPts.length];
-        var p1 = underPts[underIdx];
-        var p2 = underPts[(underIdx + 3) % underPts.length];
-        g.append('line')
-          .attr('x1', p0.x).attr('y1', p0.y).attr('x2', p1.x).attr('y2', p1.y)
-          .attr('stroke', uColor).attr('stroke-width', 2.5).attr('stroke-linecap', 'round').attr('stroke-dasharray', '2,3');
-      });
-    } else {
-      // Single-component knot
-      // Draw the full curve
-      g.append('path')
-        .attr('d', buildPath(currentPts))
-        .attr('fill', 'none').attr('stroke', overColor).attr('stroke-width', 3.5).attr('stroke-linecap', 'round');
+    // Crossings: gap on the under-strand, pale under hint, over-strand redrawn
+    crossings.forEach(function (c) {
+      g.append('circle')
+        .attr('cx', c.x).attr('cy', c.y).attr('r', 8)
+        .attr('fill', 'var(--fig-bg)').attr('stroke', 'none');
 
-      // For each crossing, add a gap on the under-strand
-      currentCrossings.forEach(function (c) {
-        var underIdx = (c.overIdx === c.i) ? c.j : c.i;
-        // White gap
-        g.append('circle')
-          .attr('cx', c.x).attr('cy', c.y).attr('r', 8)
-          .attr('fill', 'var(--fig-bg)').attr('stroke', 'none');
-        // Lighter segment through the gap (under-strand hint)
-        var spread = 4;
-        var p0 = currentPts[(underIdx - spread + currentPts.length) % currentPts.length];
-        var p1 = currentPts[(underIdx + spread) % currentPts.length];
-        g.append('line')
-          .attr('x1', p0.x).attr('y1', p0.y).attr('x2', p1.x).attr('y2', p1.y)
-          .attr('stroke', underColor).attr('stroke-width', 2.5).attr('stroke-linecap', 'round');
-      });
-    }
+      var underPass = c.over === 0 ? c.p1 : c.p0;
+      var dU = c.over === 0 ? c.d1 : c.d0;
+      g.append('line')
+        .attr('x1', c.x - 6 * dU.x).attr('y1', c.y - 6 * dU.y)
+        .attr('x2', c.x + 6 * dU.x).attr('y2', c.y + 6 * dU.y)
+        .attr('stroke', underHintColors[underPass.comp % underHintColors.length])
+        .attr('stroke-width', 2.5).attr('stroke-linecap', 'round');
+
+      var overPass = c.over === 0 ? c.p0 : c.p1;
+      g.append('path')
+        .attr('d', pathOf(subCurve(comps[overPass.comp], overPass.t, 13), false))
+        .attr('fill', 'none')
+        .attr('stroke', compColors[overPass.comp % compColors.length])
+        .attr('stroke-width', 3.5).attr('stroke-linecap', 'round');
+    });
 
     // Clickable crossing hotspots
-    var spots = g.selectAll('.crossing-spot')
-      .data(currentCrossings)
+    g.selectAll('.crossing-spot')
+      .data(crossings)
       .enter().append('circle')
+      .attr('class', 'crossing-spot')
       .attr('cx', function (d) { return d.x; })
       .attr('cy', function (d) { return d.y; })
       .attr('r', 12)
@@ -437,36 +722,36 @@ svg text { font-family: var(--heading-font); }
       .attr('stroke-dasharray', '3,2')
       .attr('cursor', 'pointer')
       .on('click', function (ev, d) {
-        // Toggle over/under
-        if (d.overIdx === d.i) {
-          d.overIdx = d.j;
-        } else {
-          d.overIdx = d.i;
-        }
-        d.sign = -d.sign;
+        ev.stopPropagation();
+        d.over = 1 - d.over;
+        recomputeSign(d);
         draw();
+        scheduleInvariant();
       });
 
     // Crossing sign labels
     g.selectAll('.crossing-sign')
-      .data(currentCrossings)
+      .data(crossings)
       .enter().append('text')
+      .attr('class', 'crossing-sign')
       .attr('x', function (d) { return d.x + 14; })
       .attr('y', function (d) { return d.y - 10; })
       .attr('font-size', '11px')
       .attr('fill', function (d) { return d.sign > 0 ? '#059669' : '#dc2626'; })
       .attr('font-weight', 600)
-      .text(function (d) { return d.sign > 0 ? '+' : '\u2212'; });
+      .attr('pointer-events', 'none')
+      .text(function (d) { return d.sign > 0 ? '+' : '−'; });
 
     updateStats();
   }
 
+  // ── Stats and invariants ──
   function updateStats() {
     var panel = d3.select('#knot-stats');
     panel.selectAll('*').remove();
 
-    var cn = Diag.knot.crossingNumber(currentCrossings);
-    var w = Diag.knot.writhe(currentCrossings);
+    var cn = Diag.knot.crossingNumber(crossings);
+    var w = Diag.knot.writhe(crossings);
 
     var stats = [
       { val: cn, lbl: 'Crossings' },
@@ -476,6 +761,82 @@ svg text { font-family: var(--heading-font); }
     panel.selectAll('.stat').data(stats).enter().append('div')
       .attr('class', 'stat')
       .html(function (d) { return '<div class="val">' + d.val + '</div><div class="lbl">' + d.lbl + '</div>'; });
+  }
+
+  function polyToLatex(p) {
+    var exps = Object.keys(p).map(Number).sort(function (a, b) { return b - a; });
+    if (!exps.length) return '0';
+    var out = '';
+    exps.forEach(function (e, idx) {
+      var c = p[e];
+      var sign = c < 0 ? '-' : (idx === 0 ? '' : '+');
+      var mag = Math.abs(c);
+      var coef = (mag === 1 && e !== 0) ? '' : String(mag);
+      var pow = (e === 0) ? '' : (e === 1 ? 'A' : 'A^{' + e + '}');
+      out += ' ' + sign + ' ' + coef + pow;
+    });
+    return out;
+  }
+
+  var invTimer = null;
+  function scheduleInvariant() {
+    clearTimeout(invTimer);
+    invTimer = setTimeout(updateInvariant, 60);
+  }
+
+  function addInvariantRow(panel, label) {
+    var row = panel.append('div').attr('class', 'invariant-row');
+    row.append('span').attr('class', 'inv-lbl').text(label);
+    return row.append('span').node();
+  }
+
+  function updateInvariant() {
+    var panel = d3.select('#knot-invariant');
+    panel.selectAll('*').remove();
+
+    if (!diagram) {
+      panel.append('div').attr('class', 'invariant-row')
+        .append('span').attr('class', 'verdict trivial')
+        .text('Close the loop to compute the bracket.');
+      return;
+    }
+
+    var m = crossings.length;
+    if (m > MAX_CROSSINGS) {
+      panel.append('div').attr('class', 'invariant-row')
+        .append('span').attr('class', 'verdict trivial')
+        .text('This diagram has ' + m + ' crossings; the bracket state sum has 2^' + m +
+              ' terms, so the live computation stops at ' + MAX_CROSSINGS +
+              '. Crossing count and writhe above are still live.');
+      return;
+    }
+
+    var bracket = kauffmanBracket(diagram);
+    var w = Diag.knot.writhe(crossings);
+    var X = normalizedBracket(bracket, w);
+
+    katex.render('\\langle D \\rangle = ' + polyToLatex(bracket),
+      addInvariantRow(panel, 'Bracket'), { throwOnError: false });
+    katex.render('X(D) = (-A^{3})^{-w}\\,\\langle D \\rangle = ' + polyToLatex(X),
+      addInvariantRow(panel, 'Normalised'), { throwOnError: false });
+
+    var nComps = diagram.nComponents;
+    var trivialValue = deltaPower(nComps - 1); // unknot / split unlink
+    var isTrivial = polyEquals(X, trivialValue);
+    var text;
+    if (nComps === 1) {
+      text = isTrivial
+        ? 'X(D) matches the unknot — the bracket cannot tell this diagram from a round circle.'
+        : 'X(D) ≠ 1 — provably knotted: no sequence of Reidemeister moves can turn this into a round circle.';
+    } else {
+      text = isTrivial
+        ? 'X(D) matches the split unlink — the bracket cannot tell these loops from separate circles.'
+        : 'X(D) differs from the split unlink — these loops are provably linked.';
+    }
+    panel.append('div').attr('class', 'invariant-row')
+      .append('span')
+      .attr('class', 'verdict ' + (isTrivial ? 'trivial' : 'nontrivial'))
+      .text(text);
   }
 
   // ── Reidemeister move illustrations ──
@@ -511,7 +872,7 @@ svg text { font-family: var(--heading-font); }
       // Gap at crossing
       g.append('circle').attr('cx', 47).attr('cy', 50).attr('r', 5).attr('fill', 'var(--fig-bg)');
       // Arrow
-      g.append('text').attr('x', 87).attr('y', 55).attr('font-size', '16px').attr('fill', 'var(--text-2)').text('\u21C4');
+      g.append('text').attr('x', 87).attr('y', 55).attr('font-size', '16px').attr('fill', 'var(--text-2)').text('⇄');
       // Right side: straight
       g.append('line').attr('x1', 105).attr('y1', 80).attr('x2', 170).attr('y2', 80)
         .attr('stroke', over).attr('stroke-width', sw).attr('stroke-linecap', 'round');
@@ -525,7 +886,7 @@ svg text { font-family: var(--heading-font); }
         .attr('d', 'M 75,25 Q 50,25 45,50 Q 40,75 50,75 L 75,75')
         .attr('fill', 'none').attr('stroke', under).attr('stroke-width', sw).attr('stroke-linecap', 'round');
       // Arrow
-      g.append('text').attr('x', 83).attr('y', 55).attr('font-size', '16px').attr('fill', 'var(--text-2)').text('\u21C4');
+      g.append('text').attr('x', 83).attr('y', 55).attr('font-size', '16px').attr('fill', 'var(--text-2)').text('⇄');
       // Right side: two parallel strands
       g.append('line').attr('x1', 110).attr('y1', 25).attr('x2', 170).attr('y2', 25)
         .attr('stroke', over).attr('stroke-width', sw).attr('stroke-linecap', 'round');
@@ -542,7 +903,7 @@ svg text { font-family: var(--heading-font); }
       g.append('line').attr('x1', 10).attr('y1', 50).attr('x2', 75).attr('y2', 50)
         .attr('stroke', '#2563eb').attr('stroke-width', sw).attr('stroke-linecap', 'round');
       // Arrow
-      g.append('text').attr('x', 82).attr('y', 55).attr('font-size', '16px').attr('fill', 'var(--text-2)').text('\u21C4');
+      g.append('text').attr('x', 82).attr('y', 55).attr('font-size', '16px').attr('fill', 'var(--text-2)').text('⇄');
       // Right: strand on other side
       g.append('line').attr('x1', 105).attr('y1', 20).attr('x2', 170).attr('y2', 80)
         .attr('stroke', over).attr('stroke-width', sw).attr('stroke-linecap', 'round');

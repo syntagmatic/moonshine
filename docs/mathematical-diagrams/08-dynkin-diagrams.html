@@ -83,6 +83,14 @@ svg text { font-family: var(--heading-font); }
 .sees-list li { margin-bottom: 0.4rem; }
 .sees-list li strong { color: var(--accent); }
 .nav-footer { margin-top: 5rem; padding-top: 2rem; border-top: 1px solid var(--border); display: flex; justify-content: space-between; font-family: var(--heading-font); font-size: 0.9rem; }
+.builder-toolbar { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; margin-bottom: 0.75rem; font-family: var(--heading-font); font-size: 0.8rem; color: var(--text-2); }
+#builder-svg { border: 1px dashed var(--border); border-radius: 4px; cursor: crosshair; }
+.builder-node { cursor: grab; }
+.builder-verdict { font-family: var(--heading-font); font-size: 0.95rem; font-weight: 600; margin-top: 0.75rem; min-height: 1.4em; color: var(--text-2); }
+.builder-verdict.finite { color: var(--c-structure); }
+.builder-verdict.affine { color: var(--c-exceptional); }
+.builder-verdict.indefinite { color: #dc2626; }
+.builder-det { font-family: var(--mono-font); font-size: 0.8rem; color: var(--text-2); margin-top: 0.25rem; min-height: 1.3em; }
 @media (prefers-reduced-motion: reduce) {html:not([data-motion="full"]) * { transition-duration: 0s !important; animation-duration: 0s !important; } }
 @media (max-width: 600px) { h1 { font-size: 1.75rem; } .type-grid { gap: 0.3rem; } .type-btn { font-size: 0.72rem; padding: 0.25rem 0.5rem; min-width: 2.2rem; } }
 </style>
@@ -125,6 +133,26 @@ svg text { font-family: var(--heading-font); }
 </ul>
 
 <p><strong>ADE: the simply-laced types:</strong> A Dynkin diagram is <strong>simply-laced</strong> if every bond is single &mdash; equivalently, all roots have the same length. These are the types A<sub>n</sub>, D<sub>n</sub>, E<sub>6</sub>, E<sub>7</sub>, E<sub>8</sub>. The simply-laced condition turns up far beyond Lie theory, in surface singularities, quiver representations, and conformal field theory.</p>
+
+<h2>Why the List Stops: Build Your Own</h2>
+
+<p>The catalog looks arbitrary until you try to extend it. Why does the D family fork exactly once? Why does the E family stop at E<sub>8</sub>? The reason is a positivity condition. Each node claims a vector, and the bonds fix the angles between adjacent vectors (120&deg;, 135&deg;, 150&deg;). The question is whether vectors at those angles can actually exist as a basis of Euclidean space. They can precisely when the Gram matrix of the configuration is positive definite, and almost every graph fails that test.</p>
+
+<p><strong>Play:</strong> Build any diagram. Click empty space to add a node. Click one node, then a second, to cycle the bond between them: none &rarr; single &rarr; double &rarr; triple &rarr; none. Drag nodes to rearrange; shift-click a node to delete it. The verdict updates on every edit: <span style="color: var(--c-structure); font-weight: 600;">finite</span> means your diagram is in the catalog, <span style="color: var(--c-exceptional); font-weight: 600;">affine</span> means it sits exactly on the boundary, and <span style="color: #dc2626; font-weight: 600;">indefinite</span> means no root system can have this shape.</p>
+
+<div class="figure" id="fig-builder">
+  <div class="builder-toolbar" id="builder-toolbar"><span>Challenges:</span></div>
+  <svg id="builder-svg" width="100%" viewBox="0 0 680 340"></svg>
+  <div class="builder-verdict" id="builder-verdict"></div>
+  <div class="builder-det" id="builder-det"></div>
+  <div class="figure-caption"><span class="figure-label">The classification sandbox.</span> The verdict comes from the symmetrized Gram matrix: 2 on the diagonal, &minus;&radic;m for a bond of multiplicity m. Symmetrizing discards the arrow on double and triple bonds, so the direction does not affect the verdict and B<sub>n</sub> and C<sub>n</sub> are reported together. Watch det B: it hits zero exactly when a diagram crosses from finite to affine, and goes negative-or-mixed beyond.</div>
+</div>
+
+<p>Try the challenges. The four-armed star is D&#771;<sub>4</sub>, one arm more than D<sub>4</sub> can carry. The triangle is &Atilde;<sub>2</sub>, the smallest cycle, already sitting on the boundary. Load E<sub>8</sub> and then E<sub>8</sub> + 1: adding a single node to E<sub>8</sub> produces E&#771;<sub>8</sub>, and the determinant lands exactly on zero. That is why the E family ends. Every diagram in the catalog is one edit away from the edge.</p>
+
+<div class="insight">
+  <p><strong>The classification theorem is a positivity test.</strong> A Dynkin diagram is shorthand for a quadratic form, and the theorem says the form stays positive definite only for the A&ndash;G shapes. The affine diagrams are the boundary cases, positive semidefinite with a kernel; everything past them is indefinite. The five exceptional algebras exist because five special shapes fit just inside the boundary.</p>
+</div>
 
 <h2>Concept Summary</h2>
 
@@ -456,6 +484,458 @@ math('m-a7', 'A_7');
     }
     clearGeometryHighlight();
   }
+})();
+
+// ── Build-your-own Dynkin diagram sandbox ──
+(function () {
+  var svg = d3.select('#builder-svg');
+  var W = 680, H = 340, R = 13;
+  var MAX_NODES = 12;
+  var EPS = 1e-7;
+
+  var nodes = [];      // {id, x, y}
+  var edges = [];      // {a, b, mult} — unordered pair of node ids, mult 1/2/3
+  var nextId = 0;
+  var selected = null; // selected node id, or null
+
+  // ── Layers ──
+  svg.append('rect')
+    .attr('x', 0).attr('y', 0).attr('width', W).attr('height', H)
+    .attr('fill', 'transparent')
+    .on('click', backgroundClick);
+  var gEdges = svg.append('g').attr('pointer-events', 'none');
+  var gNodes = svg.append('g');
+  var hint = svg.append('text')
+    .attr('x', W / 2).attr('y', H / 2)
+    .attr('text-anchor', 'middle')
+    .attr('fill', 'var(--text-2)')
+    .attr('font-size', '0.95rem')
+    .attr('pointer-events', 'none')
+    .text('Click anywhere to add a node (a simple root)');
+
+  // ── Small math helpers (inline; lib untouched) ──
+  function sub(n) {
+    return String(n).split('').map(function (c) {
+      return String.fromCharCode(0x2080 + parseInt(c, 10));
+    }).join('');
+  }
+
+  // Determinant by Gaussian elimination with partial pivoting
+  function detOf(Min) {
+    var n = Min.length;
+    var M = Min.map(function (r) { return r.slice(); });
+    var d = 1;
+    for (var c = 0; c < n; c++) {
+      var p = c;
+      for (var r = c + 1; r < n; r++) if (Math.abs(M[r][c]) > Math.abs(M[p][c])) p = r;
+      if (Math.abs(M[p][c]) < 1e-12) return 0;
+      if (p !== c) { var tmp = M[p]; M[p] = M[c]; M[c] = tmp; d = -d; }
+      d *= M[c][c];
+      for (var r2 = c + 1; r2 < n; r2++) {
+        var f = M[r2][c] / M[c][c];
+        for (var k = c; k < n; k++) M[r2][k] -= f * M[c][k];
+      }
+    }
+    return d;
+  }
+
+  // Eigenvalues of a small symmetric matrix by cyclic Jacobi rotations
+  function eigvalsSym(Min) {
+    var n = Min.length;
+    if (n === 1) return [Min[0][0]];
+    var A = Min.map(function (r) { return r.slice(); });
+    for (var sweep = 0; sweep < 60; sweep++) {
+      var off = 0;
+      for (var i = 0; i < n; i++) for (var j = i + 1; j < n; j++) off += A[i][j] * A[i][j];
+      if (off < 1e-20) break;
+      for (var p = 0; p < n - 1; p++) {
+        for (var q = p + 1; q < n; q++) {
+          if (Math.abs(A[p][q]) < 1e-14) continue;
+          var theta = (A[q][q] - A[p][p]) / (2 * A[p][q]);
+          var t = (theta >= 0 ? 1 : -1) / (Math.abs(theta) + Math.sqrt(theta * theta + 1));
+          var c = 1 / Math.sqrt(t * t + 1), s = t * c;
+          for (var k = 0; k < n; k++) {
+            var apk = A[p][k], aqk = A[q][k];
+            A[p][k] = c * apk - s * aqk;
+            A[q][k] = s * apk + c * aqk;
+          }
+          for (var k2 = 0; k2 < n; k2++) {
+            var akp = A[k2][p], akq = A[k2][q];
+            A[k2][p] = c * akp - s * akq;
+            A[k2][q] = s * akp + c * akq;
+          }
+        }
+      }
+    }
+    var ev = [];
+    for (var i2 = 0; i2 < n; i2++) ev.push(A[i2][i2]);
+    return ev.sort(function (a, b) { return a - b; });
+  }
+
+  // Symmetrized Gram matrix: B_ii = 2, B_ij = -sqrt(mult) for bonded pairs.
+  // (B_ij · B_ji = mult matches the Cartan matrix; symmetrizing drops the arrow.)
+  function gramFor(ids, compEdges) {
+    var idx = {};
+    ids.forEach(function (id, i) { idx[id] = i; });
+    var n = ids.length;
+    var B = [];
+    for (var i = 0; i < n; i++) { B.push(new Array(n).fill(0)); B[i][i] = 2; }
+    compEdges.forEach(function (e) {
+      var i = idx[e.a], j = idx[e.b];
+      B[i][j] = B[j][i] = -Math.sqrt(e.mult);
+    });
+    return B;
+  }
+
+  // ── Graph helpers ──
+  function nodeById(id) {
+    for (var i = 0; i < nodes.length; i++) if (nodes[i].id === id) return nodes[i];
+    return null;
+  }
+
+  function edgeBetween(a, b) {
+    for (var i = 0; i < edges.length; i++) {
+      var e = edges[i];
+      if ((e.a === a && e.b === b) || (e.a === b && e.b === a)) return e;
+    }
+    return null;
+  }
+
+  function components() {
+    var adj = {}, seen = {}, comps = [];
+    nodes.forEach(function (n) { adj[n.id] = []; });
+    edges.forEach(function (e) { adj[e.a].push(e.b); adj[e.b].push(e.a); });
+    nodes.forEach(function (n) {
+      if (seen[n.id]) return;
+      var stack = [n.id], comp = [];
+      seen[n.id] = true;
+      while (stack.length) {
+        var id = stack.pop();
+        comp.push(id);
+        adj[id].forEach(function (m) { if (!seen[m]) { seen[m] = true; stack.push(m); } });
+      }
+      comps.push(comp);
+    });
+    return comps;
+  }
+
+  // Branch lengths from a center node (valid when every other node has degree ≤ 2)
+  function branchLengths(adj, center) {
+    return adj[center].map(function (nb) {
+      var len = 1, prev = center, cur = nb;
+      while (true) {
+        var next = adj[cur].filter(function (x) { return x !== prev; });
+        if (next.length !== 1) break;
+        prev = cur; cur = next[0]; len++;
+      }
+      return len;
+    });
+  }
+
+  // ── Classification of one connected component ──
+  function analyzeComponent(ids) {
+    var inComp = {};
+    ids.forEach(function (id) { inComp[id] = true; });
+    var ce = edges.filter(function (e) { return inComp[e.a]; });
+    var n = ids.length;
+
+    var deg = {}, adj = {};
+    ids.forEach(function (id) { deg[id] = 0; adj[id] = []; });
+    ce.forEach(function (e) {
+      deg[e.a]++; deg[e.b]++;
+      adj[e.a].push(e.b); adj[e.b].push(e.a);
+    });
+
+    var m2 = ce.filter(function (e) { return e.mult === 2; }).length;
+    var m3 = ce.filter(function (e) { return e.mult === 3; }).length;
+    var allSingle = (m2 + m3 === 0);
+    var hasCycle = ce.length >= n;
+    var maxDeg = 0;
+    ids.forEach(function (id) { if (deg[id] > maxDeg) maxDeg = deg[id]; });
+    var branchPts = ids.filter(function (id) { return deg[id] >= 3; });
+
+    var B = gramFor(ids, ce);
+    var ev = eigvalsSym(B);
+    var minEig = ev[0];
+    var cls = minEig > EPS ? 0 : minEig > -EPS ? 1 : 2; // 0 finite, 1 affine, 2 indefinite
+
+    var ctx = {
+      n: n, ce: ce, deg: deg, adj: adj,
+      m2: m2, m3: m3, allSingle: allSingle, hasCycle: hasCycle,
+      maxDeg: maxDeg, branchPts: branchPts
+    };
+
+    return {
+      n: n, cls: cls, B: B, minEig: minEig,
+      name: cls === 0 ? nameFinite(ctx) : cls === 1 ? nameAffine(ctx) : null,
+      hint: cls === 2 ? indefiniteHint(ctx) : ''
+    };
+  }
+
+  function nameFinite(c) {
+    var n = c.n;
+    if (n === 1) return 'A' + sub(1);
+    if (c.allSingle) {
+      if (c.maxDeg <= 2) return 'A' + sub(n);
+      if (c.branchPts.length === 1 && c.maxDeg === 3) {
+        var bl = branchLengths(c.adj, c.branchPts[0]).sort(function (a, b) { return a - b; });
+        if (bl[0] === 1 && bl[1] === 1) return 'D' + sub(n);
+        var key = bl.join(',');
+        if (key === '1,2,2') return 'E' + sub(6);
+        if (key === '1,2,3') return 'E' + sub(7);
+        if (key === '1,2,4') return 'E' + sub(8);
+      }
+    } else if (c.m3 === 1 && n === 2) {
+      return 'G' + sub(2);
+    } else if (c.m2 === 1 && c.m3 === 0 && c.maxDeg <= 2 && !c.hasCycle) {
+      var de = null;
+      c.ce.forEach(function (e) { if (e.mult === 2) de = e; });
+      if (c.deg[de.a] === 1 || c.deg[de.b] === 1) return 'B' + sub(n) + '/C' + sub(n);
+      if (n === 4) return 'F' + sub(4);
+    }
+    return 'finite (rank ' + n + ')';
+  }
+
+  function nameAffine(c) {
+    var n = c.n;
+    if (c.hasCycle && c.allSingle && c.maxDeg === 2 && c.ce.length === n) return 'Ã' + sub(n - 1);
+    if (c.allSingle && !c.hasCycle) {
+      if (n === 5 && c.maxDeg === 4) return 'D̃' + sub(4);
+      if (c.branchPts.length === 2 && c.maxDeg === 3) {
+        var forks = c.branchPts.every(function (id) {
+          return c.adj[id].filter(function (x) { return c.deg[x] === 1; }).length >= 2;
+        });
+        if (forks) return 'D̃' + sub(n - 1);
+      }
+      if (c.branchPts.length === 1 && c.maxDeg === 3) {
+        var key = branchLengths(c.adj, c.branchPts[0])
+          .sort(function (a, b) { return a - b; }).join(',');
+        if (key === '2,2,2') return 'Ẽ' + sub(6);
+        if (key === '1,3,3') return 'Ẽ' + sub(7);
+        if (key === '1,2,5') return 'Ẽ' + sub(8);
+      }
+    }
+    if (!c.hasCycle && c.maxDeg <= 2) { // a path
+      if (c.m2 === 2 && c.m3 === 0) {
+        var atEnds = c.ce.filter(function (e) { return e.mult === 2; })
+          .every(function (e) { return c.deg[e.a] === 1 || c.deg[e.b] === 1; });
+        if (atEnds) return 'C̃' + sub(n - 1);
+      }
+      if (c.m2 === 1 && c.m3 === 0 && n === 5) return 'F̃' + sub(4);
+      if (c.m3 === 1 && c.m2 === 0 && n === 3) return 'G̃' + sub(2);
+    }
+    if (c.m2 === 1 && c.m3 === 0 && c.branchPts.length === 1 && c.maxDeg === 3) return 'B̃' + sub(n - 1);
+    return 'affine (rank ' + (n - 1) + ')';
+  }
+
+  function indefiniteHint(c) {
+    if (c.hasCycle) return c.allSingle ? 'contains a cycle' : 'a cycle with a multiple bond';
+    if (c.maxDeg >= 4) return 'a node of degree ' + c.maxDeg;
+    if (c.branchPts.length >= 2) return 'two branch points';
+    if (c.m3 >= 2) return 'two triple bonds';
+    if (c.m3 >= 1 && c.m2 >= 1) return 'a triple bond and a double bond together';
+    if (c.m3 >= 1 && c.branchPts.length >= 1) return 'a triple bond at a branch point';
+    if (c.m3 >= 1) return 'a triple bond in a chain longer than G̃' + sub(2);
+    if (c.m2 >= 3) return 'three double bonds';
+    if (c.m2 >= 1 && c.branchPts.length >= 1) return 'a double bond plus a branch point';
+    if (c.m2 === 2) return 'two double bonds away from the ends';
+    if (c.m2 === 1) return 'a double bond too deep in the chain';
+    if (c.branchPts.length === 1) return 'branches longer than the Ẽ' + sub(8) + ' limit';
+    return 'the quadratic form has a negative direction';
+  }
+
+  // ── Live verdict ──
+  function fmt(v) {
+    if (Math.abs(v) < 5e-4) v = 0;
+    return v.toFixed(3);
+  }
+
+  function classify() {
+    var verdictEl = d3.select('#builder-verdict');
+    var detEl = d3.select('#builder-det');
+    verdictEl.attr('class', 'builder-verdict');
+
+    if (nodes.length === 0) {
+      verdictEl.text('Empty canvas.');
+      detEl.text('');
+      return;
+    }
+
+    var results = components().map(analyzeComponent);
+    var worst = 0, detB = 1, minEig = Infinity;
+    results.forEach(function (r) {
+      if (r.cls > worst) worst = r.cls;
+      detB *= detOf(r.B);
+      if (r.minEig < minEig) minEig = r.minEig;
+    });
+
+    var names = results.map(function (r) { return r.cls === 2 ? 'indefinite' : r.name; });
+
+    if (worst === 0) {
+      verdictEl.attr('class', 'builder-verdict finite')
+        .text('✓ Finite type: ' + names.join(' × '));
+    } else if (worst === 1) {
+      verdictEl.attr('class', 'builder-verdict affine')
+        .text('Affine type: ' + names.join(' × ') + ' — on the boundary');
+    } else {
+      var bad = null;
+      results.forEach(function (r) { if (!bad && r.cls === 2) bad = r; });
+      var label = '✗ Indefinite — ' + bad.hint;
+      if (results.length > 1) label += ' (' + names.join(' × ') + ')';
+      verdictEl.attr('class', 'builder-verdict indefinite').text(label);
+    }
+
+    detEl.text('n = ' + nodes.length +
+      '  ·  det B = ' + fmt(detB) +
+      '  ·  λₘᵢₙ = ' + fmt(minEig));
+  }
+
+  // ── Interaction ──
+  var drag = d3.drag()
+    .on('drag', function (event, d) {
+      d.x = Math.max(R + 4, Math.min(W - R - 4, event.x));
+      d.y = Math.max(R + 4, Math.min(H - R - 4, event.y));
+      d3.select(this).attr('transform', 'translate(' + d.x + ',' + d.y + ')');
+      drawEdges();
+    });
+
+  function backgroundClick(event) {
+    if (selected !== null) { selected = null; redraw(); return; }
+    if (nodes.length >= MAX_NODES) {
+      d3.select('#builder-det').text('Limit reached: ' + MAX_NODES + ' nodes.');
+      return;
+    }
+    var p = d3.pointer(event);
+    nodes.push({
+      id: nextId++,
+      x: Math.max(R + 4, Math.min(W - R - 4, p[0])),
+      y: Math.max(R + 4, Math.min(H - R - 4, p[1]))
+    });
+    redraw();
+    classify();
+  }
+
+  function nodeClick(event, d) {
+    event.stopPropagation();
+    if (event.shiftKey) {
+      nodes = nodes.filter(function (n) { return n.id !== d.id; });
+      edges = edges.filter(function (e) { return e.a !== d.id && e.b !== d.id; });
+      if (selected === d.id) selected = null;
+      redraw();
+      classify();
+      return;
+    }
+    if (selected === null) { selected = d.id; redraw(); return; }
+    if (selected === d.id) { selected = null; redraw(); return; }
+    var e = edgeBetween(selected, d.id);
+    if (!e) edges.push({ a: selected, b: d.id, mult: 1 });
+    else if (e.mult >= 3) edges = edges.filter(function (x) { return x !== e; });
+    else e.mult++;
+    selected = null;
+    redraw();
+    classify();
+  }
+
+  // ── Rendering ──
+  function drawBond(p1, p2, mult) {
+    var lines = [0];
+    if (mult >= 2) {
+      var dx = p2.x - p1.x, dy = p2.y - p1.y;
+      var len = Math.sqrt(dx * dx + dy * dy) || 1;
+      var off = mult === 2 ? 3.5 : 4;
+      var nx = -dy / len * off, ny = dx / len * off;
+      lines = mult === 2 ? [-1, 1] : [-1, 0, 1];
+      lines = lines.map(function (s) { return { x: nx * s, y: ny * s }; });
+    } else {
+      lines = [{ x: 0, y: 0 }];
+    }
+    lines.forEach(function (o) {
+      gEdges.append('line')
+        .attr('x1', p1.x + o.x).attr('y1', p1.y + o.y)
+        .attr('x2', p2.x + o.x).attr('y2', p2.y + o.y)
+        .attr('stroke', 'var(--c-morphism)')
+        .attr('stroke-width', mult === 1 ? 2.5 : 2);
+    });
+  }
+
+  function drawEdges() {
+    gEdges.selectAll('*').remove();
+    edges.forEach(function (e) {
+      var p1 = nodeById(e.a), p2 = nodeById(e.b);
+      if (p1 && p2) drawBond(p1, p2, e.mult);
+    });
+  }
+
+  function redraw() {
+    drawEdges();
+    hint.style('display', nodes.length ? 'none' : null);
+
+    var sel = gNodes.selectAll('g.builder-node').data(nodes, function (d) { return d.id; });
+    sel.exit().remove();
+    var enter = sel.enter().append('g')
+      .attr('class', 'builder-node')
+      .call(drag)
+      .on('click', nodeClick);
+    enter.append('circle').attr('r', R).attr('fill', '#fff');
+
+    var all = enter.merge(sel);
+    all.attr('transform', function (d) { return 'translate(' + d.x + ',' + d.y + ')'; });
+    all.select('circle')
+      .attr('stroke', function (d) { return d.id === selected ? 'var(--c-action)' : 'var(--c-element)'; })
+      .attr('stroke-width', function (d) { return d.id === selected ? 4 : 2.5; });
+  }
+
+  // ── Challenge presets ──
+  var presets = [
+    {
+      label: 'D̃₄ star',
+      nodes: [[340, 170], [270, 170], [410, 170], [340, 100], [340, 240]],
+      edges: [[0, 1, 1], [0, 2, 1], [0, 3, 1], [0, 4, 1]]
+    },
+    {
+      label: 'Ã₂ triangle',
+      nodes: [[290, 120], [390, 120], [340, 205]],
+      edges: [[0, 1, 1], [1, 2, 1], [2, 0, 1]]
+    },
+    {
+      label: 'E₈',
+      nodes: [[80, 150], [160, 150], [240, 150], [320, 150], [400, 150], [480, 150], [560, 150], [240, 230]],
+      edges: [[0, 1, 1], [1, 2, 1], [2, 3, 1], [3, 4, 1], [4, 5, 1], [5, 6, 1], [2, 7, 1]]
+    },
+    {
+      label: 'E₈ + 1',
+      nodes: [[60, 150], [135, 150], [210, 150], [285, 150], [360, 150], [435, 150], [510, 150], [585, 150], [210, 230]],
+      edges: [[0, 1, 1], [1, 2, 1], [2, 3, 1], [3, 4, 1], [4, 5, 1], [5, 6, 1], [6, 7, 1], [2, 8, 1]]
+    }
+  ];
+
+  function loadPreset(p) {
+    nodes = p.nodes.map(function (xy, i) { return { id: i, x: xy[0], y: xy[1] }; });
+    edges = p.edges.map(function (e) { return { a: e[0], b: e[1], mult: e[2] }; });
+    nextId = nodes.length;
+    selected = null;
+    redraw();
+    classify();
+  }
+
+  var toolbar = d3.select('#builder-toolbar');
+  presets.forEach(function (p) {
+    toolbar.append('button')
+      .attr('class', 'type-btn')
+      .text(p.label)
+      .on('click', function () { loadPreset(p); });
+  });
+  toolbar.append('button')
+    .attr('class', 'type-btn')
+    .text('Clear')
+    .on('click', function () {
+      nodes = []; edges = []; nextId = 0; selected = null;
+      redraw();
+      classify();
+    });
+
+  redraw();
+  classify();
 })();
 </script>
 
