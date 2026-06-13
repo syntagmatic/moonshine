@@ -17,7 +17,7 @@ Four-article interactive explainer series on aperiodic order — the geometry th
 
 **Visual style.** Manipulable figures first. The phason slider is the signature interactive: sweep an offset through internal space and watch vertices wink in and out. Inflation should be animated as a fixed-point map. Diffraction should be live: change the window, change the envelope. Penrose and Fibonacci should both be re-projectable from their ambient lattice in real time. Avoid decorative kaleidoscopic imagery; every visual should expose a *parameter*.
 
-**Rendering stack.** Standalone HTML/CSS/JS, no build step. SVG for tilings and lattice diagrams; canvas for diffraction patterns and dense vertex clouds. A shared helper at `docs/quasicrystals/lib/quasi-viz.js` attaches to a single `QUASI` global. Where the library substrate exists, prefer to cite it: squishy-thing's `packages/e8-core/src/cut-and-project.ts` is the implementation reference for `elserSloane`, `h3Quasicrystal`, `fibonacciScheme`, phason mechanics, and the diffraction oracle. `penroseFromE8` is a related in-house 2D slice, not the canonical 5-fold Penrose construction; article 2 should use a classical Z5 implementation unless a 5-fold-aligned H4 slice ships first. The series can either embed squishy-thing's standalone interactives via `<iframe>` or re-implement the small ones (Fibonacci, phason, classical Penrose) directly in `quasi-viz.js`. Pick per article; the trade-off is build-step weight vs. inspectability.
+**Rendering stack.** Standalone HTML/CSS/JS, no build step. SVG for tilings and lattice diagrams; canvas for diffraction patterns and dense vertex clouds. A shared helper at `docs/quasicrystals/lib/quasi-viz.js` attaches to a single `QUASI` global. Where the library substrate exists, prefer to cite it: squishy-thing's `packages/core/src/cut-and-project.ts` is the implementation reference for `elserSloane`, `h3Quasicrystal`, `fibonacciScheme`, phason mechanics, and the diffraction oracle. `penroseFromE8` is a related in-house 2D slice, not the canonical 5-fold Penrose construction; article 2 should use a classical Z5 implementation unless a 5-fold-aligned H4 slice ships first. The series can either embed squishy-thing's standalone interactives via `<iframe>` or re-implement the small ones (Fibonacci, phason, classical Penrose) directly in `quasi-viz.js`. Pick per article; the trade-off is build-step weight vs. inspectability.
 
 ## Research grounding
 
@@ -97,7 +97,7 @@ Primary anchors:
 
 In-house substrates:
 
-- `/Users/kai/git/squishy-thing/packages/e8-core/src/cut-and-project.ts` — `elserSloane`, `h3Quasicrystal`, `penroseFromE8`, `fibonacciScheme`, phason mechanics, diffraction.
+- `/Users/kai/git/squishy-thing/packages/core/src/cut-and-project.ts` — `elserSloane`, `h3Quasicrystal`, `penroseFromE8`, `fibonacciScheme`, phason mechanics, diffraction.
 - `/Users/kai/git/squishy-thing/research/03-cut-and-project/synthesis.md` — the mathematical anchor.
 - `/Users/kai/git/squishy-thing/research/22-galois-pair-lattice/synthesis.md` — icosian-ring substrate for article 3.
 - `/Users/kai/git/squishy-thing/apps/gallery/src/interactives/{penrose-phason,fibonacci-phason,diffraction-lab,cut-and-project}.ts` — shipped interactives available for embed.
