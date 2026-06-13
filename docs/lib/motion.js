@@ -1,4 +1,6 @@
-// motion.js — shared reduced-motion override used across every series.
+// motion.js — shared site chrome used across every series. Two things:
+//   1. a reduced-motion override (Motion.reduced / opt-in banner), and
+//   2. a dismissable notice that the content is machine-generated.
 //
 // If the OS reports `prefers-reduced-motion: reduce` we respect it by default:
 //   • the page's own `@media (prefers-reduced-motion: reduce)` CSS rule, scoped
@@ -14,12 +16,17 @@
 // false`. A banner at the top of .article surfaces the toggle.
 //
 // Public API: window.Motion.{reduced, overridden, enable, disable, mountBanner,
-// onVisible}.
+// mountNotice, dismissNotice, onVisible}.
 
 (function (global) {
   'use strict';
 
   var MOTION_KEY = 'li-motion-override';
+  var NOTICE_KEY = 'li-notice-dismissed';
+
+  function noticeDismissed() {
+    try { return localStorage.getItem(NOTICE_KEY) === '1'; } catch (e) { return false; }
+  }
 
   function override() {
     try { return localStorage.getItem(MOTION_KEY) === '1'; } catch (e) { return false; }
@@ -100,6 +107,59 @@
       btn.addEventListener('click', function () { Motion.enable(); });
       b.appendChild(msg); b.appendChild(btn);
       host.insertBefore(b, host.firstChild);
+    },
+    dismissNotice: function () {
+      try { localStorage.setItem(NOTICE_KEY, '1'); } catch (e) {}
+      var doc = global.document;
+      var el = doc && doc.getElementById('generated-notice');
+      if (el && el.parentNode) el.parentNode.removeChild(el);
+    },
+    mountNotice: function () {
+      if (noticeDismissed()) return;
+      var doc = global.document;
+      if (!doc) return;
+      var host = doc.querySelector('.article') || doc.body;
+      if (!host || doc.getElementById('generated-notice')) return;
+      var b = doc.createElement('div');
+      b.id = 'generated-notice';
+      b.setAttribute('role', 'note');
+      // Deliberately understated: a quiet disclaimer, not an alarm box.
+      b.style.cssText = [
+        'margin: 0 0 1rem',
+        'padding: 0.55rem 0.9rem',
+        'border: 1px solid #e2e8f0',
+        'background: #f8fafc',
+        "font-family: 'Source Sans 3', system-ui, sans-serif",
+        'font-size: 0.82rem',
+        'color: #64748b',
+        'border-radius: 6px',
+        'display: flex',
+        'align-items: center',
+        'justify-content: space-between',
+        'gap: 0.75rem'
+      ].join(';');
+      var msg = doc.createElement('span');
+      msg.innerHTML = 'This content is machine-generated and may contain errors.';
+      var btn = doc.createElement('button');
+      btn.type = 'button';
+      btn.setAttribute('aria-label', 'Dismiss notice');
+      btn.textContent = 'Dismiss';
+      btn.style.cssText = [
+        "font-family: 'Source Sans 3', system-ui, sans-serif",
+        'font-size: 0.78rem',
+        'font-weight: 600',
+        'padding: 0.25rem 0.7rem',
+        'border-radius: 5px',
+        'border: 1px solid #cbd5e1',
+        'background: #fff',
+        'color: #475569',
+        'cursor: pointer',
+        'flex-shrink: 0'
+      ].join(';');
+      btn.addEventListener('click', function () { Motion.dismissNotice(); });
+      b.appendChild(msg); b.appendChild(btn);
+      // Mount above the motion banner so the disclaimer sits topmost.
+      host.insertBefore(b, host.firstChild);
     }
   };
 
@@ -109,12 +169,17 @@
     global.document.documentElement.dataset.motion = 'full';
   }
 
-  // Auto-mount the banner on DOM ready.
+  // Auto-mount site chrome on DOM ready. Mount the motion banner first, then
+  // the notice, so the notice (inserted last, before firstChild) sits topmost.
+  function mountChrome() {
+    Motion.mountBanner();
+    Motion.mountNotice();
+  }
   if (global.document) {
     if (global.document.readyState === 'loading') {
-      global.document.addEventListener('DOMContentLoaded', Motion.mountBanner);
+      global.document.addEventListener('DOMContentLoaded', mountChrome);
     } else {
-      Motion.mountBanner();
+      mountChrome();
     }
   }
 
