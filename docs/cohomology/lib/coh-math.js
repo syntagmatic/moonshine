@@ -1,4 +1,4 @@
-// coh-math.js — Computational engine for the "Holes Have Names" cohomology series.
+// coh-math.js — Computational engine for the cohomology series.
 // Attaches a single `COH` object to the global scope.
 // Depends on `tda-math.js` (must be loaded first) for simplicial complexes,
 // boundary operators over Z/2, and persistent homology.
