@@ -23,14 +23,32 @@ no dependencies, no tests; `package.json` is plugin-marketplace metadata only.
 
 ## Commands
 
+- Vendor assets: `./scripts/vendor.sh` — run once before serving. Fetches KaTeX,
+  D3, fonts and topology data into `docs/vendor/` (gitignored)
 - Serve: `python3 -m http.server 8000 -d docs` (or any static server); pages also
   work opened directly as files
 - No build, lint, or test commands exist
 
+## Vendored assets
+
+Pages load KaTeX, D3, fonts and topology data from `docs/vendor/` by relative
+path — never from a CDN. This lets them render inside a network-restricted
+sandbox and keeps them working offline.
+
+- `docs/vendor/` is gitignored; `scripts/vendor.sh` refetches it, and the Pages
+  workflow runs the same script before deploying
+- Font sets live in `scripts/font-sets.txt`, the single source of truth shared
+  by the vendor script and any page rewriter. Add a set there rather than
+  pointing a page back at `fonts.googleapis.com`
+- New pages should reference `vendor/...` paths. A CDN URL in a page will work
+  on your machine and silently fail in a sandboxed container
+
 ## Authoring and registering an essay
 
-1. Articles are self-contained HTML: vanilla JS + D3 v7 from CDN, fonts Source
-   Serif 4 / Source Sans 3 / Source Code Pro. Start from the scaffold in
+1. Articles are self-contained HTML: vanilla JS + D3 v7 from `vendor/js/`, fonts
+   Source Serif 4 / Source Sans 3 / Source Code Pro from `vendor/fonts/`. The
+   plugin scaffold uses CDN URLs (right for plugin users); swap them for
+   `vendor/` paths in this repo. Start from the scaffold in
    `plugins/moonshine/ARTICLE.md`.
 2. New article in an existing series: add `NN-slug.html` to the series dir, add a
    card to the series `index.html`, link back to the series index in the footer.
@@ -43,7 +61,7 @@ no dependencies, no tests; `package.json` is plugin-marketplace metadata only.
 
 ## Math (KaTeX)
 
-- Load KaTeX JS + CSS from `cdn.jsdelivr.net/npm/katex`. `katex.render(expr, el)`
+- Load KaTeX JS + CSS from `vendor/katex@<version>/`. `katex.render(expr, el)`
   for display math, `katex.renderToString(expr)` for inline; pass
   `{ throwOnError: false }`.
 - Series use semantic concept colors as `--c-*` CSS custom properties, mirrored in
