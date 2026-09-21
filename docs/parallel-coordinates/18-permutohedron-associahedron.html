@@ -788,7 +788,7 @@ function treeBracket(tree, labels) {
   return bracketing(tree, labels, { i: 0 });
 }
 
-// Right rotation: if node has right child R with left subtree C, rotate so the current node becomes the left child of R
+// Right rotation: if node has an internal left child L, rotate so the current node becomes the right child of L
 // Returns list of trees obtained by applying a right rotation at some internal node
 function rightRotations(tree) {
   // Returns array of resulting trees after applying one right rotation anywhere
@@ -797,17 +797,17 @@ function rightRotations(tree) {
     if (t === null) return null;
     return { left: clone(t.left), right: clone(t.right) };
   }
-  // For each internal node, check if it has a right child that is also an internal node.
-  // If so, applying a right rotation transforms   (A, (B, C))   ->   ((A, B), C)
+  // For each internal node, check if it has a left child that is also an internal node.
+  // If so, applying a right rotation transforms   ((A, B), C)   ->   (A, (B, C))
   function enumerate(t, replaceFn) {
     if (t === null) return;
     // Try rotating at this node
-    if (t.right !== null) {
-      // (A, (B, C)) -> ((A, B), C)
-      var A = t.left;
-      var B = t.right.left;
-      var C = t.right.right;
-      var rotated = { left: { left: A, right: B }, right: C };
+    if (t.left !== null) {
+      // ((A, B), C) -> (A, (B, C))
+      var A = t.left.left;
+      var B = t.left.right;
+      var C = t.right;
+      var rotated = { left: A, right: { left: B, right: C } };
       rotations.push(replaceFn(rotated));
     }
     // Recurse into children (clone so we can substitute)
@@ -1993,13 +1993,16 @@ var k5Data = (function() {
     return [x1, y1, z2];
   }
 
-  // Tamari rank = number of right rotations from minimum
-  // Compute via BFS
+  // Tamari rank = length of the longest chain of right rotations from the
+  // minimum. The minimum is the left-comb: no tree rotates into it, and
+  // every tree is reachable from it by right rotations. A tree can be
+  // reached by predecessors at different distances from the minimum, so
+  // rank has to be the longest chain reaching it (relaxed over several
+  // passes), not just the first one discovered.
   var minKey = '((((L,L),L),L),L)'; // left comb
   var maxKey = '(L,(L,(L,(L,L))))'; // right comb
   var keys = k5Data.keys;
-  var ranks = new Array(trees.length).fill(-1);
-  var queue = [];
+  var ranks = new Array(trees.length).fill(-Infinity);
   var minIdx = keys.indexOf(minKey);
   if (minIdx < 0) {
     // Try to find by computing the left comb
@@ -2011,17 +2014,13 @@ var k5Data = (function() {
     minIdx = keys.indexOf(treeKey(lc));
   }
   ranks[minIdx] = 0;
-  queue.push(minIdx);
-  while (queue.length > 0) {
-    var u = queue.shift();
-    // Find trees reachable by ONE right rotation from trees[u]
-    var rots = rightRotations(trees[u]);
-    for (var r = 0; r < rots.length; r++) {
-      var rk = treeKey(rots[r]);
-      var v = keys.indexOf(rk);
-      if (v >= 0 && ranks[v] < 0) {
-        ranks[v] = ranks[u] + 1;
-        queue.push(v);
+  for (var pass = 0; pass < trees.length; pass++) {
+    for (var u = 0; u < trees.length; u++) {
+      if (ranks[u] === -Infinity) continue;
+      var rots = rightRotations(trees[u]);
+      for (var r = 0; r < rots.length; r++) {
+        var v = keys.indexOf(treeKey(rots[r]));
+        if (v >= 0 && ranks[u] + 1 > ranks[v]) ranks[v] = ranks[u] + 1;
       }
     }
   }
@@ -2208,30 +2207,31 @@ var k5Data = (function() {
   var brackets = k5Data.brackets;
   var keys = k5Data.keys;
 
-  // Compute ranks via right-rotation BFS from left-comb
+  // Compute ranks via right rotations from the left-comb, the unique
+  // minimum. Rank is the longest chain of rotations
+  // reaching a tree, since it can have predecessors at different
+  // distances from the minimum; relax over several passes rather than
+  // taking the first (shortest) path BFS would find.
   function leftComb(n) {
     if (n === 1) return null;
     return { left: leftComb(n-1), right: null };
   }
   var lc = leftComb(5);
   var minIdx = keys.indexOf(treeKey(lc));
-  var ranks = new Array(trees.length).fill(-1);
+  var ranks = new Array(trees.length).fill(-Infinity);
   ranks[minIdx] = 0;
-  var queue = [minIdx];
   var coverEdges = [];
-  while (queue.length > 0) {
-    var u = queue.shift();
-    var rots = rightRotations(trees[u]);
+  for (var i = 0; i < trees.length; i++) {
+    var rots = rightRotations(trees[i]);
     for (var r = 0; r < rots.length; r++) {
-      var rk = treeKey(rots[r]);
-      var v = keys.indexOf(rk);
-      if (v >= 0) {
-        coverEdges.push([u, v]);
-        if (ranks[v] < 0) {
-          ranks[v] = ranks[u] + 1;
-          queue.push(v);
-        }
-      }
+      var v = keys.indexOf(treeKey(rots[r]));
+      if (v >= 0) coverEdges.push([i, v]);
+    }
+  }
+  for (var pass = 0; pass < trees.length; pass++) {
+    for (var e = 0; e < coverEdges.length; e++) {
+      var u = coverEdges[e][0], v = coverEdges[e][1];
+      if (ranks[u] !== -Infinity && ranks[u] + 1 > ranks[v]) ranks[v] = ranks[u] + 1;
     }
   }
   // Unique cover edges
@@ -2411,7 +2411,7 @@ var k5Data = (function() {
       // Pick one that leads to higher rank
       for (var r = 0; r < rots.length; r++) {
         var v = keys.indexOf(treeKey(rots[r]));
-        if (v >= 0 && ranks[v] === ranks[current] + 1) {
+        if (v >= 0 && ranks[v] > ranks[current]) {
           current = v;
           highlightIdx = current;
           draw();
