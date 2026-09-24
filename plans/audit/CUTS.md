@@ -1,0 +1,80 @@
+# Cut ranking (2026-09-23)
+
+Eight reviewers scored every series against one rubric (`reviews/RUBRIC.md`),
+using foam as the reference for the current bar. Per-article verdicts and
+reasons are in `reviews/<group>.md`. Scores are out of 10. "Cut" counts both
+deletions and merges into a sibling article.
+
+Each score is one reviewer's judgment, and the factual errors they cite still
+need confirming when we fix them. Treat the verdicts as a strong prior, not a
+final ruling.
+
+| # | Series | Score | Verdict | Articles | Cut % (articles) | Cut % (words) |
+|---|---|---|---|---|---|---|
+| 1 | foam | 7 | keep, finish (index, homepage, 02 pressure error) | 3 | 0 | 0 |
+| 2 | noether | 6 | trim (07, 15) | 15 | 13 | 12 |
+| 3 | cohomology | 6 | keep, serious fix pass (05 Betti, 06 Z/2 lift) | 6 | 0 | 0 |
+| 4 | decision-trees | 6 | trim (07, 08) | 8 | 25 | 25 |
+| 5 | lithium-ion | 6 | restructure: merge 01-03 | 7 | 29-43 | 25 |
+| 6 | modular-forms | 5 | restructure: cut 13, 14, 17, 18; merge 02+05, 06+09 | 20 | 35 | 27 |
+| 7 | grateful-dead | 5 | trim: cut MFCC, merge two | 7 | 43 | 35 |
+| 8 | game-is-the-math | 5 | trim + fact-check; survivors about 40% shorter | 15 | 33 | 38 (about 60 after shortening) |
+| 9 | bioinformatics | 5 | restructure into about 8 essays (TP53 spine) | 15 | 47 | 20 |
+| 10 | sph | 5 | trim 04, maybe merge 03 into 01 | 4 | 25-50 | 7 |
+| 11 | lattice-simulation | 5 | restructure: keep 02, 04, 06-09 | 15 | 60 | 58 |
+| 12 | exceptional-atlas | 5 | restructure; owns Lie/E8/Leech; absorb PC 16 | 17 | 47 | 40 |
+| 13 | parallel-coordinates | 5 | trim to the Inselberg core, 01-11 | 23 | 43 | 51 |
+| 14 | mathematical-diagrams | 4 | restructure: keep 15-23 tier, 08 to exceptional-atlas | 23 | 52 | 37 |
+| 15 | japan-earthquakes | 4 | restructure to 6-7 articles (co-author: check first) | 20 | 55 | 49 |
+| 16 | emergence | 4 | restructure into about 12 essays by mechanism | 43 | 63 | 52 |
+| 17 | algorithms-ml | 4 | restructure: keep GD, PCA, Bayes; fix backprop, RL | 12 | 58 | 57 |
+| 18 | quasicrystals | 3 | rewrite from 01, or cut | 4 | 75-100 | 75-100 |
+| 19 | topological-data-analysis | 3 | cut; fold 01's Rips builder into cohomology | 3 | 100 | 100 |
+| 20 | autoresearch | 3 | cut (internal tooling docs, invented stats) | 13 | 100 | 100 |
+| 21 | information-geometry | 2 | cut (e/m roles swapped, invented conjectures) | 15 | 100 | 100 |
+| 22 | type-systems | 2 | cut; salvage 07 (symplectic drift) | 12 | 92 | 92 |
+| 23 | atlas-of-atlases | 2 | cut (meta-index of the gallery) | 8 | 100 | 100 |
+| 24 | directions | 2 | cut (roadmap brainstorm, rigged demos) | 24 | 100 | 100 |
+| 25 | d3-power-tools | 2 | cut (skill-pack docs, wrong D3 code) | 37 | 100 | 100 |
+
+## Totals
+
+- About 228 of 369 articles go (62%), leaving about 140.
+- About 330k of 560k words go (about 59%). The figure rises to about 65% once
+  game-is-the-math's survivors are shortened.
+- Seven whole series are cut: d3-power-tools, directions, autoresearch,
+  atlas-of-atlases, information-geometry, type-systems and
+  topological-data-analysis. That is 112 articles and 209k words, over a third
+  of the site. Quasicrystals would make eight unless it is rewritten.
+
+## Patterns behind the cuts
+
+- Batch generation: a whole series written in one day, one template repeated
+  (a hook, a named model, sliders, a one-line moral).
+- Figures that pose as computation: hardcoded "results", hand-typed data labeled
+  derived, `Math.random` standing in for real datasets, simulated LLMs.
+- Late-series drift: series start strong, then stretch their frame into
+  off-theme topics, where the errors cluster (parallel-coordinates 14-23,
+  lattice-simulation 10-15, exceptional-atlas 08-10).
+- Confident errors in places readers can't check: theorem statements, history,
+  statistics, quotes.
+- Topics duplicated across series: E8/Dynkin/Leech in four series; boids, SIR,
+  Ising, Life and lattice Boltzmann in three.
+
+## Worth salvaging before deleting
+
+- d3-power-tools: the navigation page's zoom figure, the projection
+  morphing.
+- directions: 21 (Cleveland-McGill), 22 (Simpson's quiz), 13 (sonification),
+  as seeds for new essays.
+- information-geometry: the math library; it could support about 4
+  rewritten essays.
+- type-systems/07, the rock-paper-scissors panel from 04, and TDA 01's Rips
+  builder.
+
+## Before cutting
+
+- japan-earthquakes credits a co-author, Daniel Overstreet.
+- Cutting information-geometry breaks links from modular-forms 14 and 20.
+  Other cross-series links need a sweep after the cuts.
+- Delete outright (git keeps the history) or move to an unlisted archive?
