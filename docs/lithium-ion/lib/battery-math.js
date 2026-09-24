@@ -6,10 +6,15 @@
 // Li.ocv         OCV curves for graphite, LFP, NMC (smoothed empirical) + derivatives
 // Li.bv          Butler–Volmer kinetics + Tafel
 // Li.sphere      1-D spherical diffusion (explicit FD, Crank–Nicolson optional)
-// Li.staging     graphite intercalation staging model
-// Li.eis         impedance of Randles + Warburg circuits
+// Li.staging     idealised graphite stage sequence with lever-rule coexistence
+// Li.eis         impedance of a Randles circuit (Warburg in the faradaic branch)
 // Li.dla         diffusion-limited aggregation for dendrites
 // Li.aging       SEI growth + calendar/cycle fade
+// Li.cell        cell OCV against SOC over a fixed electrode window
+// Li.charge      CCCV charging of one cell (OCV + lumped R)
+// Li.string      series-string capacity with cell spread and balancing modes
+// Li.bms         SOC estimation: coulomb counting, voltage lookup, 2-state EKF
+// Li.thermal     runaway propagation in a lumped thermal network (Arrhenius)
 // Li.fmt         number/axis formatting helpers
 
 (function (global) {
@@ -22,24 +27,16 @@
   var RT_F = R * T_ROOM / F; // ≈ 0.02569 V  (thermal voltage)
 
   // ─────────────────────────────────────────── OCV curves ──
-  // Empirical shape of graphite-lithium half-cell OCV vs x = Li content
-  // (x = 0 → empty graphite at ~3 V, x = 1 → fully lithiated at ~0.05 V).
-  // Three plateaus near stages 4/3 → 2 → 1 produce the characteristic flats.
-  // Coefficients tuned to reproduce the classic Dahn graphite profile.
+  // Graphite half-cell OCV vs x = Li content (x = 0 empty, x = 1 LiC6).
+  // Published fit for the graphite(-SiOx) negative electrode of an LG M50
+  // cell: Chen et al., J. Electrochem. Soc. 167, 080534 (2020). Plateaus
+  // near 0.21 V, 0.13 V and 0.09 V are the staging two-phase regions.
   function ocvGraphite(x) {
     x = Math.max(0.001, Math.min(0.999, x));
-    // Piecewise-smooth form: logarithmic divergences + three sigmoid plateaus.
-    var v = 0.124
-          + 1.5 * Math.exp(-70 * x)
-          - 0.0351 * tanh((x - 0.286) / 0.083)
-          - 0.0045 * tanh((x - 0.849) / 0.119)
-          - 0.035 * tanh((x - 0.1) / 0.03)
-          - 0.0147 * tanh((x - 0.5) / 0.034)
-          - 0.102 * tanh((x - 0.194) / 0.142)
-          - 0.022 * tanh((x - 0.98) / 0.052)
-          - 0.011 * tanh((x - 0.124) / 0.0226)
-          + 0.0155 * tanh((x - 0.105) / 0.029);
-    return v;
+    return 1.9793 * Math.exp(-39.3631 * x) + 0.2482
+         - 0.0909 * tanh(29.8538 * (x - 0.1234))
+         - 0.04478 * tanh(14.9159 * (x - 0.2769))
+         - 0.0205 * tanh(30.4444 * (x - 0.6103));
   }
   // LFP cathode OCV: flat ~3.42 V plateau with small curvature at edges.
   function ocvLFP(x) {
@@ -164,85 +161,84 @@
   }
 
   // ─────────────────────────────────────────── staging model ──
-  // Minimal intercalation staging: lattice-gas on a 1-D sequence of gallery
-  // sites; nearest-neighbour attractive interactions within a stage favour
-  // filling one gallery fully before opening the next (the "staging" phase
-  // transition that produces voltage plateaus).
+  // Idealised Rüdorff-Hofmann staging drawn from the phase sequence, not
+  // simulated. Pure stage n has every n-th gallery full, composition LiC_(6n),
+  // so x = 1/n (stage 4: 0.25, stage 3: 1/3, stage 2: 0.5, stage 1: 1). A
+  // dilute phase with lithium scattered through every gallery covers x < 0.04.
+  // Between two pure phases the electrode is a two-phase mixture, and the
+  // lever rule sets how much of each is present: fraction (x - xa)/(xb - xa)
+  // of the lateral extent is drawn as the richer phase b (Daumas-Hérold
+  // domains). The compositions are the textbook ideal; measured plateaus
+  // (ocvGraphite above) sit at nearby but not identical x.
   //
-  // Returns a state map for visualisation: array of galleries, each an array
-  // of site occupancies (0 or 1).
+  // Returns { galleries: [nGalleries][sitesPerGallery] of 0/1, stage: label }.
+  var STAGE_PHASES = [
+    { label: 'dilute', x: 0.04, n: 0 },
+    { label: '4', x: 0.25, n: 4 },
+    { label: '3', x: 1 / 3, n: 3 },
+    { label: '2', x: 0.5, n: 2 },
+    { label: '1', x: 1.0, n: 1 }
+  ];
+  function stagePattern(phase, g, s, nGalleries, x) {
+    if (phase.n === 0) {
+      // dilute: occupancy x spread evenly over every gallery
+      return ((s * 7 + g * 3) % 25) < Math.round(x * 25) ? 1 : 0;
+    }
+    // stage n: galleries n-1, 2n-1, ... (counting from the bottom) are full
+    return (g % phase.n) === phase.n - 1 ? 1 : 0;
+  }
   function stagingConfig(x, nGalleries, sitesPerGallery) {
-    // Compute stage number: at filling fraction x, stage n has every n-th
-    // gallery filled. Order: empty → stage 4 → stage 3 → stage 2 → stage 1.
-    var totalSites = nGalleries * sitesPerGallery;
-    var filled = Math.round(x * totalSites);
+    x = Math.max(0, Math.min(1, x));
     var galleries = [];
     for (var g = 0; g < nGalleries; g++) galleries.push(new Array(sitesPerGallery).fill(0));
-    // Determine active stage from x
-    var stage;
-    if (x < 0.03) stage = 0;
-    else if (x < 0.18) stage = 4;
-    else if (x < 0.33) stage = 3;
-    else if (x < 0.55) stage = 2;
-    else stage = 1;
-    // Active galleries = galleries 0, stage, 2*stage, ... (1-indexed mod)
-    var active = [];
-    if (stage === 0) {
-      // sparse
-      var want = filled;
-      for (var g = 0; g < nGalleries && want > 0; g++) {
-        galleries[g][0] = 1; want--;
-      }
-      return { galleries: galleries, stage: '∅' };
+    var P = STAGE_PHASES;
+    var a, b, f, label;
+    if (x <= P[0].x) {
+      for (var g1 = 0; g1 < nGalleries; g1++)
+        for (var s1 = 0; s1 < sitesPerGallery; s1++)
+          galleries[g1][s1] = stagePattern(P[0], g1, s1, nGalleries, x);
+      return { galleries: galleries, stage: 'dilute', fraction: 0 };
     }
-    for (var g = 0; g < nGalleries; g += stage) active.push(g);
-    // Fill active galleries first, then distribute remainder uniformly to
-    // transitioning galleries
-    var sitesInActive = active.length * sitesPerGallery;
-    var perGalleryFrac = Math.min(1, filled / sitesInActive);
-    active.forEach(function (g) {
-      var want = Math.round(perGalleryFrac * sitesPerGallery);
-      for (var i = 0; i < want; i++) galleries[g][i] = 1;
-    });
-    var used = active.length * Math.round(perGalleryFrac * sitesPerGallery);
-    var remaining = filled - used;
-    if (remaining > 0 && stage > 1) {
-      // Begin populating the next-stage galleries (interleaves emerge)
-      for (var g = Math.floor(stage / 2); g < nGalleries && remaining > 0; g += stage) {
-        for (var i = 0; i < sitesPerGallery && remaining > 0; i++) {
-          if (galleries[g][i] === 0) { galleries[g][i] = 1; remaining--; }
-        }
+    for (var k = 0; k < P.length - 1; k++) {
+      if (x <= P[k + 1].x) { a = P[k]; b = P[k + 1]; break; }
+    }
+    f = (x - a.x) / (b.x - a.x);             // lever rule: fraction of phase b
+    var split = Math.round((1 - f) * sitesPerGallery);  // sites [0, split) are phase a
+    for (var g2 = 0; g2 < nGalleries; g2++) {
+      for (var s2 = 0; s2 < sitesPerGallery; s2++) {
+        var ph = s2 < split ? a : b;
+        galleries[g2][s2] = stagePattern(ph, g2, s2, nGalleries, a.x);
       }
     }
-    return { galleries: galleries, stage: stage };
+    if (f < 0.03) label = a.label;
+    else if (f > 0.97) label = b.label;
+    else label = a.label + ' + ' + b.label;
+    return { galleries: galleries, stage: label, fraction: f };
   }
 
   // ─────────────────────────────────────────── impedance ──
-  // Randles circuit: R_s + (R_ct || (Q_dl)) + W   (W = Warburg diffusional tail)
-  // Returns Z(ω) = Z' − j Z'' (Nyquist convention: positive Z'' plotted up)
+  // Randles circuit: R_s + [ (R_ct + Z_W) || Z_CPE ].
+  // The Warburg element sits in the faradaic branch, in series with R_ct,
+  // because diffusion only limits the current that crosses the interface;
+  // the double-layer current bypasses it. With an ideal capacitor (phi = 1)
+  // the low-f tail extrapolates to R_s + R_ct - 2 sigma^2 C_dl on the real axis.
+  // Returns Z(ω) = Z' + j Z'' (Z'' < 0 for capacitive behaviour; Nyquist plots −Z'').
   function randlesZ(omega, Rs, Rct, Cdl, sigmaW, phiCPE) {
-    // CPE: Z_CPE = 1 / (Y0 * (jω)^phi). Use phi = phiCPE ∈ [0.7, 1]; phi=1 → capacitor.
-    phiCPE = phiCPE == null ? 1.0 : phiCPE;
-    var Y0 = Cdl; // approximate
-    var phi = phiCPE;
-    // (jω)^phi = ω^phi · (cos(phi π/2) + j sin(phi π/2))
+    // CPE: Z_CPE = 1 / (Q (jω)^phi) with Q = Cdl; phi = 1 is a capacitor.
+    var phi = phiCPE == null ? 1.0 : phiCPE;
+    var Q = Cdl;
+    // Admittance of the CPE: Q ω^phi (cos(phi π/2) + j sin(phi π/2))
     var wp = Math.pow(omega, phi);
-    var cosp = Math.cos(phi * Math.PI / 2), sinp = Math.sin(phi * Math.PI / 2);
-    var Z_CPE_re = cosp / (Y0 * wp) / (cosp*cosp + sinp*sinp);
-    var Z_CPE_im = -sinp / (Y0 * wp) / (cosp*cosp + sinp*sinp);
-    // Parallel (R_ct, Z_CPE)
-    var Yct_re = 1 / Rct, Yct_im = 0;
-    var Ycpe_re = 1 / ((Z_CPE_re*Z_CPE_re + Z_CPE_im*Z_CPE_im)) * Z_CPE_re;
-    var Ycpe_im = -1 / ((Z_CPE_re*Z_CPE_re + Z_CPE_im*Z_CPE_im)) * Z_CPE_im;
-    var Yp_re = Yct_re + Ycpe_re, Yp_im = Yct_im + Ycpe_im;
-    var magY = Yp_re*Yp_re + Yp_im*Yp_im;
-    var Zp_re = Yp_re / magY, Zp_im = -Yp_im / magY;
-    // Warburg: σ/√ω · (1 − j)
-    var Zw_re = sigmaW / Math.sqrt(omega);
-    var Zw_im = -sigmaW / Math.sqrt(omega);
-    var Z_re = Rs + Zp_re + Zw_re;
-    var Z_im = Zp_im + Zw_im;
-    return { re: Z_re, im: Z_im };
+    var Yc_re = Q * wp * Math.cos(phi * Math.PI / 2);
+    var Yc_im = Q * wp * Math.sin(phi * Math.PI / 2);
+    // Faradaic branch: R_ct + σ/√ω (1 − j)
+    var zf_re = Rct + sigmaW / Math.sqrt(omega);
+    var zf_im = -sigmaW / Math.sqrt(omega);
+    var mf = zf_re * zf_re + zf_im * zf_im;
+    var Yf_re = zf_re / mf, Yf_im = -zf_im / mf;
+    var Y_re = Yf_re + Yc_re, Y_im = Yf_im + Yc_im;
+    var mY = Y_re * Y_re + Y_im * Y_im;
+    return { re: Rs + Y_re / mY, im: -Y_im / mY };
   }
 
   // ─────────────────────────────────────────── dendrite DLA ──
@@ -381,256 +377,219 @@
     return pts;
   }
 
-  // ─────────────────────────────────────────── scale presets ──
-  // Six canonical systems that thread through the applied articles. Each carries
-  // chemistry defaults, pack topology, cooling, BMS sophistication, and the
-  // plausible safe operating envelope.
-  var SYSTEMS = {
-    flashlight: {
-      key: 'flashlight', label: 'Flashlight', cell: 'AA',
-      nS: 4, nP: 1, cellV: 1.5, cellQ: 2.0,
-      chemistry: 'alkaline',
-      typCurrent: 0.2, peakCurrent: 1.0,
-      cooling: 'none', bms: 'none',
-      safeT: { min: -10, max: 50 }, safeV: { min: 0.9, max: 1.6 },
-      safeI: { min: -2, max: 2 },
-      Rspread: 0.20, Qspread: 0.15
-    },
-    drill: {
-      key: 'drill', label: 'Power drill', cell: '18650',
-      nS: 5, nP: 2, cellV: 3.7, cellQ: 2.5,
-      chemistry: 'NMC',
-      typCurrent: 10, peakCurrent: 40,
-      cooling: 'air', bms: 'basic',
-      safeT: { min: 0, max: 60 }, safeV: { min: 2.7, max: 4.2 },
-      safeI: { min: -50, max: 50 },
-      Rspread: 0.12, Qspread: 0.06
-    },
-    ebike: {
-      key: 'ebike', label: 'E-bike', cell: '18650',
-      nS: 13, nP: 5, cellV: 3.7, cellQ: 2.9,
-      chemistry: 'NMC',
-      typCurrent: 8, peakCurrent: 25,
-      cooling: 'air-separator', bms: 'midrange',
-      safeT: { min: -10, max: 55 }, safeV: { min: 2.8, max: 4.2 },
-      safeI: { min: -25, max: 25 },
-      Rspread: 0.08, Qspread: 0.04
-    },
-    home: {
-      key: 'home', label: 'Home battery', cell: 'prismatic LFP',
-      nS: 16, nP: 40, cellV: 3.2, cellQ: 50,
-      chemistry: 'LFP',
-      typCurrent: 30, peakCurrent: 100,
-      cooling: 'plate-air', bms: 'high',
-      safeT: { min: 0, max: 50 }, safeV: { min: 2.5, max: 3.65 },
-      safeI: { min: -100, max: 100 },
-      Rspread: 0.05, Qspread: 0.03
-    },
-    ev: {
-      key: 'ev', label: 'Electric vehicle', cell: '21700',
-      nS: 96, nP: 74, cellV: 3.7, cellQ: 5.0,
-      chemistry: 'NMC',
-      typCurrent: 150, peakCurrent: 600,
-      cooling: 'liquid-plate', bms: 'high-sophisticated',
-      safeT: { min: -20, max: 55 }, safeV: { min: 2.7, max: 4.2 },
-      safeI: { min: -600, max: 600 },
-      Rspread: 0.03, Qspread: 0.02
-    },
-    grid: {
-      key: 'grid', label: 'Grid storage', cell: 'prismatic LFP',
-      nS: 416, nP: 120, cellV: 3.2, cellQ: 280,
-      chemistry: 'LFP',
-      typCurrent: 800, peakCurrent: 2000,
-      cooling: 'immersion', bms: 'cluster',
-      safeT: { min: 0, max: 45 }, safeV: { min: 2.5, max: 3.65 },
-      safeI: { min: -2000, max: 2000 },
-      Rspread: 0.02, Qspread: 0.015
-    }
-  };
-  function systemPack(key) {
-    var s = SYSTEMS[key];
-    if (!s) return null;
-    return {
-      nS: s.nS, nP: s.nP,
-      packV: s.nS * s.cellV,
-      packQ: s.nP * s.cellQ,
-      packE: s.nS * s.nP * s.cellV * s.cellQ,   // Wh
-      cellCount: s.nS * s.nP,
-      system: s
+  // ─────────────────────────────────────────── cell window ──
+  // A cell never uses an electrode's full range. Cell SOC 0..1 maps onto the
+  // middle of the graphite range, x = 0.14..0.88, and the cathode takes 1 - x.
+  // With the curves above this gives an NMC cell 2.9 V empty, 4.18 V full,
+  // and an LFP cell sitting on its 3.1-3.3 V plateau for almost all of it.
+  var X_EMPTY = 0.14, X_FULL = 0.895;
+  function ocvSoc(soc, chem) {
+    return ocvCell(X_EMPTY + (X_FULL - X_EMPTY) * soc, chem);
+  }
+  function dOcvdSoc(soc, chem) {
+    var h = 0.002;
+    return (ocvSoc(soc + h, chem) - ocvSoc(soc - h, chem)) / (2 * h);
+  }
+
+  // Seeded PRNG (mulberry32) and standard normal draws (Box-Muller).
+  function rng(seed) {
+    var a = seed >>> 0;
+    return function () {
+      a = (a + 0x6D2B79F5) >>> 0;
+      var t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
   }
-
-  // ─────────────────────────────────────────── pack ──
-  // Simple drift monte-carlo: generate cells with capacity / resistance noise
-  // drawn from the system's spread, then run N cycles. Each cycle consumes a
-  // constant charge from each parallel string; weakest cell in each series
-  // branch sets the termination voltage. Returns per-cell terminal-voltage
-  // history to visualise fan-out.
-  function packDrift(systemKey, nCycles, seed) {
-    var sys = SYSTEMS[systemKey]; if (!sys) return null;
-    var rng = (function (s) { return function () { s = (s * 9301 + 49297) % 233280; return s / 233280; }; })(seed || 17);
-    // Cap simulated cells at a visualisation-friendly count; report scale factor.
-    var visN = Math.min(sys.nS * sys.nP, 120);
-    var scaleFactor = (sys.nS * sys.nP) / visN;
-    var cells = [];
-    for (var i = 0; i < visN; i++) {
-      cells.push({
-        R: 1 + sys.Rspread * (rng() - 0.5) * 2,     // relative R multiplier
-        Qmax: 1 + sys.Qspread * (rng() - 0.5) * 2,  // relative capacity
-        Qused: 0,
-        Vhist: []
-      });
-    }
-    for (var c = 0; c < nCycles; c++) {
-      var avgPull = 0.85 + 0.10 * (rng() - 0.5);  // DOD per cycle
-      cells.forEach(function (cell) {
-        cell.Qused += avgPull / cell.Qmax;
-        // Terminal V after this cycle, simple OCV + R drop approximation.
-        var soc = Math.max(0, 1 - (cell.Qused % 1));
-        var fade = 1 - 0.0003 * c * cell.R;
-        var v = sys.cellV * (0.85 + 0.15 * soc) * fade;
-        cell.Vhist.push(v);
-      });
-    }
-    return { cells: cells, scaleFactor: scaleFactor, nCycles: nCycles, system: sys };
+  function normal(r) {
+    var u = 1 - r(), v = r();
+    return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
   }
-  // Thermal runaway toy model. Grid of cells, one triggered; heat diffuses
-  // into neighbours; cell ignites when its temperature crosses T_trigger.
-  // Cooling removes heat at a topology-specific rate.
-  function thermalSpread(systemKey, triggerIdx, steps) {
-    var sys = SYSTEMS[systemKey]; if (!sys) return null;
-    var W = Math.min(12, sys.nS);
-    var H = Math.min(10, sys.nP);
-    var N = W * H;
-    var T = new Float64Array(N); for (var i = 0; i < N; i++) T[i] = 25;
-    var ignited = new Uint8Array(N);
-    var T_TRIGGER = 150;
-    var Q_RELEASE = 250;  // °C equivalent per step when burning
-    var coolingK = { 'none': 0.002, 'air': 0.015, 'air-separator': 0.03,
-                     'plate-air': 0.06, 'liquid-plate': 0.14, 'immersion': 0.28 };
-    var kCool = coolingK[sys.cooling] || 0.02;
-    var kConduct = 0.25;  // cell-to-cell conduction
-    if (triggerIdx == null) triggerIdx = Math.floor(N / 2);
-    ignited[triggerIdx] = 1; T[triggerIdx] = 200;
-    var history = [];
-    for (var s = 0; s < steps; s++) {
-      var Tnext = new Float64Array(N);
-      for (var idx = 0; idx < N; idx++) {
-        var x = idx % W, y = Math.floor(idx / W);
-        var nbSum = 0, nbCount = 0;
-        [[1,0],[-1,0],[0,1],[0,-1]].forEach(function (d) {
-          var nx = x + d[0], ny = y + d[1];
-          if (nx >= 0 && nx < W && ny >= 0 && ny < H) {
-            nbSum += T[ny * W + nx]; nbCount++;
-          }
-        });
-        var nbAvg = nbCount ? nbSum / nbCount : T[idx];
-        var dT = kConduct * (nbAvg - T[idx]) - kCool * (T[idx] - 25);
-        if (ignited[idx]) dT += Q_RELEASE / 8;
-        Tnext[idx] = T[idx] + dT;
-        if (!ignited[idx] && Tnext[idx] > T_TRIGGER) ignited[idx] = 1;
+
+  // ─────────────────────────────────────────── CCCV charge ──
+  // One cell, OCV(SOC) plus a lumped resistance R. Constant current at
+  // cRate until the terminal voltage OCV + I R reaches vMax, then hold vMax:
+  // I = (vMax - OCV) / R, which falls as OCV rises. Stop when I < cutoff.
+  // Q in Ah, R in ohms. Returns samples and the SOC/time of the CC->CV switch.
+  function cccv(opts) {
+    var Q = opts.Q || 5, R = opts.R, c = opts.cRate, chem = opts.chem || 'NMC';
+    var vMax = opts.vMax || 4.2, cutoff = (opts.cutoffC || 0.05) * Q;
+    var soc = opts.soc0 == null ? 0 : opts.soc0;
+    var dt = opts.dt || 2, t = 0, phase = 'CC', sw = null;
+    var Icc = c * Q, out = [], I = 0, V = 0;
+    for (var k = 0; k < 200000; k++) {
+      var ocv = ocvSoc(soc, chem);
+      if (phase === 'CC') {
+        I = Icc; V = ocv + I * R;
+        if (V >= vMax) { phase = 'CV'; sw = { t: t, soc: soc }; }
       }
-      T = Tnext;
-      history.push({ T: new Float64Array(T), ignited: new Uint8Array(ignited) });
+      if (phase === 'CV') { I = Math.min(Icc, (vMax - ocv) / R); V = vMax; }
+      if (k % 5 === 0) out.push({ t: t, soc: soc, I: I, V: V, phase: phase });
+      if (phase === 'CV' && I < cutoff) break;
+      soc += I * dt / (3600 * Q);
+      t += dt;
     }
-    return { W: W, H: H, history: history, system: sys };
+    out.push({ t: t, soc: soc, I: I, V: V, phase: phase });
+    return { pts: out, sw: sw, tEnd: t, socEnd: soc };
   }
 
-  // ─────────────────────────────────────────── bms ──
-  // Simple blended SoC estimator. Three strategies:
-  //   'voltage'  — invert OCV(x) from the (noisy) terminal voltage directly.
-  //   'coulomb'  — integrate current to update SoC from a starting guess.
-  //   'blend'    — weighted average that trusts voltage when dV/dx is large
-  //                (i.e. away from flat LFP plateaus) and coulomb otherwise.
-  // Returns per-step {socTrue, socEst, strategy, weight} arrays.
-  function socEstimate(strategy, systemKey, stepMinutes) {
-    var sys = SYSTEMS[systemKey]; if (!sys) return null;
-    stepMinutes = stepMinutes || 120;
-    var chem = sys.chemistry === 'LFP' ? 'LFP' : 'NMC';
-    var ocvFn = chem === 'LFP' ? ocvLFP : ocvNMC;
-    var dVdxFn = chem === 'LFP' ? dVdxLFP : dVdxNMC;
-    var pts = [];
-    // Simulate a slow discharge from SOC 0.95 → 0.1 over stepMinutes
-    var soc = 0.95;
-    var socCoulomb = 0.92;  // starting guess is slightly wrong
-    var socEst;
-    for (var k = 0; k <= stepMinutes; k++) {
-      soc = 0.95 - 0.85 * (k / stepMinutes);
-      var vTrue = ocvFn(1 - soc);
-      var vNoise = vTrue + (Math.random() - 0.5) * 0.006;  // ±3 mV sensor noise
-      // Voltage-only estimate: invert by table lookup on a finer grid.
-      var vSoc = invertOcv(chem, vNoise);
-      // Coulomb estimate: integrate a (noisy) current
-      var iNoise = 1 + (Math.random() - 0.5) * 0.02;
-      socCoulomb -= 0.85 / stepMinutes * iNoise;
-      // Weight for blending
-      var dv = Math.abs(dVdxFn(1 - soc));
-      var wVolt = Math.min(1, dv / 0.5);  // confidence in voltage
-      if (strategy === 'voltage') socEst = vSoc;
-      else if (strategy === 'coulomb') socEst = socCoulomb;
-      else socEst = wVolt * vSoc + (1 - wVolt) * socCoulomb;
-      pts.push({ t: k, socTrue: soc, socEst: socEst, wVolt: wVolt, vTrue: vTrue, vNoise: vNoise, socCoulomb: socCoulomb, socVolt: vSoc });
-    }
-    return pts;
-  }
-  // Invert ocv(1-soc) numerically; chem ∈ {LFP, NMC}.
-  function invertOcv(chem, v) {
-    var fn = chem === 'LFP' ? ocvLFP : ocvNMC;
-    var lo = 0.001, hi = 0.999;
-    for (var k = 0; k < 50; k++) {
-      var mid = (lo + hi) / 2;
-      var vm = fn(mid);
-      if (vm < v) hi = mid; else lo = mid;
-    }
-    return 1 - (lo + hi) / 2;
-  }
-
-  // Balancing simulation. Mode ∈ {'passive', 'active'}. Passive shunts the
-  // highest cell's top-of-charge excess through a bleeder resistor (hours).
-  // Active transfers charge between cells via a flyback / capacitor network
-  // (minutes). Returns history of per-cell SoC.
-  function balanceSim(mode, systemKey, minutes) {
-    var sys = SYSTEMS[systemKey]; if (!sys) return null;
-    var n = Math.min(12, sys.nS);
-    var cells = [];
+  // ─────────────────────────────────────────── series string ──
+  // n cells in series share one current. Capacities are drawn with relative
+  // spread sQ; starting charge offsets (SOC imbalance) with spread sS.
+  // mode 'none'   : the string was charged until its fullest cell hit 100%,
+  //                 so each cell sits below full by its offset.
+  // mode 'top'    : passive top balancing has bled every cell to 100%.
+  // mode 'active' : ideal lossless shuttling keeps every cell at one SOC.
+  // Discharge stops when the first cell reaches 0%. Returns usable Ah.
+  function drawString(n, sQ, sS, seed, Q0) {
+    var r = rng(seed), cells = [];
+    Q0 = Q0 || 5;
     for (var i = 0; i < n; i++) {
-      cells.push(0.80 + 0.12 * (Math.sin(i * 1.3) + 1) / 2 + 0.05 * (Math.random() - 0.5));
+      var Q = Q0 * (1 + sQ * normal(r));
+      var off = Q0 * sS * normal(r);
+      cells.push({ Q: Q, off: off });
     }
-    var history = [cells.slice()];
-    var rate = mode === 'active' ? 0.12 / 60 : 0.015 / 60;  // per minute
-    for (var t = 1; t <= minutes; t++) {
-      var mean = cells.reduce(function (a, b) { return a + b; }, 0) / n;
-      for (var i = 0; i < n; i++) {
-        if (mode === 'passive') {
-          // Only shunt above the target
-          if (cells[i] > mean) cells[i] -= rate * (cells[i] - mean);
-        } else {
-          // Active: transfer toward mean symmetrically
-          cells[i] -= rate * (cells[i] - mean);
-        }
-      }
-      history.push(cells.slice());
+    var maxOff = -Infinity;
+    cells.forEach(function (c) { if (c.off > maxOff) maxOff = c.off; });
+    // headroom below full at end of charge: the cell with the largest offset is full
+    cells.forEach(function (c) { c.head = Math.min(c.Q, maxOff - c.off); });
+    return cells;
+  }
+  function usable(cells, mode) {
+    if (mode === 'active') {
+      var s = 0; cells.forEach(function (c) { s += c.Q; }); return s / cells.length;
     }
-    return { history: history, n: n, mode: mode };
+    var m = Infinity;
+    cells.forEach(function (c) { var q = c.Q - (mode === 'top' ? 0 : c.head); if (q < m) m = q; });
+    return Math.max(0, m);
+  }
+  // Mean usable fraction of nominal over many random strings of length n.
+  function usableMC(n, sQ, sS, mode, trials, seed, Q0) {
+    Q0 = Q0 || 5;
+    var acc = 0;
+    for (var k = 0; k < trials; k++) acc += usable(drawString(n, sQ, sS, seed + 7919 * k, Q0), mode) / Q0;
+    return acc / trials;
   }
 
-  // Safe zone classifier. Returns {state, reasons} for a (V, I, T) point.
-  function safeZone(systemKey, V, I, T_C) {
-    var sys = SYSTEMS[systemKey]; if (!sys) return null;
-    var r = [];
-    var state = 'safe';
-    function flag(s, msg) { if (severity(s) > severity(state)) state = s; r.push(msg); }
-    function severity(s) { return { safe: 0, warn: 1, fault: 2, hard: 3 }[s] || 0; }
-    if (V < sys.safeV.min) flag('fault', 'V below ' + sys.safeV.min + ' V');
-    else if (V > sys.safeV.max) flag('fault', 'V above ' + sys.safeV.max + ' V');
-    else if (V > sys.safeV.max - 0.05) flag('warn', 'near upper V limit');
-    if (T_C < sys.safeT.min) flag('fault', 'T below ' + sys.safeT.min + ' °C');
-    else if (T_C > sys.safeT.max) flag('fault', 'T above ' + sys.safeT.max + ' °C');
-    else if (T_C > sys.safeT.max - 5) flag('warn', 'near upper T limit');
-    if (Math.abs(I) > Math.abs(sys.safeI.max)) flag('hard', '|I| exceeds ' + Math.abs(sys.safeI.max) + ' A');
-    else if (Math.abs(I) > 0.85 * Math.abs(sys.safeI.max)) flag('warn', '|I| near limit');
-    if (!r.length) r.push('within safe envelope');
-    return { state: state, reasons: r };
+  // ─────────────────────────────────────────── SOC estimation ──
+  // Truth: one cell of Q Ah with series resistance R0 and one RC pair
+  // (R1, tau) for polarisation, driven by a seeded drive profile.
+  // Sensors: current with a constant bias plus noise (0.5% of 1C), voltage
+  // with noise sigmaV. Three estimators see the same measurements:
+  //   cc   : coulomb counting from the (wrong) starting guess
+  //   v    : invert OCV(V + I R0) by bisection each sample (ignores the RC)
+  //   ekf  : two-state extended Kalman filter, x = [SOC, v_RC], predicting
+  //          with measured current and correcting with voltage through
+  //          H = [dOCV/dSOC, -1] at the current estimate (Plett 2004 style).
+  // The filter is handed the true OCV curve, R0, R1 and tau, which a real
+  // BMS only has approximately. sd is the filter's own SOC standard deviation.
+  function invertSoc(v, chem) {
+    var lo = 0, hi = 1;
+    for (var k = 0; k < 40; k++) {
+      var mid = (lo + hi) / 2;
+      if (ocvSoc(mid, chem) < v) lo = mid; else hi = mid;
+    }
+    return (lo + hi) / 2;
+  }
+  function estimate(opts) {
+    var chem = opts.chem || 'NMC', Q = opts.Q || 5;
+    var R0 = opts.R0 || 0.015, R1 = opts.R1 || 0.015, tau = opts.tau || 60;
+    var r = rng(opts.seed || 1);
+    var bias = (opts.biasC || 0) * Q;           // A
+    var sI = 0.005 * Q, sV = opts.sigmaV || 0.002;
+    var dt = 1, a = Math.exp(-dt / tau);
+    var soc = opts.soc0 || 0.95, v1 = 0;
+    var cc = soc + (opts.initErr || 0);
+    var x0 = cc, x1 = 0;                        // EKF state
+    var P00 = 0.2 * 0.2, P01 = 0, P11 = 0.01 * 0.01;
+    var q0 = Math.pow(0.02 * dt / 3600, 2);     // allows a current error of ~2% of 1C
+    var q1 = Math.pow(0.0005, 2);
+    var Rv = Math.pow(opts.sigmaModel || 0.004, 2);
+    var out = [], I = 0, segLeft = 0, t = 0;
+    while (soc > 0.05 && t < 6 * 3600) {
+      if (segLeft <= 0) {
+        var u = r();
+        I = u < 0.15 ? 0 : (u < 0.25 ? -0.3 * Q * r() : Q * (0.2 + 1.2 * r()));
+        segLeft = 60 + Math.floor(240 * r());
+      }
+      segLeft -= dt;
+      // truth
+      soc -= I * dt / (3600 * Q);
+      v1 = a * v1 + R1 * (1 - a) * I;
+      var V = ocvSoc(soc, chem) - v1 - I * R0 + sV * normal(r);
+      var Im = I + bias + sI * normal(r);
+      // coulomb counting and voltage lookup
+      cc -= Im * dt / (3600 * Q);
+      var vs = invertSoc(V + Im * R0, chem);
+      // EKF predict: F = diag(1, a)
+      x0 -= Im * dt / (3600 * Q);
+      x1 = a * x1 + R1 * (1 - a) * Im;
+      P00 += q0; P01 = a * P01; P11 = a * a * P11 + q1;
+      // EKF update, H = [h0, -1]
+      var xs = Math.max(0.001, Math.min(0.999, x0));
+      var h0 = dOcvdSoc(xs, chem);
+      var y = V - (ocvSoc(xs, chem) - x1 - Im * R0);
+      var PH0 = P00 * h0 - P01, PH1 = P01 * h0 - P11;   // P H^T
+      var S = h0 * PH0 - PH1 + Rv;
+      var K0 = PH0 / S, K1 = PH1 / S;
+      x0 += K0 * y; x1 += K1 * y;
+      var n00 = P00 - K0 * PH0, n01 = P01 - K0 * PH1, n11 = P11 - K1 * PH1;
+      P00 = n00; P01 = n01; P11 = n11;
+      if (t % 10 === 0) out.push({ t: t, soc: soc, cc: cc, v: vs, ekf: x0, sd: Math.sqrt(Math.max(0, P00)), I: I });
+      t += dt;
+    }
+    return out;
+  }
+
+  // ─────────────────────────────────────────── thermal propagation ──
+  // A W x H module of cells as a lumped thermal network. Each cell has heat
+  // capacity Cth (J/K), conductance G (W/K) to each of its four neighbours
+  // and conductance h (W/K) to coolant at 25 C. Inside each cell a single
+  // Arrhenius reaction releases a finite energy E (J): heat rate E k(T) c,
+  // with c the unreacted fraction and k(T) = k0 exp(-Ea / RT). Ea = 151
+  // kJ/mol and k0 are set so self-heating is about 0.02 K/min at 100 C and
+  // about 10 K/s at 200 C for E = 30 kJ, Cth = 45 J/K (a 45 g cylinder).
+  // There is no fixed trigger temperature: a cell runs away when its own
+  // heat release outruns what the neighbours and coolant carry off
+  // (Semenov's criterion). Venting and ejecta are not modelled.
+  // The trigger cell starts at 200 C and is forced to react at a rate of at
+  // least 0.5 /s, standing in for an internal short. dt = 0.25 s.
+  var EA_R = 18200, K0 = 7.8e14;
+  function thermal(opts) {
+    var W = opts.W || 9, H = opts.H || 6, N = W * H;
+    var Cth = opts.Cth || 45, G = opts.G, h = opts.h, E = opts.E;
+    var Tc = 25, tEnd = opts.tEnd || 900, dt = 0.25, every = opts.every || 4;
+    var T = new Float64Array(N).fill(Tc), c = new Float64Array(N).fill(1);
+    var tRun = new Float64Array(N).fill(-1);
+    var trig = opts.trigger == null ? Math.floor(H / 2) * W + Math.floor(W / 2) : opts.trigger;
+    T[trig] = 200;
+    var frames = [], peak = Tc, perFrame = Math.round(every / dt);
+    for (var s = 0; s * dt <= tEnd; s++) {
+      var t = s * dt;
+      var dT = new Float64Array(N);
+      for (var i = 0; i < N; i++) {
+        var x = i % W, y = (i / W) | 0, q = -h * (T[i] - Tc);
+        if (x > 0) q += G * (T[i - 1] - T[i]);
+        if (x < W - 1) q += G * (T[i + 1] - T[i]);
+        if (y > 0) q += G * (T[i - W] - T[i]);
+        if (y < H - 1) q += G * (T[i + W] - T[i]);
+        var k = K0 * Math.exp(-EA_R / (T[i] + 273.15));
+        if (i === trig && k < 0.5) k = 0.5;
+        var dc = c[i] * (1 - Math.exp(-k * dt));   // exact for one step
+        c[i] -= dc;
+        dT[i] = (q * dt + E * dc) / Cth;
+      }
+      for (var j = 0; j < N; j++) {
+        T[j] += dT[j];
+        if (T[j] > peak) peak = T[j];
+        if (tRun[j] < 0 && c[j] < 0.5) tRun[j] = t;
+      }
+      if (s % perFrame === 0) frames.push({ t: t, T: Float64Array.from(T), c: Float64Array.from(c) });
+    }
+    var count = 0, last = 0;
+    for (var m = 0; m < N; m++) if (tRun[m] >= 0) { count++; if (tRun[m] > last) last = tRun[m]; }
+    return { W: W, H: H, frames: frames, tRun: tRun, count: count, last: last, peak: peak, trigger: trig };
   }
 
   // ─────────────────────────────────────────── formatting ──
@@ -675,18 +634,12 @@
       resistanceRise: resistanceRise,
       duty: dutyCycleFade
     },
-    systems: SYSTEMS,
-    pack: {
-      of: systemPack,
-      drift: packDrift,
-      thermal: thermalSpread
-    },
-    bms: {
-      soc: socEstimate,
-      invertOcv: invertOcv,
-      balance: balanceSim,
-      safeZone: safeZone
-    },
+    cell: { ocvSoc: ocvSoc, dOcvdSoc: dOcvdSoc, invertSoc: invertSoc },
+    rand: { rng: rng, normal: normal },
+    charge: { cccv: cccv },
+    string: { draw: drawString, usable: usable, usableMC: usableMC },
+    bms: { estimate: estimate },
+    thermal: { run: thermal },
     fmt: { sci: sci, sup: sup, mV: mV }
   };
 })(window);

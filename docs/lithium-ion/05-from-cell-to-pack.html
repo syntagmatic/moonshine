@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>From Cell to Pack — Lithium-Ion</title>
+<script src="../vendor/js/d3.v7.min.js"></script>
+<link rel="stylesheet" href="../vendor/katex@0.16.11/katex.min.css">
+<script src="../vendor/katex@0.16.11/katex.min.js"></script>
+<link href="../vendor/fonts/sans-serif-mono/fonts.css" rel="stylesheet">
+<script src="lib/battery-math.js"></script>
+<script src="../lib/motion.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --article-width: 740px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem;
+  --line-height: 1.65;
+  --text: #1a1a2e;
+  --text-2: #4a4a6a;
+  --accent: #b45309;
+  --accent-light: #fef3c7;
+  --bg: #fafafa;
+  --fig-bg: #ffffff;
+  --border: #e2e2e8;
+  --c-volt: #2563eb;
+  --c-curr: #ea580c;
+  --c-ekf: #0f766e;
+  --c-nmc: #7c3aed;
+  --c-lfp: #059669;
+  --c-axis: #64748b;
+}
+
+body { font-family: var(--body-font); font-size: var(--body-size); line-height: var(--line-height); color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased; }
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
+
+h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+
+p { margin: 0 0 1rem; }
+a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+a:hover { color: #92400e; }
+
+.back-link { font-family: var(--heading-font); font-size: 0.85rem; display: inline-block; margin-bottom: 1rem; color: var(--text-2); text-decoration: none; }
+.back-link:hover { color: var(--accent); }
+
+.header { padding: 3rem 0 2rem; border-bottom: 1px solid var(--border); margin-bottom: 2.5rem; }
+.header .subtitle { font-family: var(--heading-font); font-size: 1.15rem; color: var(--text-2); max-width: 620px; }
+
+.figure { margin: 2rem 0; padding: 1.25rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.figure svg { display: block; width: 100%; height: auto; }
+.figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; line-height: 1.45; }
+.figure-label { font-weight: 600; color: var(--text); }
+
+.controls { display: flex; align-items: center; gap: 0.5rem 1rem; flex-wrap: wrap; font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; }
+.controls label { display: flex; align-items: center; gap: 0.4rem; }
+.controls input[type=range] { accent-color: var(--accent); width: 130px; }
+.controls select { font-family: var(--heading-font); font-size: 0.85rem; padding: 0.2rem 0.4rem; border: 1px solid var(--border); border-radius: 4px; background: var(--fig-bg); color: var(--text); }
+.controls .val { font-family: var(--mono-font); font-size: 0.8rem; min-width: 4.5em; color: var(--text); }
+
+.btn { font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600; padding: 0.3rem 0.9rem; border-radius: 5px; border: 1px solid var(--border); background: var(--fig-bg); color: var(--text); cursor: pointer; }
+.btn:hover { border-color: var(--accent); background: var(--accent-light); }
+
+.readout { font-family: var(--heading-font); font-size: 0.88rem; color: var(--text); margin-top: 0.6rem; min-height: 1.4em; }
+
+.katex-display { margin: 1.25rem 0; overflow-x: auto; overflow-y: hidden; }
+svg text { font-family: var(--heading-font); }
+
+.nav-footer { margin-top: 5rem; padding-top: 2rem; border-top: 1px solid var(--border); display: flex; justify-content: space-between; gap: 1rem; font-family: var(--heading-font); font-size: 0.9rem; }
+
+@media (max-width: 600px) { h1 { font-size: 1.75rem; } .article { padding: 1.5rem 1rem 4rem; } .figure { padding: 0.75rem; } }
+</style>
+</head>
+<body>
+<div class="article">
+
+<a href="index.html" class="back-link">← Lithium-Ion</a>
+
+<div class="header">
+  <h1>From Cell to Pack</h1>
+  <p class="subtitle">Charging against a voltage ceiling, the weakest cell in a series string, estimating a charge no sensor can read, and heat that crosses from one cell to the next.</p>
+</div>
+
+<p>The first four parts of this series stayed inside one cell: where its resting voltage comes from (<a href="01-voltage-at-rest.html">Part 1</a>), what it loses under load (<a href="02-voltage-under-load.html">Part 2</a>), how it ages (<a href="03-aging-and-failure.html">Part 3</a>), and how an impedance sweep reads that back through the terminals (<a href="04-impedance-spectroscopy.html">Part 4</a>). Products are built from many cells. A drill pack has ten, an e-bike pack about sixty-five, a long-range car several thousand. Putting them together creates problems a single cell never has: cells that are nearly identical but differ a little, a state of charge that has to be estimated for each one, and heat that can travel from one cell to the next. Charging comes first, because even for a single cell it depends on the losses from Part 2.</p>
+
+<h2>Charging against a ceiling</h2>
+
+<p>A charger cannot simply connect an empty cell to its full voltage. An NMC cell at rest reads about 4.19 V full and 2.9 V empty. Connected straight to 4.2 V, the empty cell would draw (4.2 − 2.9)/<em>R</em>, over 40 A through a 30 mΩ cell. The standard protocol has two phases. In the <strong>constant-current</strong> (CC) phase the charger pushes a fixed current, quoted as a C-rate: 1C is the current that would fill the cell in an hour. The terminal voltage is the resting voltage plus the loss stack, <em>V</em> = OCV(SOC) + <em>IR</em>, so it climbs as the cell fills. When it reaches the ceiling, 4.2 V for most NMC cells, the charger switches to <strong>constant voltage</strong> (CV). It holds 4.2 V, and the current becomes whatever the resistance allows across the gap between the ceiling and the resting voltage:</p>
+
+<div id="math-cv"></div>
+
+<p>As the cell fills, OCV creeps toward the ceiling and the current tapers. The charger stops when it falls below a set fraction, commonly C/20. Figure 1 computes this for a 5 Ah cell, with Part 2's loss stack lumped into one resistance <em>R</em>.</p>
+
+<div class="figure" id="fig-cccv">
+  <div id="cccv-host"></div>
+  <div class="controls">
+    <label>C-rate <input type="range" id="cc-rate" min="0.25" max="3" step="0.05" value="1"><span class="val" id="cc-rate-v"></span></label>
+    <label>resistance <input type="range" id="cc-r" min="10" max="60" step="1" value="30"><span class="val" id="cc-r-v"></span></label>
+  </div>
+  <div class="readout" id="cccv-readout"></div>
+  <p class="figure-caption"><span class="figure-label">Figure 1.</span> CCCV charge of a 5 Ah NMC cell from empty, modelled as OCV(SOC) plus one resistance <em>R</em>. Left: terminal voltage (blue) and current (orange) against time. The shaded span is the CV phase. Right: total charge time (solid) and time in the CC phase (dashed) against C-rate at the chosen <em>R</em>. The dot marks the current setting. Charging stops at C/20. The model has no diffusion and no heating, so it understates the real CV tail.</p>
+</div>
+
+<p>The switch to CV happens when OCV + <em>IR</em> reaches the ceiling, so it comes earlier at higher current and in a higher-resistance cell. At 30 mΩ the switch comes at 83% SOC when charging at 1C and at 54% at 3C. Tripling the current cuts the total from 82 to 53 minutes, because the CV tail grows from 32 to 43 minutes. The tail does lengthen, though much less than in proportion. Resistance matters more. Part 3 showed it rising over a cell's life. Double it to 60 mΩ and a 3C charge takes 83 minutes, four minutes faster than 2C. Real fast charging runs into a limit this model leaves out, lithium plating on the graphite (Part 3), and chargers avoid it by stepping the current down as SOC rises.</p>
+
+<h2>Series, parallel, and the weakest cell</h2>
+
+<p>Cells in series add their voltages and carry one current. Cells in parallel share one voltage and add their capacities. A pack described as <em>n</em>S<em>m</em>P has <em>n</em> groups in series, each of <em>m</em> cells in parallel, and delivers <em>n</em> times the cell voltage at <em>m</em> times the cell capacity. A 13S5P e-bike pack of 3.6 V, 2.9 Ah cells gives 47 V and 14.5 Ah, about 680 Wh. A Tesla Model 3 Long Range pack is 96S46P of 21700 cells, around 350 V and 75 to 80 kWh.</p>
+
+<p>A parallel group behaves like one large cell. Its cells are tied to the same voltage, so a cell with a little less capacity supplies a little less current and the group stays together. A series string has no such mechanism. Every cell carries the same current and gives up the same charge. When the cells differ, the string can only be discharged until its emptiest cell reaches its lower limit, and only charged until its fullest cell reaches its upper limit. Whatever the other cells still hold is stranded.</p>
+
+<p>Cells differ in two ways that behave differently. Capacity varies by a percent or two even in a well-sorted batch, and more with age, since the cell nearest a hot spot ages fastest (Part 3). State of charge drifts apart as well, because self-discharge rates differ, so cells of equal capacity end up at different SOCs over weeks. A battery management system (BMS) can recover some of the stranded charge by <strong>balancing</strong>. Passive balancing, the cheap and common kind, puts a switched resistor across each cell and bleeds the fullest cells at the top of charge until all of them reach 100% together. Bleed currents are typically 50 to 200 mA, so taking 5% off a 5 Ah cell at 100 mA takes two and a half hours. This <em>top balancing</em> removes the SOC offsets and leaves the capacity differences: every cell starts full, and the string still stops when its smallest cell is empty. <em>Active</em> balancing moves charge from strong cells to weak ones through capacitors, inductors or small transformers while the pack is in use. Ideally it keeps every cell at the same SOC, and the string delivers the average cell capacity.</p>
+
+<div class="figure" id="fig-string">
+  <div id="string-host"></div>
+  <div class="controls">
+    <label>cells in series <select id="st-n"><option value="4">4</option><option value="12" selected>12</option><option value="24">24</option><option value="96">96</option></select></label>
+    <label>capacity spread <input type="range" id="st-q" min="0" max="5" step="0.1" value="2"><span class="val" id="st-q-v"></span></label>
+    <label>SOC spread <input type="range" id="st-s" min="0" max="5" step="0.1" value="3"><span class="val" id="st-s-v"></span></label>
+    <label>balancing <select id="st-mode"><option value="none" selected>none</option><option value="top">top (passive)</option><option value="active">active (ideal)</option></select></label>
+    <button class="btn" id="st-seed">new cells</button>
+  </div>
+  <div class="readout" id="string-readout"></div>
+  <p class="figure-caption"><span class="figure-label">Figure 2.</span> Left: the voltage of every cell in one series string discharged at C/2, against charge drawn. Capacities and SOC offsets are drawn from normal distributions with the spreads (one standard deviation) set by the sliders. The string stops when its first cell is empty (vertical line). The faint continuation of each trace is charge that cell still holds. Right: usable capacity as a fraction of the average cell against the number of cells in series, each point averaged over 300 random strings, for the three balancing modes. The dot is the left panel's setting. The active curve assumes lossless transfer, so it is an upper bound.</p>
+</div>
+
+<p>The right panel shows why this matters more as packs grow. After top balancing, the string's capacity is the smallest of <em>n</em> random capacities, and the expected smallest of <em>n</em> draws sits further below the mean as <em>n</em> grows: about one standard deviation for 4 cells, 1.6 for 12, and 2.5 for 96. With a 2% capacity spread a 4-cell string loses about 2% to its weakest cell and a 96-cell string about 5%. Without balancing the SOC offsets add a second minimum on top, and with a 3% SOC spread the loss roughly triples. A car has ninety-six cells in series, so the same spread costs it more than it costs a drill, which is part of why car makers pay for matched cells and balancing hardware.</p>
+
+<h2>Estimating a charge no sensor can read</h2>
+
+<p>Every step above needs each cell's state of charge, and nothing measures it. The BMS measures cell voltages, pack current and a few temperatures, and infers the rest. The two simple strategies each fail in their own way.</p>
+
+<p><strong>Coulomb counting</strong> integrates the measured current. It is smooth and knows nothing about the chemistry, but it needs a correct starting point and an unbiased current sensor. A sensor that reads 1% of 1C too high adds 1% of SOC error for every hour of operation, and the error never decays, because nothing in the method looks at the cell. A wrong starting value, after a long rest or a controller reset, stays wrong.</p>
+
+<p><strong>Voltage lookup</strong> inverts the OCV curve: measure the voltage and find the SOC that produces it. It needs no history and corrects itself immediately, but the voltage under load is not the OCV. Adding back the <em>IR</em> term still leaves the polarisation that builds up over a minute or so of current, the slower part of Part 2's loss stack, and on NMC that shifts the estimate by several points under load, up to about ten. On LFP the problem is the one <a href="01-voltage-at-rest.html">Part 1</a> predicted from dV/dx. Across the plateau a millivolt spans many percent of SOC, and the lookup is close to useless.</p>
+
+<p>A <strong>Kalman filter</strong> combines the two. It carries a model of the cell, here the OCV curve, the series resistance and one RC pair for the polarisation, along with an estimate of its own uncertainty <em>P</em>. Each step it advances the SOC by counting coulombs and lets <em>P</em> grow a little to allow for sensor error. Then it compares the measured voltage with the voltage the model predicts, and corrects the SOC by a gain <em>K</em>:</p>
+
+<div id="math-ekf"></div>
+
+<p>The gain is large where the OCV slope <em>H</em> is steep, so the voltage says a lot about SOC, and small where the slope is flat. Because the OCV curve is nonlinear the filter uses the slope at its current estimate, which makes it an <em>extended</em> Kalman filter (EKF). Filters of this kind, following Plett (2004), are a standard approach to SOC estimation in vehicle packs.</p>
+
+<div class="figure" id="fig-soc">
+  <div id="soc-host"></div>
+  <div class="controls">
+    <label><input type="radio" name="soc-chem" value="NMC" checked> NMC</label>
+    <label><input type="radio" name="soc-chem" value="LFP"> LFP</label>
+    <label>current-sensor bias <input type="range" id="soc-bias" min="-2" max="2" step="0.1" value="1"><span class="val" id="soc-bias-v"></span></label>
+    <label>initial guess error <input type="range" id="soc-err" min="-30" max="30" step="1" value="-15"><span class="val" id="soc-err-v"></span></label>
+    <button class="btn" id="soc-seed">new drive</button>
+  </div>
+  <div class="readout" id="soc-readout"></div>
+  <p class="figure-caption"><span class="figure-label">Figure 3.</span> One 5 Ah cell (15 mΩ series resistance, one RC pair of 15 mΩ and 60 s) driven through a random drive profile from 95% SOC. Top: true SOC (black), coulomb counting (orange), voltage lookup (blue) and the EKF (teal) with its own ±2σ band. Bottom: each estimate's error, from −30 to +30 points. The estimators see the same noisy sensors, and coulomb counting and the EKF start from the same wrong guess. Grey spans mark where the OCV slope is below 0.5 mV per percent of SOC. The EKF is given the exact cell model, which a real BMS never has, so its NMC result is a best case.</p>
+</div>
+
+<p>On NMC the filter pulls a guess that is 15 points off onto the truth within seconds, since the slope is steep everywhere, and then stays within a fraction of a percent. On LFP it cannot. On the plateau the voltage carries almost no information, <em>K</em> is near zero, and the filter is left counting coulombs, so a sensor bias accumulates just as it does for plain coulomb counting. It gets corrected only where the curve has some slope: near empty, near full, and at the small step that graphite staging leaves in the middle of an LFP cell's curve (Part 1). LFP systems therefore make use of regular full charges, since the top of the curve is a reliable place to re-anchor the estimate. Set a 2% bias on LFP and the error drifts outside the filter's own ±2σ band, because the filter was told to expect a smaller current error than it got.</p>
+
+<p>The same estimates feed the protection limits. Each cell has a voltage window (about 2.7 to 4.2 V for NMC, 2.5 to 3.65 V for LFP), a current limit that depends on temperature and SOC, and a temperature window: no charging below about 0 °C, where plating sets in, and derating well before 60 °C. The BMS enforces these per cell, and when one cell reaches a limit the whole string stops. It is the weakest-cell rule again, seen from the protection side.</p>
+
+<h2>When one cell goes</h2>
+
+<p>The worst pack failure starts in a single cell. An internal short, from a metal particle, a dendrite (Part 3) or a crushed separator, heats a region of the cell. Above about 90 °C the SEI begins to decompose and release heat. The separator melts at around 130 °C for polyethylene and 165 °C for polypropylene, and above about 200 °C an NMC cathode releases oxygen that reacts with the electrolyte. Each step releases heat faster than the one before. Once the cell's own heat release outruns what it can shed, its temperature runs away, typically to 600 to 900 °C within seconds.</p>
+
+<p>Whether the failure stays in one cell depends on what happens next door. The hot cell heats its neighbours. Each neighbour holds the same chemistry, with a reaction rate that rises exponentially with temperature, and it runs away if that heat release outruns what it can pass on to its own neighbours and to the coolant. Semenov worked out this balance for thermal explosions in 1928. There is no fixed ignition temperature, only a race between a heat source that grows exponentially with temperature and losses that grow linearly with it.</p>
+
+<p>Figure 4 runs the race on a stack of twelve cells in a row, the geometry of pouch or prismatic cells pressed face to face. Each cell has one lumped reaction with an activation energy of 151 kJ/mol, tuned so that a full cell self-heats at about 0.02 K per minute at 100 °C, the onset rate used in accelerating-rate calorimetry. It releases 30 kJ in total, enough to raise a 45 g cell by about 670 °C on its own. Cell 1 starts at 200 °C and is forced to react, standing in for an internal short.</p>
+
+<div class="figure" id="fig-thermal">
+  <div id="thermal-host"></div>
+  <div class="controls">
+    <label>cell-to-cell G <input type="range" id="th-g" min="0" max="1" step="0.01" value="0.52"><span class="val" id="th-g-v"></span></label>
+    <label>cooling h <input type="range" id="th-h" min="0" max="1" step="0.01" value="0.4"><span class="val" id="th-h-v"></span></label>
+    <label>state of charge <input type="range" id="th-soc" min="30" max="100" step="5" value="100"><span class="val" id="th-soc-v"></span></label>
+  </div>
+  <div class="readout" id="thermal-readout"></div>
+  <p class="figure-caption"><span class="figure-label">Figure 4.</span> Left: temperature of each cell in a stack of twelve (columns) against time (downward) after cell 1 is driven into runaway. Right: the share of the stack that runs away for each pair of cell-to-cell conductance <em>G</em> and cooling conductance <em>h</em> per cell, both in W/K on log axes, at the chosen state of charge. Released energy scales with state of charge. The ring marks the left panel's setting; click the map to move it. The model carries heat by conduction only. Vented gas and ejected material, which carry much of the energy in real propagation, are left out.</p>
+</div>
+
+<p>Propagation needs strong coupling and weak cooling. With large <em>G</em>, as when big flat cells are pressed together with no gap, the front moves down the stack at a few seconds to a few tens of seconds per cell. With more cooling, or insulation between cells, it dies after a cell or two. Between the two regions is a narrow band where the front stalls part-way. State of charge moves the whole boundary: a cell at 50% holds half the energy, and the region of the map where the stack burns shrinks sharply. This is one reason lithium-ion cells shipped on their own by air must be at no more than 30% state of charge.</p>
+
+<p>Pack designers work on both terms. Mica or aerogel sheets between cells lower <em>G</em>. Cold plates and liquid cooling raise <em>h</em>. Vents steer hot gas away from the next cell, covering the path this model leaves out. The aim is to keep every design point in the part of the map where a failed cell stays one failed cell.</p>
+
+<div class="nav-footer">
+  <a href="04-impedance-spectroscopy.html">← Part 4: Impedance spectroscopy</a>
+  <a href="index.html">Series index →</a>
+</div>
+
+</div>
+
+<script>
+function math(id, tex) {
+  var el = document.getElementById(id);
+  if (el) katex.render(tex, el, { throwOnError: false, displayMode: true });
+}
+math('math-cv', 'I_{\\text{CV}} \\;=\\; \\frac{V_{\\max} - \\mathrm{OCV}(\\mathrm{SOC})}{R}');
+math('math-ekf',
+  '\\hat{s} \\leftarrow \\hat{s} + K\\,\\big(V_{\\text{meas}} - V_{\\text{model}}(\\hat{s})\\big), \\qquad ' +
+  'K = \\frac{P\\,H}{H^2 P + \\sigma_v^2}, \\qquad H = \\frac{d\\,\\mathrm{OCV}}{d\\,\\mathrm{SOC}}');
+
+// Resolved colours (d3 cannot read CSS variables)
+var C = {
+  volt: '#2563eb', curr: '#ea580c', ekf: '#0f766e', truth: '#1a1a2e',
+  nmc: '#7c3aed', lfp: '#059669', axis: '#64748b', grid: '#e2e2e8',
+  text: '#1a1a2e', text2: '#4a4a6a', shade: '#fef3c7', plateau: '#eef0f3',
+  none: '#dc2626', top: '#b45309', active: '#0f766e'
+};
+
+function makeSvg(hostId, W, H) {
+  return d3.select('#' + hostId).append('svg')
+    .attr('viewBox', '0 0 ' + W + ' ' + H)
+    .attr('preserveAspectRatio', 'xMidYMid meet');
+}
+function styleAxis(sel) {
+  sel.selectAll('path, line').attr('stroke', C.axis);
+  sel.selectAll('text').attr('fill', C.axis).attr('font-size', 10);
+}
+function axisLabel(g, x, y, text, rotate, colour, anchor) {
+  var t = g.append('text').attr('x', x).attr('y', y).attr('font-size', 11)
+    .attr('fill', colour || C.axis).attr('text-anchor', anchor || 'middle').text(text);
+  if (rotate) t.attr('transform', 'rotate(-90,' + x + ',' + y + ')');
+  return t;
+}
+
+// ─────────────────────────────────────────── Figure 1: CCCV ──
+(function () {
+  var W = 680, H = 280;
+  var svg = makeSvg('cccv-host', W, H);
+  var mL = { l: 44, r: 44, t: 16, b: 38 }, wL = 360, hL = H - mL.t - mL.b;
+  var gL = svg.append('g').attr('transform', 'translate(' + mL.l + ',' + mL.t + ')');
+  var x0R = mL.l + wL + 92, wR = W - x0R - 12;
+  var gR = svg.append('g').attr('transform', 'translate(' + x0R + ',' + mL.t + ')');
+
+  var xT = d3.scaleLinear().range([0, wL]);
+  var yV = d3.scaleLinear().domain([2.8, 4.3]).range([hL, 0]);
+  var yI = d3.scaleLinear().domain([0, 15]).range([hL, 0]);
+  var xC = d3.scaleLinear().domain([0.25, 3]).range([0, wR]);
+  var yM = d3.scaleLinear().domain([0, 250]).range([hL, 0]);
+
+  var cvShade = gL.append('rect').attr('fill', C.shade).attr('y', 0).attr('height', hL);
+  var axX = gL.append('g').attr('transform', 'translate(0,' + hL + ')');
+  var axV = gL.append('g');
+  var axI = gL.append('g').attr('transform', 'translate(' + wL + ',0)');
+  axisLabel(gL, wL / 2, hL + 32, 'time (min)');
+  axisLabel(gL, -32, hL / 2, 'voltage (V)', true, C.volt);
+  axisLabel(gL, wL + 36, hL / 2, 'current (A)', true, C.curr);
+  var ceil = gL.append('line').attr('x1', 0).attr('x2', wL).attr('stroke', C.volt)
+    .attr('stroke-dasharray', '2,3').attr('stroke-opacity', 0.5);
+  var pathV = gL.append('path').attr('fill', 'none').attr('stroke', C.volt).attr('stroke-width', 2);
+  var pathI = gL.append('path').attr('fill', 'none').attr('stroke', C.curr).attr('stroke-width', 2);
+  var cvLabel = gL.append('text').attr('font-size', 10).attr('fill', '#92400e').attr('y', 12);
+
+  var axC = gR.append('g').attr('transform', 'translate(0,' + hL + ')');
+  var axM = gR.append('g');
+  axisLabel(gR, wR / 2, hL + 32, 'C-rate');
+  axisLabel(gR, -36, hL / 2, 'minutes to full', true);
+  var pathTot = gR.append('path').attr('fill', 'none').attr('stroke', C.text).attr('stroke-width', 1.8);
+  var pathCC = gR.append('path').attr('fill', 'none').attr('stroke', C.text).attr('stroke-width', 1.2).attr('stroke-dasharray', '4,3');
+  var dot = gR.append('circle').attr('r', 4.5).attr('fill', C.curr);
+
+  var rateEl = document.getElementById('cc-rate'), rEl = document.getElementById('cc-r');
+  function run(c, R) { return Li.charge.cccv({ Q: 5, R: R, cRate: c, soc0: 0, vMax: 4.2 }); }
+
+  function draw() {
+    var c = +rateEl.value, R = +rEl.value / 1000;
+    document.getElementById('cc-rate-v').textContent = c.toFixed(2) + ' C';
+    document.getElementById('cc-r-v').textContent = (R * 1000).toFixed(0) + ' mΩ';
+    var res = run(c, R);
+    var tMax = Math.max(60, Math.ceil(res.tEnd / 60 / 20) * 20);
+    xT.domain([0, tMax]);
+    axX.call(d3.axisBottom(xT).ticks(6)); styleAxis(axX);
+    axV.call(d3.axisLeft(yV).ticks(6)); styleAxis(axV);
+    axI.call(d3.axisRight(yI).ticks(5)); styleAxis(axI);
+    ceil.attr('y1', yV(4.2)).attr('y2', yV(4.2));
+    pathV.attr('d', d3.line().x(function (d) { return xT(d.t / 60); }).y(function (d) { return yV(d.V); })(res.pts));
+    pathI.attr('d', d3.line().x(function (d) { return xT(d.t / 60); }).y(function (d) { return yI(d.I); })(res.pts));
+    var sw = res.sw ? res.sw.t / 60 : res.tEnd / 60;
+    cvShade.attr('x', xT(sw)).attr('width', Math.max(0, xT(res.tEnd / 60) - xT(sw)));
+    cvLabel.attr('x', xT(sw) + 4).text('CV');
+
+    // right panel: sweep C-rate at this R
+    var sweep = [];
+    for (var cc = 0.25; cc <= 3.001; cc += 0.125) {
+      var r = run(cc, R);
+      sweep.push({ c: cc, tot: r.tEnd / 60, cc: (r.sw ? r.sw.t : r.tEnd) / 60 });
+    }
+    axC.call(d3.axisBottom(xC).ticks(5).tickFormat(function (v) { return v + 'C'; })); styleAxis(axC);
+    yM.domain([0, Math.max(150, Math.ceil(d3.max(sweep, function (d) { return d.tot; }) / 50) * 50)]);
+    axM.call(d3.axisLeft(yM).ticks(5)); styleAxis(axM);
+    pathTot.attr('d', d3.line().x(function (d) { return xC(d.c); }).y(function (d) { return yM(d.tot); })(sweep));
+    pathCC.attr('d', d3.line().x(function (d) { return xC(d.c); }).y(function (d) { return yM(d.cc); })(sweep));
+    dot.attr('cx', xC(c)).attr('cy', yM(res.tEnd / 60));
+
+    document.getElementById('cccv-readout').textContent =
+      'Switches to CV at ' + (res.sw ? (res.sw.soc * 100).toFixed(0) : '100') + '% SOC after ' +
+      sw.toFixed(0) + ' min. Full (C/20) after ' + (res.tEnd / 60).toFixed(0) + ' min, of which ' +
+      (res.tEnd / 60 - sw).toFixed(0) + ' min in CV.';
+  }
+  rateEl.addEventListener('input', draw);
+  rEl.addEventListener('input', draw);
+  draw();
+})();
+
+// ─────────────────────────────────────────── Figure 2: series string ──
+(function () {
+  var W = 680, H = 300;
+  var svg = makeSvg('string-host', W, H);
+  var m = { l: 44, t: 16, b: 38 }, wL = 380, hL = H - m.t - m.b;
+  var gL = svg.append('g').attr('transform', 'translate(' + m.l + ',' + m.t + ')');
+  var x0R = m.l + wL + 56, wR = W - x0R - 14;
+  var gR = svg.append('g').attr('transform', 'translate(' + x0R + ',' + m.t + ')');
+
+  var Q0 = 5, I = 2.5, Rcell = 0.02;
+  var xQ = d3.scaleLinear().domain([0, 5.6]).range([0, wL]);
+  var yV = d3.scaleLinear().domain([2.8, 4.25]).range([hL, 0]);
+  var xN = d3.scaleLog().domain([1, 200]).range([0, wR]);
+  var yU = d3.scaleLinear().domain([0.7, 1.0]).range([hL, 0]);
+
+  var axX = gL.append('g').attr('transform', 'translate(0,' + hL + ')');
+  var axY = gL.append('g');
+  axisLabel(gL, wL / 2, hL + 32, 'charge drawn (Ah)');
+  axisLabel(gL, -32, hL / 2, 'cell voltage (V)', true);
+  var traces = gL.append('g');
+  var stopLine = gL.append('line').attr('y1', 0).attr('y2', hL).attr('stroke', C.text).attr('stroke-width', 1.2);
+  var stopLabel = gL.append('text').attr('y', 10).attr('font-size', 10).attr('fill', C.text);
+  var meanLine = gL.append('line').attr('y1', 0).attr('y2', hL).attr('stroke', C.axis).attr('stroke-dasharray', '3,3');
+  var meanLabel = gL.append('text').attr('y', 22).attr('font-size', 10).attr('fill', C.axis);
+
+  var axN = gR.append('g').attr('transform', 'translate(0,' + hL + ')');
+  var axU = gR.append('g');
+  axisLabel(gR, wR / 2, hL + 32, 'cells in series');
+  axisLabel(gR, -34, hL / 2, 'usable / average cell', true);
+  var curves = gR.append('g');
+  var dotR = gR.append('circle').attr('r', 4.5).attr('stroke', '#fff').attr('stroke-width', 1.5);
+  var leg = gR.append('g').attr('transform', 'translate(' + (wR - 4) + ',' + (hL - 50) + ')');
+  [['active', 'active'], ['top', 'top'], ['none', 'none']].forEach(function (d, i) {
+    leg.append('text').attr('x', 0).attr('y', i * 14).attr('text-anchor', 'end')
+      .attr('font-size', 10).attr('fill', C[d[0]]).attr('font-weight', 600).text(d[1]);
+  });
+
+  var seed = 5;
+  var nEl = document.getElementById('st-n'), qEl = document.getElementById('st-q'),
+      sEl = document.getElementById('st-s'), modeEl = document.getElementById('st-mode');
+  var NS = [1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128, 192];
+  var mcCache = {};
+
+  function drawRight(sQ, sS, n, mode, useNow) {
+    var key = sQ + '|' + sS;
+    if (!mcCache[key]) {
+      mcCache[key] = ['none', 'top', 'active'].map(function (md) {
+        return { mode: md, pts: NS.map(function (k) { return { n: k, u: Li.string.usableMC(k, sQ, sS, md, 300, 101, Q0) }; }) };
+      });
+    }
+    var data = mcCache[key];
+    var lo = Math.min(0.9, d3.min(data[0].pts, function (d) { return d.u; }) - 0.02);
+    lo = Math.min(lo, useNow - 0.02);
+    yU.domain([Math.max(0, Math.floor(lo * 20) / 20), 1.01]);
+    axN.call(d3.axisBottom(xN).tickValues([1, 4, 12, 24, 96]).tickFormat(d3.format('d'))); styleAxis(axN);
+    axU.call(d3.axisLeft(yU).ticks(5).tickFormat(d3.format('.0%'))); styleAxis(axU);
+    var sel = curves.selectAll('path').data(data);
+    sel.enter().append('path').merge(sel)
+      .attr('fill', 'none').attr('stroke-width', 1.8)
+      .attr('stroke', function (d) { return C[d.mode]; })
+      .attr('d', function (d) { return d3.line().x(function (p) { return xN(p.n); }).y(function (p) { return yU(p.u); })(d.pts); });
+    dotR.attr('cx', xN(n)).attr('cy', yU(useNow)).attr('fill', C[mode]);
+  }
+
+  function draw() {
+    var n = +nEl.value, sQ = +qEl.value / 100, sS = +sEl.value / 100, mode = modeEl.value;
+    document.getElementById('st-q-v').textContent = (sQ * 100).toFixed(1) + '%';
+    document.getElementById('st-s-v').textContent = (sS * 100).toFixed(1) + '%';
+    var cells = Li.string.draw(n, sQ, sS, seed, Q0);
+    var qStop = Li.string.usable(cells, mode);
+    var meanQ = d3.mean(cells, function (c) { return c.Q; });
+    var minQ = d3.min(cells, function (c) { return c.Q; });
+    axX.call(d3.axisBottom(xQ).ticks(6)); styleAxis(axX);
+    axY.call(d3.axisLeft(yV).ticks(5)); styleAxis(axY);
+
+    function socAt(c, q) {
+      if (mode === 'active') return 1 - q / meanQ;
+      var start = c.Q - (mode === 'top' ? 0 : c.head);
+      return (start - q) / c.Q;
+    }
+    function vAt(s) { return Li.cell.ocvSoc(Math.max(0, Math.min(1, s)), 'NMC') - I * Rcell; }
+    var paths = [];
+    cells.forEach(function (c) {
+      var qEmpty = mode === 'active' ? meanQ : (c.Q - (mode === 'top' ? 0 : c.head));
+      var on = [], off = [];
+      for (var k = 0; k <= 60; k++) {
+        var q = qStop * k / 60; on.push([q, vAt(socAt(c, q))]);
+      }
+      if (qEmpty > qStop + 1e-6) {
+        for (var j = 0; j <= 20; j++) {
+          var q2 = qStop + (qEmpty - qStop) * j / 20; off.push([q2, vAt(socAt(c, q2))]);
+        }
+      }
+      paths.push({ d: on, faint: false }, { d: off, faint: true });
+    });
+    var line = d3.line().x(function (p) { return xQ(p[0]); }).y(function (p) { return yV(p[1]); });
+    var ps = traces.selectAll('path').data(paths);
+    ps.exit().remove();
+    ps.enter().append('path').merge(ps)
+      .attr('fill', 'none')
+      .attr('stroke', function (d) { return d.faint ? C.axis : C[mode]; })
+      .attr('stroke-opacity', function (d) { return d.faint ? 0.3 : (n > 24 ? 0.35 : 0.7); })
+      .attr('stroke-width', function (d) { return d.faint ? 1 : 1.2; })
+      .attr('d', function (d) { return d.d.length ? line(d.d) : null; });
+    stopLine.attr('x1', xQ(qStop)).attr('x2', xQ(qStop));
+    stopLabel.attr('x', xQ(qStop) - 4).attr('text-anchor', 'end').text('string stops ' + qStop.toFixed(2) + ' Ah');
+    meanLine.attr('x1', xQ(meanQ)).attr('x2', xQ(meanQ));
+    meanLabel.attr('x', xQ(meanQ) + 4).attr('text-anchor', 'start').text('average cell ' + meanQ.toFixed(2) + ' Ah');
+
+    drawRight(sQ, sS, n, mode, qStop / meanQ);
+    document.getElementById('string-readout').textContent =
+      'This string delivers ' + qStop.toFixed(2) + ' Ah, ' + (100 * qStop / meanQ).toFixed(1) +
+      '% of its average cell. Its smallest cell holds ' + minQ.toFixed(2) + ' Ah.';
+  }
+  [nEl, qEl, sEl, modeEl].forEach(function (el) { el.addEventListener('input', draw); });
+  document.getElementById('st-seed').addEventListener('click', function () { seed += 1; draw(); });
+  draw();
+})();
+
+// ─────────────────────────────────────────── Figure 3: SOC estimation ──
+(function () {
+  var W = 680, H = 330;
+  var svg = makeSvg('soc-host', W, H);
+  var m = { l: 48, r: 110, t: 12 }, w = W - m.l - m.r, hTop = 190, gap = 26, hBot = 70;
+  var g = svg.append('g').attr('transform', 'translate(' + m.l + ',' + m.t + ')');
+  var xS = d3.scaleLinear().range([0, w]);
+  var yS = d3.scaleLinear().domain([0, 1.05]).range([hTop, 0]);
+  var yE = d3.scaleLinear().domain([-0.3, 0.3]).range([hTop + gap + hBot, hTop + gap]).clamp(true);
+
+  var plat = g.append('g');
+  var band = g.append('path').attr('fill', C.ekf).attr('fill-opacity', 0.15);
+  var axX = g.append('g').attr('transform', 'translate(0,' + (hTop + gap + hBot) + ')');
+  var axY = g.append('g'), axE = g.append('g');
+  axisLabel(g, w / 2, hTop + gap + hBot + 30, 'time (min)');
+  axisLabel(g, -36, hTop / 2, 'state of charge', true);
+  axisLabel(g, -36, hTop + gap + hBot / 2, 'error', true);
+  g.append('line').attr('x1', 0).attr('x2', w).attr('y1', yE(0)).attr('y2', yE(0)).attr('stroke', C.grid);
+  var series = [
+    { k: 'v', col: C.volt, wd: 1, name: 'voltage lookup' },
+    { k: 'cc', col: C.curr, wd: 1.8, name: 'coulomb count' },
+    { k: 'ekf', col: C.ekf, wd: 2, name: 'EKF' },
+    { k: 'soc', col: C.truth, wd: 1.6, name: 'true SOC' }
+  ];
+  var top = g.append('g'), bot = g.append('g');
+  var paths = series.map(function (s) {
+    return {
+      s: s,
+      top: top.append('path').attr('fill', 'none').attr('stroke', s.col).attr('stroke-width', s.wd)
+        .attr('stroke-opacity', s.k === 'v' ? 0.7 : 1),
+      bot: s.k === 'soc' ? null : bot.append('path').attr('fill', 'none').attr('stroke', s.col)
+        .attr('stroke-width', s.k === 'v' ? 0.8 : 1.5).attr('stroke-opacity', s.k === 'v' ? 0.7 : 1)
+    };
+  });
+  var leg = svg.append('g').attr('transform', 'translate(' + (m.l + w + 14) + ',' + (m.t + 14) + ')');
+  series.slice().reverse().forEach(function (s, i) {
+    leg.append('line').attr('x1', 0).attr('x2', 16).attr('y1', i * 16).attr('y2', i * 16).attr('stroke', s.col).attr('stroke-width', 2);
+    leg.append('text').attr('x', 21).attr('y', i * 16 + 3.5).attr('font-size', 10).attr('fill', C.text2).text(s.name);
+  });
+
+  var seed = 3;
+  var biasEl = document.getElementById('soc-bias'), errEl = document.getElementById('soc-err');
+  function chem() { return document.querySelector('input[name=soc-chem]:checked').value; }
+
+  function draw() {
+    var ch = chem(), b = +biasEl.value / 100, e0 = +errEl.value / 100;
+    document.getElementById('soc-bias-v').textContent = (b >= 0 ? '+' : '') + (b * 100).toFixed(1) + '% of 1C';
+    document.getElementById('soc-err-v').textContent = (e0 >= 0 ? '+' : '') + (e0 * 100).toFixed(0) + ' pts';
+    var pts = Li.bms.estimate({ chem: ch, biasC: b, initErr: e0, seed: seed, soc0: 0.95 });
+    var tMax = pts[pts.length - 1].t / 60;
+    xS.domain([0, tMax]);
+    axX.call(d3.axisBottom(xS).ticks(8)); styleAxis(axX);
+    axY.call(d3.axisLeft(yS).ticks(5).tickFormat(d3.format('.0%'))); styleAxis(axY);
+    axE.call(d3.axisLeft(yE).tickValues([-0.3, 0, 0.3]).tickFormat(function (v) { return (v > 0 ? '+' : '') + Math.round(v * 100); })); styleAxis(axE);
+
+    // plateau spans: |dOCV/dSOC| < 0.05 V per unit SOC (0.5 mV per %)
+    var spans = [], inside = false, s0 = 0;
+    pts.forEach(function (p, i) {
+      var flat = Math.abs(Li.cell.dOcvdSoc(Math.max(0.002, Math.min(0.998, p.soc)), ch)) < 0.05;
+      if (flat && !inside) { inside = true; s0 = p.t; }
+      if ((!flat || i === pts.length - 1) && inside) { inside = false; spans.push([s0, p.t]); }
+    });
+    var ps = plat.selectAll('rect').data(spans);
+    ps.exit().remove();
+    ps.enter().append('rect').merge(ps)
+      .attr('x', function (d) { return xS(d[0] / 60); }).attr('width', function (d) { return xS(d[1] / 60) - xS(d[0] / 60); })
+      .attr('y', 0).attr('height', hTop + gap + hBot).attr('fill', C.plateau);
+
+    band.attr('d', d3.area().x(function (p) { return xS(p.t / 60); })
+      .y0(function (p) { return yS(Math.max(0, p.ekf - 2 * p.sd)); })
+      .y1(function (p) { return yS(Math.min(1.05, p.ekf + 2 * p.sd)); })(pts));
+    paths.forEach(function (o) {
+      var k = o.s.k;
+      o.top.attr('d', d3.line().x(function (p) { return xS(p.t / 60); }).y(function (p) { return yS(Math.max(0, Math.min(1.05, p[k]))); })(pts));
+      if (o.bot) o.bot.attr('d', d3.line().x(function (p) { return xS(p.t / 60); }).y(function (p) { return yE(p[k] - p.soc); })(pts));
+    });
+
+    var late = pts.filter(function (p) { return p.t > 300; });
+    function worst(k) { return d3.max(late, function (p) { return Math.abs(p[k] - p.soc); }) * 100; }
+    var outside = late.filter(function (p) { return Math.abs(p.ekf - p.soc) > 2 * p.sd; }).length / late.length;
+    document.getElementById('soc-readout').textContent =
+      'Worst error after the first 5 min: coulomb counting ' + worst('cc').toFixed(1) +
+      ' pts, voltage lookup ' + worst('v').toFixed(1) + ' pts, EKF ' + worst('ekf').toFixed(1) +
+      ' pts. The truth is outside the EKF’s ±2σ band ' + (outside * 100).toFixed(0) + '% of the time.';
+  }
+  biasEl.addEventListener('input', draw);
+  errEl.addEventListener('input', draw);
+  document.querySelectorAll('input[name=soc-chem]').forEach(function (el) { el.addEventListener('change', draw); });
+  document.getElementById('soc-seed').addEventListener('click', function () { seed += 1; draw(); });
+  draw();
+})();
+
+// ─────────────────────────────────────────── Figure 4: thermal propagation ──
+(function () {
+  var W = 680, H = 320;
+  var svg = makeSvg('thermal-host', W, H);
+  var m = { l: 44, t: 26, b: 40 }, wL = 280, hL = H - m.t - m.b;
+  var gL = svg.append('g').attr('transform', 'translate(' + m.l + ',' + m.t + ')');
+  var x0R = m.l + wL + 128, wR = W - x0R - 16, hR = hL;
+  var gR = svg.append('g').attr('transform', 'translate(' + x0R + ',' + m.t + ')');
+
+  var NC = 12, T_END = 900;
+  var G_MIN = 0.1, G_MAX = 5, H_MIN = 0.02, H_MAX = 3;
+  var tempCol = d3.scaleSequential(d3.interpolateInferno).domain([25, 900]);
+  var shareCol = d3.scaleSequential(d3.interpolateOrRd).domain([0, 1]);
+
+  var xCell = d3.scaleBand().domain(d3.range(NC)).range([0, wL]).padding(0.08);
+  var yTime = d3.scaleLinear().domain([0, T_END]).range([0, hL]);
+  var cellsG = gL.append('g');
+  gL.append('g').attr('transform', 'translate(0,' + hL + ')')
+    .call(d3.axisBottom(xCell).tickFormat(function (d) { return d + 1; })).call(styleAxis);
+  gL.append('g').call(d3.axisLeft(yTime).ticks(6)).call(styleAxis);
+  axisLabel(gL, wL / 2, hL + 32, 'cell in stack');
+  axisLabel(gL, -32, hL / 2, 'time (s)', true);
+
+  // temperature legend
+  var legW = 12, legH = hL;
+  var defs = svg.append('defs');
+  var grad = defs.append('linearGradient').attr('id', 'tgrad').attr('x1', 0).attr('x2', 0).attr('y1', 1).attr('y2', 0);
+  d3.range(0, 1.01, 0.1).forEach(function (f) {
+    grad.append('stop').attr('offset', f).attr('stop-color', tempCol(25 + f * 875));
+  });
+  var legG = svg.append('g').attr('transform', 'translate(' + (m.l + wL + 12) + ',' + m.t + ')');
+  legG.append('rect').attr('width', legW).attr('height', legH).attr('fill', 'url(#tgrad)');
+  legG.append('g').attr('transform', 'translate(' + legW + ',0)')
+    .call(d3.axisRight(d3.scaleLinear().domain([25, 900]).range([legH, 0])).tickValues([25, 200, 400, 600, 800])).call(styleAxis);
+  axisLabel(legG, 48, legH / 2, 'temperature (°C)', true);
+
+  var xG = d3.scaleLog().domain([G_MIN, G_MAX]).range([0, wR]);
+  var yH = d3.scaleLog().domain([H_MIN, H_MAX]).range([hR, 0]);
+  var mapG = gR.append('g');
+  gR.append('g').attr('transform', 'translate(0,' + hR + ')')
+    .call(d3.axisBottom(xG).tickValues([0.1, 0.3, 1, 3]).tickFormat(d3.format('~g'))).call(styleAxis);
+  gR.append('g').call(d3.axisLeft(yH).tickValues([0.03, 0.1, 0.3, 1, 3]).tickFormat(d3.format('~g'))).call(styleAxis);
+  axisLabel(gR, wR / 2, hR + 32, 'cell-to-cell G (W/K)');
+  axisLabel(gR, -34, hR / 2, 'cooling h (W/K)', true);
+  var mapTitle = gR.append('text').attr('x', 0).attr('y', -10).attr('font-size', 10).attr('fill', C.text2);
+  var marker = gR.append('circle').attr('r', 5).attr('fill', 'none').attr('stroke', '#111').attr('stroke-width', 2);
+  var hit = gR.append('rect').attr('width', wR).attr('height', hR).attr('fill', 'transparent').style('cursor', 'crosshair');
+
+  var gEl = document.getElementById('th-g'), hEl = document.getElementById('th-h'), socEl = document.getElementById('th-soc');
+  function G() { return G_MIN * Math.pow(G_MAX / G_MIN, +gEl.value); }
+  function Hc() { return H_MIN * Math.pow(H_MAX / H_MIN, +hEl.value); }
+  function E() { return 30000 * (+socEl.value / 100); }
+
+  var mapKey = null, mapTimer = null;
+  function drawMap() {
+    var key = socEl.value;
+    if (key === mapKey) return;
+    mapKey = key;
+    var nG = 14, nH = 14, cells = [], e = E();
+    for (var i = 0; i < nG; i++) {
+      for (var j = 0; j < nH; j++) {
+        var gv = G_MIN * Math.pow(G_MAX / G_MIN, (i + 0.5) / nG);
+        var hv = H_MIN * Math.pow(H_MAX / H_MIN, (j + 0.5) / nH);
+        var r = Li.thermal.run({ W: NC, H: 1, G: gv, h: hv, E: e, trigger: 0, tEnd: T_END, every: 1e9 });
+        cells.push({ i: i, j: j, share: (r.count - 1) / (NC - 1) });
+      }
+    }
+    var cw = wR / nG, chh = hR / nH;
+    var sel = mapG.selectAll('rect').data(cells);
+    sel.enter().append('rect').merge(sel)
+      .attr('x', function (d) { return d.i * cw; }).attr('y', function (d) { return hR - (d.j + 1) * chh; })
+      .attr('width', cw + 0.5).attr('height', chh + 0.5)
+      .attr('fill', function (d) { return shareCol(d.share); });
+    mapTitle.text('share of stack that runs away at ' + socEl.value + '% SOC');
+  }
+
+  function drawRun() {
+    var gv = G(), hv = Hc();
+    document.getElementById('th-g-v').textContent = gv.toFixed(2) + ' W/K';
+    document.getElementById('th-h-v').textContent = hv.toFixed(2) + ' W/K';
+    document.getElementById('th-soc-v').textContent = socEl.value + '%';
+    var r = Li.thermal.run({ W: NC, H: 1, G: gv, h: hv, E: E(), trigger: 0, tEnd: T_END, every: 5 });
+    var dt = 5, rows = [];
+    r.frames.forEach(function (f) {
+      for (var c = 0; c < NC; c++) rows.push({ c: c, t: f.t, T: f.T[c] });
+    });
+    var sel = cellsG.selectAll('rect').data(rows);
+    sel.exit().remove();
+    sel.enter().append('rect').merge(sel)
+      .attr('x', function (d) { return xCell(d.c); }).attr('width', xCell.bandwidth())
+      .attr('y', function (d) { return yTime(d.t); }).attr('height', yTime(dt) - yTime(0) + 1)
+      .attr('fill', function (d) { return tempCol(Math.min(900, d.T)); });
+    marker.attr('cx', xG(gv)).attr('cy', yH(hv));
+    var n = r.count;
+    document.getElementById('thermal-readout').textContent = n === 1
+      ? 'Only cell 1 runs away. Peak temperature ' + r.peak.toFixed(0) + ' °C.'
+      : n + ' of 12 cells run away; the last starts at ' + r.last.toFixed(0) + ' s. Peak temperature ' + r.peak.toFixed(0) + ' °C.';
+  }
+  function drawAll() { drawRun(); clearTimeout(mapTimer); mapTimer = setTimeout(drawMap, 60); }
+
+  gEl.addEventListener('input', drawRun);
+  hEl.addEventListener('input', drawRun);
+  socEl.addEventListener('input', drawAll);
+  hit.on('click', function (ev) {
+    var p = d3.pointer(ev);
+    var gv = xG.invert(p[0]), hv = yH.invert(p[1]);
+    gEl.value = Math.log(gv / G_MIN) / Math.log(G_MAX / G_MIN);
+    hEl.value = Math.log(hv / H_MIN) / Math.log(H_MAX / H_MIN);
+    drawRun();
+  });
+  drawRun();
+  drawMap();
+})();
+</script>
+</body>
+</html>

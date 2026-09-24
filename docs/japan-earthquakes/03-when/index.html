@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>When the Ground Won't Stop Shaking</title>
+<link href="../../vendor/fonts/sans-serif-mono-jp/fonts.css" rel="stylesheet">
+<script src="../../vendor/js/d3.v7.min.js"></script>
+<script src="../../vendor/js/topojson-client.min.js"></script>
+<script src="../../lib/motion.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --article-width: 740px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem;
+  --line-height: 1.6;
+  --text: #1a1a2e;
+  --text-2: #4a4a6a;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --bg: #fafafa;
+  --fig-bg: #ffffff;
+  --border: #e2e2e8;
+  --shindo-0: #b0bec5;
+  --shindo-1: #81d4fa;
+  --shindo-2: #4fc3f7;
+  --shindo-3: #29b6f6;
+  --shindo-4: #fdd835;
+  --shindo-5l: #ffb300;
+  --shindo-5u: #fb8c00;
+  --shindo-6l: #f4511e;
+  --shindo-6u: #d32f2f;
+  --shindo-7: #7b1fa2;
+}
+@media (prefers-reduced-motion: reduce) {html:not([data-motion="full"]) *, html:not([data-motion="full"]) *::before, html:not([data-motion="full"]) *::after { animation-duration: 0s !important; transition-duration: 0s !important; }
+}
+body { font-family: var(--body-font); font-size: var(--body-size); line-height: var(--line-height); color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased; }
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
+h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+p { margin: 0 0 1rem; }
+.figure { margin: 2rem 0; padding: 1.5rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; }
+.figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; }
+.insight { background: var(--accent-light); border-left: 3px solid var(--accent); padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 4px 4px 0; }
+svg text { font-family: var(--heading-font); }
+html[lang="ja"] { --body-font: 'Noto Serif JP', Georgia, serif; --heading-font: 'Noto Sans JP', system-ui, sans-serif; }
+svg .axis text { font-size: 11px; fill: var(--text-2); }
+svg .axis line, svg .axis path { stroke: var(--border); }
+
+.subtitle { font-family: var(--heading-font); font-size: 1.1rem; color: var(--text-2); margin: 0 0 2rem; font-weight: 400; }
+.controls-bar {
+  display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;
+  padding: 0.75rem 1rem; background: #f0f0f5; border-radius: 6px;
+  margin-bottom: 1rem; font-family: var(--heading-font); font-size: 0.85rem;
+}
+.controls-bar button {
+  font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600;
+  padding: 0.4rem 1rem; border: 1px solid var(--border); border-radius: 4px;
+  background: var(--fig-bg); cursor: pointer; color: var(--text);
+  transition: background 0.15s;
+}
+.controls-bar button:hover { background: var(--accent-light); }
+.controls-bar button.active { background: var(--accent); color: white; border-color: var(--accent); }
+.control-group { display: flex; align-items: center; gap: 0.4rem; }
+.control-group label { color: var(--text-2); white-space: nowrap; }
+.control-group input[type="range"] { width: 90px; }
+.current-date {
+  font-family: var(--mono-font); font-size: 1.1rem; font-weight: 500;
+  color: var(--accent); margin-left: auto;
+}
+.legend {
+  display: flex; gap: 1rem; font-family: var(--heading-font); font-size: 0.8rem;
+  color: var(--text-2); margin-top: 0.5rem; flex-wrap: wrap;
+}
+.legend-item { display: flex; align-items: center; gap: 0.3rem; }
+.legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+.map-container { position: relative; }
+.tooltip {
+  position: absolute; pointer-events: none; background: rgba(26,26,46,0.92);
+  color: #fff; padding: 0.4rem 0.6rem; border-radius: 4px;
+  font-family: var(--heading-font); font-size: 0.78rem; line-height: 1.4;
+  opacity: 0; transition: opacity 0.15s; white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+}
+</style>
+</head>
+<body>
+<div class="article">
+
+<h1 data-i18n="title">When the Ground Won't Stop Shaking</h1>
+<p class="subtitle" data-i18n="subtitle">Twenty-six years of earthquakes around Japan, animated in time</p>
+
+<p data-i18n="p1">Japan sits at the collision of four tectonic plates. If you've lived there for any length of time, you know the drill: the phone buzzes, the room sways, and you wait to see if it's going to get worse. Most of the time it doesn't. Sometimes it does, and then a single event can outweigh decades of everything else put together.</p>
+
+<p data-i18n="p2">This animation plays through every earthquake of magnitude 4.5 and above that the USGS recorded near Japan from 2000 through 2025, all 16,792 of them. Pay attention to March 2011.</p>
+
+<div class="figure">
+  <div class="controls-bar">
+    <button id="playBtn" data-i18n="ctrl_play">Play</button>
+    <div class="control-group">
+      <label data-i18n="ctrl_speed">Speed:</label>
+      <input type="range" id="speedSlider" min="0" max="4" step="1" value="2">
+      <span id="speedLabel">30 d/s</span>
+    </div>
+    <div class="control-group">
+      <label data-i18n="ctrl_min_mag">Min mag:</label>
+      <input type="range" id="magSlider" min="45" max="70" step="5" value="45">
+      <span id="magLabel">4.5</span>
+    </div>
+    <span class="current-date" id="currentDate">2000-01-01</span>
+  </div>
+  <div class="map-container">
+    <div id="map"></div>
+    <div class="tooltip" id="tooltip"></div>
+  </div>
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:#4ade80"></div> M4.5–5.0</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#facc15"></div> M5.0–6.0</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#f97316"></div> M6.0–7.0</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#ef4444"></div> M7.0+</div>
+  </div>
+  <div class="figure-caption" data-i18n="fig_caption">Each dot is an earthquake from the USGS catalog (M4.5+, 2000–2025). Dots scale by magnitude and fade after 30 days. Speed is in days of catalog time per second. The sparkline below tracks cumulative seismic energy on a log scale. Click or drag the sparkline to jump to any point in time.</div>
+</div>
+
+<div class="figure" style="padding: 0.75rem 1.5rem;">
+  <div id="sparkline"></div>
+</div>
+
+<h2 data-i18n="h2_sequences">How earthquake sequences unfold</h2>
+
+<p data-i18n="p3">Most of the time, Japan's seismicity looks like a steady background hum. About ten dots a week, scattered across the map, mostly M4.5 to M5.5. This is normal stress release along plate boundaries and faults. Alarming if you're new to it, but it's the baseline. The earth is always adjusting.</p>
+
+<p data-i18n="p4">Then there are the sequences. When a major earthquake strikes, it changes the stress field in the surrounding crust. Faults that were close to failure get pushed over the edge, and the result is a burst of aftershocks that can last weeks or months. In the animation, you can see this dramatically: the Tohoku M9.1 on March 11, 2011 produces a dense swarm of dots that lights up the entire northeast coast of Honshu. The catalog holds 531 events of M4.5 or larger in the first 24 hours alone.</p>
+
+<p data-i18n="insight_aftershock">For comparison, the 2001–2010 background averaged about one M4.5+ event a day. Over the 30 days after the mainshock the catalog counts 2,081, roughly 70 times the background rate. The stress change also reached faults far from the rupture. Within 15 hours a M6.2 struck near the Nagano-Niigata border and another M6.2 hit the Sea of Japan off Akita, on the opposite coast; four days later a M6.0 shook the foot of Mount Fuji.</p>
+
+<h2 data-i18n="h2_magnitude">The tyranny of the magnitude scale</h2>
+
+<p data-i18n="p5">The magnitude scale is logarithmic: each whole number represents about 32 times more energy. Add up the energy of all 16,792 earthquakes on this map and the M9.1 Tohoku mainshock accounts for 86% of it, about six times everything else <em>combined</em>. Look at the sparkline. The cumulative energy line is essentially flat for most of the timeline, then jumps vertically on March 11, 2011.</p>
+
+<p data-i18n="p6">Here's another way to think about it: to match the energy of one M9.1 earthquake, you would need about 45,000 earthquakes of M6.0, or about 8 million of M4.5. The whole catalog holds 344 events of M6.0 or larger. Even its second-largest event, the M8.2 Tokachi-oki earthquake of 2003, released less than a twentieth of Tohoku's energy.</p>
+
+<p data-i18n="insight_notable">Play through the full timeline and you'll spot several other bursts: the 2003 Tokachi-oki earthquake off Hokkaido, the 2016 Kumamoto earthquakes (a foreshock on April 14, then a larger mainshock 28 hours later), the 2024 Noto Peninsula earthquake on New Year's Day, and recurring offshore swarms east of Honshu. Each has a different character. Kumamoto was shallow and destructive. Noto struck a region with many traditional wooden buildings. The offshore events mostly dissipate into the Pacific. Magnitudes on this page are the USGS catalog values, which can differ from the Japan Meteorological Agency's: USGS gives Kumamoto M7.0 and Noto M7.5, where JMA gives 7.3 and 7.6.</p>
+
+<h2 data-i18n="h2_daily">What this means for daily life</h2>
+
+<p data-i18n="p7">If you're living in Japan, the background seismicity is a constant companion. The shindo scale matters more than magnitude for how it actually feels. A deep M6.0 hundreds of kilometers offshore might produce only a gentle sway in Tokyo, while a shallow M5.5 directly beneath the city is a sharp jolt that knocks things off shelves. The animation can't show you that nuance, but it does show spatial patterns: some regions are consistently more active than others, and the offshore trench east of Honshu is the single biggest source of earthquakes.</p>
+
+<p data-i18n="p8">Japan's building codes and early warning systems are among the best anywhere. But the physics is non-negotiable: another great earthquake is a matter of when, not if. Knowing what the difference between background noise and a major sequence looks like, that's part of living in earthquake country.</p>
+
+<footer style="margin-top: 4rem; padding-top: 2rem; border-top: 1px solid var(--border); font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2);">
+  <p><span data-i18n="footer_part_of">Part of</span> <a href="../index.html" style="color: var(--text-2);" data-i18n="footer_series">Japan Earthquakes</a>. <span data-i18n="footer_prev">Previous</span>: <a href="../02-plates/" style="color: var(--accent);" data-i18n="footer_prev_title">Tectonic Plate Geometry of Japan</a>. <span data-i18n="footer_next">Next</span>: <a href="../04-gutenberg-richter/" style="color: var(--accent);" data-i18n="footer_next_title">How Often the Big Ones Come</a>.</p>
+  <p><span data-i18n="footer_built">Built with</span> <a href="https://github.com/enjalot/moonshine" style="color: var(--text-2);">moonshine</a>.</p>
+</footer>
+
+</div>
+
+<script>
+// === DATA ===
+d3.csv("../shared/data/earthquakes.csv", d => ({
+  time: +new Date(d.time), lat: +d.latitude, lon: +d.longitude,
+  depth: +d.depth, mag: +d.mag
+})).then(rows => {
+const quakes = rows.sort((a, b) => a.time - b.time);
+
+// === CONFIGURATION ===
+const FADE_WINDOW_MS = 30 * 24 * 3600 * 1000; // 30 days
+const speedSteps = [5, 15, 30, 60, 120]; // catalog days per second
+const DAY_MS = 86400000;
+
+// === MAP SETUP ===
+const mapW = 690, mapH = 520;
+const sparkW = 690, sparkH = 100;
+
+// Japan-centric Mercator projection
+const projection = d3.geoMercator()
+  .center([137, 37])
+  .scale(1100)
+  .translate([mapW / 2, mapH / 2]);
+
+const mapSvg = d3.select("#map").append("svg")
+  .attr("viewBox", `0 0 ${mapW} ${mapH}`)
+  .attr("width", "100%");
+
+// Background
+mapSvg.append("rect")
+  .attr("width", mapW).attr("height", mapH)
+  .attr("fill", "#f0f4f8");
+
+const path = d3.geoPath().projection(projection);
+const worldLandG = mapSvg.append("g");
+const landG = mapSvg.append("g");
+const dotsG = mapSvg.append("g");
+
+// Load world land backing (Korea, Sakhalin, Kamchatka, etc.)
+d3.json("../../vendor/data/world-atlas/countries-50m.json").then(function(world) {
+  const landFeature = topojson.feature(world, { type: "GeometryCollection", geometries: world.objects.countries.geometries.filter(g => g.id !== "392") });
+  worldLandG.append("path")
+    .datum(landFeature)
+    .attr("d", path)
+    .attr("fill", "#e8e8e0")
+    .attr("stroke", "#bbb")
+    .attr("stroke-width", 0.6);
+});
+
+// Load TopoJSON prefecture geography
+d3.json("../shared/japan.topojson").then(topoData => {
+  const prefectures = topojson.feature(topoData, topoData.objects.japan);
+  const prefBorders = topojson.mesh(topoData, topoData.objects.japan, (a, b) => a !== b);
+
+  landG.selectAll("path.prefecture")
+    .data(prefectures.features)
+    .join("path")
+    .attr("class", "prefecture")
+    .attr("d", path)
+    .attr("fill", "#e8e8e0")
+    .attr("stroke", "#bbb")
+    .attr("stroke-width", 0.5);
+
+  landG.append("path")
+    .datum(prefBorders)
+    .attr("fill", "none")
+    .attr("stroke", "#ddd")
+    .attr("stroke-width", 0.5)
+    .attr("d", path);
+
+  // City labels
+  const cities = [
+    { name: "Tokyo", ja: "東京", lon: 139.69, lat: 35.69, dx: 8, dy: 4 },
+    { name: "Osaka", ja: "大阪", lon: 135.50, lat: 34.69, dx: -30, dy: 12 },
+    { name: "Sendai", ja: "仙台", lon: 140.87, lat: 38.27, dx: 8, dy: 4 },
+    { name: "Sapporo", ja: "札幌", lon: 141.35, lat: 43.06, dx: 8, dy: 4 }
+  ];
+
+  const cityG = landG.append("g").attr("class", "city-labels");
+  cities.forEach(c => {
+    const [cx, cy] = projection([c.lon, c.lat]);
+    cityG.append("circle")
+      .attr("cx", cx).attr("cy", cy).attr("r", 2.5)
+      .attr("fill", "#444").attr("stroke", "#fff").attr("stroke-width", 0.8);
+    cityG.append("text")
+      .attr("x", cx + c.dx).attr("y", cy + c.dy)
+      .attr("font-size", "10px").attr("fill", "#333")
+      .attr("font-weight", 600)
+      .text(c.name)
+      .attr("data-i18n", "svg_city_" + c.name.toLowerCase());
+  });
+});
+
+// Color scale
+function magColor(m) {
+  if (m >= 7) return "#ef4444";
+  if (m >= 6) return "#f97316";
+  if (m >= 5) return "#facc15";
+  return "#4ade80";
+}
+
+function magRadius(m) {
+  if (m >= 9) return 18;
+  if (m >= 8) return 14;
+  if (m >= 7) return 10;
+  if (m >= 6) return 6;
+  if (m >= 5) return 3.5;
+  return 2;
+}
+
+// === SPARKLINE ===
+const timeExtent = d3.extent(quakes, d => d.time);
+const sparkMargin = { top: 8, right: 15, bottom: 22, left: 50 };
+const sparkInnerW = sparkW - sparkMargin.left - sparkMargin.right;
+const sparkInnerH = sparkH - sparkMargin.top - sparkMargin.bottom;
+
+// Compute cumulative energy
+function seismicEnergy(mag) {
+  return Math.pow(10, 1.5 * mag + 4.8);
+}
+
+let cumEnergy = [];
+let runningTotal = 0;
+quakes.forEach(q => {
+  runningTotal += seismicEnergy(q.mag);
+  cumEnergy.push({ time: q.time, energy: runningTotal });
+});
+
+const sparkX = d3.scaleLinear().domain(timeExtent).range([0, sparkInnerW]);
+const sparkY = d3.scaleLog()
+  .domain([cumEnergy[0].energy, cumEnergy[cumEnergy.length - 1].energy])
+  .range([sparkInnerH, 0]);
+
+const sparkSvg = d3.select("#sparkline").append("svg")
+  .attr("viewBox", `0 0 ${sparkW} ${sparkH}`)
+  .attr("width", "100%")
+  .style("cursor", "pointer");
+
+const sparkG = sparkSvg.append("g")
+  .attr("transform", `translate(${sparkMargin.left},${sparkMargin.top})`);
+
+// Axes
+const yearTicks = d3.range(2000, 2026, 2).map(y => Date.UTC(y, 0, 1));
+sparkG.append("g")
+  .attr("class", "axis")
+  .attr("transform", `translate(0,${sparkInnerH})`)
+  .call(d3.axisBottom(sparkX)
+    .tickValues(yearTicks)
+    .tickFormat(d => new Date(d).getFullYear())
+    .tickSize(-sparkInnerH)
+    .tickSizeOuter(0))
+  .selectAll("line").attr("stroke-opacity", 0.15);
+
+sparkG.append("g")
+  .attr("class", "axis")
+  .call(d3.axisLeft(sparkY).ticks(3, ".0e").tickSize(-sparkInnerW).tickSizeOuter(0))
+  .selectAll("line").attr("stroke-opacity", 0.15);
+
+// Energy label
+sparkG.append("text")
+  .attr("x", -sparkMargin.left + 4).attr("y", -2)
+  .attr("font-size", "10px").attr("fill", "var(--text-2)")
+  .text("Cumulative energy (J)")
+  .attr("data-i18n", "svg_cumulative_energy");
+
+// Energy line
+const line = d3.line()
+  .x(d => sparkX(d.time))
+  .y(d => sparkY(d.energy));
+
+sparkG.append("path")
+  .datum(cumEnergy)
+  .attr("fill", "none")
+  .attr("stroke", "var(--accent)")
+  .attr("stroke-width", 1.5)
+  .attr("d", line);
+
+// Annotations for key seismic events
+const annotations = [
+  { date: new Date(Date.UTC(2011, 2, 11, 5, 46)), label: "Tōhoku M9.1", key: "svg_anno_tohoku", dy: -6 },
+  { date: new Date(Date.UTC(2016, 3, 15, 16, 25)), label: "Kumamoto M7.0", key: "svg_anno_kumamoto", dy: -6 },
+  { date: new Date(Date.UTC(2024, 0, 1, 7, 10)), label: "Noto M7.5", key: "svg_anno_noto", dy: -6 }
+];
+annotations.forEach(a => {
+  const ax = sparkX(a.date.getTime());
+  sparkG.append("line")
+    .attr("x1", ax).attr("x2", ax)
+    .attr("y1", 0).attr("y2", sparkInnerH)
+    .attr("stroke", "#999").attr("stroke-width", 0.7)
+    .attr("stroke-dasharray", "2,2");
+  sparkG.append("text")
+    .attr("x", ax).attr("y", a.dy)
+    .attr("text-anchor", "middle")
+    .attr("font-size", "9px").attr("fill", "#666")
+    .text(a.label)
+    .attr("data-i18n", a.key);
+});
+
+// Cursor line
+const cursorLine = sparkG.append("line")
+  .attr("y1", 0).attr("y2", sparkInnerH)
+  .attr("stroke", "#ef4444")
+  .attr("stroke-width", 1.5)
+  .attr("stroke-dasharray", "3,2");
+
+// === ANIMATION STATE ===
+let currentTime = timeExtent[0];
+let playing = false;
+let speed = speedSteps[2];
+let minMag = 4.5;
+let animFrame = null;
+let lastTimestamp = null;
+
+const playBtn = document.getElementById("playBtn");
+const speedSlider = document.getElementById("speedSlider");
+const speedLabel = document.getElementById("speedLabel");
+const magSlider = document.getElementById("magSlider");
+const magLabel = document.getElementById("magLabel");
+const currentDateEl = document.getElementById("currentDate");
+const tooltipEl = document.getElementById("tooltip");
+
+function formatDate(ms) {
+  const d = new Date(ms);
+  return d.toISOString().slice(0, 10);
+}
+
+// Speed: days per real second
+// speedSteps are catalog days per real second.
+function animate(timestamp) {
+  if (!lastTimestamp) lastTimestamp = timestamp;
+  const dt = Math.min(timestamp - lastTimestamp, 100); // cap dt
+  lastTimestamp = timestamp;
+
+  // Advance time: speed is in days per second
+  currentTime += speed * DAY_MS * (dt / 1000);
+
+  if (currentTime > timeExtent[1] + FADE_WINDOW_MS) {
+    currentTime = timeExtent[1] + FADE_WINDOW_MS;
+    pause();
+  }
+
+  render();
+  if (playing) animFrame = requestAnimationFrame(animate);
+}
+
+function render() {
+  const windowStart = currentTime - FADE_WINDOW_MS;
+
+  // Filter quakes in window and above min magnitude
+  const visible = quakes.filter(q =>
+    q.mag >= minMag && q.time <= currentTime && q.time > windowStart
+  );
+
+  const circles = dotsG.selectAll("circle")
+    .data(visible, d => d.time + "_" + d.lat);
+
+  circles.exit()
+    .transition().duration(150).ease(d3.easeCubicInOut)
+    .attr("r", 0)
+    .attr("opacity", 0)
+    .remove();
+
+  const entered = circles.enter().append("circle")
+    .attr("cx", d => projection([d.lon, d.lat])[0])
+    .attr("cy", d => projection([d.lon, d.lat])[1])
+    .attr("r", 0)
+    .attr("fill", d => magColor(d.mag))
+    .attr("stroke", d => d.mag >= 7 ? "#991b1b" : "none")
+    .attr("stroke-width", d => d.mag >= 7 ? 1.5 : 0)
+    .on("mouseenter", function(event, d) {
+      tooltipEl.style.opacity = 1;
+      const tipLang = window.getPageLang ? window.getPageLang() : "en";
+      const depthLabel = tipLang === "ja"
+        ? (d.depth < 30 ? "浅発" : d.depth < 70 ? "中深発" : "深発")
+        : (d.depth < 30 ? "Shallow" : d.depth < 70 ? "Intermediate" : "Deep");
+      const depthLine = tipLang === "ja"
+        ? `${depthLabel}、深さ${d.depth} km`
+        : `${depthLabel}, ${d.depth} km depth`;
+      const coordLine = tipLang === "ja"
+        ? `北緯${d.lat.toFixed(2)}°、東経${d.lon.toFixed(2)}°`
+        : `${d.lat.toFixed(2)}°N, ${d.lon.toFixed(2)}°E`;
+      const magBar = "▮".repeat(Math.round(d.mag - 3));
+      tooltipEl.innerHTML = [
+        `<strong style="font-size:0.9rem">M${d.mag.toFixed(1)}</strong> <span style="color:#aaa;letter-spacing:-1px">${magBar}</span>`,
+        `${formatDate(d.time)}`,
+        depthLine,
+        coordLine
+      ].join("<br>");
+      const rect = document.getElementById("map").getBoundingClientRect();
+      const px = projection([d.lon, d.lat]);
+      let left = px[0] * rect.width / mapW + 14;
+      if (left + 160 > rect.width) left = px[0] * rect.width / mapW - 170;
+      tooltipEl.style.left = left + "px";
+      tooltipEl.style.top = (px[1] * rect.height / mapH - 20) + "px";
+    })
+    .on("mouseleave", () => { tooltipEl.style.opacity = 0; });
+
+  entered.transition().duration(250).ease(d3.easeLinear)
+    .attr("r", d => magRadius(d.mag));
+
+  // Update opacity based on age
+  dotsG.selectAll("circle")
+    .attr("opacity", d => {
+      const age = currentTime - d.time;
+      if (age < 0) return 0;
+      const fadeStart = FADE_WINDOW_MS * 0.6;
+      if (age < fadeStart) return 0.85;
+      return 0.85 * (1 - (age - fadeStart) / (FADE_WINDOW_MS - fadeStart));
+    });
+
+  // Update cursor
+  cursorLine.attr("x1", sparkX(currentTime)).attr("x2", sparkX(currentTime));
+  currentDateEl.textContent = formatDate(Math.min(currentTime, timeExtent[1]));
+}
+
+function getButtonText(key) {
+  const lang = window.getPageLang ? window.getPageLang() : "en";
+  const labels = {
+    play: lang === "ja" ? "再生" : "Play",
+    pause: lang === "ja" ? "一時停止" : "Pause"
+  };
+  return labels[key];
+}
+
+function play() {
+  playing = true;
+  playBtn.textContent = getButtonText("pause");
+  playBtn.classList.add("active");
+  lastTimestamp = null;
+  animFrame = requestAnimationFrame(animate);
+}
+
+function pause() {
+  playing = false;
+  playBtn.textContent = getButtonText("play");
+  playBtn.classList.remove("active");
+  if (animFrame) cancelAnimationFrame(animFrame);
+}
+
+let figureInView = true;
+let wantsPlay = false;
+
+function userPlay() {
+  wantsPlay = true;
+  if (Motion.reduced()) return; // respect user preference; stay paused
+  if (figureInView) play();
+}
+function userPause() {
+  wantsPlay = false;
+  pause();
+}
+
+playBtn.addEventListener("click", () => {
+  if (playing || wantsPlay) {
+    userPause();
+  } else {
+    if (currentTime >= timeExtent[1] + FADE_WINDOW_MS) {
+      currentTime = timeExtent[0];
+    }
+    userPlay();
+  }
+});
+
+const figureEl = document.querySelector('.figure');
+if (figureEl && 'IntersectionObserver' in window) {
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach((e) => {
+      figureInView = e.isIntersecting;
+      if (!figureInView && playing) {
+        pause(); // auto-suspend off-screen; keep wantsPlay intact
+      } else if (figureInView && wantsPlay && !playing && !Motion.reduced()) {
+        play();
+      }
+    });
+  }, { threshold: 0.1 });
+  io.observe(figureEl);
+}
+
+speedSlider.addEventListener("input", () => {
+  speed = speedSteps[+speedSlider.value];
+  speedLabel.textContent = speed + " d/s";
+});
+
+magSlider.addEventListener("input", () => {
+  minMag = +magSlider.value / 10;
+  magLabel.textContent = "≥ " + minMag.toFixed(1);
+  render();
+});
+
+// Scrub sparkline
+function scrubTo(event) {
+  const svgRect = sparkSvg.node().getBoundingClientRect();
+  const x = (event.clientX - svgRect.left) * sparkW / svgRect.width - sparkMargin.left;
+  const t = sparkX.invert(Math.max(0, Math.min(sparkInnerW, x)));
+  currentTime = t;
+  render();
+}
+
+let dragging = false;
+sparkSvg.on("mousedown", (event) => {
+  if (playing) pause();
+  dragging = true;
+  scrubTo(event);
+});
+sparkSvg.on("mousemove", (event) => { if (dragging) scrubTo(event); });
+sparkSvg.on("mouseup", () => { dragging = false; });
+sparkSvg.on("mouseleave", () => { dragging = false; });
+
+// Touch support for scrubbing
+sparkSvg.on("touchstart", (event) => {
+  event.preventDefault();
+  if (playing) pause();
+  dragging = true;
+  scrubTo(event.touches[0]);
+});
+sparkSvg.on("touchmove", (event) => {
+  event.preventDefault();
+  if (dragging) scrubTo(event.touches[0]);
+});
+sparkSvg.on("touchend", () => { dragging = false; });
+
+// Re-render dynamic text when language changes
+window.addEventListener("langchange", function() {
+  if (playing) {
+    playBtn.textContent = getButtonText("pause");
+  } else {
+    playBtn.textContent = getButtonText("play");
+  }
+});
+
+// Initial render
+render();
+});
+</script>
+<script>
+window.PAGE_JA = {
+  svg_city_tokyo: "東京",
+  svg_city_osaka: "大阪",
+  svg_city_sendai: "仙台",
+  svg_city_sapporo: "札幌",
+  svg_cumulative_energy: "累積エネルギー (J)",
+  svg_anno_tohoku: "東北 M9.1",
+  svg_anno_kumamoto: "熊本 M7.0",
+  svg_anno_noto: "能登 M7.5",
+  ctrl_play: "再生",
+  ctrl_speed: "速度：",
+  ctrl_min_mag: "最小M：",
+  title: "揺れが止まらないとき",
+  subtitle: "日本周辺の26年間の地震をアニメーションで再生する",
+  p1: "日本は4つのプレートが衝突する場所に位置している。しばらく住んだことがあれば、あの感覚は分かるだろう。スマホが鳴り、部屋が揺れ、もっと大きくなるかどうか見守る。たいていの場合は大丈夫だ。だが、時にそうはいかない。そのときは、たった1つの地震が何十年分の地震活動すべてを上回ることがある。",
+  p2: "このアニメーションは、USGSが2000年から2025年にかけて日本周辺で記録したマグニチュード4.5以上の全地震、16,792件を再生する。2011年3月に注目してほしい。",
+  fig_caption: "各ドットはUSGSカタログの1つの地震（M4.5以上、2000〜2025年）。ドットはマグニチュードに応じて拡大し、30日後にフェードアウトする。速度は1秒あたりに進むカタログ上の日数。下のスパークラインは累積地震エネルギーを対数スケールで追跡する。スパークラインをクリックまたはドラッグすると、任意の時点にジャンプできる。",
+  h2_sequences: "地震の連鎖はどう展開するか",
+  p3: "通常、日本の地震活動は安定したバックグラウンドの低い音のように見える。週に10個ほどのドットが地図上に散らばり、ほとんどがM4.5からM5.5。プレート境界や断層に沿った通常の応力解放だ。慣れない人には不安かもしれないが、これが基準値だ。大地は常に調整を続けている。",
+  p4: "そして連鎖が起きる。大地震が発生すると、周囲の地殻の応力場が変化する。破壊寸前だった断層が限界を超え、数週間から数ヶ月続く余震のバーストが生まれる。アニメーションではこれが劇的に見える。2011年3月11日の東北M9.1は、本州北東の海岸線全体を照らし出す高密度のドット群を生み出す。最初の24時間だけで、M4.5以上の地震が531回カタログに記録されている。",
+  insight_aftershock: "比較のために言えば、2001〜2010年のバックグラウンドはM4.5以上が1日平均およそ1回だった。本震後30日間にカタログが数えた地震は2,081回で、バックグラウンドの約70倍にあたる。応力の変化は破壊域から遠い断層にも及んだ。15時間以内に長野・新潟県境付近でM6.2、反対側の秋田沖の日本海でもM6.2が発生し、4日後には富士山のふもとでM6.0が起きた。",
+  h2_magnitude: "マグニチュードスケールの支配",
+  p5: "マグニチュードスケールは対数的だ。整数1つ上がるごとにエネルギーは約32倍になる。この地図上の16,792件の地震のエネルギーを合計すると、M9.1の東北地方太平洋沖地震の本震がその86%を占める。他のすべての地震を<em>合計</em>したものの約6倍だ。スパークラインを見てほしい。累積エネルギーの線はタイムラインの大部分でほぼ平坦だが、2011年3月11日に垂直に跳ね上がる。",
+  p6: "別の見方をすると、M9.1の地震1つのエネルギーに匹敵するには、M6.0の地震が約45,000回、M4.5の地震なら約800万回必要だ。カタログ全体でM6.0以上の地震は344回しかない。2番目に大きい2003年十勝沖地震（M8.2）でさえ、東北の20分の1以下のエネルギーしか放出していない。",
+  insight_notable: "タイムライン全体を再生すると、ほかにもいくつかのバーストに気づくだろう。2003年の十勝沖地震、2016年の熊本地震（4月14日の前震と、その28時間後のより大きな本震）、2024年元日の能登半島地震、そして本州東方沖で繰り返される群発地震。それぞれ性格が異なる。熊本は浅く破壊的だった。能登は伝統的な木造建築が多い地域を直撃した。沖合の群発は主に太平洋へ消散していく。このページのマグニチュードはUSGSカタログの値で、気象庁の値とは異なることがある。USGSは熊本をM7.0、能登をM7.5とし、気象庁はそれぞれ7.3、7.6としている。",
+  h2_daily: "日常生活にとっての意味",
+  p7: "日本に住んでいるなら、バックグラウンドの地震活動は常に隣にある。体感では震度のほうがマグニチュードより重要だ。沖合数百キロのM6.0の深発地震は東京でゆるやかな揺れにしかならないかもしれないが、都市の真下で起きるM5.5の浅発地震は棚の物を落とすような鋭い衝撃になる。このアニメーションではそのニュアンスは見えないが、空間パターンは見える。一部の地域は他より一貫して活発で、本州東方沖の海溝が最大の地震源だ。",
+  p8: "日本の建築基準法と緊急地震速報は世界でもトップクラスだ。しかし物理法則は交渉の余地がない。次の巨大地震は「起きるかどうか」ではなく「いつ起きるか」の問題だ。バックグラウンドノイズと大きな連鎖の違いを知ること、それが地震国に生きるということだ。",
+  footer_built: "作成：",
+  footer_part_of: "シリーズ",
+  footer_series: "日本の地震",
+  footer_prev: "前",
+  footer_prev_title: "日本のプレートテクトニクス",
+  footer_next: "次",
+  footer_next_title: "大地震はどれくらいの頻度で来るのか"
+};
+</script>
+<script src="../shared/i18n.js"></script>
+</body>
+</html>

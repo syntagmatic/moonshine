@@ -26,7 +26,9 @@ no dependencies, no tests; `package.json` is plugin-marketplace metadata only.
 - Vendor assets: `./scripts/vendor.sh` — run once before serving. Fetches KaTeX,
   D3, fonts and topology data into `docs/vendor/` (gitignored)
 - Serve: `python3 -m http.server 8000 -d docs` (or any static server); pages also
-  work opened directly as files
+  work opened directly as files. Directory URLs need a trailing slash, or the
+  relative `../vendor/` paths resolve one level too high. `docs/serve.json` (serve reads it from the served dir) makes
+  `serve` redirect to add it (and keeps `.html` URLs intact).
 - No build, lint, or test commands exist
 
 ## Vendored assets

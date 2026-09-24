@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flocking: How Birds Fly Together</title>
+<link href="../vendor/fonts/sans-serif-mono-alt/fonts.css" rel="stylesheet">
+<script src="../vendor/js/d3.v7.min.js"></script>
+<script src="../lib/motion.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --article-width: 740px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem;
+  --line-height: 1.6;
+  --text: #1a1a2e;
+  --text-2: #4a4a6a;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --bg: #fafafa;
+  --fig-bg: #ffffff;
+  --border: #e2e2e8;
+  --c-agent: #2563eb;
+  --c-rule: #0891b2;
+  --c-pattern: #8b5cf6;
+  --c-critical: #f59e0b;
+  --c-feedback: #ef4444;
+  --c-env: #10b981;
+  --c-danger: #ef4444;
+}
+body { font-family: var(--body-font); font-size: var(--body-size);
+  line-height: var(--line-height); color: var(--text); background: var(--bg);
+  -webkit-font-smoothing: antialiased; }
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
+h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+h3 { font-size: 1.15rem; margin: 2rem 0 0.75rem; }
+p { margin: 0 0 1rem; }
+a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+a:hover { color: #1d4ed8; }
+
+header { margin-bottom: 3rem; }
+.back-link { font-family: var(--heading-font); font-size: 0.85rem; text-decoration: none; color: var(--text-2); display: inline-block; margin-bottom: 1rem; }
+.subtitle { font-family: var(--heading-font); font-size: 1.15rem; color: var(--text-2); max-width: 600px; }
+
+.figure { margin: 2rem 0; padding: 1.5rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.figure canvas { display: block; width: 100%; border-radius: 3px; }
+.figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; line-height: 1.4; }
+.figure-label { font-weight: 600; color: var(--text); }
+.insight { background: var(--accent-light); border-left: 3px solid var(--accent); padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 4px 4px 0; }
+.insight p { margin: 0; }
+.controls { display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-end; margin-bottom: 1rem; font-family: var(--heading-font); font-size: 0.85rem; }
+.control-group { display: flex; flex-direction: column; gap: 0.25rem; }
+.control-group label { color: var(--text-2); font-weight: 600; }
+.control-group .slider-row { display: flex; align-items: center; gap: 0.5rem; }
+.control-group input[type="range"] { width: 120px; accent-color: var(--accent); }
+.control-group .val { font-family: var(--mono-font); font-variant-numeric: tabular-nums; min-width: 2.5em; text-align: right; color: var(--text); }
+.btn { font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600;
+  padding: 0.35rem 0.85rem; border-radius: 4px; border: 1px solid var(--border);
+  background: var(--fig-bg); color: var(--text); cursor: pointer;
+  transition: all 0.15s; user-select: none; }
+.btn:hover { border-color: var(--accent); background: var(--accent-light); }
+.btn.active { border-color: var(--accent); background: var(--accent); color: white; }
+.btn-group { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+.click-hint { font-family: var(--heading-font); font-size: 0.8rem; color: var(--text-2);
+  text-align: center; margin-top: 0.5rem; font-style: italic; }
+svg text { font-family: var(--heading-font); }
+
+@media (prefers-reduced-motion: reduce) {html:not([data-motion="full"]) .figure canvas { outline: 2px dashed var(--border); outline-offset: -2px; }
+}
+@media (max-width: 640px) {
+  h1 { font-size: 1.75rem; }
+  .controls { gap: 0.6rem; }
+  .control-group input[type="range"] { width: 80px; }
+}
+.readout { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text); margin: 0.5rem 0 0; font-variant-numeric: tabular-nums; }
+.readout .num { font-family: var(--mono-font); }
+.live { font-family: var(--mono-font); font-size: 0.95em; font-variant-numeric: tabular-nums; }
+.vicsek-row { display: flex; gap: 1rem; align-items: flex-start; }
+.vicsek-row > div { flex: 1 1 0; min-width: 0; }
+.trace-label { font-family: var(--heading-font); font-size: 0.75rem; color: var(--text-2); margin-bottom: 0.25rem; }
+#sweep-chart svg { display: block; width: 100%; height: auto; cursor: crosshair; }
+.formula { font-family: var(--mono-font); font-size: 1rem; text-align: center; margin: 1.25rem 0; }
+@media (max-width: 640px) { .vicsek-row { flex-direction: column; } }
+</style>
+</head>
+<body>
+<div class="article">
+
+<header>
+  <a href="index.html" class="back-link">&larr; Emergence Series</a>
+  <h1>Flocking</h1>
+  <p class="subtitle">When does a crowd of self-steering agents pick one direction? A disorder-to-order transition you can measure, and the reason it needs the agents to move.</p>
+</header>
+
+<p>
+A starling murmuration looks choreographed, but no bird leads and no bird knows what the flock is doing. Each bird reacts to a few nearby birds. That much is familiar, and Craig Reynolds turned it into three steering rules for his simulated "boids" in 1987. The rules make a pleasant animation. They also leave a question the animation cannot answer by eye: when is a crowd a flock?
+</p>
+
+<p>
+This essay answers with one number. For <em>N</em> agents with unit heading vectors <em>v&#770;<sub>i</sub></em>, the <strong>polarization</strong> is the length of their average heading:
+</p>
+
+<p class="formula">&phi; = | (1/N) &Sigma;<sub>i</sub> v&#770;<sub>i</sub> |</p>
+
+<p>
+If every agent points the same way, &phi; = 1. If headings are independent and random, the vectors mostly cancel and &phi; is of order 1/&radic;N, about <span class="live" id="phi-random">&hellip;</span> for the 400 agents used later. Everything below is a measurement of &phi; in a running simulation.
+</p>
+
+<h2>Three rules, one number</h2>
+
+<p>
+Each boid looks at the others within its vision radius and adds three steering terms. <strong>Separation</strong> pushes it away from neighbors that are too close. <strong>Alignment</strong> turns it toward its neighbors' average heading. <strong>Cohesion</strong> pulls it toward their average position. The boids below fly at constant speed in a box that wraps around at the edges, with a small random wobble in each turn, and the line under the canvas reports &phi; as they fly.
+</p>
+
+<div class="figure" id="fig-flock">
+  <canvas id="canvas-flock"></canvas>
+  <p class="readout" id="flock-readout">&nbsp;</p>
+  <div class="controls" style="margin-top: 0.75rem;">
+    <div class="control-group">
+      <label for="sep-slider">Separation</label>
+      <div class="slider-row"><input type="range" id="sep-slider" min="0" max="3" step="0.1" value="1.5"><span class="val" id="sep-val">1.5</span></div>
+    </div>
+    <div class="control-group">
+      <label for="ali-slider">Alignment</label>
+      <div class="slider-row"><input type="range" id="ali-slider" min="0" max="2" step="0.05" value="1"><span class="val" id="ali-val">1.00</span></div>
+    </div>
+    <div class="control-group">
+      <label for="coh-slider">Cohesion</label>
+      <div class="slider-row"><input type="range" id="coh-slider" min="0" max="2" step="0.05" value="1"><span class="val" id="coh-val">1.00</span></div>
+    </div>
+    <div class="control-group">
+      <label for="radius-slider">Vision radius</label>
+      <div class="slider-row"><input type="range" id="radius-slider" min="10" max="100" step="5" value="50"><span class="val" id="radius-val">50</span></div>
+    </div>
+    <button class="btn" id="reset-flock">Scatter</button>
+  </div>
+  <p class="figure-caption"><span class="figure-label">Figure 1.</span> 150 boids with separation, alignment and cohesion. Boids are colored by group: two boids share a group if a chain of neighbors, each within the vision radius of the next, connects them. &phi; is computed over all boids; within-group &phi; is the size-weighted average of each group's own polarization, over groups of two or more (gray boids are loners).</p>
+</div>
+
+<p>
+Only one of the three rules makes the flock choose a direction. Before you touch anything, this page ran the figure's own code in the background, three runs of 1,500 steps from random starts: with the default weights, &phi; averaged <span class="live" id="bg-on">&hellip;</span> over the second half of each run, and with alignment set to zero it averaged <span class="live" id="bg-off">&hellip;</span>. Drag alignment to zero and watch the readout follow. Separation and cohesion still gather the boids into clumps, but each clump churns in place.
+</p>
+
+<p>
+That clumping without a heading is how many swarm robots gather. A common aggregation controller tells each robot to move toward the neighbors its short-range sensors detect while keeping a collision buffer, which is cohesion and separation with no alignment term. It collects robots into piles. Getting them to travel together takes the third rule.
+</p>
+
+<p>
+Now restore alignment, set the vision radius to its smallest values and press Scatter. The boids condense into many small groups, each tightly aligned inside while the groups head in different directions, so within-group &phi; runs well above the global &phi;. The radius sets how far heading information can reach in one step. Watch for a while and groups that cross paths merge and settle on a common heading, so the global number creeps up. (Shrink the radius without scattering and the flock splits into pieces that keep the heading they already shared, so global &phi; stays high.) Hold on to the merging, because it turns out to be the whole story.
+</p>
+
+<h2>Strip it down</h2>
+
+<p>
+Boids have too many knobs for a clean experiment. In 1995 Tam&aacute;s Vicsek and colleagues kept only alignment. Every particle moves at the same speed <em>v</em><sub>0</sub>. At each step it adopts the average heading of all particles within distance 1 of it (itself included), then adds a random angle drawn uniformly from [&minus;&eta;/2, &eta;/2]. There is no separation, no cohesion and no leader. The noise &eta; plays the role of temperature: at &eta; = 2&pi; the new heading is completely random.
+</p>
+
+<div class="figure" id="fig-vicsek">
+  <div class="vicsek-row">
+    <div><canvas id="canvas-vicsek"></canvas></div>
+    <div>
+      <div class="trace-label">&phi; over the last 600 steps</div>
+      <canvas id="canvas-trace"></canvas>
+      <p class="readout" id="vicsek-readout">&nbsp;</p>
+    </div>
+  </div>
+  <div class="controls" style="margin-top: 0.75rem;">
+    <div class="control-group">
+      <label for="eta-slider">Noise &eta;</label>
+      <div class="slider-row"><input type="range" id="eta-slider" min="0" max="6.28" step="0.05" value="1"><span class="val" id="eta-val">1.00</span></div>
+    </div>
+    <div class="control-group">
+      <label for="v0-slider">Speed v<sub>0</sub></label>
+      <div class="slider-row"><input type="range" id="v0-slider" min="0" max="0.5" step="0.01" value="0.3"><span class="val" id="v0-val">0.30</span></div>
+    </div>
+    <button class="btn" id="reset-vicsek">Randomize</button>
+  </div>
+  <p class="figure-caption"><span class="figure-label">Figure 2.</span> The Vicsek model: 400 particles in a 20 &times; 20 periodic box (density 1, interaction radius 1), each drawn as a short stroke colored by its heading. The trace on the right is &phi; at every step; the dashed line marks the random-heading level for 400 particles.</p>
+</div>
+
+<p>
+At low noise the colors merge into one hue and the trace climbs toward 1. Raise &eta; and the trace sinks and starts to swing, with ordered stretches that break up and re-form. At high noise it lies along the dashed line. Somewhere in between, the crowd stops being a flock.
+</p>
+
+<h2>A transition, measured</h2>
+
+<p>
+To locate "somewhere in between", the figure below runs the same code at 16 noise levels, each from a fresh random start, discarding the first 400 steps and averaging &phi; over the next 600. Error bars are the standard deviation of &phi; over those 600 steps, so they measure how much the order flickers, not uncertainty in the mean. The sweep runs in your browser while the figure is on screen.
+</p>
+
+<div class="figure" id="fig-sweep">
+  <div id="sweep-chart"></div>
+  <div class="controls" style="margin-top: 0.75rem;">
+    <button class="btn" id="rerun-sweep">Re-run with new seeds</button>
+    <span class="readout" id="sweep-status" style="margin: 0;">&nbsp;</span>
+  </div>
+  <p class="figure-caption"><span class="figure-label">Figure 3.</span> Mean polarization against noise for moving particles (v<sub>0</sub> = 0.3) and for frozen ones (v<sub>0</sub> = 0), same density, radius and particle count as Figure 2. The vertical line is Figure 2's current noise; click the chart to move it there.</p>
+</div>
+
+<p>
+The moving particles order at low noise and disorder at high noise, and in this run &phi; crosses 0.5 at &eta; &asymp; <span class="live" id="eta-star">&hellip;</span>. The fluctuations are largest near that crossing, which is where Figure 2's trace swung hardest. Those are the signatures of a phase transition, with &phi; as its order parameter and &eta; as its control parameter.
+</p>
+
+<p>
+Four hundred particles cannot settle what kind of transition it is. Vicsek's group reported a continuous one. Later simulations by Gr&eacute;goire and Chat&eacute; (2004) on much larger systems found it discontinuous: near threshold the ordered phase breaks into dense bands that sweep through a sparse disordered gas, and the bands only appear once the box is several times wider than a band. A 20 &times; 20 box is too small to show them, so treat the curve above as the rounded, finite-size version of the transition.
+</p>
+
+<h2>Why the flock has to move</h2>
+
+<p>
+The second curve in Figure 3 holds everything fixed except speed. With v<sub>0</sub> = 0 the particles still align with their neighbors every step, at the same noise, but they stay where they started. Their best &phi; anywhere on the sweep was <span class="live" id="frozen-max">&hellip;</span>, against <span class="live" id="moving-max">&hellip;</span> for the moving particles. Set the speed slider in Figure 2 to zero and noise to its lowest value, press Randomize, and you can see why: the box fills with patches of uniform color that never agree.
+</p>
+
+<p>
+The frozen particles fail because their neighbor network falls apart. At density 1 with radius 1, a particle has on average <span class="live" id="mean-deg">&hellip;</span> neighbors, and in the frozen configurations this page generated the largest connected cluster held only <span class="live" id="giant-frac">&hellip;</span> of the particles. Heading information cannot cross a gap between clusters, so each cluster picks its own direction. Moving particles leave their clusters, meet strangers and carry their heading with them, and over time everyone is connected to everyone. Nothing in the update rule changed. Motion alone turned a set of disconnected islands into one flock.
+</p>
+
+<p>
+The same mechanism matters even when the network is connected. In two dimensions, a static system whose parts try to align a continuous direction under noise cannot hold true long-range order (the Mermin-Wagner theorem): slow, long-wavelength twists of the heading field always win in a large enough system. John Toner and Yuhai Tu showed in 1995 that flocks escape this. Moving agents carry heading information along the direction they travel, and that transport suppresses the twists, so a two-dimensional flock can be ordered in the thermodynamic limit when a static magnet with the same rule cannot. A 400-particle box cannot test that limit, but the frozen curve above shows the same principle at small scale: whether a crowd can agree depends on whether its members travel.
+</p>
+
+<p>
+Real flocks add one more twist to perception. Our boids and particles count as neighbors everything within a fixed distance. Ballerini and colleagues reconstructed starling flocks in three dimensions from stereo photographs and found each bird interacting with its six or seven nearest neighbors regardless of how far away they were. A fixed-count rule keeps the neighbor network connected when the flock thins out, which is exactly where the fixed-radius particles above lost their order.
+</p>
+
+<footer style="margin-top: 4rem; padding-top: 2rem; border-top: 1px solid var(--border); font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2);">
+  <p>&larr; Previous: <a href="01-cellular-automata.html" style="color: var(--accent);">Cellular Automata</a></p>
+  <p>Next: <a href="03-traffic-shockwaves.html" style="color: var(--accent);">Traffic Shockwaves</a> &rarr;</p>
+  <p style="margin-top: 1rem;">References: C. Reynolds, "Flocks, herds and schools," SIGGRAPH 1987. T. Vicsek et al., Phys. Rev. Lett. 75, 1226 (1995). J. Toner and Y. Tu, Phys. Rev. Lett. 75, 4326 (1995). G. Gr&eacute;goire and H. Chat&eacute;, Phys. Rev. Lett. 92, 025702 (2004). M. Ballerini et al., PNAS 105, 1232 (2008).</p>
+  <p style="margin-top: 1rem; opacity: 0.6;">Built with <a href="https://github.com/enjalot/moonshine" style="color: var(--text-2);">moonshine</a>.</p>
+</footer>
+
+</div><!-- .article -->
+
+<script>
+const REDUCED = Motion.reduced();
+const PAL = { agent: '#2563eb', critical: '#f59e0b', frozen: '#b45309', text: '#1a1a2e', text2: '#4a4a6a', border: '#e2e2e8' };
+
+function rng(seed) {
+  let s = seed >>> 0;
+  return function () {
+    s = (s + 0x6D2B79F5) >>> 0;
+    let t = s;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+let seedCounter = (Date.now() & 0xffff) + 1;
+function freshSeed() { return (seedCounter = (seedCounter * 7919 + 13) >>> 0); }
+
+function setupCanvas(canvas, cssW, cssH) {
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = Math.round(cssW * dpr);
+  canvas.height = Math.round(cssH * dpr);
+  canvas.style.height = cssH + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return ctx;
+}
+
+function onVisible(el, cb) {
+  new IntersectionObserver(entries => entries.forEach(e => cb(e.isIntersecting)), { threshold: 0.05 }).observe(el);
+}
+
+// Union-find over a pairwise "within distance" relation on a periodic box.
+function components(n, x, y, W, H, link) {
+  const par = new Int32Array(n);
+  for (let i = 0; i < n; i++) par[i] = i;
+  const find = i => { while (par[i] !== i) { par[i] = par[par[i]]; i = par[i]; } return i; };
+  const L2 = link * link, hw = W / 2, hh = H / 2;
+  for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) {
+    let dx = x[j] - x[i], dy = y[j] - y[i];
+    if (dx > hw) dx -= W; else if (dx < -hw) dx += W;
+    if (dy > hh) dy -= H; else if (dy < -hh) dy += H;
+    if (dx * dx + dy * dy <= L2) { const a = find(i), b = find(j); if (a !== b) par[a] = b; }
+  }
+  const root = new Int32Array(n);
+  for (let i = 0; i < n; i++) root[i] = find(i);
+  return root;
+}
+
+const headingColor = (() => {
+  const lut = [];
+  for (let k = 0; k < 72; k++) lut.push(d3.color(d3.interpolateSinebow(k / 72)).formatHex());
+  return a => { let t = (a / (2 * Math.PI)) % 1; if (t < 0) t += 1; return lut[Math.floor(t * 72) % 72]; };
+})();
+
+// ===================================================================
+// Boids (Figure 1)
+// ===================================================================
+const BW = 600, BH = 340, BN = 150, BV = 2, BTURN = 0.1, BNOISE = 0.15;
+
+function makeBoids(seed) {
+  const r = rng(seed);
+  const b = { r, x: new Float64Array(BN), y: new Float64Array(BN), vx: new Float64Array(BN), vy: new Float64Array(BN), fx: new Float64Array(BN), fy: new Float64Array(BN) };
+  for (let i = 0; i < BN; i++) {
+    b.x[i] = r() * BW; b.y[i] = r() * BH;
+    const a = r() * 2 * Math.PI; b.vx[i] = Math.cos(a); b.vy[i] = Math.sin(a);
+  }
+  return b;
+}
+
+function stepBoids(b, p) {
+  const { x, y, vx, vy, fx, fy, r } = b;
+  const R = p.radius, R2 = R * R, sd = R * 0.4, sd2 = sd * sd, hw = BW / 2, hh = BH / 2;
+  for (let i = 0; i < BN; i++) {
+    let sx = 0, sy = 0, ax = 0, ay = 0, cx = 0, cy = 0, n = 0;
+    for (let j = 0; j < BN; j++) {
+      if (j === i) continue;
+      let dx = x[j] - x[i], dy = y[j] - y[i];
+      if (dx > hw) dx -= BW; else if (dx < -hw) dx += BW;
+      if (dy > hh) dy -= BH; else if (dy < -hh) dy += BH;
+      const d2 = dx * dx + dy * dy;
+      if (d2 > R2) continue;
+      n++; ax += vx[j]; ay += vy[j]; cx += dx; cy += dy;
+      if (d2 < sd2 && d2 > 1e-9) { const d = Math.sqrt(d2), w = (sd - d) / sd; sx -= dx / d * w; sy -= dy / d * w; }
+    }
+    let gx = 0, gy = 0;
+    if (n > 0) {
+      gx = p.ali * (ax / n - vx[i]) + p.coh * (cx / n) / R + p.sep * sx;
+      gy = p.ali * (ay / n - vy[i]) + p.coh * (cy / n) / R + p.sep * sy;
+    }
+    fx[i] = gx; fy[i] = gy;
+  }
+  let px = 0, py = 0;
+  for (let i = 0; i < BN; i++) {
+    const nx = vx[i] + BTURN * fx[i], ny = vy[i] + BTURN * fy[i];
+    const a = Math.atan2(ny, nx) + BNOISE * (r() - 0.5);
+    vx[i] = Math.cos(a); vy[i] = Math.sin(a);
+    px += vx[i]; py += vy[i];
+    x[i] = (x[i] + BV * vx[i] + BW) % BW;
+    y[i] = (y[i] + BV * vy[i] + BH) % BH;
+  }
+  return Math.hypot(px, py) / BN;
+}
+
+function measureBoids(b, radius) {
+  const root = components(BN, b.x, b.y, BW, BH, radius);
+  const g = new Map();
+  for (let i = 0; i < BN; i++) {
+    let e = g.get(root[i]);
+    if (!e) { e = { n: 0, x: 0, y: 0, id: g.size }; g.set(root[i], e); }
+    e.n++; e.x += b.vx[i]; e.y += b.vy[i];
+  }
+  let loc = 0, inGroups = 0, big = 0, groups = 0;
+  for (const e of g.values()) {
+    big = Math.max(big, e.n);
+    if (e.n >= 2) { groups++; loc += Math.hypot(e.x, e.y); inGroups += e.n; }
+  }
+  return { root, g, loc: inGroups ? loc / inGroups : 0, big, groups, singles: g.size - groups };
+}
+
+(function flockFigure() {
+  const fig = document.getElementById('fig-flock');
+  const canvas = document.getElementById('canvas-flock');
+  const readout = document.getElementById('flock-readout');
+  const params = { sep: 1.5, ali: 1, coh: 1, radius: 50 };
+  let boids = makeBoids(freshSeed());
+  let ctx, cw, ch, visible = false, frame = 0, meas = null, phi = 0, phiAvg = null;
+  const groupPalette = ['#2563eb', '#0891b2', '#8b5cf6', '#f59e0b', '#ef4444', '#10b981', '#db2777', '#65a30d', '#7c3aed', '#0e7490'];
+
+  function resize() {
+    cw = canvas.parentElement.clientWidth - 0;
+    cw = canvas.clientWidth || cw;
+    ch = Math.round(cw * BH / BW);
+    ctx = setupCanvas(canvas, cw, ch);
+  }
+
+  function colorFor(i) {
+    if (!meas) return PAL.agent;
+    const e = meas.g.get(meas.root[i]);
+    if (e.n < 2) return '#9ca3af';
+    // order groups by size so the largest keeps the first color
+    return groupPalette[e.rank % groupPalette.length];
+  }
+
+  function remeasure() {
+    meas = measureBoids(boids, params.radius);
+    const sorted = [...meas.g.values()].sort((a, b) => b.n - a.n);
+    sorted.forEach((e, k) => { e.rank = k; });
+    phiAvg = phiAvg === null ? phi : phiAvg * 0.9 + phi * 0.1;
+    readout.innerHTML = 'Polarization &phi; = <span class="num">' + phi.toFixed(2) + '</span>' +
+      ' &nbsp;&middot;&nbsp; ' + meas.groups + (meas.groups === 1 ? ' group' : ' groups') +
+      (meas.singles ? ' + ' + meas.singles + (meas.singles === 1 ? ' loner' : ' loners') : '') +
+      ', largest holds <span class="num">' + Math.round(100 * meas.big / BN) + '%</span>' +
+      ' &nbsp;&middot;&nbsp; within-group &phi; = <span class="num">' + meas.loc.toFixed(2) + '</span>';
+  }
+
+  function draw() {
+    const s = cw / BW;
+    ctx.clearRect(0, 0, cw, ch);
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, cw, ch);
+    for (let i = 0; i < BN; i++) {
+      const x = boids.x[i] * s, y = boids.y[i] * s, a = Math.atan2(boids.vy[i], boids.vx[i]);
+      ctx.save(); ctx.translate(x, y); ctx.rotate(a);
+      ctx.beginPath(); ctx.moveTo(6, 0); ctx.lineTo(-4, 3); ctx.lineTo(-4, -3); ctx.closePath();
+      ctx.fillStyle = colorFor(i); ctx.fill(); ctx.restore();
+    }
+  }
+
+  function advance(n) { for (let k = 0; k < n; k++) phi = stepBoids(boids, params); }
+
+  function tick() {
+    if (!visible) return;
+    advance(1);
+    if (++frame % 6 === 0) remeasure();
+    draw();
+    requestAnimationFrame(tick);
+  }
+
+  function staticRender() { advance(600); remeasure(); draw(); }
+
+  function bind(id, key, digits) {
+    const el = document.getElementById(id), val = document.getElementById(id.replace('slider', 'val'));
+    el.addEventListener('input', () => {
+      params[key] = +el.value; val.textContent = (+el.value).toFixed(digits);
+      if (REDUCED) staticRender();
+    });
+  }
+  bind('sep-slider', 'sep', 1); bind('ali-slider', 'ali', 2); bind('coh-slider', 'coh', 2); bind('radius-slider', 'radius', 0);
+  document.getElementById('reset-flock').addEventListener('click', () => {
+    boids = makeBoids(freshSeed()); phiAvg = null; phi = 0; remeasure(); draw();
+    if (REDUCED) staticRender();
+  });
+
+  resize();
+  phi = 0; remeasure(); draw();
+  if (REDUCED) staticRender();
+  new ResizeObserver(() => { resize(); draw(); }).observe(fig);
+  onVisible(fig, v => {
+    const was = visible; visible = v && !REDUCED;
+    if (visible && !was) requestAnimationFrame(tick);
+  });
+
+  // Background measurement quoted in the prose: default weights vs alignment off.
+  const jobs = [];
+  for (const ali of [1, 0]) for (let s = 0; s < 3; s++) jobs.push({ ali, seed: 101 + s });
+  const acc = { 1: [], 0: [] };
+  function runJob() {
+    const job = jobs.shift();
+    if (!job) {
+      const mean = a => a.reduce((u, v) => u + v, 0) / a.length;
+      document.getElementById('bg-on').textContent = mean(acc[1]).toFixed(2);
+      document.getElementById('bg-off').textContent = mean(acc[0]).toFixed(2);
+      return;
+    }
+    const b = makeBoids(job.seed), p = { sep: 1.5, ali: job.ali, coh: 1, radius: 50 };
+    let sum = 0, n = 0;
+    for (let t = 0; t < 1500; t++) { const f = stepBoids(b, p); if (t >= 750) { sum += f; n++; } }
+    acc[job.ali].push(sum / n);
+    setTimeout(runJob, 30);
+  }
+  setTimeout(runJob, 200);
+})();
+
+// ===================================================================
+// Vicsek model (Figures 2 and 3)
+// ===================================================================
+const VN = 400, VL = 20, VR = 1;
+
+function makeVicsek(seed) {
+  const r = rng(seed);
+  const s = { r, x: new Float64Array(VN), y: new Float64Array(VN), th: new Float64Array(VN), nt: new Float64Array(VN),
+    head: new Int32Array(VL * VL), next: new Int32Array(VN) };
+  for (let i = 0; i < VN; i++) { s.x[i] = r() * VL; s.y[i] = r() * VL; s.th[i] = (r() * 2 - 1) * Math.PI; }
+  return s;
+}
+
+// One synchronous Vicsek update; returns phi after the step.
+function stepVicsek(s, eta, v0) {
+  const { x, y, th, nt, head, next, r } = s;
+  const M = VL, h = VL / 2, R2 = VR * VR;
+  head.fill(-1);
+  for (let i = 0; i < VN; i++) {
+    const c = (Math.floor(y[i]) % M) * M + (Math.floor(x[i]) % M);
+    next[i] = head[c]; head[c] = i;
+  }
+  for (let i = 0; i < VN; i++) {
+    let sx = 0, sy = 0;
+    const cx = Math.floor(x[i]) % M, cy = Math.floor(y[i]) % M;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      const c = ((cy + dy + M) % M) * M + ((cx + dx + M) % M);
+      for (let j = head[c]; j >= 0; j = next[j]) {
+        let ex = x[j] - x[i], ey = y[j] - y[i];
+        if (ex > h) ex -= VL; else if (ex < -h) ex += VL;
+        if (ey > h) ey -= VL; else if (ey < -h) ey += VL;
+        if (ex * ex + ey * ey <= R2) { sx += Math.cos(th[j]); sy += Math.sin(th[j]); }
+      }
+    }
+    nt[i] = Math.atan2(sy, sx) + eta * (r() - 0.5);
+  }
+  let px = 0, py = 0;
+  for (let i = 0; i < VN; i++) {
+    th[i] = nt[i];
+    const c = Math.cos(th[i]), sn = Math.sin(th[i]);
+    px += c; py += sn;
+    x[i] = (x[i] + v0 * c + VL) % VL;
+    y[i] = (y[i] + v0 * sn + VL) % VL;
+  }
+  return Math.hypot(px, py) / VN;
+}
+
+// Expected phi for N independent uniformly random headings: sqrt(pi/N)/2.
+const PHI_RANDOM = Math.sqrt(Math.PI / VN) / 2;
+document.getElementById('phi-random').textContent = PHI_RANDOM.toFixed(3);
+
+const vicsekBus = d3.dispatch('eta');
+const vicsekState = { eta: 1, v0: 0.3 };
+
+(function vicsekFigure() {
+  const fig = document.getElementById('fig-vicsek');
+  const canvas = document.getElementById('canvas-vicsek');
+  const trace = document.getElementById('canvas-trace');
+  const readout = document.getElementById('vicsek-readout');
+  const etaSlider = document.getElementById('eta-slider'), etaVal = document.getElementById('eta-val');
+  const v0Slider = document.getElementById('v0-slider'), v0Val = document.getElementById('v0-val');
+  let sim = makeVicsek(freshSeed());
+  const hist = [];
+  let ctx, tctx, size, tw, th, visible = false, step = 0;
+
+  function resize() {
+    size = canvas.parentElement.clientWidth;
+    ctx = setupCanvas(canvas, size, size);
+    tw = trace.parentElement.clientWidth;
+    th = Math.max(120, Math.round(Math.min(size, 340) * 0.6));
+    tctx = setupCanvas(trace, tw, th);
+  }
+
+  function draw() {
+    const s = size / VL, len = 0.45 * s;
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, size, size);
+    ctx.lineWidth = 1.6; ctx.lineCap = 'round';
+    for (let i = 0; i < VN; i++) {
+      const x = sim.x[i] * s, y = sim.y[i] * s, c = Math.cos(sim.th[i]), sn = Math.sin(sim.th[i]);
+      ctx.strokeStyle = headingColor(sim.th[i]);
+      ctx.beginPath(); ctx.moveTo(x - c * len, y - sn * len); ctx.lineTo(x + c * len, y + sn * len); ctx.stroke();
+    }
+    ctx.strokeStyle = PAL.border; ctx.lineWidth = 1; ctx.strokeRect(0.5, 0.5, size - 1, size - 1);
+
+    // trace
+    const pad = { l: 26, r: 6, t: 6, b: 16 };
+    const iw = tw - pad.l - pad.r, ih = th - pad.t - pad.b;
+    tctx.fillStyle = '#ffffff'; tctx.fillRect(0, 0, tw, th);
+    tctx.font = '10px "Source Sans 3", sans-serif'; tctx.fillStyle = PAL.text2; tctx.textAlign = 'right'; tctx.textBaseline = 'middle';
+    for (const v of [0, 0.5, 1]) {
+      const yy = pad.t + ih * (1 - v);
+      tctx.strokeStyle = PAL.border; tctx.beginPath(); tctx.moveTo(pad.l, yy); tctx.lineTo(pad.l + iw, yy); tctx.stroke();
+      tctx.fillText(v.toFixed(1), pad.l - 4, yy);
+    }
+    tctx.setLineDash([3, 3]); tctx.strokeStyle = PAL.text2;
+    const yr = pad.t + ih * (1 - PHI_RANDOM);
+    tctx.beginPath(); tctx.moveTo(pad.l, yr); tctx.lineTo(pad.l + iw, yr); tctx.stroke(); tctx.setLineDash([]);
+    tctx.textAlign = 'left'; tctx.textBaseline = 'top'; tctx.fillText('step →', pad.l, pad.t + ih + 3);
+    if (hist.length > 1) {
+      tctx.strokeStyle = PAL.agent; tctx.lineWidth = 1.5; tctx.beginPath();
+      hist.forEach((v, k) => { const xx = pad.l + iw * k / 599, yy = pad.t + ih * (1 - v); k ? tctx.lineTo(xx, yy) : tctx.moveTo(xx, yy); });
+      tctx.stroke(); tctx.lineWidth = 1;
+    }
+    const last = hist.slice(-200);
+    const mean = last.length ? last.reduce((a, b) => a + b, 0) / last.length : 0;
+    readout.innerHTML = 'Now &phi; = <span class="num">' + (hist.length ? hist[hist.length - 1].toFixed(2) : '—') +
+      '</span>, mean of last ' + last.length + ' steps <span class="num">' + mean.toFixed(2) + '</span>';
+  }
+
+  function advance(n) {
+    for (let k = 0; k < n; k++) { hist.push(stepVicsek(sim, vicsekState.eta, vicsekState.v0)); if (hist.length > 600) hist.shift(); step++; }
+  }
+
+  function tick() {
+    if (!visible) return;
+    advance(2); draw();
+    requestAnimationFrame(tick);
+  }
+  function staticRender() { advance(600); draw(); }
+
+  function setEta(v, source) {
+    vicsekState.eta = v; etaSlider.value = v; etaVal.textContent = v.toFixed(2);
+    if (source !== 'vicsek') vicsekBus.call('eta', null, { eta: v, source: 'vicsek' });
+    if (REDUCED) staticRender();
+  }
+  etaSlider.addEventListener('input', () => setEta(+etaSlider.value, 'slider'));
+  vicsekBus.on('eta.vicsek', e => { if (e.source !== 'vicsek') setEta(e.eta, 'vicsek'); });
+  v0Slider.addEventListener('input', () => {
+    vicsekState.v0 = +v0Slider.value; v0Val.textContent = vicsekState.v0.toFixed(2);
+    if (REDUCED) staticRender();
+  });
+  document.getElementById('reset-vicsek').addEventListener('click', () => {
+    sim = makeVicsek(freshSeed()); hist.length = 0; draw();
+    if (REDUCED) staticRender();
+  });
+
+  resize(); draw();
+  if (REDUCED) staticRender();
+  new ResizeObserver(() => { resize(); draw(); }).observe(fig);
+  onVisible(fig, v => {
+    const was = visible; visible = v && !REDUCED;
+    if (visible && !was) requestAnimationFrame(tick);
+  });
+})();
+
+(function sweepFigure() {
+  const fig = document.getElementById('fig-sweep');
+  const holder = document.getElementById('sweep-chart');
+  const status = document.getElementById('sweep-status');
+  const ETAS = d3.range(16).map(k => 0.25 + k * (6.0 - 0.25) / 15);
+  const CURVES = [{ key: 'moving', v0: 0.3, color: PAL.agent, label: 'moving, v₀ = 0.3' },
+                  { key: 'frozen', v0: 0, color: PAL.frozen, label: 'frozen, v₀ = 0' }];
+  const TRANS = 400, MEAS = 600, TOTAL = TRANS + MEAS;
+  let results, queue, current, visible = false, running = false;
+
+  const W = 680, H = 300, m = { l: 44, r: 110, t: 12, b: 38 };
+  const svg = d3.select(holder).append('svg').attr('viewBox', `0 0 ${W} ${H}`);
+  const x = d3.scaleLinear().domain([0, 2 * Math.PI]).range([m.l, W - m.r]);
+  const y = d3.scaleLinear().domain([0, 1]).range([H - m.b, m.t]);
+  svg.append('g').attr('transform', `translate(0,${H - m.b})`).call(d3.axisBottom(x).tickValues([0, 1, 2, 3, 4, 5, 6, 2 * Math.PI]).tickFormat(d => d === 2 * Math.PI ? '2π' : d));
+  svg.append('g').attr('transform', `translate(${m.l},0)`).call(d3.axisLeft(y).ticks(5));
+  svg.append('text').attr('x', (m.l + W - m.r) / 2).attr('y', H - 4).attr('text-anchor', 'middle').attr('font-size', 12).attr('fill', PAL.text2).text('noise η');
+  svg.append('text').attr('transform', `translate(12,${(m.t + H - m.b) / 2}) rotate(-90)`).attr('text-anchor', 'middle').attr('font-size', 12).attr('fill', PAL.text2).text('mean polarization φ');
+  svg.append('line').attr('x1', m.l).attr('x2', W - m.r).attr('y1', y(PHI_RANDOM)).attr('y2', y(PHI_RANDOM)).attr('stroke', PAL.text2).attr('stroke-dasharray', '3,3');
+  svg.append('text').attr('x', W - m.r + 6).attr('y', y(PHI_RANDOM)).attr('dy', '0.35em').attr('font-size', 11).attr('fill', PAL.text2).text('random headings');
+  const marker = svg.append('line').attr('y1', m.t).attr('y2', H - m.b).attr('stroke', PAL.text).attr('stroke-width', 1).attr('opacity', 0.5);
+  const layers = {};
+  CURVES.forEach(c => {
+    const g = svg.append('g');
+    layers[c.key] = { g, path: g.append('path').attr('fill', 'none').attr('stroke', c.color).attr('stroke-width', 2),
+      label: g.append('text').attr('font-size', 12).attr('font-weight', 600).attr('fill', c.color).attr('x', W - m.r + 6) };
+  });
+  svg.append('rect').attr('x', m.l).attr('y', m.t).attr('width', W - m.l - m.r).attr('height', H - m.t - m.b).attr('fill', 'transparent')
+    .on('click', ev => {
+      const [px] = d3.pointer(ev);
+      const eta = Math.max(0, Math.min(6.28, Math.round(x.invert(px) / 0.05) * 0.05));
+      vicsekBus.call('eta', null, { eta, source: 'sweep' });
+    });
+
+  function moveMarker(eta) { marker.attr('x1', x(eta)).attr('x2', x(eta)); }
+  moveMarker(vicsekState.eta);
+  vicsekBus.on('eta.sweep', e => moveMarker(e.eta));
+
+  function render() {
+    CURVES.forEach(c => {
+      const pts = results[c.key].filter(Boolean);
+      const L = layers[c.key];
+      L.path.attr('d', d3.line().x(d => x(d.eta)).y(d => y(d.mean))(pts));
+      const sel = L.g.selectAll('g.pt').data(pts, d => d.eta);
+      const en = sel.enter().append('g').attr('class', 'pt');
+      en.append('line').attr('stroke', c.color).attr('opacity', 0.45);
+      en.append('circle').attr('r', 3.2).attr('fill', c.color);
+      const all = en.merge(sel);
+      all.select('line').attr('x1', d => x(d.eta)).attr('x2', d => x(d.eta)).attr('y1', d => y(Math.max(0, d.mean - d.sd))).attr('y2', d => y(Math.min(1, d.mean + d.sd)));
+      all.select('circle').attr('cx', d => x(d.eta)).attr('cy', d => y(d.mean));
+      sel.exit().remove();
+      if (pts.length) {
+        const first = pts[0];
+        L.label.attr('x', x(first.eta) + 8).attr('y', y(first.mean) + (c.key === 'moving' ? -10 : -10)).text(c.label).attr('text-anchor', 'start');
+      } else L.label.text('');
+    });
+  }
+
+  function finish() {
+    const mv = results.moving, fr = results.frozen;
+    let star = null;
+    for (let k = 1; k < mv.length; k++) {
+      if (mv[k - 1].mean >= 0.5 && mv[k].mean < 0.5) {
+        const t = (mv[k - 1].mean - 0.5) / (mv[k - 1].mean - mv[k].mean);
+        star = mv[k - 1].eta + t * (mv[k].eta - mv[k - 1].eta); break;
+      }
+    }
+    document.getElementById('eta-star').textContent = star === null ? '(no crossing this run)' : star.toFixed(1);
+    document.getElementById('frozen-max').textContent = d3.max(fr, d => d.mean).toFixed(2);
+    document.getElementById('moving-max').textContent = d3.max(mv, d => d.mean).toFixed(2);
+    status.textContent = 'Done: ' + (ETAS.length * CURVES.length) + ' runs of ' + TOTAL + ' steps.';
+  }
+
+  function start() {
+    results = { moving: [], frozen: [] };
+    queue = [];
+    ETAS.forEach((eta, k) => CURVES.forEach(c => queue.push({ key: c.key, v0: c.v0, eta, k })));
+    current = null;
+    svg.selectAll('g.pt').remove();
+    render();
+    if (visible && !running) loop();
+  }
+
+  function loop() {
+    running = true;
+    const t0 = performance.now();
+    while (performance.now() - t0 < 14) {
+      if (!current) {
+        const job = queue.shift();
+        if (!job) { running = false; finish(); return; }
+        current = { job, sim: makeVicsek(freshSeed()), t: 0, sum: 0, sum2: 0 };
+      }
+      for (let k = 0; k < 20 && current.t < TOTAL; k++, current.t++) {
+        const f = stepVicsek(current.sim, current.job.eta, current.job.v0);
+        if (current.t >= TRANS) { current.sum += f; current.sum2 += f * f; }
+      }
+      if (current.t >= TOTAL) {
+        const mean = current.sum / MEAS, sd = Math.sqrt(Math.max(0, current.sum2 / MEAS - mean * mean));
+        results[current.job.key][current.job.k] = { eta: current.job.eta, mean, sd };
+        current = null; render();
+      }
+    }
+    const done = ETAS.length * CURVES.length - queue.length - (current ? 1 : 0);
+    status.textContent = 'Running: ' + done + ' of ' + (ETAS.length * CURVES.length) + ' runs finished';
+    if (visible) requestAnimationFrame(loop); else running = false;
+  }
+
+  document.getElementById('rerun-sweep').addEventListener('click', () => { start(); if (!running) loop(); });
+  onVisible(fig, v => { visible = v; if (v && !running && (queue.length || current)) loop(); });
+  start();
+})();
+
+// Connectivity of frozen configurations, quoted in the prose.
+(function frozenNetwork() {
+  const trials = 10;
+  let deg = 0, giant = 0;
+  for (let t = 0; t < trials; t++) {
+    const s = makeVicsek(9001 + t * 7777);
+    const root = components(VN, s.x, s.y, VL, VL, VR);
+    const counts = new Map();
+    for (let i = 0; i < VN; i++) counts.set(root[i], (counts.get(root[i]) || 0) + 1);
+    giant += d3.max([...counts.values()]) / VN;
+    for (let i = 0; i < VN; i++) for (let j = 0; j < VN; j++) {
+      if (i === j) continue;
+      let dx = Math.abs(s.x[j] - s.x[i]), dy = Math.abs(s.y[j] - s.y[i]);
+      if (dx > VL / 2) dx = VL - dx; if (dy > VL / 2) dy = VL - dy;
+      if (dx * dx + dy * dy <= VR * VR) deg++;
+    }
+  }
+  document.getElementById('mean-deg').textContent = (deg / (trials * VN)).toFixed(1);
+  document.getElementById('giant-frac').textContent = Math.round(100 * giant / trials) + '%';
+})();
+</script>
+</body>
+</html>

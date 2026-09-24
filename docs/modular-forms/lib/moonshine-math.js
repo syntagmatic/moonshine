@@ -162,17 +162,16 @@
 
   var MONSTER_TOTAL_IRREPS = 194;
 
-  // Two of the 194 irreps are the unusual dimension-
-  //   13657487487436080603604188900 (~1.37 × 10^28)
-  // pair of real representations χ_179 and χ_180 mentioned in the ATLAS.
-  var MONSTER_TWIN_DIM = 13657487487436080603604188900n;
+  // Largest irrep dimension, χ_194(1) in the ATLAS. The sum of squares of
+  // all 194 dimensions is |M|, so every dimension is below sqrt|M| ≈ 9e26.
+  var MONSTER_MAX_DIM = 258823477531055064045234375n;
 
   var monster = {
     primes: MONSTER_PRIMES,
     order: monsterOrder,
     irreps: MONSTER_IRREPS,
     totalIrreps: MONSTER_TOTAL_IRREPS,
-    twinDim: MONSTER_TWIN_DIM,
+    maxDim: MONSTER_MAX_DIM,
     conjugacyClasses: 194
   };
 

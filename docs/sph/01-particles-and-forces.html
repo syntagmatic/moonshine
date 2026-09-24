@@ -104,7 +104,7 @@ svg text { font-family: var(--heading-font); }
       How a fluid can emerge from particles that only know about their neighbors.
     </p>
     <p style="font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.5rem;">
-      Part 1 of <a href="index.html">Smooth Particle Hydrodynamics</a>
+      Part 1 of <a href="index.html">Smoothed Particle Hydrodynamics</a>
     </p>
   </header>
 
@@ -131,33 +131,9 @@ svg text { font-family: var(--heading-font); }
     and <span class="t-velocity">velocity</span>. Particles only exist where the fluid is.
   </p>
   <p>
-    The particle approach resembles flocking simulations, where each bird looks at nearby
-    birds and follows three rules: separate, align, cohere.
-  </p>
-
-  <div class="figure figure-wide" id="fig-boids">
-    <div class="controls">
-      <label>Separation: <input type="range" id="boids-sep-slider" min="0" max="3" value="1.5" step="0.1"> <span id="boids-sep-val">1.5</span></label>
-      <label>Alignment: <input type="range" id="boids-ali-slider" min="0" max="3" value="1.0" step="0.1"> <span id="boids-ali-val">1.0</span></label>
-      <label>Cohesion: <input type="range" id="boids-coh-slider" min="0" max="3" value="1.0" step="0.1"> <span id="boids-coh-val">1.0</span></label>
-    </div>
-    <canvas id="boids-canvas" style="width:100%;border-radius:4px;"></canvas>
-    <div class="figure-caption">
-      <span class="figure-label">Flocking (boids).</span>
-      Click a boid to select it and see its
-      <span class="t-kernel">neighbor radius</span> and force breakdown:
-      <span style="color:var(--c-pressure)">separation</span>,
-      <span style="color:var(--c-viscosity)">alignment</span>,
-      <span style="color:var(--c-kernel)">cohesion</span>.
-      Each boid only knows about its neighbors, yet flocking emerges.
-    </div>
-  </div>
-
-  <p>
-    In SPH each particle follows the same pattern: look at nearby particles, compute
-    local forces, update. Instead of steering rules, SPH uses forces derived from
-    fluid physics: how crowded is it here, which way is pressure pushing, how fast
-    are my neighbors moving compared to me. Fluid-like behavior emerges from local interactions.
+    Each particle looks only at nearby particles, computes local forces, and updates.
+    The forces come from fluid physics: how crowded is it here, which way is pressure
+    pushing, how fast are my neighbors moving compared to me.
   </p>
 
   <h2>The Smoothing Kernel</h2>
@@ -199,8 +175,13 @@ svg text { font-family: var(--heading-font); }
   </div>
 
   <p>
-    The specific shape of the kernel matters less than its properties: smooth,
-    falling to zero at the smoothing radius, and normalized so the total influence integrates to 1.
+    The specific shape of the kernel matters less than its properties: smooth, and
+    falling to zero at the smoothing radius. A textbook kernel also carries a normalizing
+    constant so that it integrates to 1 over the plane. For this cubic that constant is
+    $10/(\pi h^2)$, since $\int_0^h (1-r/h)^3\, 2\pi r\,dr = \pi h^2/10$. The code on this
+    page leaves the constant out. Every density it computes is then scaled by the same
+    factor, which gets absorbed into the rest density and the stiffness, as long as
+    $h$ stays fixed while the simulation runs.
   </p>
 
   <h2>Estimating Density</h2>
@@ -327,9 +308,11 @@ svg text { font-family: var(--heading-font); }
         </div>
       </div>
       <div class="code-block">
-        <span class="comment">// Symplectic Euler: velocity first, then position</span><br>
+        <span class="comment">// Explicit Euler: position moves with the OLD velocity</span><br>
+        <span class="c-position">pos</span> += <span class="c-velocity">vel</span> * dt; &nbsp;<span class="c-velocity">vel</span> += <span class="c-pressure">F</span>/<span class="c-density">ρ</span> * dt<br>
+        <span class="comment">// Symplectic Euler (used by the simulations here): velocity first</span><br>
         <span class="c-velocity">vel</span> += <span class="c-pressure">F</span>/<span class="c-density">ρ</span> * dt; &nbsp;<span class="c-position">pos</span> += <span class="c-velocity">vel</span> * dt<br>
-        <span class="comment">// RK4: four force evaluations per step, much more accurate</span>
+        <span class="comment">// Velocity Verlet: half kick, drift, half kick. RK4: four force evaluations</span>
       </div>
     </div>
     <div class="controls">
@@ -341,8 +324,12 @@ svg text { font-family: var(--heading-font); }
     <div id="integration-legend" style="display:flex;gap:1.2rem;flex-wrap:wrap;font-family:var(--heading-font);font-size:0.8rem;margin-top:0.5rem;"></div>
     <div class="figure-caption">
       <span class="figure-label">Figure 5.</span>
-      Four integration methods on the same orbit. Scrub to walk through steps.
-      At larger dt, cheaper methods spiral outward while RK4 stays on track.
+      Four integrators on the same circular orbit (a harmonic spring toward the center),
+      with the energy error of each shown above. Scrub to walk through steps.
+      Explicit Euler gains energy every step and spirals outward. Symplectic Euler and
+      Verlet cost one force evaluation each, like explicit Euler, yet their energy error
+      oscillates instead of growing. RK4 tracks the orbit most closely, but it costs four
+      force evaluations per step and its energy slowly drains away.
     </div>
   </div>
 
@@ -369,12 +356,66 @@ svg text { font-family: var(--heading-font); }
 
   <p>
     The simulation loop: compute densities, compute forces, update velocities, update positions.
-    The expensive part is finding neighbors, solved with spatial hashing on the GPU in
-    <a href="02-gpu.html">Part 2</a>.
+    Gravity is the one force that needs care. The pressure and viscosity terms are forces per
+    unit volume, and the update divides by density to get acceleration. Gravity must enter the
+    same sum as $\rho\,\mathbf{g}$. Added as a bare $\mathbf{g}$, it would be divided by density
+    too, and the crowded bottom of the pool would fall more slowly than a lone droplet.
+  </p>
+
+  <h2>Walls and Obstacles</h2>
+  <p>
+    The container in Figure 6 is handled outside the physics: after each position update,
+    any particle that has crossed a wall is moved back and its velocity reflected. That works
+    for axis-aligned walls. For other shapes there are two common approaches.
+  </p>
+  <p>
+    One is to line the solid with fixed boundary particles. They take part in the density sum,
+    so fluid near a wall feels the same pressure push it would feel from more fluid. The
+    other, used below, is a <em>signed distance function</em>: for each shape, a function
+    $d(\mathbf{r})$ that gives the distance to the surface, negative inside, whose gradient
+    is the outward normal $\hat{n}$. A particle closer to the surface than its own radius
+    $r_p$ is moved out along $\hat{n}$, and the part of its velocity pointing into the shape
+    is removed. Circles and boxes have closed-form distance functions, and any shape that
+    has one can be dropped into the scene without new collision code.
+  </p>
+
+  <div class="figure figure-wide" id="fig-collisions">
+    <div class="eq-code-stack">
+      <div class="eq-block">
+        <div class="eq-label">Signed distance collision</div>
+        <div class="eq-rows">
+          <div id="eq-collision"></div>
+        </div>
+      </div>
+      <div class="code-block">
+        <span class="c-position">d</span>, <span class="c-position">n</span> = sdf(particle, shape) &nbsp;&nbsp;<span class="comment">// distance (negative inside) and outward normal</span><br>
+        if <span class="c-position">d</span> &lt; <span class="c-position">r_p</span>: <span class="comment">// particle overlaps the surface</span><br>
+        &nbsp;&nbsp;<span class="c-position">pos</span> += <span class="c-position">n</span> * (<span class="c-position">r_p</span> - <span class="c-position">d</span>) &nbsp;&nbsp;<span class="comment">// push out to the surface</span><br>
+        &nbsp;&nbsp;<span class="c-velocity">vel</span> -= min(0, dot(<span class="c-velocity">vel</span>, <span class="c-position">n</span>)) * <span class="c-position">n</span> <span class="comment">// remove inward velocity</span>
+      </div>
+    </div>
+    <div class="controls">
+      <label>Gravity: <input type="range" id="coll-gravity-slider" min="0" max="500" value="200" step="10"> <span id="coll-gravity-val">200</span></label>
+      <label>Max particles: <input type="range" id="coll-count-slider" min="50" max="300" value="150" step="10"> <span id="coll-count-val">150</span></label>
+      <button id="coll-reset">Reset</button>
+    </div>
+    <canvas id="coll-canvas" style="width:100%;border-radius:4px;cursor:grab;"></canvas>
+    <div class="figure-caption">
+      <span class="figure-label">Figure 7.</span>
+      Fluid particles fall onto a circle and a box. Drag either shape to move it through the
+      fluid. Both collide through their distance functions alone, with no boundary particles.
+    </div>
+  </div>
+
+  <p>
+    Every figure on this page checks each particle against every other one, which is fine
+    for a few hundred particles and hopeless for tens of thousands.
+    <a href="02-gpu.html">Part 2</a> fixes the neighbor search with a spatial hash and moves
+    the loop onto the GPU.
   </p>
 
   <footer style="margin-top:4rem;padding-top:2rem;border-top:1px solid var(--border);font-family:var(--heading-font);font-size:0.85rem;color:var(--text-2);">
-    <p>Part of <a href="index.html" style="color:var(--text-2);">Smooth Particle Hydrodynamics</a>. Next: <a href="02-gpu.html" style="color:var(--accent);">Moving to the GPU</a>.</p>
+    <p>Part of <a href="index.html" style="color:var(--text-2);">Smoothed Particle Hydrodynamics</a>. Next: <a href="02-gpu.html" style="color:var(--accent);">Moving to the GPU</a>.</p>
     <p>Built with <a href="https://github.com/enjalot/moonshine" style="color:var(--text-2);">moonshine</a>.</p>
   </footer>
 </div>
@@ -399,7 +440,8 @@ function renderEq(el, tex) { katex.render(tex, el, { displayMode: false, throwOn
     'eq-density': String.raw`{\color{#7c3aed}\rho_i} = \sum_j {\color{#d97706}m_j} \cdot {\color{#059669}W}\!\left({\color{#0891b2}r_{ij}},\; {\color{#059669}h}\right)`,
     'eq-pressure': String.raw`{\color{#dc2626}\mathbf{F}_i^{press}} = -\sum_j {\color{#d97706}m_j}\frac{{\color{#dc2626}P_i}+{\color{#dc2626}P_j}}{2{\color{#7c3aed}\rho_j}} {\color{#059669}\nabla W}`,
     'eq-viscosity': String.raw`{\color{#2563eb}\mathbf{F}_i^{visc}} = {\color{#2563eb}\mu} \sum_j \frac{{\color{#be185d}\mathbf{v}_j}-{\color{#be185d}\mathbf{v}_i}}{{\color{#7c3aed}\rho_j}} {\color{#059669}\nabla^2 W}`,
-    'eq-integration': String.raw`{\color{#be185d}\mathbf{v}} \mathrel{+}= \frac{{\color{#dc2626}\mathbf{F}}}{{\color{#7c3aed}\rho}} \Delta t \qquad {\color{#0891b2}\mathbf{r}} \mathrel{+}= {\color{#be185d}\mathbf{v}} \cdot \Delta t`
+    'eq-integration': String.raw`{\color{#be185d}\mathbf{v}} \mathrel{+}= \frac{{\color{#dc2626}\mathbf{F}}}{{\color{#7c3aed}\rho}} \Delta t \qquad {\color{#0891b2}\mathbf{r}} \mathrel{+}= {\color{#be185d}\mathbf{v}} \cdot \Delta t`,
+    'eq-collision': String.raw`\text{if } {\color{#0891b2}d} < {\color{#0891b2}r_p}: \quad {\color{#0891b2}\mathbf{r}} \mathrel{+}= ({\color{#0891b2}r_p} - {\color{#0891b2}d})\,{\color{#0891b2}\hat{n}}, \quad {\color{#be185d}\mathbf{v}} \mathrel{-}= \min(0,\,{\color{#be185d}\mathbf{v}} \cdot {\color{#0891b2}\hat{n}})\,{\color{#0891b2}\hat{n}}`
   };
   for (const [id, tex] of Object.entries(eqs)) {
     const el = document.getElementById(id);
@@ -596,168 +638,6 @@ function visibleLoop(elementId, loopFn) {
   visibleLoop('fig-grid', step);
 })();
 
-
-// ============================================================
-// Boids flocking simulation
-// ============================================================
-(function() {
-  const canvas = document.getElementById("boids-canvas");
-  const ctx = canvas.getContext("2d");
-  const dpr = window.devicePixelRatio||1;
-  let cW=680, cH=280;
-
-  function resize(){
-    const rect=canvas.parentElement.getBoundingClientRect();
-    cW=Math.floor(rect.width-48); cH=280;
-    canvas.width=cW*dpr; canvas.height=cH*dpr;
-    canvas.style.height=cH+'px';
-    ctx.setTransform(dpr,0,0,dpr,0,0);
-  }
-  resize();
-
-  const nBoids = 120;
-  const radius = 60; // neighbor radius
-  const maxSpeed = 3, maxForce = 0.08;
-  let sepW=1.5, aliW=1.0, cohW=1.0;
-  let selectedId = 0;
-
-  const boids = [];
-  for(let i=0;i<nBoids;i++){
-    const a=Math.random()*Math.PI*2;
-    boids.push({
-      x:Math.random()*cW, y:Math.random()*cH,
-      vx:Math.cos(a)*1.5, vy:Math.sin(a)*1.5,
-      fx:0,fy:0, sepFx:0,sepFy:0, aliFx:0,aliFy:0, cohFx:0,cohFy:0,
-      id:i
-    });
-  }
-
-  function limit(vx,vy,max){
-    const m=Math.sqrt(vx*vx+vy*vy);
-    if(m>max){const s=max/m;return[vx*s,vy*s];}return[vx,vy];
-  }
-
-  function step(){
-    boids.forEach(b=>{
-      let sepX=0,sepY=0,sepN=0;
-      let aliX=0,aliY=0,aliN=0;
-      let cohX=0,cohY=0,cohN=0;
-
-      boids.forEach(o=>{
-        if(b===o)return;
-        let dx=o.x-b.x, dy=o.y-b.y;
-        // Wrap distance
-        if(dx>cW/2)dx-=cW; if(dx<-cW/2)dx+=cW;
-        if(dy>cH/2)dy-=cH; if(dy<-cH/2)dy+=cH;
-        const dist=Math.sqrt(dx*dx+dy*dy);
-        if(dist>radius||dist<1e-4)return;
-
-        // Separation (stronger when closer)
-        const sepR=radius*0.4;
-        if(dist<sepR){sepX-=dx/dist*(1-dist/sepR);sepY-=dy/dist*(1-dist/sepR);sepN++;}
-        // Alignment
-        aliX+=o.vx;aliY+=o.vy;aliN++;
-        // Cohesion
-        cohX+=dx;cohY+=dy;cohN++;
-      });
-
-      // Normalize and weight
-      b.sepFx=0;b.sepFy=0;b.aliFx=0;b.aliFy=0;b.cohFx=0;b.cohFy=0;
-
-      if(sepN>0){
-        [b.sepFx,b.sepFy]=limit(sepX/sepN,sepY/sepN,maxForce);
-        b.sepFx*=sepW;b.sepFy*=sepW;
-      }
-      if(aliN>0){
-        let ax=aliX/aliN-b.vx, ay=aliY/aliN-b.vy;
-        [b.aliFx,b.aliFy]=limit(ax,ay,maxForce);
-        b.aliFx*=aliW;b.aliFy*=aliW;
-      }
-      if(cohN>0){
-        let cx2=cohX/cohN, cy2=cohY/cohN;
-        [b.cohFx,b.cohFy]=limit(cx2*0.01,cy2*0.01,maxForce);
-        b.cohFx*=cohW;b.cohFy*=cohW;
-      }
-
-      b.fx=b.sepFx+b.aliFx+b.cohFx;
-      b.fy=b.sepFy+b.aliFy+b.cohFy;
-    });
-
-    boids.forEach(b=>{
-      b.vx+=b.fx;b.vy+=b.fy;
-      [b.vx,b.vy]=limit(b.vx,b.vy,maxSpeed);
-      b.x+=b.vx;b.y+=b.vy;
-      // Wrap
-      if(b.x<0)b.x+=cW;if(b.x>cW)b.x-=cW;
-      if(b.y<0)b.y+=cH;if(b.y>cH)b.y-=cH;
-    });
-  }
-
-  function render(){
-    ctx.fillStyle='#f0f4f8';ctx.fillRect(0,0,cW,cH);
-
-    const sel=boids[selectedId];
-
-    // Selected boid radius
-    ctx.beginPath();ctx.arc(sel.x,sel.y,radius,0,Math.PI*2);
-    ctx.strokeStyle='var(--c-kernel)';ctx.lineWidth=1.5;ctx.setLineDash([6,3]);ctx.globalAlpha=0.3;ctx.stroke();
-    ctx.setLineDash([]);ctx.globalAlpha=1;
-
-    // Force arrows on selected boid
-    const aS=120;
-    // Separation
-    if(Math.abs(sel.sepFx)+Math.abs(sel.sepFy)>0.001){
-      ctx.beginPath();ctx.moveTo(sel.x,sel.y);ctx.lineTo(sel.x+sel.sepFx*aS,sel.y+sel.sepFy*aS);
-      ctx.strokeStyle='var(--c-pressure)';ctx.lineWidth=2.5;ctx.stroke();
-    }
-    // Alignment
-    if(Math.abs(sel.aliFx)+Math.abs(sel.aliFy)>0.001){
-      ctx.beginPath();ctx.moveTo(sel.x,sel.y);ctx.lineTo(sel.x+sel.aliFx*aS,sel.y+sel.aliFy*aS);
-      ctx.strokeStyle='var(--c-viscosity)';ctx.lineWidth=2.5;ctx.stroke();
-    }
-    // Cohesion
-    if(Math.abs(sel.cohFx)+Math.abs(sel.cohFy)>0.001){
-      ctx.beginPath();ctx.moveTo(sel.x,sel.y);ctx.lineTo(sel.x+sel.cohFx*aS,sel.y+sel.cohFy*aS);
-      ctx.strokeStyle='var(--c-kernel)';ctx.lineWidth=2.5;ctx.stroke();
-    }
-
-    // All boids as triangles
-    boids.forEach(b=>{
-      const angle=Math.atan2(b.vy,b.vx);
-      const sz=b.id===selectedId?7:5;
-      ctx.save();
-      ctx.translate(b.x,b.y);ctx.rotate(angle);
-      ctx.beginPath();
-      ctx.moveTo(sz,0);ctx.lineTo(-sz*0.6,-sz*0.5);ctx.lineTo(-sz*0.6,sz*0.5);ctx.closePath();
-      ctx.fillStyle=b.id===selectedId?'var(--c-velocity)':'#4a6fa5';
-      ctx.globalAlpha=b.id===selectedId?1:0.7;
-      ctx.fill();
-      ctx.restore();
-      ctx.globalAlpha=1;
-    });
-
-    // Selection ring
-    ctx.beginPath();ctx.arc(sel.x,sel.y,10,0,Math.PI*2);
-    ctx.strokeStyle='var(--c-velocity)';ctx.lineWidth=2;ctx.stroke();
-  }
-
-  // Click to select
-  canvas.addEventListener("pointerdown",e=>{
-    const r=canvas.getBoundingClientRect();
-    const mx=(e.clientX-r.left)*(cW/r.width), my=(e.clientY-r.top)*(cH/r.height);
-    let best=Infinity, bestId=0;
-    boids.forEach(b=>{const d=(b.x-mx)*(b.x-mx)+(b.y-my)*(b.y-my);if(d<best){best=d;bestId=b.id;}});
-    selectedId=bestId;
-  });
-
-  d3.select("#boids-sep-slider").on("input",function(){sepW=+this.value;d3.select("#boids-sep-val").text(sepW.toFixed(1));});
-  d3.select("#boids-ali-slider").on("input",function(){aliW=+this.value;d3.select("#boids-ali-val").text(aliW.toFixed(1));});
-  d3.select("#boids-coh-slider").on("input",function(){cohW=+this.value;d3.select("#boids-coh-val").text(cohW.toFixed(1));});
-
-  function loopStep(){ step(); render(); }
-  new ResizeObserver(()=>{resize();}).observe(canvas.parentElement);
-  visibleLoop('fig-boids', loopStep);
-})();
 
 
 // ============================================================
@@ -1193,7 +1073,7 @@ function visibleLoop(elementId, loopFn) {
 
 
 // ============================================================
-// Figure 5: Integration (3 methods shown simultaneously)
+// Figure 5: Integration (4 methods shown simultaneously)
 // ============================================================
 (function() {
   const container = d3.select("#integration-viz");
@@ -1205,7 +1085,8 @@ function visibleLoop(elementId, loopFn) {
   let dt=0.035, numSteps=25, currentStep=0;
 
   const methods = [
-    { name: 'Euler', color: '#dc2626', key: 'euler' },
+    { name: 'Explicit Euler', color: '#dc2626', key: 'euler' },
+    { name: 'Symplectic Euler', color: '#d97706', key: 'symp' },
     { name: 'Verlet', color: '#2563eb', key: 'verlet' },
     { name: 'RK4', color: '#7c3aed', key: 'rk4' },
   ];
@@ -1250,8 +1131,6 @@ function visibleLoop(elementId, loopFn) {
     methods.forEach(m=>{
       const steps = [];
       let px=cx+100, py=cy, vx=0, vy=-Math.sqrt(k)*100;
-      // For Verlet we need prev position
-      let prevX=px-vx*dt, prevY=py-vy*dt;
       steps.push({x:px,y:py,vx,vy});
 
       for (let i=0;i<numSteps;i++) {
@@ -1261,13 +1140,15 @@ function visibleLoop(elementId, loopFn) {
         if (m.key==='euler') {
           newPx=px+vx*dt; newPy=py+vy*dt;
           newVx=vx+ax*dt; newVy=vy+ay*dt;
+        } else if (m.key==='symp') {
+          newVx=vx+ax*dt; newVy=vy+ay*dt;
+          newPx=px+newVx*dt; newPy=py+newVy*dt;
         } else if (m.key==='verlet') {
-          // Stormer-Verlet: x(n+1) = 2x(n) - x(n-1) + a*dt^2
-          newPx = 2*px - prevX + ax*dt*dt;
-          newPy = 2*py - prevY + ay*dt*dt;
-          newVx = (newPx - prevX)/(2*dt);
-          newVy = (newPy - prevY)/(2*dt);
-          prevX=px; prevY=py;
+          // Velocity Verlet: half kick, drift, half kick
+          const hvx = vx + ax*dt/2, hvy = vy + ay*dt/2;
+          newPx = px + hvx*dt; newPy = py + hvy*dt;
+          const [bx,by] = accel(newPx,newPy);
+          newVx = hvx + bx*dt/2; newVy = hvy + by*dt/2;
         } else { // rk4
           const [k1ax,k1ay] = accel(px,py);
           const k1vx=vx, k1vy=vy;
@@ -1322,7 +1203,8 @@ function visibleLoop(elementId, loopFn) {
     stepLabel.text(`step ${currentStep} / ${numSteps}, dt = ${dt.toFixed(3)}`);
 
     // Energy comparison in equation row
-    const E0 = 0.5*k*100*100;
+    // Initial energy: kinetic 0.5*v0^2 with v0 = sqrt(k)*100, plus potential 0.5*k*100^2
+    const E0 = k*100*100;
     const parts = methods.map(m=>{
       const s = methodGroups[m.key].steps[currentStep];
       const E = 0.5*(s.vx*s.vx+s.vy*s.vy) + 0.5*k*((s.x-cx)*(s.x-cx)+(s.y-cy)*(s.y-cy));
@@ -1405,7 +1287,9 @@ function visibleLoop(elementId, loopFn) {
       pi.pressure=stiffness*Math.max(0,pi.density-restD);
     }
     for(let i=0;i<particles.length;i++){
-      const pi=particles[i]; pi.fx=0; pi.fy=gravity;
+      // Forces here are per unit volume and get divided by density below,
+      // so gravity enters as rho*g: every particle then falls at the same rate.
+      const pi=particles[i]; pi.fx=0; pi.fy=gravity*pi.density;
       for(let j=0;j<particles.length;j++){if(i===j)continue;const pj=particles[j];
         const dx=pi.x-pj.x,dy=pi.y-pj.y,dist=Math.sqrt(dx*dx+dy*dy);
         if(dist<H&&dist>0.1){const nx=dx/dist,ny=dy/dist;
@@ -1497,6 +1381,176 @@ function visibleLoop(elementId, loopFn) {
 
   new ResizeObserver(()=>{resizeCanvas();}).observe(canvas.parentElement);
   init(); visibleLoop('fig-sim', loopStep2);
+})();
+
+// ============================================================
+// Figure 7: Collisions with signed distance functions
+// ============================================================
+(function() {
+  const canvas = document.getElementById("coll-canvas");
+  const ctx = canvas.getContext("2d");
+  const dpr = window.devicePixelRatio || 1;
+  let simW = 680, simH = 360;
+
+  function resize() {
+    const rect = canvas.parentElement.getBoundingClientRect();
+    simW = Math.floor(rect.width - 48); simH = 360;
+    canvas.width = simW*dpr; canvas.height = simH*dpr;
+    canvas.style.height = simH+'px';
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+  resize();
+
+  const H = 11, pR = 5, dt = 0.001, substeps = 4, stiffness = 2800, restD = 3.5, visc = 80;
+  let gravity = 200, maxP = 150;
+  let particles = [], emitTimer = 0;
+
+  const circleObs = { x: 0, y: 0, r: 40 };
+  const rectObs = { x: 0, y: 0, w: 100, h: 20 };
+  let dragTarget = null, dragOffX = 0, dragOffY = 0;
+
+  function resetObstacles() {
+    circleObs.x = simW * 0.35; circleObs.y = simH * 0.5;
+    rectObs.x = simW * 0.6; rectObs.y = simH * 0.6;
+  }
+  function init() { particles = []; emitTimer = 0; resetObstacles(); }
+  init();
+
+  // Exact signed distance to a circle, with its gradient as the normal
+  function sdfCircle(px, py) {
+    const dx=px-circleObs.x, dy=py-circleObs.y;
+    const dist=Math.sqrt(dx*dx+dy*dy);
+    return { d: dist - circleObs.r, nx: dx/(dist||1), ny: dy/(dist||1) };
+  }
+  // Exact signed distance to an axis-aligned box. Outside, the normal points from
+  // the nearest surface point; inside, it points out through the nearest face.
+  function sdfRect(px, py) {
+    const cx=rectObs.x+rectObs.w/2, cy=rectObs.y+rectObs.h/2;
+    const dx=px-cx, dy=py-cy;
+    const qx=Math.abs(dx)-rectObs.w/2, qy=Math.abs(dy)-rectObs.h/2;
+    const d = Math.hypot(Math.max(qx,0), Math.max(qy,0)) + Math.min(Math.max(qx,qy), 0);
+    let nx, ny;
+    if (d > 0) { nx = Math.max(qx,0)*Math.sign(dx); ny = Math.max(qy,0)*Math.sign(dy); }
+    else if (qx > qy) { nx = Math.sign(dx) || 1; ny = 0; }
+    else { nx = 0; ny = Math.sign(dy) || 1; }
+    const len = Math.hypot(nx, ny) || 1;
+    return { d, nx: nx/len, ny: ny/len };
+  }
+
+  function collide(p, s) {
+    if (s.d >= pR) return;
+    p.x += s.nx * (pR - s.d);
+    p.y += s.ny * (pR - s.d);
+    const vn = p.vx*s.nx + p.vy*s.ny;
+    if (vn < 0) { p.vx -= vn * s.nx; p.vy -= vn * s.ny; }
+  }
+
+  function emit() {
+    if (particles.length >= maxP) return;
+    const n = Math.min(3, maxP - particles.length);
+    for (let i=0; i<n; i++) {
+      particles.push({
+        x: simW/2 + (Math.random()-0.5)*60, y: 10 + Math.random()*5,
+        vx: (Math.random()-0.5)*20, vy: 20 + Math.random()*10,
+        density: 0, pressure: 0, fx: 0, fy: 0
+      });
+    }
+  }
+
+  function step() {
+    const n = particles.length;
+    for (let i=0; i<n; i++) {
+      const pi=particles[i]; pi.density=0;
+      for (let j=0; j<n; j++) {
+        const dx=pi.x-particles[j].x, dy=pi.y-particles[j].y;
+        pi.density+=SPH.kernel(Math.sqrt(dx*dx+dy*dy),H);
+      }
+      pi.pressure=stiffness*Math.max(0,pi.density-restD);
+    }
+    for (let i=0; i<n; i++) {
+      const pi=particles[i]; pi.fx=0; pi.fy=gravity*pi.density;
+      for (let j=0; j<n; j++) {
+        if (i===j) continue;
+        const pj=particles[j];
+        const dx=pi.x-pj.x, dy=pi.y-pj.y, dist=Math.sqrt(dx*dx+dy*dy);
+        if (dist<H && dist>0.1) {
+          const nx=dx/dist, ny=dy/dist;
+          const g=SPH.gradKernel(dist,H), rJ=Math.max(pj.density,0.01);
+          const pA=(pi.pressure+pj.pressure)/(2*rJ);
+          pi.fx-=pA*g*nx; pi.fy-=pA*g*ny;
+          const l=SPH.lapKernel(dist,H);
+          pi.fx+=visc/rJ*(pj.vx-pi.vx)*l; pi.fy+=visc/rJ*(pj.vy-pi.vy)*l;
+        }
+      }
+    }
+    for (const p of particles) {
+      const rho=Math.max(p.density,0.01);
+      p.vx+=(p.fx/rho)*dt; p.vy+=(p.fy/rho)*dt;
+      const sp=Math.sqrt(p.vx*p.vx+p.vy*p.vy); if(sp>500){const s=500/sp;p.vx*=s;p.vy*=s;}
+      p.x+=p.vx*dt; p.y+=p.vy*dt;
+      collide(p, sdfCircle(p.x, p.y));
+      collide(p, sdfRect(p.x, p.y));
+      const m=pR+1;
+      if(p.x<m){p.x=m;p.vx=Math.abs(p.vx)*0.3;}
+      if(p.x>simW-m){p.x=simW-m;p.vx=-Math.abs(p.vx)*0.3;}
+      if(p.y<m){p.y=m;p.vy=Math.abs(p.vy)*0.3;}
+      if(p.y>simH-m){p.y=simH-m;p.vy=-Math.abs(p.vy)*0.3;}
+    }
+  }
+
+  function render() {
+    ctx.clearRect(0,0,simW,simH);
+    ctx.fillStyle='#f0f4f8'; ctx.fillRect(0,0,simW,simH);
+    ctx.strokeStyle='#475569'; ctx.lineWidth=2.5; ctx.fillStyle='rgba(71,85,105,0.1)';
+    ctx.beginPath(); ctx.arc(circleObs.x,circleObs.y,circleObs.r,0,Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.fillRect(rectObs.x,rectObs.y,rectObs.w,rectObs.h);
+    ctx.strokeRect(rectObs.x,rectObs.y,rectObs.w,rectObs.h);
+    const cs=d3.scaleSequential(t=>d3.interpolateBlues(0.35+t*0.55)).domain([0,200]);
+    for (const p of particles) {
+      const sp=Math.sqrt(p.vx*p.vx+p.vy*p.vy);
+      ctx.beginPath(); ctx.arc(p.x,p.y,pR,0,Math.PI*2);
+      ctx.fillStyle=cs(Math.min(sp,180)); ctx.fill();
+    }
+    ctx.fillStyle='#94a3b8'; ctx.font='11px "Source Sans 3",sans-serif';
+    ctx.fillText(`${particles.length}/${maxP}`,simW-60,14);
+  }
+
+  function loopStep() {
+    emitTimer++;
+    if (emitTimer>=3) { emitTimer=0; emit(); }
+    for (let s=0; s<substeps; s++) step();
+    render();
+  }
+
+  function pointer(e) {
+    const rect=canvas.getBoundingClientRect();
+    return [(e.clientX-rect.left)*(simW/rect.width), (e.clientY-rect.top)*(simH/rect.height)];
+  }
+  canvas.addEventListener("pointerdown", e => {
+    const [mx,my]=pointer(e);
+    const cdx=mx-circleObs.x, cdy=my-circleObs.y;
+    if (Math.hypot(cdx,cdy)<circleObs.r+10) {
+      dragTarget='circle'; dragOffX=cdx; dragOffY=cdy; canvas.style.cursor='grabbing'; return;
+    }
+    if (mx>rectObs.x-10&&mx<rectObs.x+rectObs.w+10&&my>rectObs.y-10&&my<rectObs.y+rectObs.h+10) {
+      dragTarget='rect'; dragOffX=mx-rectObs.x; dragOffY=my-rectObs.y; canvas.style.cursor='grabbing';
+    }
+  });
+  canvas.addEventListener("pointermove", e => {
+    if (!dragTarget) return;
+    const [mx,my]=pointer(e);
+    if (dragTarget==='circle') { circleObs.x=mx-dragOffX; circleObs.y=my-dragOffY; }
+    else { rectObs.x=mx-dragOffX; rectObs.y=my-dragOffY; }
+  });
+  canvas.addEventListener("pointerup", ()=>{ dragTarget=null; canvas.style.cursor='grab'; });
+  canvas.addEventListener("pointerleave", ()=>{ dragTarget=null; canvas.style.cursor='grab'; });
+
+  d3.select("#coll-gravity-slider").on("input",function(){gravity=+this.value;d3.select("#coll-gravity-val").text(gravity);});
+  d3.select("#coll-count-slider").on("input",function(){maxP=+this.value;d3.select("#coll-count-val").text(maxP);});
+  d3.select("#coll-reset").on("click",init);
+
+  new ResizeObserver(resize).observe(canvas.parentElement);
+  visibleLoop('fig-collisions', loopStep);
 })();
 </script>
 </body>

@@ -12,10 +12,11 @@
 //   COH.cup          Cup product via Alexander–Whitney
 //   COH.deRham       De Rham forms on a sphere mesh; closed/exact tests; loop integration
 //   COH.mv           Mayer–Vietoris: cover assembly, restriction maps, long exact sequence
-//   COH.persistCoh   Persistent cohomology (dual of TDA.persistence) + circular coordinates
+//   COH.persistCoh   Persistent cohomology over Z/p (cocycle algorithm) + circular coordinates
 //   COH.fmt          Formatting helpers (cocycle pretty-print, ring element rendering)
 //
-// All linear algebra is over Z/2 (GF(2)) unless noted otherwise (de Rham uses R).
+// All linear algebra is over Z/2 (GF(2)) unless noted otherwise (de Rham uses R;
+// persistCoh uses Z/p with p = 47 so the cocycle lifts to an integer cocycle).
 
 (function (global) {
   'use strict';
@@ -650,7 +651,23 @@
     var U = restrictComplex(complex, function (v) { return (vertexMask[v] & 1) === 1; });
     var V = restrictComplex(complex, function (v) { return (vertexMask[v] & 2) === 2; });
     var UV = restrictComplex(complex, function (v) { return vertexMask[v] === 3; });
-    return { X: complex, U: U, V: V, UV: UV, vertexMask: vertexMask };
+    // Mayer–Vietoris needs X = U ∪ V. With a vertex mask that fails exactly
+    // when some simplex has a vertex outside U and another vertex outside V
+    // (for instance an edge from a U-only vertex to a V-only vertex), or a
+    // vertex in neither. List the simplices of X that neither piece contains.
+    var missing = [];
+    Object.keys(complex.simplices).forEach(function (d) {
+      (complex.simplices[d] || []).forEach(function (s) {
+        var inU = true, inV = true;
+        for (var i = 0; i < s.length; i++) {
+          if (!(vertexMask[s[i]] & 1)) inU = false;
+          if (!(vertexMask[s[i]] & 2)) inV = false;
+        }
+        if (!inU && !inV) missing.push(s);
+      });
+    });
+    return { X: complex, U: U, V: V, UV: UV, vertexMask: vertexMask,
+             missing: missing, covers: missing.length === 0 };
   };
 
   // π* : H^k(X) → H^k(U) ⊕ H^k(V). For each basis cocycle on X, restrict to
@@ -775,6 +792,32 @@
     return { matrix: mat, rows: rows, cols: cols, hUV: hUV, hX: hX };
   };
 
+  // Exactness, checked on the actual maps. The sequence
+  //   0 → H⁰(X) → H⁰(U)⊕H⁰(V) → H⁰(U∩V) → H¹(X) → … → H²(U∩V) → 0
+  // is exact at a node when rank(incoming map) + rank(outgoing map) equals the
+  // node's dimension (image = kernel, counted). Ranks are computed over Z/2
+  // from the matrices of π*, i_U*−i_V* and δ*. Requires cover.covers.
+  mv.exactness = function (cover, maxDim) {
+    maxDim = maxDim === undefined ? 2 : maxDim;
+    function rank(m) { return (m.rows && m.cols) ? gauss(m.matrix, m.rows, m.cols).rank : 0; }
+    var nodes = [], maps = [];
+    for (var k = 0; k <= maxDim; k++) {
+      var R = mv.restrict(cover, k), D = mv.difference(cover, k);
+      nodes.push({ label: 'H' + k + '(X)', dim: R.hX.betti });
+      maps.push({ label: 'π*', rank: rank(R) });
+      nodes.push({ label: 'H' + k + '(U)+H' + k + '(V)', dim: R.hU.betti + R.hV.betti });
+      maps.push({ label: 'iU*−iV*', rank: rank(D) });
+      nodes.push({ label: 'H' + k + '(U∩V)', dim: D.hUV.betti });
+      if (k < maxDim) maps.push({ label: 'δ*', rank: rank(mv.connecting(cover, k)) });
+    }
+    var exactAt = nodes.map(function (n, i) {
+      var rin = i > 0 ? maps[i - 1].rank : 0, rout = i < maps.length ? maps[i].rank : 0;
+      return rin + rout === n.dim;
+    });
+    return { nodes: nodes, maps: maps, exactAt: exactAt,
+             exact: exactAt.every(function (x) { return x; }) };
+  };
+
   mv.longExactSequence = function (cover, maxDim) {
     maxDim = maxDim === undefined ? 2 : maxDim;
     var seq = [];
@@ -791,117 +834,157 @@
 
   var persistCoh = {};
 
-  // Persistent cohomology. We compute persistent homology via TDA.persistence,
-  // then for each non-trivial bar attach a cocycle representative computed at
-  // a representative scale (the bar's midpoint). Cheap and correct on the
-  // typical demo input (annulus, figure-8); for high-volume data, replace
-  // with a true dual reduction.
-  persistCoh.compute = function (filt) {
-    var ph = TDA.persistence.compute(filt);
-    var enriched = [];
-    for (var i = 0; i < ph.bars.length; i++) {
-      var bar = ph.bars[i];
-      var rep = null;
-      if (bar.dim === 1 && bar.death !== Infinity) {
-        rep = persistCoh._h1CocycleAtScale(filt, (bar.birth + bar.death) / 2, bar);
-      } else if (bar.dim === 1 && bar.death === Infinity) {
-        rep = persistCoh._h1CocycleAtScale(filt, bar.birth * 1.001, bar);
+  // Persistent cohomology over Z/p by the cocycle algorithm of de Silva,
+  // Morozov and Vejdemo-Johansson ("Persistent cohomology and circular
+  // coordinates", 2011). Simplices are added in filtration order. The live
+  // cocycles of each dimension are kept as sparse maps simplexKey -> value in
+  // Z/p. When a d-simplex s arrives, evaluate every live (d-1)-cocycle z_i on
+  // the boundary of s: c_i = z_i(∂s). If every c_i is 0, the dual cochain s*
+  // is a new d-cocycle (a class is born). Otherwise the youngest z_i with
+  // c_i != 0 dies at this scale, and every other z_j with c_j != 0 is replaced
+  // by z_j - (c_j / c_i) z_i, which keeps it a cocycle of the larger complex.
+  //
+  // opts.stopAt: process only simplices with birth <= stopAt and return the
+  //   live cocycles at that scale (the representatives a reader can inspect).
+  // opts.topDim: highest dimension of cocycle to track (default 1). Simplices
+  //   of dimension topDim + 1 are still processed, because they kill classes.
+  //
+  // Returns { bars: [{dim, birth, death, key}], live: {0: [...], 1: [...]}, p }
+  // where key is the birth simplex's key (it identifies the bar) and each live
+  // cocycle is {dim, birth, key, vec}.
+  function modp(a, p) { a %= p; return a < 0 ? a + p : a; }
+  function invp(a, p) { // Fermat: a^(p-2) mod p, p prime
+    var r = 1, b = modp(a, p), e = p - 2;
+    while (e > 0) { if (e & 1) r = (r * b) % p; b = (b * b) % p; e >>= 1; }
+    return r;
+  }
+  function skey(s) { return s.join(','); }
+
+  persistCoh.P = 47;
+
+  persistCoh.compute = function (filt, opts) {
+    opts = opts || {};
+    var p = opts.p || persistCoh.P;
+    var topDim = opts.topDim === undefined ? 1 : opts.topDim;
+    var stopAt = opts.stopAt === undefined ? Infinity : opts.stopAt;
+    var live = {}, bars = [];
+    for (var d = 0; d <= topDim; d++) live[d] = [];
+
+    var events = filt.events;
+    for (var k = 0; k < events.length; k++) {
+      var ev = events[k];
+      if (ev.birth > stopAt) break;
+      var s = ev.simplex, d = ev.dim;
+      if (d > topDim + 1) continue;
+      if (d === 0) {
+        var v0 = {}; v0[skey(s)] = 1;
+        live[0].push({ dim: 0, birth: ev.birth, key: skey(s), vec: v0 });
+        continue;
       }
-      enriched.push({
-        dim: bar.dim, birth: bar.birth, death: bar.death,
-        birthSimplex: bar.birthSimplex, deathSimplex: bar.deathSimplex,
-        rep: rep
-      });
+      // Signed boundary: ∂[v0..vd] = Σ (-1)^i [v0..v̂i..vd].
+      var faces = [], signs = [];
+      for (var i = 0; i <= d; i++) {
+        faces.push(skey(s.slice(0, i).concat(s.slice(i + 1))));
+        signs.push(i % 2 === 0 ? 1 : -1);
+      }
+      var Z = live[d - 1], c = new Array(Z.length), youngest = -1;
+      for (var i = 0; i < Z.length; i++) {
+        var acc = 0, vec = Z[i].vec;
+        for (var f = 0; f < faces.length; f++) {
+          var val = vec[faces[f]];
+          if (val) acc += signs[f] * val;
+        }
+        c[i] = modp(acc, p);
+        if (c[i] !== 0) youngest = i;
+      }
+      if (youngest < 0) {
+        if (d <= topDim) {
+          var vn = {}; vn[skey(s)] = 1;
+          live[d].push({ dim: d, birth: ev.birth, key: skey(s), vec: vn });
+        }
+        continue;
+      }
+      var zi = Z[youngest], ci = c[youngest], inv = invp(ci, p);
+      if (ev.birth > zi.birth) bars.push({ dim: d - 1, birth: zi.birth, death: ev.birth, key: zi.key });
+      for (var j = 0; j < Z.length; j++) {
+        if (j === youngest || c[j] === 0) continue;
+        var factor = (c[j] * inv) % p, zj = Z[j].vec;
+        for (var key in zi.vec) {
+          var nv = modp((zj[key] || 0) - factor * zi.vec[key], p);
+          if (nv === 0) delete zj[key]; else zj[key] = nv;
+        }
+      }
+      Z.splice(youngest, 1);
     }
-    return { bars: enriched };
+    for (var d = 0; d <= topDim; d++) {
+      for (var i = 0; i < live[d].length; i++) {
+        if (stopAt === Infinity) bars.push({ dim: d, birth: live[d][i].birth, death: Infinity, key: live[d][i].key });
+      }
+    }
+    return { bars: bars, live: live, p: p };
   };
 
-  // Build the Rips subcomplex at scale ε and return one H^1 cocycle rep.
-  // For a bar with multiple H^1 generators alive at ε, the choice between
-  // them is arbitrary but deterministic (first in the gauss-elim ordering).
-  persistCoh._h1CocycleAtScale = function (filt, eps, bar) {
-    var simplices = { 0: [], 1: [], 2: [] };
-    for (var i = 0; i < filt.events.length; i++) {
-      var ev = filt.events[i];
-      if (ev.birth <= eps) {
-        if (!simplices[ev.dim]) simplices[ev.dim] = [];
-        simplices[ev.dim].push(ev.simplex);
-      }
-    }
-    var vertSet = {};
-    for (var i = 0; i < simplices[0].length; i++) vertSet[simplices[0][i][0]] = true;
-    var cpx = { vertices: Object.keys(vertSet).map(Number), simplices: simplices };
-    var h1 = cohomology.compute(cpx, 1);
-    if (h1.basis.length === 0) return null;
-    return { edges: simplices[1], cocycle: h1.basis[0] };
+  // Lift a Z/p cochain to integers in (-p/2, p/2]. For a cocycle with small
+  // coefficients this lift is an integer cocycle; the check below confirms it
+  // on every triangle rather than assuming it.
+  persistCoh.liftToZ = function (vec, p) {
+    var out = {};
+    for (var key in vec) { var v = vec[key]; out[key] = v > p / 2 ? v - p : v; }
+    return out;
   };
 
-  // Circular coordinates from a 1-cocycle (de Silva–Vejdemo-Johansson 2011,
-  // simplified). Take the Z/2 cocycle ω, lift to ±1 on the canonical
-  // orientation, and solve the harmonic least-squares problem
-  //     minimize ||δθ − ω̃||²
-  // i.e. the graph-Laplacian equation L θ = δ^T ω̃, pinning θ[0] = 0.
-  // The result, taken mod 1, is the circular coordinate.
-  persistCoh.circularCoords = function (points, filtration, rep) {
-    var n = points.length;
-    var angles = new Float64Array(n);
-    if (!rep || !rep.edges || !rep.cocycle) return angles;
-    var edges = rep.edges;
+  // Count triangles on which an integer 1-cochain fails the cocycle condition
+  // (δω)[a,b,c] = ω[b,c] − ω[a,c] + ω[a,b] = 0.
+  persistCoh.cocycleDefect = function (intVec, triangles) {
+    var bad = 0;
+    for (var t = 0; t < triangles.length; t++) {
+      var a = triangles[t][0], b = triangles[t][1], c = triangles[t][2];
+      var s = (intVec[b + ',' + c] || 0) - (intVec[a + ',' + c] || 0) + (intVec[a + ',' + b] || 0);
+      if (s !== 0) bad++;
+    }
+    return bad;
+  };
 
-    // Build L (n × n) and the right-hand side δ^T ω̃ (length n).
-    var L = [];
+  // Circular coordinates from an integer 1-cocycle ω on the edges of a
+  // complex with n vertices: solve min_θ ||δθ − ω||² over the edges, i.e. the
+  // graph-Laplacian system L θ = δᵀω, then take θ mod 1. One vertex per
+  // connected component is pinned to make L invertible (the objective does not
+  // see per-component constants). Returns angles in [0, 2π) and the harmonic
+  // residual ω − δθ on each edge.
+  persistCoh.circularCoords = function (n, edges, intVec) {
+    var L = [], rhs = new Float64Array(n);
     for (var i = 0; i < n; i++) L[i] = new Float64Array(n);
-    var rhs = new Float64Array(n);
+    var parent = []; for (var i = 0; i < n; i++) parent[i] = i;
+    function find(x) { while (parent[x] !== x) x = parent[x] = parent[parent[x]]; return x; }
     for (var e = 0; e < edges.length; e++) {
-      var i = edges[e][0], j = edges[e][1];
-      var w = rep.cocycle[e] ? 1 : 0;
-      L[i][i] += 1; L[j][j] += 1;
-      L[i][j] -= 1; L[j][i] -= 1;
-      // Canonical edge orientation i < j; δθ on this edge = θ(j) − θ(i).
-      // δ^T ω̃ at v = (sum of ω̃ on edges ending at v) − (sum on edges starting at v).
-      rhs[i] -= w;
-      rhs[j] += w;
+      var a = edges[e][0], b = edges[e][1], w = intVec[a + ',' + b] || 0;
+      L[a][a] += 1; L[b][b] += 1; L[a][b] -= 1; L[b][a] -= 1;
+      rhs[a] -= w; rhs[b] += w;      // (δᵀω)(v) = Σ_{e ends at v} ω(e) − Σ_{e starts at v} ω(e)
+      parent[find(a)] = find(b);
     }
-
-    // Solve L θ = rhs with θ[0] = 0. L is singular (kernel = constants), so
-    // remove row 0 and column 0 and solve the (n−1)×(n−1) reduced system.
-    // For demo sizes (≤200 points) plain Gaussian elimination is fine.
-    var m = n - 1;
-    var A = [];
-    var b = new Float64Array(m);
-    for (var i = 0; i < m; i++) {
-      A[i] = new Float64Array(m + 1);
-      for (var j = 0; j < m; j++) A[i][j] = L[i + 1][j + 1];
-      A[i][m] = rhs[i + 1];
-    }
-    // Partial-pivoting Gauss-Jordan.
-    for (var col = 0; col < m; col++) {
-      var pivot = col;
-      for (var r = col + 1; r < m; r++) {
-        if (Math.abs(A[r][col]) > Math.abs(A[pivot][col])) pivot = r;
-      }
-      if (Math.abs(A[pivot][col]) < 1e-12) continue;  // degenerate; skip
-      if (pivot !== col) { var tmp = A[col]; A[col] = A[pivot]; A[pivot] = tmp; }
-      var diag = A[col][col];
-      for (var c = col; c <= m; c++) A[col][c] /= diag;
-      for (var r = 0; r < m; r++) {
-        if (r === col) continue;
-        var factor = A[r][col];
-        if (factor === 0) continue;
-        for (var c = col; c <= m; c++) A[r][c] -= factor * A[col][c];
+    var pinned = {};
+    for (var i = 0; i < n; i++) { var r = find(i); if (!pinned[r]) { pinned[r] = true; L[i][i] += 1; } }
+    // Dense Gaussian elimination with partial pivoting (n is at most ~100 here).
+    var A = L.map(function (row, i) { var r = Array.from(row); r.push(rhs[i]); return r; });
+    for (var col = 0; col < n; col++) {
+      var piv = col;
+      for (var r = col + 1; r < n; r++) if (Math.abs(A[r][col]) > Math.abs(A[piv][col])) piv = r;
+      var tmp = A[col]; A[col] = A[piv]; A[piv] = tmp;
+      for (var r = col + 1; r < n; r++) {
+        var f = A[r][col] / A[col][col];
+        if (f === 0) continue;
+        for (var cc = col; cc <= n; cc++) A[r][cc] -= f * A[col][cc];
       }
     }
     var theta = new Float64Array(n);
-    theta[0] = 0;
-    for (var i = 0; i < m; i++) theta[i + 1] = A[i][m];
-
-    // Map θ to [0, 2π) by its fractional part (the lift adds an integer
-    // around each fundamental cycle; we want the angle on S¹).
-    for (var i = 0; i < n; i++) {
-      var t = theta[i] - Math.floor(theta[i]);
-      angles[i] = 2 * Math.PI * t;
+    for (var r = n - 1; r >= 0; r--) {
+      var sum = A[r][n];
+      for (var cc = r + 1; cc < n; cc++) sum -= A[r][cc] * theta[cc];
+      theta[r] = sum / A[r][r];
     }
-    return angles;
+    var angles = new Float64Array(n);
+    for (var i = 0; i < n; i++) angles[i] = 2 * Math.PI * (theta[i] - Math.floor(theta[i]));
+    return { angles: angles, theta: theta };
   };
 
   // ─────────────────────────────────────────── COH.fmt ──

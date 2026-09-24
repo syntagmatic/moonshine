@@ -1,0 +1,902 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stigmergy: Coordination Through a Shared Field</title>
+<link href="../vendor/fonts/sans-serif-mono-alt/fonts.css" rel="stylesheet">
+<link rel="stylesheet" href="../vendor/katex@0.16.9/katex.min.css">
+<script src="../vendor/katex@0.16.9/katex.min.js"></script>
+<script src="../vendor/js/d3.v7.min.js"></script>
+<script src="../lib/motion.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --article-width: 740px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem;
+  --line-height: 1.6;
+  --text: #1a1a2e;
+  --text-2: #4a4a6a;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --bg: #fafafa;
+  --fig-bg: #ffffff;
+  --border: #e2e2e8;
+  --c-agent: #2563eb;
+  --c-rule: #0891b2;
+  --c-pattern: #8b5cf6;
+  --c-critical: #f59e0b;
+  --c-feedback: #ef4444;
+  --c-env: #10b981;
+  --c-danger: #ef4444;
+}
+body { font-family: var(--body-font); font-size: var(--body-size);
+  line-height: var(--line-height); color: var(--text); background: var(--bg);
+  -webkit-font-smoothing: antialiased; }
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
+h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+h3 { font-size: 1.15rem; margin: 2rem 0 0.75rem; }
+p { margin: 0 0 1rem; }
+a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+a:hover { color: #1d4ed8; }
+
+header { margin-bottom: 3rem; }
+.back-link { font-family: var(--heading-font); font-size: 0.85rem; text-decoration: none; color: var(--text-2); display: inline-block; margin-bottom: 1rem; }
+.subtitle { font-family: var(--heading-font); font-size: 1.15rem; color: var(--text-2); max-width: 600px; }
+.figure { margin: 2rem 0; padding: 1.5rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.figure canvas { display: block; width: 100%; border-radius: 3px; }
+.figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; line-height: 1.4; }
+.figure-label { font-weight: 600; color: var(--text); }
+.insight { background: var(--accent-light); border-left: 3px solid var(--accent); padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 4px 4px 0; }
+.insight p { margin: 0; }
+.insight p + p { margin-top: 0.75rem; }
+.controls { display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-end; margin-top: 1rem; font-family: var(--heading-font); font-size: 0.85rem; }
+.control-group { display: flex; flex-direction: column; gap: 0.25rem; }
+.control-group label { color: var(--text-2); font-weight: 600; }
+.control-group .slider-row { display: flex; align-items: center; gap: 0.5rem; }
+.control-group input[type="range"] { width: 120px; accent-color: var(--accent); }
+.control-group .val { font-family: var(--mono-font); font-variant-numeric: tabular-nums;
+  min-width: 2.5em; text-align: right; color: var(--text); }
+.btn { font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600;
+  padding: 0.45rem 1.1rem; border-radius: 5px; border: 1px solid var(--border);
+  background: var(--fig-bg); color: var(--text); cursor: pointer;
+  transition: background 0.15s, border-color 0.15s; user-select: none; }
+.btn:hover { border-color: var(--accent); background: var(--accent-light); }
+.btn.active { border-color: var(--accent); background: var(--accent); color: white; }
+.stat-row { display: flex; gap: 1.5rem; margin-top: 0.75rem; font-family: var(--heading-font); font-size: 0.85rem; }
+.stat-row .stat { display: flex; gap: 0.35rem; align-items: baseline; }
+.stat-row .stat-label { color: var(--text-2); font-weight: 600; }
+.stat-row .stat-val { font-family: var(--mono-font); font-variant-numeric: tabular-nums; color: var(--text); }
+.click-hint { font-family: var(--heading-font); font-size: 0.8rem; color: var(--text-2);
+  text-align: center; margin-top: 0.5rem; font-style: italic; }
+svg text { font-family: var(--heading-font); }
+
+.overlay-svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+.canvas-wrap { position: relative; }
+.eq { margin: 1.25rem 0 1.5rem; overflow-x: auto; overflow-y: hidden; }
+.stat-line { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin: 0.75rem 0 0; font-variant-numeric: tabular-nums; }
+.bridge-chart { display: block; margin-top: 0.5rem; }
+.bridge-chart .tick text { font-size: 10px; fill: var(--text-2); }
+.bridge-chart .domain, .bridge-chart .tick line { stroke: var(--border); }
+.t-dep { color: #b45309; font-weight: 600; }
+.t-dec { color: #0e7490; font-weight: 600; }
+.t-dif { color: #6d28d9; font-weight: 600; }
+
+@media (prefers-reduced-motion: reduce) {html:not([data-motion="full"]) .figure canvas { outline: 2px dashed var(--border); outline-offset: -2px; }
+}
+@media (max-width: 600px) {
+  h1 { font-size: 1.75rem; }
+  .controls { gap: 0.6rem; }
+  .control-group input[type="range"] { width: 80px; }
+}
+</style>
+</head>
+<body>
+<div class="article">
+
+<header>
+  <a href="index.html" class="back-link">&larr; Emergence Series</a>
+  <h1>Stigmergy</h1>
+  <p class="subtitle">Slime molds, ants, people on a lawn and termites with mud all coordinate through the same loop: write into the environment, let the writing fade and spread, steer toward where it is strongest.</p>
+</header>
+
+<p>
+In the 1950s Pierre-Paul Grass&eacute; watched termites rebuild a damaged nest and could find no sign that they coordinated with one another. Each termite responded to the state of the construction in front of it, and whatever it added changed what the next termite responded to. He called this <em>stigmergy</em>, from the Greek for mark and work: the work in progress directs the work.
+</p>
+
+<p>
+The version of the idea that recurs across biology has three parts. Agents write into a shared field as they move. The field fades and spreads on its own. Agents read the field near them and steer toward more of it. For a concentration <span class="m" data-tex="c(\mathbf{x},t)"></span> written by agents at positions <span class="m" data-tex="\mathbf{x}_i"></span>,
+</p>
+
+<div class="eq" data-tex="\frac{\partial c}{\partial t} \;=\; {\color{#b45309} q \sum_i \delta(\mathbf{x}-\mathbf{x}_i)} \;-\; {\color{#0e7490} \lambda\, c} \;+\; {\color{#6d28d9} D\,\nabla^2 c}"></div>
+
+<p>
+with <span class="t-dep">deposit</span> <span class="m" data-tex="q"></span>, <span class="t-dec">decay</span> rate <span class="m" data-tex="\lambda"></span> and <span class="t-dif">diffusion</span> <span class="m" data-tex="D"></span>, and each agent turns up <span class="m" data-tex="\nabla c"></span>. Two combinations of these constants do most of the deciding. Where agents pass at rate <span class="m" data-tex="\rho"></span>, the field settles at a level of order <span class="m" data-tex="q\rho/\lambda"></span>. Agents can only tell concentrations apart over some range; call its scale <span class="m" data-tex="K"></span>. If <span class="m" data-tex="q\rho/\lambda \gg K"></span>, every direction looks equally marked and the field says nothing; if <span class="m" data-tex="q\rho/\lambda \ll K"></span>, the marks are too faint to follow. The second combination, <span class="m" data-tex="\ell = \sqrt{D/\lambda}"></span>, is how far away a mark can still be read, and so how close two trails must be before they merge.
+</p>
+
+<p>
+The four systems below are this loop with different agents and different fields. Every figure runs the model live, and each has a control that moves one of these ratios.
+</p>
+
+<h2>A slime mold as a crowd of particles</h2>
+
+<p>
+<em>Physarum polycephalum</em> is a single cell, often many centimetres across, that forages as a network of tubes. Cytoplasm shuttles back and forth through them; tubes that carry more flow thicken and the others shrink away. Jeff Jones (2010) showed that a much cruder picture reproduces the look of these networks. He replaced the organism with thousands of particles on a grid. Each particle samples the field at three points ahead of it (left, centre and right, at a fixed sensor distance and angle), rotates toward the strongest sample, and steps forward if the cell ahead is empty, depositing as it goes. If the cell is taken it stays put and picks a new heading. Every step the field is blurred by a 3&times;3 mean filter and multiplied by a decay factor.
+</p>
+
+<p>
+The particles stand in for the flow of cytoplasm, and the field is the record of where flow has been; neither is a piece of the real cell. The one-particle-per-cell rule matters: without it the particles pile into a single thick band, because nothing stops the densest trail from capturing everyone.
+</p>
+
+<div class="figure" id="fig-growth">
+  <canvas id="canvas-growth"></canvas>
+  <div class="controls">
+    <div class="control-group">
+      <label>Sensor angle</label>
+      <div class="slider-row">
+        <input type="range" id="sensor-angle" min="10" max="80" step="1" value="45">
+        <span class="val" id="sensor-angle-val">45&deg;</span>
+      </div>
+    </div>
+    <div class="control-group">
+      <label>Sensor distance</label>
+      <div class="slider-row">
+        <input type="range" id="sensor-dist" min="3" max="20" step="1" value="9">
+        <span class="val" id="sensor-dist-val">9</span>
+      </div>
+    </div>
+    <div class="control-group">
+      <label>Turn angle</label>
+      <div class="slider-row">
+        <input type="range" id="turn-rate" min="10" max="80" step="1" value="45">
+        <span class="val" id="turn-rate-val">45&deg;</span>
+      </div>
+    </div>
+    <div class="control-group">
+      <label>Deposit</label>
+      <div class="slider-row">
+        <input type="range" id="deposit-amt" min="1" max="20" step="1" value="5">
+        <span class="val" id="deposit-amt-val">5</span>
+      </div>
+    </div>
+    <div class="control-group">
+      <label>Decay factor</label>
+      <div class="slider-row">
+        <input type="range" id="decay-rate" min="0.80" max="0.99" step="0.01" value="0.90">
+        <span class="val" id="decay-rate-val">0.90</span>
+      </div>
+    </div>
+    <button class="btn" id="reset-growth">Reset</button>
+  </div>
+  <p class="figure-caption"><span class="figure-label">Figure 1.</span> Jones's particle model of <em>Physarum</em>. Particles start scattered over the whole grid, one per cell at most, covering about 6% of cells; the brightness is the field. Sliders take effect immediately, and Reset reseeds. Defaults are the values Jones used most often (sensor and turn angle 45&deg;, sensor distance 9, deposit 5, decay 0.9).</p>
+</div>
+
+<p id="jones-notes">
+Within a few hundred steps the scattered particles condense into a web of strands around empty cells. The sensor distance sets the mesh. A particle reacts to a strand only within about one sensor distance of its path, so strands closer together than that pull into one, while strands farther apart each keep their own traffic. Raise the sensor distance to 20 and the cells of the web roughly double in size. The decay factor sets how much the field remembers. At 0.99 each deposit lingers for about a hundred steps, and the strands grow thick and bright with the record of past traffic. At 0.8 a mark is mostly gone within five steps; the web still forms, but its strands are thin and faint, because only the particles passing right now hold them up. Drop the turn angle to 15&deg;, well below the sensor angle, and particles see strands they cannot turn onto quickly, so the mesh becomes finer and ragged.
+</p>
+
+<p>
+Real <em>Physarum</em> does something the particles are too crude to test directly: it prunes. Nakagaki, Yamada and T&oacute;th (2000) spread pieces of a plasmodium through a plastic maze, let them fuse into one cell filling the corridors, and put food at two exits. Over several hours the tubes in dead ends withdrew, and what remained was a tube along a shortest route between the two food sources, or along one of the two shortest routes when the maze offered two of equal length.
+</p>
+
+<p>
+Tero and colleagues (2010) then placed oat flakes at the positions of 36 cities around Tokyo on an agar plate shaped like the region, with bright light standing in for mountains and coastline, which the slime mold avoids. They compared the networks it formed after about a day with the real rail network on three measures: total length, average travel distance between cities, and how likely the network is to stay connected when a random link is cut. The slime mold networks came out comparable to the rail network on all three, better on some measures and worse on others from plate to plate. Some plates looked much like the rail map and others did not. The model that reproduced their results is a flow network, in which each tube's conductance grows with the flux through it and otherwise decays. That is the same reinforce-and-decay loop in a different representation from the particles above, and the paper's claim is that a rule this simple finds networks in the same efficiency range as engineered ones. It does not say the slime mold reproduced the Tokyo rail map.
+</p>
+
+<h2>Two bridges to the same food</h2>
+
+<p>
+Argentine ants (<em>Linepithema humile</em>) mark the ground with trail pheromone as they walk, in both directions. Jean-Louis Deneubourg, Simon Goss and colleagues connected a nest to food by a bridge that split into two branches and counted which way the ants went. With branches of equal length, the colony ended up on one branch, chosen at random from run to run. With one branch twice as long as the other, most colonies settled on the short one. They fitted the choices with a simple rule. An ant at a fork takes branch <span class="m" data-tex="A"></span> over branch <span class="m" data-tex="B"></span> with probability
+</p>
+
+<div class="eq" data-tex="P_A = \frac{(k + c_A)^n}{(k + c_A)^n + (k + c_B)^n}, \qquad n \approx 2,\; k \approx 20"></div>
+
+<p>
+where <span class="m" data-tex="c_A"></span> and <span class="m" data-tex="c_B"></span> measure the pheromone on each branch (in the experiment, how many ants had already crossed it). Here <span class="m" data-tex="k"></span> plays the part of <span class="m" data-tex="K"></span>: marks much weaker than it make no difference, and the exponent <span class="m" data-tex="n = 2"></span> lets a lead feed on itself. No term compares lengths. The short branch wins because its ants get back sooner. The first ants to return have marked both ends of the short branch before anyone has finished the long trip, so the next ants to choose, at either end, see more pheromone on the short side.
+</p>
+
+<div class="figure" id="fig-bridge">
+  <canvas id="canvas-bridge"></canvas>
+  <svg id="svg-bridge-chart" class="bridge-chart"></svg>
+  <div class="controls">
+    <div class="control-group">
+      <label>Long / short length</label>
+      <div class="slider-row">
+        <input type="range" id="br-ratio" min="1" max="2.5" step="0.1" value="2">
+        <span class="val" id="br-ratio-val">2.0</span>
+      </div>
+    </div>
+    <div class="control-group">
+      <label>Evaporation &lambda; per step</label>
+      <div class="slider-row">
+        <input type="range" id="br-evap" min="0" max="0.08" step="0.002" value="0">
+        <span class="val" id="br-evap-val">0.000</span>
+      </div>
+    </div>
+    <div class="control-group">
+      <label>Short branch</label>
+      <div class="slider-row">
+        <button class="btn active" id="br-open">Open from start</button>
+        <button class="btn" id="br-late">Opens at step 1500</button>
+      </div>
+    </div>
+    <button class="btn" id="br-reset">Restart</button>
+    <button class="btn" id="br-batch">Run 20 colonies</button>
+  </div>
+  <p class="stat-line" id="br-batch-out">Run 20 colonies simulates twenty independent colonies at the current settings and plots where each one ends up.</p>
+  <p class="figure-caption"><span class="figure-label">Figure 2.</span> The double bridge. Each branch is a one-dimensional field of cells (the short branch is 30 cells); line width shows pheromone. 100 ants leave the nest at random intervals, deposit one unit on every cell they walk over, and at each end choose a branch with the rule above (k&nbsp;=&nbsp;20, n&nbsp;=&nbsp;2) using the pheromone in the three cells nearest that end. The chart tracks the share of the last 100 departures from the nest that took the short branch, over 8000 steps. The histogram below it counts the final shares of the colonies in a batch run.</p>
+</div>
+
+<p>
+With the long branch twice the short one and no evaporation, most colonies settle on the short branch in this model (batches of 20 typically give between 14 and 17); the rest lock onto the long one because it happened to pull ahead in the first few dozen choices. Set the ratio to 1 and the outcome is a coin flip that is decided early and then never revisited. The rule tilts the odds toward the short branch, and positive feedback turns the tilted coin into a near-unanimous decision, right or wrong.
+</p>
+
+<p>
+Goss and colleagues also ran the experiment with the short branch closed until the colony had settled on the long one. When they opened it, most colonies stayed where they were. Choose <em>Opens at step 1500</em> to try the same thing. With no evaporation, no colony switches: by the time the short branch opens, the long branch holds far more than <span class="m" data-tex="k"></span>, and the handful of ants that try the short branch cannot catch up. Raise the evaporation and the steady trail on the long branch, of order <span class="m" data-tex="q\rho/\lambda"></span>, sinks toward <span class="m" data-tex="k"></span>. Around <span class="m" data-tex="\lambda \approx 0.04"></span> traffic starts leaking back onto the short branch and a few colonies in twenty switch. Past about 0.06 the trails fade faster than the ants can refresh them, every choice is close to a coin flip, and traffic splits roughly evenly whichever branch opened first. In this model no evaporation rate makes the late colonies reliably find the short branch; the band between locked in and forgetful is narrow. Dorigo's ant colony optimization algorithms added evaporation to this rule for exactly that reason, so that a search over graphs can forget a bad early choice.
+</p>
+
+<h2>Paths across a lawn</h2>
+
+<p>
+The worn paths that cut across a campus lawn run the same loop with people as the agents and trampled grass as the field. Dirk Helbing, Joachim Keltsch and P&eacute;ter Moln&aacute;r (1997) wrote it down as the active walker model. The ground <span class="m" data-tex="G"></span> recovers toward untouched grass with durability <span class="m" data-tex="T"></span> and is worn by each footstep, with a wear rate <span class="m" data-tex="I"></span> that saturates as the grass dies:
+</p>
+
+<div class="eq" data-tex="\frac{dG}{dt} = -\frac{G}{T} + I\Bigl(1-\frac{G}{G_{\max}}\Bigr)\sum_\alpha \delta(\mathbf{x}-\mathbf{x}_\alpha)"></div>
+
+<p>
+Besides the ground under its feet, a walker sees a smoothed version <span class="m" data-tex="V"></span>, the ground averaged over a visibility radius <span class="m" data-tex="\sigma"></span>, which plays the part of diffusion in the loop. It heads along the sum of the unit vector toward its destination and the pull of worn ground nearby:
+</p>
+
+<div class="eq" data-tex="\mathbf{e}_\alpha = \frac{\mathbf{e}_{\text{dest}} + \kappa\, \nabla V(\mathbf{x}_\alpha)}{\bigl\lVert \mathbf{e}_{\text{dest}} + \kappa\, \nabla V(\mathbf{x}_\alpha) \bigr\rVert}"></div>
+
+<div class="figure" id="fig-trails">
+  <canvas id="canvas-trails"></canvas>
+  <div class="controls">
+    <div class="control-group">
+      <label>Durability T (steps)</label>
+      <div class="slider-row">
+        <input type="range" id="tr-dur" min="0" max="100" step="1" value="80">
+        <span class="val" id="tr-dur-val">20000</span>
+      </div>
+    </div>
+    <div class="control-group">
+      <label>Attraction &kappa;</label>
+      <div class="slider-row">
+        <input type="range" id="tr-kappa" min="0" max="160" step="10" value="100">
+        <span class="val" id="tr-kappa-val">100</span>
+      </div>
+    </div>
+    <button class="btn" id="tr-reset">Reset</button>
+  </div>
+  <p class="stat-line" id="tr-stats">&nbsp;</p>
+  <p class="figure-caption"><span class="figure-label">Figure 3.</span> The active walker model on a 120&times;80 lawn with an entrance at each corner. Each walker enters at one corner and leaves at another chosen at random, so the direct routes would be the four sides and both diagonals. Colour runs from grass (G&nbsp;=&nbsp;0) to bare earth (G&nbsp;=&nbsp;1). The smoothing uses a Gaussian of width &sigma;&nbsp;=&nbsp;10 cells in place of Helbing's exponential kernel. Detour is the average walked length divided by the straight-line distance, over the last 100 walkers; worn ground is the share of the lawn with G&nbsp;&gt;&nbsp;0.3. Changing a slider resets the lawn.</p>
+</div>
+
+<p id="trail-notes">
+With a durability of a few hundred steps, grass grows back almost as fast as it is trampled, the pull <span class="m" data-tex="\kappa\nabla V"></span> stays weak, and faint wear traces the six direct routes; walkers cover about 1.00 times the straight-line distance. At the default durability, wear outlasts the gaps between walkers. The diagonals feel the side trails and each other, bow outward toward the sides near the corners, and cross the middle as a braided bundle, and the sides collect traffic from the diagonals. Walkers now travel roughly 10% farther than the straight line, because they follow the worn ground. Helbing and colleagues describe the result as a compromise between the direct routes, which minimize each walker's distance, and the shortest network joining all the entrances, which minimizes the length of trail, and they compared such simulated systems with trails photographed on real lawns. Set the attraction to zero and the durability stops mattering: walkers ignore the ground, go straight, and the wear traces the direct routes however long it lasts.
+</p>
+
+<h2>Mud that calls for more mud</h2>
+
+<p>
+Grass&eacute;'s termites carry soil pellets. In the model Deneubourg proposed in 1977 for the first stage of termite building, freshly placed material carries a pheromone that attracts termites carrying pellets, so pellets pile where pellets already are. Figure 4 uses that idea with the pick-up and drop rules from Deneubourg's later model of ant brood sorting. Every pellet on the ground emits pheromone at a fixed rate, and the pheromone spreads and decays. A termite carrying a pellet drifts up the gradient and drops its load with probability <span class="m" data-tex="\bigl(c/(c+K)\bigr)^2"></span>; an empty termite that walks over a pellet picks it up with probability <span class="m" data-tex="\bigl(K/(K+c)\bigr)^2"></span>. Here the structure writes the field and the agents write the structure.
+</p>
+
+<div class="figure" id="fig-termites">
+  <canvas id="canvas-termites"></canvas>
+  <div class="controls">
+    <div class="control-group">
+      <label>Pheromone lifetime 1/&lambda;</label>
+      <div class="slider-row">
+        <input type="range" id="tm-life" min="0" max="100" step="1" value="42">
+        <span class="val" id="tm-life-val">20</span>
+      </div>
+    </div>
+    <div class="control-group">
+      <label>Emission</label>
+      <div class="slider-row">
+        <button class="btn active" id="tm-on">On</button>
+        <button class="btn" id="tm-off">Off</button>
+      </div>
+    </div>
+    <button class="btn" id="tm-reset">Reset</button>
+  </div>
+  <p class="stat-line" id="tm-stats">&nbsp;</p>
+  <p class="figure-caption"><span class="figure-label">Figure 4.</span> Pellet clustering on a 120&times;72 grid with wrap-around edges. About 690 pellets start scattered one per cell over 8% of the grid; 150 termites walk at random (yellow: carrying a pellet, grey: empty). Brown squares are pellets, darker for taller stacks; the amber glow is pheromone. K&nbsp;=&nbsp;6 and diffusion D&nbsp;=&nbsp;0.2. The readout counts piles of ten or more pellets and compares the field a uniform scatter would produce, &rho;q/&lambda;, with K. Pellets are conserved. Changing a control resets the grid.</p>
+</div>
+
+<p>
+At the default lifetime of 20 steps, the field on a lone pellet sits near <span class="m" data-tex="K"></span> and the field on a pile of ten is several times <span class="m" data-tex="K"></span>, so an empty termite is about six times as likely to pick up a lone pellet as one from a pile. Isolated pellets get picked up and carried until the termite wanders near a pile, and within a few thousand steps nearly every pellet sits in one of a dozen or so piles. Lengthen the lifetime past about 100 steps and the background field of the scatter itself, <span class="m" data-tex="\rho q/\lambda"></span>, climbs above <span class="m" data-tex="K"></span>. Every cell then smells like a pile, termites drop pellets anywhere and rarely pick them up, and clustering stalls. Turn emission off and termites carry pellets at random and drop them at random, and the scatter stays a scatter.
+</p>
+
+<p>
+The cement pheromone in this model is a hypothesis that has held up poorly as chemistry. No one has isolated it from termite mud, and experiments on <em>Macrotermes</em> suggest that freshly worked soil, moisture and the shape of the surface all influence where termites build. What the model shows is what a signal of this kind would be sufficient to do, and that it would work only within a limited range of lifetimes. Paper wasps building combs make the same point from the other side: they respond to the geometry of the cells already built, a discrete cue with no decay at all, and lattice models built on that cue alone (Theraulaz and Bonabeau 1995) grow recognizable nests.
+</p>
+
+<footer style="margin-top: 4rem; padding-top: 2rem; border-top: 1px solid var(--border); font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2);">
+  <p>&larr; Previous: <a href="09-self-avoiding-walks.html" style="color: var(--accent);">Self-Avoiding Walks</a></p>
+  <p>Next: <a href="11-predator-prey-in-space.html" style="color: var(--accent);">Spatial Predator-Prey</a> &rarr;</p>
+  <p style="margin-top: 1rem;">References: P.-P. Grass&eacute;, Insectes Sociaux 6, 41 (1959). J.-L. Deneubourg, Insectes Sociaux 24, 117 (1977). S. Goss, S. Aron, J.-L. Deneubourg and J. M. Pasteels, Naturwissenschaften 76, 579 (1989). J.-L. Deneubourg, S. Aron, S. Goss and J. M. Pasteels, J. Insect Behavior 3, 159 (1990). J.-L. Deneubourg et al., "The dynamics of collective sorting," From Animals to Animats (1991). G. Theraulaz and E. Bonabeau, J. Theor. Biol. 177, 381 (1995). M. Dorigo, V. Maniezzo and A. Colorni, IEEE Trans. SMC-B 26, 29 (1996). D. Helbing, J. Keltsch and P. Moln&aacute;r, Nature 388, 47 (1997). T. Nakagaki, H. Yamada and &Aacute;. T&oacute;th, Nature 407, 470 (2000). J. Jones, Artificial Life 16, 127 (2010). A. Tero et al., Science 327, 439 (2010).</p>
+  <p style="margin-top: 1rem; opacity: 0.6;">Built with <a href="https://github.com/enjalot/moonshine" style="color: var(--text-2);">moonshine</a>.</p>
+</footer>
+
+</div><!-- .article -->
+
+<script>
+/* ================================================================
+   Shared: KaTeX, run-while-visible loop, reduced-motion fallback
+   ================================================================ */
+function renderMath() {
+  if (!window.katex) return;
+  document.querySelectorAll(".m[data-tex]").forEach(function(el) {
+    katex.render(el.getAttribute("data-tex"), el, { throwOnError: false });
+  });
+  document.querySelectorAll(".eq[data-tex]").forEach(function(el) {
+    katex.render(el.getAttribute("data-tex"), el, { throwOnError: false, displayMode: true });
+  });
+}
+if (window.katex) renderMath(); else window.addEventListener("load", renderMath);
+
+/* makeRunner(fig, tick, opts)
+   tick() advances the model by one frame's worth of steps and draws.
+   While the figure is on screen the loop runs in requestAnimationFrame.
+   Under reduced motion the loop never animates: settle() runs the model
+   forward in timed chunks to opts.settleFrames frames and draws once. */
+function makeRunner(fig, tick, opts) {
+  var reduced = Motion.reduced();
+  var visible = false, raf = null, gen = 0;
+  function frame() {
+    raf = null;
+    if (!visible || (opts.done && opts.done())) return;
+    tick(true);
+    raf = requestAnimationFrame(frame);
+  }
+  function kick() {
+    if (reduced) { settle(); return; }
+    if (visible && !raf) raf = requestAnimationFrame(frame);
+  }
+  function settle() {
+    var my = ++gen, left = opts.settleFrames;
+    (function chunk() {
+      if (my !== gen) return;
+      var t0 = performance.now();
+      while (left > 0 && performance.now() - t0 < 30) { tick(false); left--; }
+      if (opts.draw) opts.draw();
+      if (left > 0) setTimeout(chunk, 0);
+    })();
+  }
+  Motion.onVisible(fig, function(v) { visible = v; if (v && !reduced && !raf) raf = requestAnimationFrame(frame); });
+  return { kick: kick, reduced: reduced };
+}
+
+/* ================================================================
+   Figure 1: Jones (2010) Physarum particle model
+   ================================================================ */
+(function() {
+  "use strict";
+  var canvas = document.getElementById("canvas-growth");
+  var ctx = canvas.getContext("2d");
+  var fig = document.getElementById("fig-growth");
+  var W, H, trail, next, occ, agents, img, lastWidth = 0;
+  var params = {};
+
+  function readSliders() {
+    params.sensorAngle = +document.getElementById("sensor-angle").value * Math.PI / 180;
+    params.sensorDist = +document.getElementById("sensor-dist").value;
+    params.turnRate = +document.getElementById("turn-rate").value * Math.PI / 180;
+    params.depositAmt = +document.getElementById("deposit-amt").value;
+    params.decayRate = +document.getElementById("decay-rate").value;
+  }
+  [["sensor-angle", "°"], ["sensor-dist", ""], ["turn-rate", "°"], ["deposit-amt", ""], ["decay-rate", ""]].forEach(function(s) {
+    var sl = document.getElementById(s[0]), vl = document.getElementById(s[0] + "-val");
+    sl.addEventListener("input", function() {
+      vl.textContent = (s[0] === "decay-rate" ? (+sl.value).toFixed(2) : sl.value) + s[1];
+      readSliders();
+      if (runner.reduced) reset();
+    });
+  });
+
+  function initSim() {
+    var rect = fig.getBoundingClientRect();
+    W = Math.max(160, Math.round((rect.width - 48) * 0.5));
+    H = Math.round(W * 0.7);
+    canvas.width = W; canvas.height = H;
+    canvas.style.aspectRatio = (W / H).toFixed(4);
+    trail = new Float32Array(W * H);
+    next = new Float32Array(W * H);
+    occ = new Uint8Array(W * H);
+    img = ctx.createImageData(W, H);
+    agents = [];
+    var n = Math.round(W * H * 0.06);
+    while (agents.length < n) {
+      var x = Math.floor(Math.random() * W), y = Math.floor(Math.random() * H);
+      if (occ[y * W + x]) continue;
+      occ[y * W + x] = 1;
+      agents.push({ x: x + 0.5, y: y + 0.5, h: Math.random() * Math.PI * 2 });
+    }
+  }
+
+  function wrap(v, m) { v = Math.floor(v) % m; return v < 0 ? v + m : v; }
+  function sense(a, off) {
+    var d = a.h + off;
+    return trail[wrap(a.y + Math.sin(d) * params.sensorDist, H) * W + wrap(a.x + Math.cos(d) * params.sensorDist, W)];
+  }
+
+  function step() {
+    var sa = params.sensorAngle, tr = params.turnRate, dep = params.depositAmt;
+    for (var i = 0; i < agents.length; i++) {
+      var a = agents[i];
+      var sL = sense(a, -sa), sC = sense(a, 0), sR = sense(a, sa);
+      if (sC > sL && sC > sR) { /* keep heading */ }
+      else if (sC < sL && sC < sR) a.h += (Math.random() < 0.5 ? -tr : tr);
+      else if (sL < sR) a.h += tr;
+      else if (sR < sL) a.h -= tr;
+      var nx = a.x + Math.cos(a.h), ny = a.y + Math.sin(a.h);
+      if (nx < 0) nx += W; if (nx >= W) nx -= W;
+      if (ny < 0) ny += H; if (ny >= H) ny -= H;
+      var oi = Math.floor(a.y) * W + Math.floor(a.x), ni = Math.floor(ny) * W + Math.floor(nx);
+      if (ni !== oi && occ[ni]) { a.h = Math.random() * Math.PI * 2; continue; }
+      occ[oi] = 0; occ[ni] = 1;
+      a.x = nx; a.y = ny;
+      trail[ni] = Math.min(trail[ni] + dep, 255);
+    }
+    var decay = params.decayRate;
+    for (var y = 0; y < H; y++) {
+      var yu = ((y - 1 + H) % H) * W, yc = y * W, yd = ((y + 1) % H) * W;
+      for (var x = 0; x < W; x++) {
+        var xl = (x - 1 + W) % W, xr = (x + 1) % W;
+        next[yc + x] = decay * (trail[yu + xl] + trail[yu + x] + trail[yu + xr] +
+          trail[yc + xl] + trail[yc + x] + trail[yc + xr] +
+          trail[yd + xl] + trail[yd + x] + trail[yd + xr]) / 9;
+      }
+    }
+    var t = trail; trail = next; next = t;
+  }
+
+  function draw() {
+    var d = img.data;
+    for (var i = 0; i < W * H; i++) {
+      var v = Math.min(trail[i] * 10, 255), o = i * 4;
+      d[o] = v * 0.75; d[o + 1] = v * 0.9; d[o + 2] = v * 0.2; d[o + 3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+  }
+
+  function reset() { readSliders(); initSim(); draw(); runner.kick(); }
+  var runner = makeRunner(fig, function(show) { if (!agents) return; step(); step(); if (show) draw(); }, { settleFrames: 250, draw: function() { draw(); } });
+  document.getElementById("reset-growth").addEventListener("click", reset);
+  new ResizeObserver(function() {
+    var w = fig.getBoundingClientRect().width;
+    if (Math.abs(w - lastWidth) > 1) { lastWidth = w; reset(); }
+  }).observe(fig);
+})();
+
+/* ================================================================
+   Figure 2: double bridge (Deneubourg / Goss choice rule)
+   ================================================================ */
+(function() {
+  "use strict";
+  var LS = 30, NANTS = 100, REL = 0.2, K = 20, NEXP = 2, TMAX = 8000, T_OPEN = 1500, WINDOW = 100;
+  var fig = document.getElementById("fig-bridge");
+  var canvas = document.getElementById("canvas-bridge");
+  var ctx = canvas.getContext("2d");
+  var svg = d3.select("#svg-bridge-chart");
+  var ratioEl = document.getElementById("br-ratio"), evapEl = document.getElementById("br-evap");
+  var late = false, sim, batch = null, geom = null, cw = 0, ch = 180;
+  var BATCH_HINT = document.getElementById("br-batch-out").textContent;
+  var C_SHORT = "#b45309", C_LONG = "#0e7490";
+
+  function Bridge(ratio, evap, late) {
+    var LL = Math.round(ratio * LS), len = [LS, LL];
+    var ph = [new Float32Array(LS), new Float32Array(LL)];
+    var ants = [], choices = [], series = [], t = 0;
+    function endVal(b, end) {
+      var f = ph[b], L = len[b];
+      return end ? (f[L - 1] + f[L - 2] + f[L - 3]) / 3 : (f[0] + f[1] + f[2]) / 3;
+    }
+    function choose(end) {
+      if (late && t < T_OPEN) return 1;
+      var a = Math.pow(K + endVal(0, end), NEXP), b = Math.pow(K + endVal(1, end), NEXP);
+      return Math.random() < a / (a + b) ? 0 : 1;
+    }
+    function share() {
+      var n = Math.min(WINDOW, choices.length);
+      if (!n) return NaN;
+      var s = 0;
+      for (var i = choices.length - n; i < choices.length; i++) if (choices[i] === 0) s++;
+      return s / n;
+    }
+    function step() {
+      t++;
+      if (ants.length < NANTS && Math.random() < REL) {
+        var br = choose(0); choices.push(br); ants.push({ b: br, p: -1, d: 1 });
+      }
+      for (var i = 0; i < ants.length; i++) {
+        var a = ants[i];
+        a.p += a.d;
+        ph[a.b][a.p] += 1;
+        if (a.d > 0 && a.p === len[a.b] - 1) { var nb = choose(1); a.b = nb; a.p = len[nb]; a.d = -1; }
+        else if (a.d < 0 && a.p === 0) { var nb2 = choose(0); choices.push(nb2); a.b = nb2; a.p = -1; a.d = 1; }
+      }
+      if (evap > 0) for (var j = 0; j < 2; j++) { var f = ph[j]; for (var c = 0; c < f.length; c++) f[c] *= (1 - evap); }
+      if (t % 25 === 0) series.push([t, share()]);
+    }
+    return { step: step, ph: ph, len: len, ants: ants, series: series, share: share, get t() { return t; } };
+  }
+
+  /* Geometry: short branch is a gentle arc above the axis; the long branch
+     dips below and meanders so that its drawn length matches the ratio. */
+  function buildGeom() {
+    var rect = fig.getBoundingClientRect();
+    cw = Math.max(280, Math.floor(rect.width - 48));
+    var dpr = window.devicePixelRatio || 1;
+    canvas.width = cw * dpr; canvas.height = ch * dpr;
+    canvas.style.width = cw + "px"; canvas.style.height = ch + "px";
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    var x0 = 50, x1 = cw - 50, mid = 70;
+    function arc(s, h) { return [x0 + (x1 - x0) * s, mid - h * Math.sin(Math.PI * s)]; }
+    function lower(s, amp) {
+      var dip = 60 * Math.sin(Math.PI * s);
+      var wig = amp * Math.sin(Math.PI * s * 14) * Math.min(1, Math.sin(Math.PI * s) * 3);
+      return [x0 + (x1 - x0) * s, mid + dip + wig];
+    }
+    function sample(fn, n) { var pts = []; for (var i = 0; i <= n; i++) pts.push(fn(i / n)); return pts; }
+    function plen(pts) { var L = 0; for (var i = 1; i < pts.length; i++) L += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]); return L; }
+    var up = sample(function(s) { return arc(s, 40); }, 400);
+    var target = plen(up) * (+ratioEl.value);
+    var lo = 0, hi = 60, amp = 0;
+    for (var it = 0; it < 40; it++) {
+      amp = (lo + hi) / 2;
+      if (plen(sample(function(s) { return lower(s, amp); }, 800)) < target) lo = amp; else hi = amp;
+    }
+    var down = sample(function(s) { return lower(s, amp); }, 800);
+    geom = { paths: [resample(up, LS), resample(down, Math.round(+ratioEl.value * LS))], x0: x0, x1: x1, mid: mid };
+  }
+  /* resample a polyline into n cells of equal arc length; returns n+1 points */
+  function resample(pts, n) {
+    var cum = [0];
+    for (var i = 1; i < pts.length; i++) cum.push(cum[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+    var L = cum[cum.length - 1], out = [], j = 1;
+    for (var k = 0; k <= n; k++) {
+      var s = L * k / n;
+      while (j < pts.length - 1 && cum[j] < s) j++;
+      var f = (s - cum[j - 1]) / ((cum[j] - cum[j - 1]) || 1);
+      out.push([pts[j - 1][0] + f * (pts[j][0] - pts[j - 1][0]), pts[j - 1][1] + f * (pts[j][1] - pts[j - 1][1])]);
+    }
+    return out;
+  }
+
+  function drawBridge() {
+    ctx.clearRect(0, 0, cw, ch);
+    var closed = late && sim.t < T_OPEN;
+    for (var b = 0; b < 2; b++) {
+      var pts = geom.paths[b], f = sim.ph[b];
+      ctx.lineCap = "round";
+      ctx.strokeStyle = "#e2e2e8"; ctx.lineWidth = 3;
+      ctx.setLineDash(b === 0 && closed ? [4, 4] : []);
+      ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]);
+      for (var i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.strokeStyle = b === 0 ? C_SHORT : C_LONG;
+      for (var c = 0; c < f.length; c++) {
+        var w = Math.min(14, Math.sqrt(f[c]) * 0.9);
+        if (w < 0.3) continue;
+        ctx.lineWidth = w;
+        ctx.beginPath(); ctx.moveTo(pts[c][0], pts[c][1]); ctx.lineTo(pts[c + 1][0], pts[c + 1][1]); ctx.stroke();
+      }
+    }
+    ctx.fillStyle = "#1a1a2e";
+    for (var a = 0; a < sim.ants.length; a++) {
+      var ant = sim.ants[a], P = geom.paths[ant.b], p = Math.max(0, Math.min(P.length - 2, ant.p));
+      var q = P[p], r = P[p + 1];
+      ctx.beginPath(); ctx.arc((q[0] + r[0]) / 2, (q[1] + r[1]) / 2, 1.8, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.font = '600 12px "Source Sans 3", sans-serif';
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    [[geom.x0 - 22, "nest"], [geom.x1 + 22, "food"]].forEach(function(n) {
+      ctx.fillStyle = "#1a1a2e"; ctx.fillText(n[1], n[0], geom.mid);
+    });
+    ctx.textAlign = "left"; ctx.fillStyle = "#4a4a6a"; ctx.font = '12px "Source Sans 3", sans-serif';
+    ctx.fillText("short branch" + (closed ? " (closed)" : ""), cw / 2 + 8, 16);
+    ctx.fillText("long branch, " + (+ratioEl.value).toFixed(1) + "×", 4, ch - 8);
+    ctx.textAlign = "right";
+    ctx.fillText("step " + sim.t, cw - 4, 16);
+  }
+
+  var margin = { top: 10, right: 12, bottom: 110, left: 44 };
+  function drawChart() {
+    var w = cw, h = 250;
+    svg.attr("width", w).attr("height", h).attr("viewBox", "0 0 " + w + " " + h);
+    svg.selectAll("*").remove();
+    var iw = w - margin.left - margin.right, ih = h - margin.top - margin.bottom;
+    var g = svg.append("g").attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+    var x = d3.scaleLinear().domain([0, TMAX]).range([0, iw]);
+    var y = d3.scaleLinear().domain([0, 1]).range([ih, 0]);
+    g.append("g").attr("transform", "translate(0," + ih + ")").call(d3.axisBottom(x).ticks(5).tickSizeOuter(0));
+    g.append("g").call(d3.axisLeft(y).ticks(3).tickFormat(d3.format(".0%")).tickSizeOuter(0));
+    g.append("text").attr("x", 4).attr("y", 2).attr("dy", "0.7em").attr("font-size", 11).attr("fill", "#4a4a6a").text("share of departures on short branch");
+    g.append("line").attr("x1", 0).attr("x2", iw).attr("y1", y(0.5)).attr("y2", y(0.5)).attr("stroke", "#e2e2e8").attr("stroke-dasharray", "3,3");
+    if (late) g.append("line").attr("x1", x(T_OPEN)).attr("x2", x(T_OPEN)).attr("y1", 0).attr("y2", ih).attr("stroke", "#4a4a6a").attr("stroke-dasharray", "2,3");
+    var data = sim.series.filter(function(d) { return !isNaN(d[1]); });
+    g.append("path").datum(data).attr("fill", "none").attr("stroke", C_SHORT).attr("stroke-width", 2)
+      .attr("d", d3.line().x(function(d) { return x(d[0]); }).y(function(d) { return y(d[1]); }));
+    /* batch histogram: final short-branch share of each colony, 10 bins */
+    var sy = ih + 84, bh = 36;
+    var xs = d3.scaleLinear().domain([0, 1]).range([0, iw]);
+    g.append("line").attr("x1", 0).attr("x2", iw).attr("y1", sy).attr("y2", sy).attr("stroke", "#e2e2e8");
+    g.append("text").attr("x", 0).attr("y", sy + 14).attr("font-size", 11).attr("fill", "#4a4a6a").text("final share 0% (all on long)");
+    g.append("text").attr("x", iw).attr("y", sy + 14).attr("text-anchor", "end").attr("font-size", 11).attr("fill", "#4a4a6a").text("100% (all on short)");
+    if (batch) {
+      var counts = new Array(10).fill(0);
+      batch.forEach(function(v) { counts[Math.min(9, Math.floor(v * 10))]++; });
+      var bw = iw / 10;
+      counts.forEach(function(c, i) {
+        if (!c) return;
+        var hgt = bh * c / batch.length;
+        g.append("rect").attr("x", i * bw + 1).attr("width", bw - 2).attr("y", sy - hgt).attr("height", hgt)
+          .attr("fill", (i + 0.5) / 10 > 0.5 ? C_SHORT : C_LONG).attr("opacity", 0.85);
+        g.append("text").attr("x", i * bw + bw / 2).attr("y", sy - hgt - 3).attr("text-anchor", "middle")
+          .attr("font-size", 10).attr("fill", "#1a1a2e").text(c);
+      });
+    }
+  }
+
+  function tick(show) {
+    for (var i = 0; i < 12 && sim.t < TMAX; i++) sim.step();
+    if (show) { drawBridge(); if (sim.t % 100 < 12 || sim.t >= TMAX) drawChart(); }
+  }
+  function drawAll() { drawBridge(); drawChart(); }
+  function restart() { sim = Bridge(+ratioEl.value, +evapEl.value, late); batch = null; document.getElementById("br-batch-out").textContent = BATCH_HINT; buildGeom(); drawAll(); runner.kick(); }
+
+  var runner = makeRunner(fig, tick, { settleFrames: Math.ceil(TMAX / 12), draw: drawAll, done: function() { return sim.t >= TMAX; } });
+
+  ratioEl.addEventListener("input", function() { document.getElementById("br-ratio-val").textContent = (+ratioEl.value).toFixed(1); restart(); });
+  evapEl.addEventListener("input", function() { document.getElementById("br-evap-val").textContent = (+evapEl.value).toFixed(3); restart(); });
+  document.getElementById("br-open").addEventListener("click", function() { late = false; this.classList.add("active"); document.getElementById("br-late").classList.remove("active"); restart(); });
+  document.getElementById("br-late").addEventListener("click", function() { late = true; this.classList.add("active"); document.getElementById("br-open").classList.remove("active"); restart(); });
+  document.getElementById("br-reset").addEventListener("click", restart);
+  document.getElementById("br-batch").addEventListener("click", function() {
+    var out = document.getElementById("br-batch-out");
+    out.textContent = "Running 20 colonies…";
+    setTimeout(function() {
+      var res = [];
+      for (var r = 0; r < 20; r++) {
+        var b = Bridge(+ratioEl.value, +evapEl.value, late);
+        for (var s = 0; s < TMAX; s++) b.step();
+        res.push(b.share());
+      }
+      batch = res;
+      var wins = res.filter(function(v) { return v > 0.5; }).length;
+      var mean = res.reduce(function(a, b) { return a + b; }, 0) / res.length;
+      out.textContent = "Of 20 colonies at these settings, " + wins + " ended with most traffic on the short branch; the average final share on the short branch was " + Math.round(mean * 100) + "%.";
+      drawChart();
+    }, 20);
+  });
+  new ResizeObserver(function() {
+    var w = Math.floor(fig.getBoundingClientRect().width - 48);
+    if (sim && Math.abs(w - cw) > 1) { buildGeom(); drawAll(); }
+  }).observe(fig);
+  sim = Bridge(+ratioEl.value, +evapEl.value, late);
+  buildGeom(); drawAll(); runner.kick();
+})();
+
+/* ================================================================
+   Figure 3: Helbing-Keltsch-Molnar active walker trails
+   ================================================================ */
+(function() {
+  "use strict";
+  var GW = 120, GH = 80, SIGMA = 10, I = 0.02, RATE = 0.25, STEPS = 40, TMAX = 30000;
+  var fig = document.getElementById("fig-trails");
+  var canvas = document.getElementById("canvas-trails");
+  var ctx = canvas.getContext("2d");
+  var off = document.createElement("canvas"); off.width = GW; off.height = GH;
+  var offCtx = off.getContext("2d"), img = offCtx.createImageData(GW, GH);
+  var durEl = document.getElementById("tr-dur"), kapEl = document.getElementById("tr-kappa");
+  var G, V, tmp, walkers, log, t, kern, T, kappa, cw = 0, chh = 0;
+  var pts = [[0.1, 0.12], [0.9, 0.12], [0.1, 0.88], [0.9, 0.88]].map(function(p) { return [p[0] * GW, p[1] * GH]; });
+  var GRASS = [74, 124, 60], DIRT = [196, 170, 118];
+
+  (function() {
+    var r = Math.ceil(SIGMA * 2.5), s = 0; kern = [];
+    for (var i = -r; i <= r; i++) { var v = Math.exp(-i * i / (2 * SIGMA * SIGMA)); kern.push(v); s += v; }
+    for (var j = 0; j < kern.length; j++) kern[j] /= s;
+  })();
+  function durFromSlider(v) { return Math.round(Math.exp(Math.log(300) + (Math.log(50000) - Math.log(300)) * v / 100) / 10) * 10; }
+
+  function reset() {
+    T = durFromSlider(+durEl.value); kappa = +kapEl.value;
+    document.getElementById("tr-dur-val").textContent = T;
+    document.getElementById("tr-kappa-val").textContent = kappa;
+    G = new Float32Array(GW * GH); V = new Float32Array(GW * GH); tmp = new Float32Array(GW * GH);
+    walkers = []; log = []; t = 0;
+    draw(); runner.kick();
+  }
+  function blur() {
+    var r = (kern.length - 1) / 2, x, y, i, s, q;
+    for (y = 0; y < GH; y++) for (x = 0; x < GW; x++) {
+      s = 0; for (i = -r; i <= r; i++) { q = x + i; if (q < 0) q = 0; else if (q >= GW) q = GW - 1; s += kern[i + r] * G[y * GW + q]; }
+      tmp[y * GW + x] = s;
+    }
+    for (y = 0; y < GH; y++) for (x = 0; x < GW; x++) {
+      s = 0; for (i = -r; i <= r; i++) { q = y + i; if (q < 0) q = 0; else if (q >= GH) q = GH - 1; s += kern[i + r] * tmp[q * GW + x]; }
+      V[y * GW + x] = s;
+    }
+  }
+  function samp(x, y) {
+    x = Math.max(0, Math.min(GW - 1.001, x)); y = Math.max(0, Math.min(GH - 1.001, y));
+    var ix = x | 0, iy = y | 0, fx = x - ix, fy = y - iy, i = iy * GW + ix;
+    return V[i] * (1 - fx) * (1 - fy) + V[i + 1] * fx * (1 - fy) + V[i + GW] * (1 - fx) * fy + V[i + GW + 1] * fx * fy;
+  }
+  function step() {
+    t++;
+    if (Math.random() < RATE) {
+      var a = Math.floor(Math.random() * 4), b = Math.floor(Math.random() * 3); if (b >= a) b++;
+      walkers.push({ x: pts[a][0], y: pts[a][1], d: pts[b], len: 0, direct: Math.hypot(pts[b][0] - pts[a][0], pts[b][1] - pts[a][1]) });
+    }
+    if (t % 8 === 0) blur();
+    var alive = [];
+    for (var i = 0; i < walkers.length; i++) {
+      var w = walkers[i], dx = w.d[0] - w.x, dy = w.d[1] - w.y, dist = Math.hypot(dx, dy);
+      if (dist < 1.5 || w.len > 4 * w.direct) { log.push((w.len + dist) / w.direct); if (log.length > 100) log.shift(); continue; }
+      var gx = (samp(w.x + 1, w.y) - samp(w.x - 1, w.y)) / 2, gy = (samp(w.x, w.y + 1) - samp(w.x, w.y - 1)) / 2;
+      var ex = dx / dist + kappa * gx, ey = dy / dist + kappa * gy, n = Math.hypot(ex, ey) || 1;
+      w.x += ex / n; w.y += ey / n; w.len += 1;
+      var ci = Math.round(w.y) * GW + Math.round(w.x);
+      if (ci >= 0 && ci < GW * GH) G[ci] += I * (1 - G[ci]);
+      alive.push(w);
+    }
+    walkers = alive;
+    var dec = 1 - 1 / T;
+    for (var j = 0; j < G.length; j++) G[j] *= dec;
+  }
+  function stats() {
+    var worn = 0; for (var j = 0; j < G.length; j++) if (G[j] > 0.3) worn++;
+    var det = log.length ? log.reduce(function(a, b) { return a + b; }, 0) / log.length : NaN;
+    document.getElementById("tr-stats").textContent = "Step " + t + ". Detour over the last " + log.length + " walkers: " +
+      (isNaN(det) ? "–" : det.toFixed(3) + "×") + " the straight line. Worn ground: " + (100 * worn / G.length).toFixed(1) + "% of the lawn.";
+  }
+  function draw() {
+    var rect = fig.getBoundingClientRect();
+    var w = Math.max(280, Math.floor(rect.width - 48)), h = Math.round(w * GH / GW), dpr = window.devicePixelRatio || 1;
+    if (w !== cw) { cw = w; chh = h; canvas.width = w * dpr; canvas.height = h * dpr; canvas.style.width = w + "px"; canvas.style.height = h + "px"; }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    var d = img.data;
+    for (var i = 0; i < GW * GH; i++) {
+      var g = Math.min(1, G[i]), o = i * 4;
+      d[o] = GRASS[0] + (DIRT[0] - GRASS[0]) * g; d[o + 1] = GRASS[1] + (DIRT[1] - GRASS[1]) * g; d[o + 2] = GRASS[2] + (DIRT[2] - GRASS[2]) * g; d[o + 3] = 255;
+    }
+    offCtx.putImageData(img, 0, 0);
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(off, 0, 0, cw, chh);
+    var s = cw / GW;
+    ctx.fillStyle = "rgba(26,26,46,0.8)";
+    for (var k = 0; k < walkers.length; k++) { ctx.beginPath(); ctx.arc(walkers[k].x * s, walkers[k].y * s, 2, 0, Math.PI * 2); ctx.fill(); }
+    ctx.fillStyle = "#fafafa"; ctx.strokeStyle = "#1a1a2e"; ctx.lineWidth = 1.5;
+    pts.forEach(function(p) { ctx.beginPath(); ctx.arc(p[0] * s, p[1] * s, 6, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); });
+    stats();
+  }
+  var runner = makeRunner(fig, function(show) { for (var i = 0; i < STEPS && t < TMAX; i++) step(); if (show) draw(); },
+    { settleFrames: TMAX / STEPS, draw: draw, done: function() { return t >= TMAX; } });
+  durEl.addEventListener("input", reset);
+  kapEl.addEventListener("input", reset);
+  document.getElementById("tr-reset").addEventListener("click", reset);
+  new ResizeObserver(function() { if (G && Math.floor(fig.getBoundingClientRect().width - 48) !== cw) draw(); }).observe(fig);
+  reset();
+})();
+
+/* ================================================================
+   Figure 4: termite pellet clustering with a pellet-emitted pheromone
+   ================================================================ */
+(function() {
+  "use strict";
+  var GW = 120, GH = 72, N = 150, D = 0.2, Q = 1, KD = 6, KP = 6, DENS = 0.08, STEPS = 20, TMAX = 12000;
+  var fig = document.getElementById("fig-termites");
+  var canvas = document.getElementById("canvas-termites");
+  var ctx = canvas.getContext("2d");
+  var off = document.createElement("canvas"); off.width = GW; off.height = GH;
+  var offCtx = off.getContext("2d"), img = offCtx.createImageData(GW, GH);
+  var lifeEl = document.getElementById("tm-life");
+  var emit = true, lam, pel, P, P2, ts, total, t, cw = 0, chh = 0;
+
+  function lifeFromSlider(v) { return Math.round(Math.exp(Math.log(2) + (Math.log(500) - Math.log(2)) * v / 100)); }
+  function idx(x, y) { x = Math.floor(x) % GW; if (x < 0) x += GW; y = Math.floor(y) % GH; if (y < 0) y += GH; return y * GW + x; }
+
+  function reset() {
+    var life = lifeFromSlider(+lifeEl.value); lam = 1 / life;
+    document.getElementById("tm-life-val").textContent = life;
+    pel = new Int16Array(GW * GH); P = new Float32Array(GW * GH); P2 = new Float32Array(GW * GH);
+    total = 0; t = 0;
+    for (var i = 0; i < GW * GH; i++) if (Math.random() < DENS) { pel[i] = 1; total++; }
+    ts = [];
+    for (var j = 0; j < N; j++) ts.push({ x: Math.random() * GW, y: Math.random() * GH, h: Math.random() * 6.283, c: false });
+    draw(); runner.kick();
+  }
+  function step() {
+    t++;
+    var q = emit ? Q : 0, i, x, y;
+    for (i = 0; i < GW * GH; i++) P[i] += q * pel[i];
+    for (y = 0; y < GH; y++) {
+      var yu = ((y - 1 + GH) % GH) * GW, yd = ((y + 1) % GH) * GW, yr = y * GW;
+      for (x = 0; x < GW; x++) {
+        var xl = (x - 1 + GW) % GW, xr = (x + 1) % GW, c = P[yr + x];
+        P2[yr + x] = (c + D * (P[yr + xl] + P[yr + xr] + P[yu + x] + P[yd + x] - 4 * c)) * (1 - lam);
+      }
+    }
+    var tmp = P; P = P2; P2 = tmp;
+    for (var k = 0; k < ts.length; k++) {
+      var a = ts[k];
+      if (a.c) {
+        var best = 0, bv = -1;
+        for (var s = -1; s <= 1; s++) {
+          var v = P[idx(a.x + Math.cos(a.h + s * 0.6) * 3, a.y + Math.sin(a.h + s * 0.6) * 3)];
+          if (v > bv) { bv = v; best = s; }
+        }
+        a.h += best * 0.3;
+      }
+      a.h += (Math.random() - 0.5) * 0.8;
+      a.x = (a.x + Math.cos(a.h) + GW) % GW; a.y = (a.y + Math.sin(a.h) + GH) % GH;
+      var ci = idx(a.x, a.y), p = P[ci];
+      if (a.c) { var fd = p / (p + KD); if (Math.random() < 0.002 + fd * fd) { pel[ci]++; a.c = false; } }
+      else if (pel[ci] > 0) { var fp = KP / (KP + p); if (Math.random() < fp * fp) { pel[ci]--; a.c = true; } }
+    }
+  }
+  function piles(min) {
+    var seen = new Uint8Array(GW * GH), n = 0, inP = 0;
+    for (var i = 0; i < GW * GH; i++) {
+      if (seen[i] || pel[i] < 1) continue;
+      var st = [i], m = 0; seen[i] = 1;
+      while (st.length) {
+        var c = st.pop(), cx = c % GW, cy = (c / GW) | 0; m += pel[c];
+        var nb = [idx(cx - 1, cy), idx(cx + 1, cy), idx(cx, cy - 1), idx(cx, cy + 1)];
+        for (var j = 0; j < 4; j++) if (!seen[nb[j]] && pel[nb[j]] > 0) { seen[nb[j]] = 1; st.push(nb[j]); }
+      }
+      if (m >= min) { n++; inP += m; }
+    }
+    return { n: n, share: inP / total };
+  }
+  function draw() {
+    var rect = fig.getBoundingClientRect();
+    var w = Math.max(280, Math.floor(rect.width - 48)), h = Math.round(w * GH / GW), dpr = window.devicePixelRatio || 1;
+    if (w !== cw) { cw = w; chh = h; canvas.width = w * dpr; canvas.height = h * dpr; canvas.style.width = w + "px"; canvas.style.height = h + "px"; }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    var d = img.data;
+    for (var i = 0; i < GW * GH; i++) {
+      var pv = Math.min(1, P[i] / (4 * KD)), o = i * 4;
+      d[o] = 42 + 170 * pv; d[o + 1] = 31 + 100 * pv; d[o + 2] = 20 + 10 * pv; d[o + 3] = 255;
+    }
+    offCtx.putImageData(img, 0, 0);
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(off, 0, 0, cw, chh);
+    var s = cw / GW;
+    for (var j = 0; j < GW * GH; j++) {
+      if (!pel[j]) continue;
+      var m = Math.min(1, pel[j] / 6);
+      ctx.fillStyle = "rgb(" + Math.round(200 - 110 * m) + "," + Math.round(150 - 90 * m) + "," + Math.round(100 - 70 * m) + ")";
+      ctx.fillRect((j % GW) * s, ((j / GW) | 0) * s, Math.ceil(s), Math.ceil(s));
+    }
+    for (var k = 0; k < ts.length; k++) {
+      ctx.beginPath(); ctx.arc(ts[k].x * s, ts[k].y * s, 1.8, 0, Math.PI * 2);
+      ctx.fillStyle = ts[k].c ? "#f5d06f" : "#a0a0b0"; ctx.fill();
+    }
+    var pl = piles(10), bg = emit ? DENS * Q / lam : 0;
+    document.getElementById("tm-stats").textContent = "Step " + t + ". " + pl.n + " piles of ten or more, holding " + Math.round(pl.share * 100) +
+      "% of the pellets. Background field of a uniform scatter, ρq/λ = " + bg.toFixed(1) + ", against K = " + KD + ".";
+  }
+  var runner = makeRunner(fig, function(show) { for (var i = 0; i < STEPS && t < TMAX; i++) step(); if (show) draw(); },
+    { settleFrames: TMAX / STEPS, draw: draw, done: function() { return t >= TMAX; } });
+  lifeEl.addEventListener("input", reset);
+  document.getElementById("tm-on").addEventListener("click", function() { emit = true; this.classList.add("active"); document.getElementById("tm-off").classList.remove("active"); reset(); });
+  document.getElementById("tm-off").addEventListener("click", function() { emit = false; this.classList.add("active"); document.getElementById("tm-on").classList.remove("active"); reset(); });
+  document.getElementById("tm-reset").addEventListener("click", reset);
+  new ResizeObserver(function() { if (pel && Math.floor(fig.getBoundingClientRect().width - 48) !== cw) draw(); }).observe(fig);
+  reset();
+})();
+</script>
+</body>
+</html>

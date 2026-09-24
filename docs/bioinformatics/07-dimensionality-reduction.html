@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dimensionality Reduction — Bioinformatics</title>
+<script src="../vendor/js/d3.v7.min.js"></script>
+<link href="../vendor/fonts/sans-serif-mono/fonts.css" rel="stylesheet">
+<script src="../lib/motion.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --article-width: 740px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem;
+  --line-height: 1.6;
+  --text: #1a1a2e;
+  --text-2: #4a4a6a;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --bg: #fafafa;
+  --fig-bg: #ffffff;
+  --border: #e2e2e8;
+  --c-gene: #2563eb;
+  --c-sample: #0891b2;
+  --c-expression: #8b5cf6;
+  --c-significance: #ef4444;
+  --c-pathway: #10b981;
+  --muted: #94a3b8;
+  --grid: #e2e8f0;
+}
+
+body { font-family: var(--body-font); font-size: var(--body-size); line-height: var(--line-height); color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased; }
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
+h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+h3 { font-size: 1.05rem; margin: 1.5rem 0 0.6rem; color: var(--text-2); font-weight: 600; }
+p { margin: 0 0 1rem; }
+a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+
+.figure { margin: 2rem 0; padding: 1.5rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.figure-wide { margin-left: -2rem; margin-right: -2rem; }
+.figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; line-height: 1.4; }
+.figure-label { font-weight: 600; color: var(--text); }
+
+.insight { background: var(--accent-light); border-left: 3px solid var(--accent); padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 4px 4px 0; }
+.insight p { margin: 0; }
+
+.controls { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; font-family: var(--heading-font); font-size: 0.83rem; color: var(--text-2); }
+.controls > label { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; }
+.controls input[type="range"] { width: 120px; accent-color: var(--accent); }
+
+.btn { font-family: var(--heading-font); font-size: 0.82rem; font-weight: 600; padding: 0.3rem 0.75rem; border-radius: 4px; border: 1px solid var(--border); background: var(--fig-bg); color: var(--text-2); cursor: pointer; transition: all 0.12s; user-select: none; }
+.btn:hover { border-color: var(--accent); color: var(--accent); }
+.btn.active { border-color: var(--accent); background: var(--accent); color: white; }
+.btn-group { display: inline-flex; gap: 0.3rem; }
+
+svg text { font-family: var(--heading-font); }
+.tip { position: fixed; pointer-events: none; background: var(--text); color: white; font-family: var(--heading-font); font-size: 0.75rem; padding: 0.4rem 0.6rem; border-radius: 4px; opacity: 0; transition: opacity 0.12s; z-index: 10; white-space: nowrap; line-height: 1.35; }
+.tip .tip-k { color: #a1a1aa; font-weight: 500; margin-right: 0.3rem; }
+
+.legend-row { display: flex; align-items: center; gap: 1.25rem; flex-wrap: wrap; margin-bottom: 0.75rem; font-family: var(--heading-font); font-size: 0.78rem; color: var(--text-2); }
+.legend-item { display: flex; align-items: center; gap: 0.35rem; }
+.legend-swatch { width: 10px; height: 10px; border-radius: 50%; }
+
+.stat { font-family: var(--heading-font); font-size: 0.82rem; color: var(--text-2); }
+.stat b { color: var(--text); font-weight: 700; }
+
+.panel-label {
+  font-family: var(--heading-font); font-size: 0.7rem; font-weight: 700;
+  letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-2);
+  margin-bottom: 0.25rem; text-align: center;
+}
+.panel-subcaption {
+  font-family: var(--heading-font); font-size: 0.72rem;
+  color: var(--muted); text-align: center; margin-top: 0.2rem; line-height: 1.35;
+}
+
+.grad-scale { display: flex; align-items: center; gap: 0.35rem; font-family: var(--heading-font); font-size: 0.75rem; color: var(--text-2); }
+.grad-bar { width: 120px; height: 8px; border-radius: 2px; background: linear-gradient(to right, #f1f5f9, #8b5cf6); }
+
+@media (max-width: 640px) { .figure-wide { margin-left: 0; margin-right: 0; } h1 { font-size: 1.75rem; } }
+@media (prefers-reduced-motion: reduce) {
+  html:not([data-motion="full"]) *,
+  html:not([data-motion="full"]) *::before,
+  html:not([data-motion="full"]) *::after {
+    transition-duration: 0.001ms !important;
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+  html:not([data-motion="full"]) .figure canvas { outline: 2px dashed var(--border); outline-offset: -2px; }
+}
+
+/* merged from source pages */
+
+</style>
+</head>
+<body>
+<div class="article">
+  <header style="margin-bottom: 3rem;">
+    <a href="index.html" style="font-family: var(--heading-font); font-size: 0.85rem; text-decoration: none; color: var(--text-2); display: inline-block; margin-bottom: 1rem;">&larr; Bioinformatics Series</a>
+    <h1>Dimensionality Reduction</h1>
+    <p style="font-family: var(--heading-font); font-size: 1.15rem; color: var(--text-2); max-width: 620px;">
+      A cell measured on twenty thousand genes cannot be plotted. A 2D map of cells is a compression, and it helps to know what each method keeps and what it throws away.
+    </p>
+  </header>
+
+  <p>A single-cell RNA-seq experiment measures around 20,000 genes in each of tens of thousands of cells. Each cell is a point in a 20,000-dimensional space, which can't be drawn. <strong>Dimensionality reduction</strong> produces 2D coordinates such that cells with similar expression land close together on the page.</p>
+
+  <p>Every embedding on this page is computed in your browser from synthetic data: principal component analysis by eigendecomposition of the covariance matrix, and t-SNE by gradient descent on its objective, animated as it runs. The mechanics of PCA are covered step by step in the <a href="../algorithms-ml/04-pca.html">PCA essay</a> of the algorithms series; this page is about what happens when these methods meet expression data.</p>
+
+  <h2>From a matrix to a scatter</h2>
+
+  <p>Every point in a single-cell map is a row in a cell × gene matrix. The data here are 200 simulated immune cells of five types, measured on 24 genes: marker genes for each type, a few genes expressed everywhere, and some that carry only noise. The expression values include the zeros that dominate real single-cell data, where a gene's transcripts are often simply not captured.</p>
+
+  <div class="figure figure-wide">
+    <div class="legend-row" id="dr-legend1"></div>
+    <div id="dr-wrap1" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+      <div id="dr-matrix"></div>
+      <div id="dr-scatter1"></div>
+    </div>
+    <div class="stat" id="dr-iter1"></div>
+    <p class="figure-caption">
+      <span class="figure-label">Figure 1.</span> Left: the 200 × 24 expression matrix, rows grouped by cell type (strip at left). Right: a t-SNE embedding of the same rows, computed from the matrix alone; the colors are added afterwards from the known types. Hover either side to find the same cell in the other.
+    </p>
+  </div>
+
+  <p>t-SNE (<a href="https://www.jmlr.org/papers/v9/vandermaaten08a.html">van der Maaten and Hinton, 2008</a>) turns distances between cells into probabilities that one cell would pick another as a neighbour, then moves points on the page until the neighbour probabilities there match. Cells of the same type share markers, so they are each other's neighbours and end up in the same island. The t-SNE never saw the type labels.</p>
+
+  <h2>When linear methods miss the structure</h2>
+
+  <p><strong>Principal component analysis</strong> (PCA) projects onto the directions of largest variance. It is exact, fast and linear, and it is usually the first step of a single-cell pipeline. It can miss a signal, though, when the directions of largest variance come from something else: batch effects, technical noise, or biology unrelated to the question.</p>
+
+  <p>Figure 2 builds that case on purpose. It places 200 points on two interlocking half-moons in two dimensions, then adds ten more dimensions of pure noise. The points now live in 12 dimensions, and the moons occupy only two of them. Under each panel, a score counts how many of each point's 10 nearest neighbours on the page come from its own moon: 100% for the original two dimensions, about 50% for a layout that has lost the moons entirely.</p>
+
+  <div class="figure figure-wide">
+    <div class="controls">
+      <label>noise SD per dimension <input type="range" id="dr-noise" min="0.2" max="0.9" value="0.5" step="0.05"> <span id="dr-noise-val" class="stat">0.50</span></label>
+      <label>perplexity <input type="range" id="dr-perp" min="5" max="80" value="30" step="5"> <span id="dr-perp-val" class="stat">30</span></label>
+      <span class="stat">t-SNE input:</span>
+      <div class="btn-group" id="dr-input"><button class="btn active" data-in="all">all 12 dimensions</button><button class="btn" data-in="pca">top 2 PCs</button></div>
+      <button class="btn" id="dr-rerun">New random start</button>
+    </div>
+    <div id="dr-wrap2" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.75rem;">
+      <div><div class="panel-label">The two moon dimensions</div><div id="dr-true"></div><div class="stat" id="dr-true-note"></div></div>
+      <div><div class="panel-label">PCA of all 12 dimensions</div><div id="dr-pca"></div><div class="stat" id="dr-pca-note"></div></div>
+      <div><div class="panel-label" id="dr-tsne-title">t-SNE of all 12 dimensions</div><div id="dr-tsne2"></div><div class="stat" id="dr-tsne-note"></div></div>
+    </div>
+    <p class="figure-caption">
+      <span class="figure-label">Figure 2.</span> Left: the moons as generated (blue and orange, shaded by position along each moon). Middle: the first two principal components of the 12-dimensional data. Right: t-SNE, of either all 12 dimensions or the top two principal components. Hover a point to find it in all three panels. Releasing a slider regenerates the data or reruns t-SNE.
+    </p>
+  </div>
+
+  <p>A common story is that PCA fails on curved structure and t-SNE rescues it. On this data the computation says otherwise. At low noise, the moon dimensions have the most variance, PCA's top two components are close to them, and PCA keeps nearly every point's neighbours on its own moon. t-SNE on all 12 dimensions does worse at low and moderate noise, because it preserves neighbourhoods as measured in the full space, and there every distance is a sum over ten noise dimensions and two signal dimensions. t-SNE cannot recover structure that the distances no longer contain. Push the noise up to about 0.9, where each noise dimension has as much variance as the moons, and PCA loses the moons too: its top components are now noise directions and its score falls to about 50%, while t-SNE holds on to a little more, around 60%.</p>
+
+  <p>Switching the t-SNE input to the top two PCs shows why single-cell pipelines run t-SNE or UMAP on the top 30 to 50 principal components instead of on raw genes. PCA discards the low-variance directions first, and t-SNE then works on distances that the discarded noise no longer blurs. That only helps when the signal is among the high-variance directions. The perplexity (roughly, how many neighbours each point tries to keep) and the random start change the layout without changing this.</p>
+
+  <h2>Reading the embedding</h2>
+
+  <p>A t-SNE or UMAP map has no meaningful axes. Cluster identity comes from <strong>marker-gene overlays</strong>: the island that lights up for <em>CD3D</em> is a T-cell island. Distances between islands are much less trustworthy than who sits next to whom. Both methods try to preserve each point's local neighbourhood and make little effort to preserve large distances, so two islands far apart on the page may be similar cell types, and island sizes do not reflect how spread out a population is.</p>
+
+  <div class="figure figure-wide">
+    <div class="controls">
+      <span class="stat">Color by:</span>
+      <div class="btn-group" id="marker-buttons">
+        <button class="btn active" data-mode="type">cell type</button>
+      </div>
+      <div class="grad-scale" id="grad-scale" style="display:none;">
+        <span>low</span><div class="grad-bar"></div><span>high expression</span>
+      </div>
+    </div>
+    <div class="controls" style="margin-bottom: 0.6rem;">
+      <label>Neighbours: <input type="range" id="neighbor-k" min="3" max="20" value="10" step="1"> <span id="neighbor-k-val" class="stat"><b>10</b></span></label>
+      <span class="stat" id="neighbor-stats">Hover a cell to see its nearest neighbours in the full 24-gene space.</span>
+    </div>
+    <div id="dr-markers" style="max-width: 460px; margin: 0 auto;"></div>
+    <p class="figure-caption">
+      <span class="figure-label">Figure 3.</span> The embedding from Figure 1. Click a gene to recolor cells by its expression. Hovering a cell draws lines to its nearest neighbours measured in the original 24 dimensions: green when the neighbour is the same cell type, red when it is not.
+    </p>
+  </div>
+
+  <p>Selective markers like <em>CD3D</em> or <em>MS4A1</em> light one island each, while <em>PTPRC</em>, expressed by all immune cells, lights all of them. The neighbour lines check the map against the data it came from. In this data, 99% of each cell's 10 nearest neighbours in 24 dimensions are the same cell type, and the lines mostly stay inside one island. They do not stay short: the exact neighbours of a cell are often spread across its island, because t-SNE keeps who belongs to which neighbourhood better than it keeps the order of distances inside one.</p>
+
+  <footer style="margin-top: 4rem; padding-top: 2rem; border-top: 1px solid var(--border); font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2);">
+    <p>Previous: <a href="06-clustered-heatmaps.html" style="color: var(--accent);">Clustered Heatmaps</a> · Next: <a href="08-clinical-evidence.html" style="color: var(--accent);">Clinical Evidence</a> &rarr;</p>
+    <p style="margin-top: 1rem; opacity: 0.6;">Built with <a href="https://github.com/enjalot/moonshine" style="color: var(--text-2);">moonshine</a>. All data synthetic.</p>
+  </footer>
+</div>
+
+<div class="tip" id="tip"></div>
+<script>
+// ── Dimensionality reduction: real PCA and exact t-SNE, computed in the page ──
+(function () {
+  'use strict';
+  var DR = {};
+  var reduced = window.Motion && Motion.reduced();
+  var tip = d3.select('#tip');
+  function tipShow(e, html) { tip.style('opacity', 1).html(html); tipMove(e); }
+  function tipMove(e) { tip.style('left', (e.clientX + 12) + 'px').style('top', (e.clientY + 12) + 'px'); }
+  function tipHide() { tip.style('opacity', 0); }
+  function mulberry32(s) { return function () { s |= 0; s = s + 0x6D2B79F5 | 0; var t = Math.imul(s ^ s >>> 15, 1 | s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+  function gaussian(rng) { var u = 0; while (!u) u = rng(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * rng()); }
+
+  // ─── PCA: covariance + power iteration with deflation ───
+  function pca(X, k) {
+    var n = X.length, d = X[0].length;
+    var mean = d3.range(d).map(function (j) { return d3.mean(X, function (r) { return r[j]; }); });
+    var Xc = X.map(function (r) { return r.map(function (v, j) { return v - mean[j]; }); });
+    var C = d3.range(d).map(function (a) { return d3.range(d).map(function (b) { var s = 0; for (var i = 0; i < n; i++) s += Xc[i][a] * Xc[i][b]; return s / (n - 1); }); });
+    var total = d3.sum(d3.range(d), function (j) { return C[j][j]; });
+    var vecs = [], vals = [], rng = mulberry32(5);
+    for (var c = 0; c < k; c++) {
+      var v = d3.range(d).map(function () { return rng() - 0.5; });
+      for (var it = 0; it < 300; it++) {
+        var w = C.map(function (row) { return d3.sum(row, function (x, j) { return x * v[j]; }); });
+        vecs.forEach(function (u) { var p = d3.sum(w, function (x, j) { return x * u[j]; }); w = w.map(function (x, j) { return x - p * u[j]; }); });
+        var nrm = Math.sqrt(d3.sum(w, function (x) { return x * x; })) || 1;
+        v = w.map(function (x) { return x / nrm; });
+      }
+      var Cv = C.map(function (row) { return d3.sum(row, function (x, j) { return x * v[j]; }); });
+      vals.push(d3.sum(Cv, function (x, j) { return x * v[j]; }));
+      vecs.push(v);
+    }
+    return {
+      Y: Xc.map(function (r) { return vecs.map(function (u) { return d3.sum(r, function (x, j) { return x * u[j]; }); }); }),
+      explained: vals.map(function (l) { return l / total; }),
+    };
+  }
+
+  // ─── Exact t-SNE (van der Maaten & Hinton, 2008) ───
+  function sqdist(X) {
+    var n = X.length, D = d3.range(n).map(function () { return new Float64Array(n); });
+    for (var i = 0; i < n; i++) for (var j = i + 1; j < n; j++) { var s = 0; for (var k = 0; k < X[i].length; k++) s += (X[i][k] - X[j][k]) * (X[i][k] - X[j][k]); D[i][j] = D[j][i] = s; }
+    return D;
+  }
+  function affinities(D, perplexity) {
+    var n = D.length, P = d3.range(n).map(function () { return new Float64Array(n); }), H = Math.log(perplexity);
+    for (var i = 0; i < n; i++) {
+      var lo = 0, hi = Infinity, beta = 1, row = P[i];
+      for (var it = 0; it < 60; it++) {
+        var sum = 0, sumDP = 0;
+        for (var j = 0; j < n; j++) { if (j === i) { row[j] = 0; continue; } row[j] = Math.exp(-D[i][j] * beta); sum += row[j]; sumDP += D[i][j] * row[j]; }
+        sum = sum || 1e-12;
+        var ent = Math.log(sum) + beta * sumDP / sum;
+        if (Math.abs(ent - H) < 1e-5) break;
+        if (ent > H) { lo = beta; beta = hi === Infinity ? beta * 2 : (beta + hi) / 2; } else { hi = beta; beta = (beta + lo) / 2; }
+      }
+      for (var j2 = 0; j2 < n; j2++) row[j2] /= sum;
+    }
+    var S = d3.range(n).map(function () { return new Float64Array(n); });
+    for (var a = 0; a < n; a++) for (var b = 0; b < n; b++) S[a][b] = Math.max((P[a][b] + P[b][a]) / (2 * n), 1e-12);
+    return S;
+  }
+  function TSNE(X, opts) {
+    var n = X.length, P = affinities(sqdist(X), opts.perplexity), rng = mulberry32(opts.seed || 1);
+    var Y = d3.range(n).map(function () { return [gaussian(rng) * 1e-2, gaussian(rng) * 1e-2]; });
+    var V = d3.range(n).map(function () { return [0, 0]; }), G = d3.range(n).map(function () { return [1, 1]; }), iter = 0;
+    var num = d3.range(n).map(function () { return new Float64Array(n); });
+    function step() {
+      var exag = iter < 100 ? 12 : 1, mom = iter < 250 ? 0.5 : 0.8, lr = 20, Z = 0;
+      for (var i = 0; i < n; i++) for (var j = i + 1; j < n; j++) {
+        var dx = Y[i][0] - Y[j][0], dy = Y[i][1] - Y[j][1], q = 1 / (1 + dx * dx + dy * dy);
+        num[i][j] = num[j][i] = q; Z += 2 * q;
+      }
+      for (var a = 0; a < n; a++) {
+        var gx = 0, gy = 0;
+        for (var b = 0; b < n; b++) {
+          if (a === b) continue;
+          var m = (exag * P[a][b] - num[a][b] / Z) * num[a][b];
+          gx += 4 * m * (Y[a][0] - Y[b][0]); gy += 4 * m * (Y[a][1] - Y[b][1]);
+        }
+        [gx, gy].forEach(function (g, d) {
+          G[a][d] = (Math.sign(g) === Math.sign(V[a][d])) ? G[a][d] * 0.8 : G[a][d] + 0.2;
+          G[a][d] = Math.max(G[a][d], 0.01);
+          V[a][d] = mom * V[a][d] - lr * G[a][d] * g;
+          Y[a][d] += V[a][d];
+        });
+      }
+      var cx = d3.mean(Y, function (p) { return p[0]; }), cy = d3.mean(Y, function (p) { return p[1]; });
+      Y.forEach(function (p) { p[0] -= cx; p[1] -= cy; });
+      iter++;
+    }
+    return { Y: Y, step: step, get iter() { return iter; } };
+  }
+  // Run t-SNE to `total` iterations, calling draw() every few steps (or once at the end with reduced motion).
+  function runTSNE(ts, total, draw, token) {
+    (function chunk() {
+      if (token.cancelled) return;
+      var per = reduced ? total : 15;
+      for (var i = 0; i < per && ts.iter < total; i++) ts.step();
+      draw();
+      if (ts.iter < total) requestAnimationFrame(chunk);
+    })();
+  }
+
+  // ─── Synthetic single-cell data: 5 immune cell types x 24 genes ───
+  var TYPES = ['T cell', 'NK cell', 'B cell', 'Monocyte', 'Dendritic'];
+  var TCOL = ['#2563eb', '#7c3aed', '#059669', '#d97706', '#dc2626'];
+  var GENES = ['CD3D', 'CD3E', 'IL7R', 'CCL5', 'GZMA', 'NKG7', 'GNLY', 'KLRD1', 'MS4A1', 'CD79A', 'CD19', 'CD14', 'LYZ', 'S100A8', 'FCER1A', 'CST3', 'CLEC10A', 'PTPRC', 'ACTB', 'MALAT1', 'G21', 'G22', 'G23', 'G24'];
+  var MARK = {
+    'T cell': { CD3D: 3, CD3E: 3, IL7R: 2.5, CCL5: 1.5, GZMA: 1 },
+    'NK cell': { NKG7: 3, GNLY: 3, KLRD1: 2.5, CCL5: 2.5, GZMA: 2.5 },
+    'B cell': { MS4A1: 3, CD79A: 3, CD19: 2.5 },
+    'Monocyte': { CD14: 3, LYZ: 3.2, S100A8: 3, CST3: 1.5 },
+    'Dendritic': { FCER1A: 3, CST3: 3, CLEC10A: 2.5, LYZ: 1.5 },
+  };
+  var cells = (function () {
+    var rng = mulberry32(2718), out = [];
+    TYPES.forEach(function (t, ti) {
+      for (var c = 0; c < 40; c++) {
+        var size = Math.exp(0.25 * gaussian(rng));
+        var x = GENES.map(function (g) {
+          var mu = (MARK[t][g] || 0.25) + (g === 'PTPRC' ? 2.2 : 0) + (g === 'ACTB' ? 3.2 : 0) + (g === 'MALAT1' ? 3.0 : 0);
+          var detect = rng() < Math.min(0.97, 0.15 + mu / 3);
+          return detect ? Math.max(0, mu * size + 0.45 * gaussian(rng)) : 0;
+        });
+        out.push({ id: out.length, type: ti, x: x });
+      }
+    });
+    return d3.shuffler(mulberry32(3))(out);
+  })();
+  var X = cells.map(function (c) { return c.x; });
+
+  // ─── Shared scatter drawer ───
+  function scatter(el, pts, opts) {
+    var W = el.node().getBoundingClientRect().width || 300, H = opts.H || W;
+    var sel = el.select('svg');
+    if (sel.empty()) {
+      sel = el.append('svg');
+      sel.append('g').attr('class', 'pts');
+    }
+    sel.attr('width', W).attr('height', H);
+    var pad = 10;
+    var xs = d3.scaleLinear().domain(d3.extent(pts, function (p) { return p[0]; })).range([pad, W - pad]);
+    var ys = d3.scaleLinear().domain(d3.extent(pts, function (p) { return p[1]; })).range([H - pad, pad]);
+    // equal aspect: distances on the page are comparable along both axes
+    var sx = (W - 2 * pad) / ((xs.domain()[1] - xs.domain()[0]) || 1), sy = (H - 2 * pad) / ((ys.domain()[1] - ys.domain()[0]) || 1), s = Math.min(sx, sy);
+    var cxm = d3.mean(xs.domain()), cym = d3.mean(ys.domain());
+    var X = function (v) { return W / 2 + (v - cxm) * s; }, Y = function (v) { return H / 2 - (v - cym) * s; };
+    var circles = sel.select('g.pts').selectAll('circle').data(pts);
+    circles.join('circle').attr('class', 'dr-pt')
+      .attr('cx', function (p) { return X(p[0]); }).attr('cy', function (p) { return Y(p[1]); })
+      .attr('r', function (p, i) { return opts.hl === i ? 5.5 : 3.2; })
+      .attr('fill', function (p, i) { return opts.color(i); })
+      .attr('stroke', function (p, i) { return opts.hl === i ? '#1a1a2e' : '#fff'; }).attr('stroke-width', 0.8)
+      .on('mouseenter', function (e, p) { var i = pts.indexOf(p); opts.onHover(i, e); })
+      .on('mousemove', tipMove)
+      .on('mouseleave', function () { opts.onHover(null); });
+    return { X: X, Y: Y };
+  }
+
+  // ═══ Figure 1: matrix + t-SNE, linked ═══
+  (function () {
+    var matEl = d3.select('#dr-matrix'), scEl = d3.select('#dr-scatter1');
+    var order = cells.map(function (c, i) { return i; }).sort(function (a, b) { return cells[a].type - cells[b].type; });
+    var hl = null, ts = TSNE(X, { perplexity: 30, seed: 1 }), token = {};
+    var col = d3.scaleSequential(d3.interpolatePurples).domain([0, 4]);
+    function drawMatrix() {
+      matEl.selectAll('*').remove();
+      var W = matEl.node().getBoundingClientRect().width || 300, H = W;
+      var cw = (W - 40) / GENES.length, ch = (H - 30) / order.length;
+      var svg = matEl.append('svg').attr('width', W).attr('height', H);
+      order.forEach(function (ci, r) {
+        svg.append('rect').attr('x', 0).attr('y', 30 + r * ch).attr('width', 8).attr('height', ch + 0.3).attr('fill', TCOL[cells[ci].type]);
+        cells[ci].x.forEach(function (v, g) {
+          svg.append('rect').attr('class', 'mx-cell').datum(ci).attr('x', 40 + g * cw).attr('y', 30 + r * ch).attr('width', cw + 0.3).attr('height', ch + 0.3)
+            .attr('fill', col(v))
+            .on('mouseenter', function (e) { hover(ci, e); }).on('mousemove', tipMove).on('mouseleave', function () { hover(null); });
+        });
+      });
+      GENES.forEach(function (g, j) {
+        svg.append('text').attr('transform', 'translate(' + (40 + j * cw + cw / 2) + ',27) rotate(-60)').attr('font-size', 7).attr('fill', '#4a4a6a').text(g);
+      });
+    }
+    function drawScatter() {
+      scatter(scEl, ts.Y, { hl: hl, color: function (i) { return TCOL[cells[i].type]; }, onHover: hover });
+      document.getElementById('dr-iter1').textContent = 't-SNE iteration ' + ts.iter;
+    }
+    function hover(i, e) {
+      hl = i;
+      matEl.selectAll('rect.mx-cell').attr('opacity', function (ci) { return hl == null || hl === ci ? 1 : 0.3; });
+      drawScatter();
+      if (i == null) { tipHide(); return; }
+      var c = cells[i], top = GENES.map(function (g, j) { return [g, c.x[j]]; }).sort(function (a, b) { return b[1] - a[1]; }).slice(0, 4);
+      tipShow(e, '<b>cell ' + c.id + '</b> · ' + TYPES[c.type] + '<br>' + top.map(function (t) { return t[0] + ' ' + t[1].toFixed(1); }).join(', '));
+    }
+    drawMatrix();
+    runTSNE(ts, 600, drawScatter, token);
+    var legend = d3.select('#dr-legend1');
+    TYPES.forEach(function (t, i) { legend.append('div').attr('class', 'legend-item').html('<span class="legend-swatch" style="background:' + TCOL[i] + '"></span>' + t); });
+    var rt; new ResizeObserver(function () { clearTimeout(rt); rt = setTimeout(function () { drawMatrix(); drawScatter(); }, 100); }).observe(document.getElementById('dr-wrap1'));
+    DR.ts1 = ts;
+  })();
+
+  // ═══ Figure 2: two moons under noise dimensions: PCA vs t-SNE ═══
+  (function () {
+    var state = { noise: 0.5, perplexity: 30, seed: 1, input: 'all' };
+    var moons, MX, pc, ts, hl = null, token = {};
+    function sameMoon(Y) {   // share of each point's 10 nearest neighbours (in Y) from its own moon
+      var D = sqdist(Y), hit = 0;
+      for (var i = 0; i < Y.length; i++) {
+        var nb = Array.from(D[i]).map(function (d, j) { return [d, j]; }).filter(function (p) { return p[1] !== i; }).sort(function (a, b) { return a[0] - b[0]; }).slice(0, 10);
+        hit += nb.filter(function (p) { return moons[p[1]].moon === moons[i].moon; }).length;
+      }
+      return Math.round(100 * hit / (Y.length * 10));
+    }
+    function makeData() {
+      var rng = mulberry32(99); moons = [];
+      for (var i = 0; i < 200; i++) {
+        var up = i < 100, t = Math.PI * rng();
+        var mx = up ? Math.cos(t) : 1 - Math.cos(t), my = up ? Math.sin(t) : 0.5 - Math.sin(t);
+        var row = [mx + 0.06 * gaussian(rng), my + 0.06 * gaussian(rng)];
+        for (var k = 0; k < 10; k++) row.push(state.noise * gaussian(rng));
+        moons.push({ moon: up ? 0 : 1, t: t, x: row });
+      }
+      MX = moons.map(function (m) { return m.x; });
+      pc = pca(MX, 2);
+      document.getElementById('dr-pca-note').textContent = 'same-moon neighbours ' + sameMoon(pc.Y) + '%; PC1, PC2 explain ' + Math.round(100 * pc.explained[0]) + '%, ' + Math.round(100 * pc.explained[1]) + '% of variance';
+      document.getElementById('dr-true-note').textContent = 'same-moon neighbours ' + sameMoon(moons.map(function (m) { return [m.x[0], m.x[1]]; })) + '%';
+    }
+    function color(i) { return moons[i].moon === 0 ? d3.interpolateBlues(0.35 + 0.6 * moons[i].t / Math.PI) : d3.interpolateOranges(0.35 + 0.6 * moons[i].t / Math.PI); }
+    function hover(i, e) {
+      hl = i; draw();
+      if (i == null) { tipHide(); return; }
+      tipShow(e, 'moon ' + (moons[i].moon + 1) + ', position along it ' + (moons[i].t / Math.PI).toFixed(2));
+    }
+    function draw() {
+      scatter(d3.select('#dr-true'), moons.map(function (m) { return [m.x[0], m.x[1]]; }), { hl: hl, color: color, onHover: hover });
+      scatter(d3.select('#dr-pca'), pc.Y, { hl: hl, color: color, onHover: hover });
+      scatter(d3.select('#dr-tsne2'), ts.Y, { hl: hl, color: color, onHover: hover });
+      var done = ts.iter >= 600;
+      document.getElementById('dr-tsne-note').textContent = done ? 'same-moon neighbours ' + sameMoon(ts.Y) + '%' : 'iteration ' + ts.iter;
+    }
+    function restart() {
+      token.cancelled = true; token = {};
+      ts = TSNE(state.input === 'all' ? MX : pc.Y, { perplexity: state.perplexity, seed: state.seed });
+      runTSNE(ts, 600, draw, token);
+    }
+    function onChange(id, key, fmt, regen) {
+      var el = document.getElementById(id);
+      el.addEventListener('input', function () { document.getElementById(id + '-val').textContent = fmt(+el.value); });
+      el.addEventListener('change', function () { state[key] = +el.value; if (regen) makeData(); restart(); });
+    }
+    onChange('dr-noise', 'noise', function (v) { return v.toFixed(2); }, true);
+    onChange('dr-perp', 'perplexity', function (v) { return v; });
+    d3.selectAll('#dr-input .btn').on('click', function () {
+      state.input = this.getAttribute('data-in');
+      d3.selectAll('#dr-input .btn').classed('active', function () { return this.getAttribute('data-in') === state.input; });
+      document.getElementById('dr-tsne-title').textContent = state.input === 'all' ? 't-SNE of all 12 dimensions' : 't-SNE of the top 2 PCs';
+      restart();
+    });
+    document.getElementById('dr-rerun').addEventListener('click', function () { state.seed++; restart(); });
+    makeData(); restart();
+    var rt; new ResizeObserver(function () { clearTimeout(rt); rt = setTimeout(draw, 100); }).observe(document.getElementById('dr-wrap2'));
+  })();
+
+  // ═══ Figure 3: marker overlays and true neighbours on the Figure 1 embedding ═══
+  (function () {
+    var el = d3.select('#dr-markers'), mode = 'type', k = 10, hl = null;
+    var D = sqdist(X);
+    var knn = D.map(function (row, i) { return Array.from(row).map(function (d, j) { return [d, j]; }).filter(function (p) { return p[1] !== i; }).sort(function (a, b) { return a[0] - b[0]; }).map(function (p) { return p[1]; }); });
+    var buttons = d3.select('#marker-buttons');
+    ['CD3D', 'NKG7', 'MS4A1', 'CD14', 'FCER1A', 'PTPRC'].forEach(function (g) { buttons.append('button').attr('class', 'btn').attr('data-mode', g).text(g); });
+    buttons.selectAll('.btn').on('click', function () {
+      mode = this.getAttribute('data-mode');
+      buttons.selectAll('.btn').classed('active', function () { return this.getAttribute('data-mode') === mode; });
+      d3.select('#grad-scale').style('display', mode === 'type' ? 'none' : 'flex');
+      draw();
+    });
+    var gcol = d3.scaleSequential(function (t) { return d3.interpolateRgb('#f1f5f9', '#8b5cf6')(t); }).domain([0, 4]);
+    function color(i) { if (mode === 'type') return TCOL[cells[i].type]; return gcol(cells[i].x[GENES.indexOf(mode)]); }
+    function draw() {
+      var ts = DR.ts1;
+      var s = scatter(el, ts.Y, { hl: hl, color: color, onHover: function (i, e) {
+        hl = i; draw();
+        if (i == null) { tipHide(); document.getElementById('neighbor-stats').textContent = 'Hover a cell to see its nearest neighbours in the full 24-gene space.'; return; }
+        var nb = knn[i].slice(0, k), same = nb.filter(function (j) { return cells[j].type === cells[i].type; }).length;
+        document.getElementById('neighbor-stats').innerHTML = '<b>' + same + '</b> of its ' + k + ' nearest neighbours in the 24-gene space are also ' + TYPES[cells[i].type] + 's';
+        tipShow(e, 'cell ' + cells[i].id + ' · ' + TYPES[cells[i].type]);
+      } });
+      var svg = el.select('svg'), g = svg.select('g.edges');
+      if (g.empty()) g = svg.insert('g', 'g.pts').attr('class', 'edges');
+      g.selectAll('*').remove();
+      if (hl != null) knn[hl].slice(0, k).forEach(function (j) {
+        g.append('line').attr('x1', s.X(ts.Y[hl][0])).attr('y1', s.Y(ts.Y[hl][1])).attr('x2', s.X(ts.Y[j][0])).attr('y2', s.Y(ts.Y[j][1]))
+          .attr('stroke', cells[j].type === cells[hl].type ? '#10b981' : '#ef4444').attr('stroke-width', 1.2).attr('opacity', 0.8);
+      });
+    }
+    document.getElementById('neighbor-k').addEventListener('input', function () { k = +this.value; document.getElementById('neighbor-k-val').innerHTML = '<b>' + k + '</b>'; draw(); });
+    (function wait() { if (DR.ts1.iter < 600) { draw(); setTimeout(wait, 300); } else draw(); })();
+    var rt; new ResizeObserver(function () { clearTimeout(rt); rt = setTimeout(draw, 100); }).observe(el.node());
+  })();
+})();
+</script>
+</body>
+</html>

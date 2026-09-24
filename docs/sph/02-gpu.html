@@ -99,11 +99,8 @@ svg text { font-family: var(--heading-font); }
 .pipeline-arrow { display: flex; align-items: center; font-size: 1.2rem; color: var(--text-2); padding: 0 0.25rem; }
 
 /* Sequential vs Parallel viz */
-.seq-par-container { display: flex; gap: 2rem; justify-content: center; align-items: flex-start; flex-wrap: wrap; }
-.seq-par-side { flex: 1; min-width: 240px; max-width: 320px; text-align: center; }
-.seq-par-side .side-label { font-family: var(--heading-font); font-weight: 700; font-size: 0.9rem; margin-bottom: 0.5rem; }
 
-@media (max-width: 640px) { h1 { font-size: 1.75rem; } .figure-wide { margin-left: 0; margin-right: 0; } .seq-par-container { flex-direction: column; align-items: center; } }
+@media (max-width: 640px) { h1 { font-size: 1.75rem; } .figure-wide { margin-left: 0; margin-right: 0; } }
 @media (prefers-reduced-motion: reduce) {html:not([data-motion="full"]) *, html:not([data-motion="full"]) *::before, html:not([data-motion="full"]) *::after { animation-duration: 0s !important; transition-duration: 0s !important; } }
 </style>
 </head>
@@ -115,7 +112,7 @@ svg text { font-family: var(--heading-font); }
       Spatial hashing, parallel passes, and scaling from dozens to thousands of particles.
     </p>
     <p style="font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.5rem;">
-      Part 2 of <a href="index.html">Smooth Particle Hydrodynamics</a>
+      Part 2 of <a href="index.html">Smoothed Particle Hydrodynamics</a>
     </p>
   </header>
 
@@ -206,8 +203,9 @@ svg text { font-family: var(--heading-font); }
       9-cell search region in light blue. Particles within
       <span class="t-kernel">H</span> are true neighbors (green circles).
       Drag particles to see cells update.
-      <strong>Brute force: <span id="hash-brute-count">0</span> checks.
-      Spatial hash: <span id="hash-smart-count">0</span> checks.</strong>
+      For the selected particle, brute force makes <span id="hash-brute-count">0</span> checks
+      and the spatial hash <span id="hash-smart-count">0</span>. Summed over every particle:
+      <span id="hash-brute-total">0</span> against <span id="hash-smart-total">0</span>.
     </div>
   </div>
 
@@ -217,49 +215,18 @@ svg text { font-family: var(--heading-font); }
     the whole population.
   </p>
 
-  <h2>From Sequential to Parallel</h2>
-  <p>
-    On the CPU, we loop through particles one at a time. On the GPU, every particle runs
-    the same computation simultaneously: the inner loop (checking neighbors) stays; the
-    outer loop disappears.
-  </p>
-
-  <div class="figure figure-wide" id="fig-seq-par">
-    <div class="controls">
-      <button id="seq-par-play">Play</button>
-      <button id="seq-par-reset">Reset</button>
-      <label>Particles: <input type="range" id="seq-par-n" min="4" max="20" value="8" step="1"> <span id="seq-par-n-val">8</span></label>
-      <span id="seq-par-timestep" style="font-family:var(--mono-font);"></span>
-    </div>
-    <div class="seq-par-container">
-      <div class="seq-par-side">
-        <div class="side-label">CPU: Sequential</div>
-        <canvas id="seq-canvas" style="width:100%;border-radius:4px;background:#f0f4f8;"></canvas>
-        <div id="seq-status" style="font-family:var(--mono-font);font-size:0.75rem;color:var(--text-2);margin-top:0.25rem;text-align:center;">Waiting</div>
-      </div>
-      <div class="seq-par-side">
-        <div class="side-label">GPU: Parallel</div>
-        <canvas id="par-canvas" style="width:100%;border-radius:4px;background:#f0f4f8;"></canvas>
-        <div id="par-status" style="font-family:var(--mono-font);font-size:0.75rem;color:var(--text-2);margin-top:0.25rem;text-align:center;">Waiting</div>
-      </div>
-    </div>
-    <div class="figure-caption">
-      <span class="figure-label">Figure 3.</span>
-      Both sides simulate <span id="caption-n">8</span> particles over 20 timesteps. The CPU
-      updates one particle at a time (200ms each, <span id="caption-cpu-time">1.6</span>s per timestep).
-      The GPU updates all <span id="caption-n2">8</span> simultaneously (200ms per timestep).
-      Try <a href="#" id="caption-more-link" style="cursor:pointer;">increasing to 20 particles</a>
-      to see the CPU fall hopelessly behind.
-    </div>
-  </div>
-
   <h2>GPU Parallelism</h2>
   <p>
-    With efficient neighbor search, each particle's computation within a pass is independent:
-    particle 42's density doesn't depend on what particle 17 computes in the same step.
-    SPH is a natural fit for GPU parallelism: one thread per particle, all running the
-    same code simultaneously. The simulation loop from Part 1 becomes a sequence of GPU
-    dispatches, each pass reading from buffers written by the previous and writing its own.
+    On the CPU, we loop through particles one at a time. On the GPU, every particle runs
+    the same computation at once: the inner loop over neighbors stays, and the outer loop
+    over particles becomes one thread per particle.
+  </p>
+  <p>
+    That only works if the threads in a pass never depend on each other. Particle 42's
+    density depends on particle 17's position, but not on particle 17's density, so all
+    densities can be computed together as long as nobody moves while they are being read.
+    The simulation loop from Part 1 becomes a sequence of GPU dispatches. Each pass reads
+    buffers that the previous pass finished writing and writes a buffer of its own.
   </p>
 
   <div class="figure figure-wide" id="fig-pipeline">
@@ -273,7 +240,7 @@ svg text { font-family: var(--heading-font); }
       <div id="pipeline-example" style="flex:1 1 260px;font-family:var(--mono-font);font-size:0.82rem;line-height:1.8;padding:1rem 1.25rem;background:#f6f8fa;border-radius:6px;border:1px solid #e8e6f0;"></div>
     </div>
     <div class="figure-caption">
-      <span class="figure-label">Figure 4.</span>
+      <span class="figure-label">Figure 3.</span>
       Each column is one particle. All columns compute simultaneously within a pass.
       Passes run sequentially top to bottom: density feeds pressure, forces feed integration.
       Outputs from each pass become inputs to the next. Step through to see the example
@@ -283,8 +250,18 @@ svg text { font-family: var(--heading-font); }
 
   <h2>Scaling Up</h2>
   <p>
-    This simulation runs on your GPU using WebGPU compute shaders. The same four passes
-    from the pipeline diagram above, each dispatching one thread per particle.
+    This simulation runs on your GPU using WebGPU compute shaders, when your browser
+    supports them. Each substep is five dispatches. Two rebuild the spatial hash: one clears
+    the cell counts, and one inserts every particle into its cell with an atomic counter.
+    The other three are the passes of Figure 3, with density and pressure fused into one
+    kernel since pressure needs nothing but the particle's own density.
+  </p>
+  <p>
+    Forces and integration must stay in separate dispatches. A thread computing particle
+    <em>i</em>'s force reads the positions and velocities of its neighbors. If the same
+    kernel also wrote <em>i</em>'s new position, a neighbor's thread could read it half a
+    step early or late, depending on scheduling. Splitting the kernel puts a barrier between
+    the last read and the first write.
   </p>
 
   <div class="figure figure-wide" id="fig-sim">
@@ -307,23 +284,16 @@ svg text { font-family: var(--heading-font); }
       <span>FPS: <strong id="sim-fps">0</strong></span>
     </div>
     <div class="figure-caption">
-      <span class="figure-label">Figure 5.</span>
-      SPH with spatial hashing. Same physics as Part 1's final figure, running
-      the four compute passes on GPU (or CPU fallback).
+      <span class="figure-label">Figure 4.</span>
+      SPH with spatial hashing. Same physics as Figure 6 of Part 1, with up to 4,000 particles
+      on the GPU. Without WebGPU it falls back to the same passes on the CPU, capped at 1,200.
       Click and drag to push particles.
       Particles are colored by speed: dark blue is settled, lighter blue is moving fast.
     </div>
   </div>
 
-  <p>
-    The GPU runs thousands of particles in parallel, each thread executing the same
-    density/force/integration code. The spatial hash keeps neighbor search cheap; the
-    parallelism handles the rest. Part 3 explores what to do with that headroom: springs,
-    friction, temperature, and collisions with solid objects.
-  </p>
-
   <footer style="margin-top:4rem;padding-top:2rem;border-top:1px solid var(--border);font-family:var(--heading-font);font-size:0.85rem;color:var(--text-2);">
-    <p>Part of <a href="index.html" style="color:var(--text-2);">Smooth Particle Hydrodynamics</a>. Previous: <a href="01-particles-and-forces.html" style="color:var(--accent);">Particles, Neighborhoods, and Forces</a>. Next: <a href="03-beyond-water.html" style="color:var(--accent);">Beyond Water</a>.</p>
+    <p>Part of <a href="index.html" style="color:var(--text-2);">Smoothed Particle Hydrodynamics</a>. Previous: <a href="01-particles-and-forces.html" style="color:var(--accent);">Particles, Neighborhoods, and Forces</a>.</p>
     <p>Built with <a href="https://github.com/enjalot/moonshine" style="color:var(--text-2);">moonshine</a>.</p>
   </footer>
 </div>
@@ -638,7 +608,17 @@ function visibleLoop(elementId, loopFn) {
       }
     }
 
-    const bruteChecks = particles.length * (particles.length - 1);
+    // Compare like with like: checks for the selected particle alone
+    const bruteChecks = particles.length - 1;
+    // and checks summed over every particle
+    const bruteTotal = particles.length * (particles.length - 1);
+    let hashTotal = 0;
+    particles.forEach(p => {
+      for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
+        const cell = grid.get(`${p.cx + dx},${p.cy + dy}`);
+        if (cell) hashTotal += cell.length - (dx === 0 && dy === 0 ? 1 : 0);
+      }
+    });
 
     // Lines to true neighbors
     const neighborData = particles.filter(p => trueNeighbors.has(p.id));
@@ -661,6 +641,8 @@ function visibleLoop(elementId, loopFn) {
     // Update counts
     d3.select("#hash-brute-count").text(bruteChecks);
     d3.select("#hash-smart-count").text(hashChecks);
+    d3.select("#hash-brute-total").text(bruteTotal);
+    d3.select("#hash-smart-total").text(hashTotal);
 
     // Equation values
     const tex = `\\text{cell}(${fmt(sel.x, 0)},${fmt(sel.y, 0)}) = (${scx},${scy}),\\;` +
@@ -731,282 +713,7 @@ function visibleLoop(elementId, loopFn) {
 
 
 // ============================================================
-// Figure 3: Sequential vs Parallel - timed particle simulation
-// ============================================================
-(function() {
-  let N = 8;             // particles (adjustable)
-  const TOTAL_STEPS = 20;
-  const TICK_MS = 200;   // ms per particle update (CPU) / per full step (GPU)
-  const W = 300, H_C = 240; // canvas size
-  const PR = 6;          // particle radius
-  const dpr = window.devicePixelRatio || 1;
-
-  // Setup canvases
-  function setupCanvas(id) {
-    const c = document.getElementById(id);
-    c.width = W * dpr; c.height = H_C * dpr;
-    c.style.width = W + 'px'; c.style.height = H_C + 'px';
-    const ctx = c.getContext('2d');
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    return ctx;
-  }
-  const ctxCpu = setupCanvas('seq-canvas');
-  const ctxGpu = setupCanvas('par-canvas');
-
-  // Physics: simple gravity + floor bounce, identical for both
-  const gravity = 0.4;
-  const rng = d3.randomLcg(42);
-
-  function initParticles() {
-    const ps = [];
-    const cols = Math.ceil(Math.sqrt(N * W / (H_C * 0.5)));
-    for (let i = 0; i < N; i++) {
-      const c = i % cols, r = Math.floor(i / cols);
-      const spacing = Math.min(50, (W - 40) / cols);
-      ps.push({
-        x: 20 + c * spacing + (rng() - 0.5) * 10,
-        y: 20 + r * spacing * 0.7 + (rng() - 0.5) * 8,
-        vx: (rng() - 0.5) * 3,
-        vy: rng() * 2,
-        trail: []
-      });
-    }
-    return ps;
-  }
-
-  function stepParticle(p) {
-    p.trail.push({ x: p.x, y: p.y });
-    if (p.trail.length > TOTAL_STEPS) p.trail.shift();
-    p.vy += gravity;
-    p.x += p.vx;
-    p.y += p.vy;
-    // Bounce off walls and floor
-    if (p.x < PR) { p.x = PR; p.vx *= -0.7; }
-    if (p.x > W - PR) { p.x = W - PR; p.vx *= -0.7; }
-    const floorY = H_C - 22; // above progress boxes
-    if (p.y > floorY - PR) { p.y = floorY - PR; p.vy *= -0.65; p.vx *= 0.95; }
-    if (p.y < PR) { p.y = PR; p.vy *= -0.5; }
-  }
-
-  let cpuParticles = initParticles();
-  let gpuParticles = initParticles();
-  // Make GPU start with same positions
-  gpuParticles = cpuParticles.map(p => ({ ...p, trail: [...p.trail] }));
-
-  let playing = false;
-  let cpuStep = 0;        // which timestep the CPU is on
-  let cpuSubIdx = 0;      // which particle within the current timestep (0..N-1)
-  let gpuStep = 0;        // which timestep the GPU is on
-  let cpuActiveParticle = -1; // currently being computed (-1 = none)
-
-  let cpuTimer = null, gpuTimer = null;
-
-  // activeSet: Set of active particle indices (or null for none)
-  // completedSteps: how many timesteps are done
-  function drawSide(ctx, particles, activeSet, completedSteps) {
-    ctx.clearRect(0, 0, W, H_C);
-    ctx.fillStyle = '#f0f4f8';
-    ctx.fillRect(0, 0, W, H_C);
-
-    // Progress boxes at bottom: 20 small boxes showing completed steps
-    const boxH = 8, boxGap = 2;
-    const totalBoxW = TOTAL_STEPS * (boxH + boxGap) - boxGap;
-    const boxStartX = (W - totalBoxW) / 2;
-    const boxY = H_C - boxH - 4;
-    for (let s = 0; s < TOTAL_STEPS; s++) {
-      ctx.fillStyle = s < completedSteps ? '#3b82f6' : '#d1d5db';
-      ctx.fillRect(boxStartX + s * (boxH + boxGap), boxY, boxH, boxH);
-    }
-
-    // Floor line (above progress boxes)
-    const floorY = boxY - 8;
-    ctx.strokeStyle = '#94a3b8';
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(0, floorY); ctx.lineTo(W, floorY); ctx.stroke();
-
-    // Draw trails
-    particles.forEach((p, i) => {
-      if (p.trail.length < 2) return;
-      ctx.beginPath();
-      ctx.moveTo(p.trail[0].x, p.trail[0].y);
-      for (let t = 1; t < p.trail.length; t++) {
-        ctx.lineTo(p.trail[t].x, p.trail[t].y);
-      }
-      ctx.lineTo(p.x, p.y);
-      ctx.strokeStyle = 'rgba(59,130,246,0.15)';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-
-      p.trail.forEach((pt, t) => {
-        const alpha = 0.05 + (t / p.trail.length) * 0.15;
-        ctx.beginPath();
-        ctx.arc(pt.x, pt.y, PR * 0.6, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(59,130,246,${alpha})`;
-        ctx.fill();
-      });
-    });
-
-    // Draw particles
-    const hasActive = activeSet && activeSet.size > 0;
-    particles.forEach((p, i) => {
-      const isActive = hasActive && activeSet.has(i);
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, PR, 0, Math.PI * 2);
-      ctx.fillStyle = isActive ? '#dc2626' : '#3b82f6';
-      ctx.globalAlpha = isActive ? 1 : 0.8;
-      ctx.fill();
-      ctx.strokeStyle = '#fff';
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-      ctx.globalAlpha = 1;
-
-      // Velocity arrow
-      const vs = 3;
-      const vLen = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
-      if (vLen > 0.3) {
-        ctx.beginPath();
-        ctx.moveTo(p.x, p.y);
-        ctx.lineTo(p.x + p.vx * vs, p.y + p.vy * vs);
-        ctx.strokeStyle = isActive ? '#dc2626' : 'rgba(190,24,93,0.6)';
-        ctx.lineWidth = isActive ? 2.5 : 1.5;
-        ctx.stroke();
-      }
-
-      // Highlight ring on active
-      if (isActive) {
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, PR + 4, 0, Math.PI * 2);
-        ctx.strokeStyle = '#dc2626';
-        ctx.lineWidth = 2;
-        ctx.setLineDash([3, 3]);
-        ctx.stroke();
-        ctx.setLineDash([]);
-      }
-    });
-  }
-
-  // Track GPU "flash" state: all particles red briefly on each step
-  let gpuFlash = false;
-
-  function renderBoth() {
-    // CPU: highlight the single active particle
-    const cpuActive = cpuActiveParticle >= 0 ? new Set([cpuActiveParticle]) : null;
-    drawSide(ctxCpu, cpuParticles, cpuActive, cpuStep);
-
-    // GPU: highlight ALL particles during the flash
-    const gpuActive = gpuFlash ? new Set(d3.range(N)) : null;
-    drawSide(ctxGpu, gpuParticles, gpuActive, gpuStep);
-
-    d3.select('#seq-par-timestep').text(`CPU: step ${cpuStep}/${TOTAL_STEPS}  |  GPU: step ${gpuStep}/${TOTAL_STEPS}`);
-    d3.select('#seq-status').text(cpuStep >= TOTAL_STEPS ? `Done (${(cpuStep * N * TICK_MS / 1000).toFixed(1)}s)` : `Updating particle ${cpuSubIdx + 1}/${N}`);
-    d3.select('#par-status').text(gpuStep >= TOTAL_STEPS ? `Done (${(gpuStep * TICK_MS / 1000).toFixed(1)}s)` : `All ${N} at once`);
-  }
-
-  // CPU: one particle every TICK_MS, N particles = 1 timestep
-  function cpuTick() {
-    if (cpuStep >= TOTAL_STEPS) { cpuActiveParticle = -1; renderBoth(); return; }
-    cpuActiveParticle = cpuSubIdx;
-    stepParticle(cpuParticles[cpuSubIdx]);
-    renderBoth();
-
-    cpuSubIdx++;
-    if (cpuSubIdx >= N) {
-      cpuSubIdx = 0;
-      cpuStep++;
-    }
-    if (cpuStep < TOTAL_STEPS) {
-      cpuTimer = setTimeout(cpuTick, TICK_MS);
-    } else {
-      cpuActiveParticle = -1;
-      renderBoth();
-    }
-  }
-
-  // GPU: all particles every TICK_MS = 1 timestep
-  function gpuTick() {
-    if (gpuStep >= TOTAL_STEPS) { gpuFlash = false; renderBoth(); return; }
-    // Flash all particles red
-    gpuFlash = true;
-    gpuParticles.forEach(p => stepParticle(p));
-    gpuStep++;
-    renderBoth();
-
-    // Turn off flash after a short delay (half the tick)
-    setTimeout(() => { gpuFlash = false; renderBoth(); }, TICK_MS * 0.4);
-
-    if (gpuStep < TOTAL_STEPS) {
-      gpuTimer = setTimeout(gpuTick, TICK_MS);
-    }
-  }
-
-  function start() {
-    playing = true;
-    d3.select('#seq-par-play').text('Pause');
-    cpuTick();
-    gpuTick();
-  }
-
-  function pause() {
-    playing = false;
-    d3.select('#seq-par-play').text('Play');
-    clearTimeout(cpuTimer);
-    clearTimeout(gpuTimer);
-  }
-
-  function reset() {
-    pause();
-    cpuStep = 0; cpuSubIdx = 0; gpuStep = 0; cpuActiveParticle = -1; gpuFlash = false;
-    cpuParticles = initParticles();
-    gpuParticles = cpuParticles.map(p => ({ ...p, trail: [] }));
-    renderBoth();
-  }
-
-  d3.select('#seq-par-play').on('click', function() {
-    if (playing) pause();
-    else if (cpuStep >= TOTAL_STEPS && gpuStep >= TOTAL_STEPS) { reset(); start(); }
-    else start();
-  });
-  d3.select('#seq-par-reset').on('click', reset);
-  d3.select('#seq-par-n').on('input', function() {
-    N = +this.value;
-    d3.select('#seq-par-n-val').text(N);
-    updateCaption();
-    reset();
-  });
-  d3.select('#caption-more-link').on('click', function(e) {
-    e.preventDefault();
-    N = 20;
-    d3.select('#seq-par-n').property('value', 20);
-    d3.select('#seq-par-n-val').text(20);
-    updateCaption();
-    reset();
-    start();
-  });
-
-  function updateCaption() {
-    d3.select('#caption-n').text(N);
-    d3.select('#caption-n2').text(N);
-    d3.select('#caption-cpu-time').text((N * TICK_MS / 1000).toFixed(1));
-  }
-
-  updateCaption();
-  renderBoth();
-
-  // Auto-start when figure scrolls into view
-  let autoStarted = false;
-  const seqParEl = document.getElementById("fig-seq-par");
-  const seqParObs = new IntersectionObserver(([entry]) => {
-    if (entry.isIntersecting && !autoStarted && !playing) {
-      autoStarted = true;
-      start();
-    }
-  }, { threshold: 0.3 });
-  seqParObs.observe(seqParEl);
-})();
-
-
-// ============================================================
-// Figure 4: Pipeline diagram (vertical array-operation, stepped)
+// Figure 3: Pipeline diagram (vertical array-operation, stepped)
 // ============================================================
 (function() {
   const N_COLS = 20;
@@ -1036,9 +743,9 @@ function visibleLoop(elementId, loopFn) {
     {
       label: 'Pass 2: Pressure',
       inputs: [{ name: 'density[i]', color: 'density' }],
-      op: 'pressure[i] = k * (density[i] - rest)',
+      op: 'pressure[i] = k * max(0, density[i] - rest)',
       outputs: [{ name: 'pressure[i]', color: 'pressure' }],
-      example: `<span style="color:#dc2626">pressure</span>[3] = 10000 * (<span style="color:#7c3aed">density</span>[3] - 1.5)<br><br>A simple per-particle calculation. No neighbor lookup needed.<br>Reads from <span style="color:#7c3aed">density[]</span> computed in Pass 1.`,
+      example: `<span style="color:#dc2626">pressure</span>[3] = 10000 * max(0, <span style="color:#7c3aed">density</span>[3] - 1.5)<br><br>A simple per-particle calculation. No neighbor lookup needed.<br>Reads from <span style="color:#7c3aed">density[]</span> computed in Pass 1.`,
       note: 'Reads density[] from Pass 1'
     },
     {
@@ -1051,7 +758,7 @@ function visibleLoop(elementId, loopFn) {
       ],
       op: 'force[i] = pressure + viscosity',
       outputs: [{ name: 'force[i]', color: 'force' }],
-      example: `<span style="color:#dc2626">force</span>[3] = <br>&nbsp;&nbsp;-sum( (<span style="color:#dc2626">P</span>[3]+<span style="color:#dc2626">P</span>[j]) / <span style="color:#7c3aed">density</span>[j] * <span style="color:#059669">gradW</span> )<br>&nbsp;&nbsp;+ mu * sum( (<span style="color:#be185d">vel</span>[j]-<span style="color:#be185d">vel</span>[3]) * <span style="color:#059669">lapW</span> )<br><br>Reads 4 arrays from the current timestep.<br>Writes to a new <span style="color:#dc2626">force[]</span> buffer.`,
+      example: `<span style="color:#dc2626">force</span>[3] = <br>&nbsp;&nbsp;-sum( (<span style="color:#dc2626">P</span>[3]+<span style="color:#dc2626">P</span>[j]) / (2 * <span style="color:#7c3aed">density</span>[j]) * <span style="color:#059669">gradW</span> )<br>&nbsp;&nbsp;+ mu * sum( (<span style="color:#be185d">vel</span>[j]-<span style="color:#be185d">vel</span>[3]) * <span style="color:#059669">lapW</span> )<br><br>Reads 4 arrays from the current timestep.<br>Writes to a new <span style="color:#dc2626">force[]</span> buffer.`,
       note: 'Reads pos[], vel[] from previous timestep + density[], pressure[] from this timestep'
     },
     {
@@ -1065,8 +772,8 @@ function visibleLoop(elementId, loopFn) {
         { name: 'vel_new[i]', color: 'velocity' },
         { name: 'pos_new[i]', color: 'position' }
       ],
-      example: `<span style="color:#be185d">vel_new</span>[3] = <span style="color:#be185d">vel</span>[3] + <span style="color:#dc2626">force</span>[3] / <span style="color:#7c3aed">density</span>[3] * dt<br><span style="color:#0891b2">pos_new</span>[3] = <span style="color:#0891b2">pos</span>[3] + <span style="color:#be185d">vel_new</span>[3] * dt<br><br>Writes to <em>new</em> buffers. After this pass,<br>swap: pos_new becomes pos for the next timestep.`,
-      note: 'Writes to NEW buffers, then swap old/new'
+      example: `<span style="color:#be185d">vel_new</span>[3] = <span style="color:#be185d">vel</span>[3] + <span style="color:#dc2626">force</span>[3] / <span style="color:#7c3aed">density</span>[3] * dt<br><span style="color:#0891b2">pos_new</span>[3] = <span style="color:#0891b2">pos</span>[3] + <span style="color:#be185d">vel_new</span>[3] * dt<br><br>Thread 3 touches only particle 3, and no thread<br>reads a neighbor in this pass, so the new values<br>can overwrite pos[] and vel[] in place.`,
+      note: 'Only pass that writes pos[] and vel[]'
     }
   ];
 
@@ -1210,7 +917,7 @@ function visibleLoop(elementId, loopFn) {
 
 
 // ============================================================
-// Figure 5: Scaled-up simulation (WebGPU with CPU fallback)
+// Figure 4: Scaled-up simulation (WebGPU with CPU fallback)
 // ============================================================
 (function() {
   const canvas = document.getElementById("sim-canvas");
@@ -1307,7 +1014,7 @@ function visibleLoop(elementId, loopFn) {
       // Force pass
       for (let i = 0; i < cpuParticles.length; i++) {
         const pi = cpuParticles[i];
-        pi.fx = 0; pi.fy = gravity;
+        pi.fx = 0; pi.fy = gravity * pi.density; // force per unit volume: rho * g
         const nbrs = getNeighborIndices(grid, pi.x, pi.y);
         for (let k = 0; k < nbrs.length; k++) {
           const j = nbrs[k];
@@ -1386,7 +1093,7 @@ function visibleLoop(elementId, loopFn) {
 
     // Constants matching CPU side
     const MAX_PARTICLES = 8192;
-    const GRID_W = Math.ceil(800 / H); // generous grid width
+    const GRID_W = Math.ceil(2400 / H); // wider than any canvas, so no particle falls off the hash
     const GRID_H = Math.ceil(500 / H);
     const MAX_PER_CELL = 32;
     const WORKGROUP_SIZE = 64;
@@ -1540,9 +1247,10 @@ fn densityPass(@builtin(global_invocation_id) id: vec3u) {
   pressure[i] = params.stiffness * max(0.0, rho - params.restD);
 }
 
-// Pass 3: Forces (pressure + viscosity) + Integration
+// Pass 3: Forces (pressure + viscosity + gravity). Reads neighbors' pos/vel,
+// writes only force[i]. Nothing moves until the next dispatch.
 @compute @workgroup_size(${WORKGROUP_SIZE})
-fn forceAndIntegrate(@builtin(global_invocation_id) id: vec3u) {
+fn forcePass(@builtin(global_invocation_id) id: vec3u) {
   let i = id.x;
   let n = u32(params.n);
   if (i >= n) { return; }
@@ -1556,11 +1264,12 @@ fn forceAndIntegrate(@builtin(global_invocation_id) id: vec3u) {
   let gh = i32(params.gridH);
   let mpc = u32(params.maxPerCell);
 
-  var fx = 0.0;
-  var fy = params.gravity;
-
   let pi_pressure = pressure[i];
   let pi_density = density[i];
+
+  // Force per unit volume: gravity enters as rho * g
+  var fx = 0.0;
+  var fy = params.gravity * pi_density;
 
   for (var dx = -1; dx <= 1; dx++) {
     for (var dy = -1; dy <= 1; dy++) {
@@ -1604,8 +1313,23 @@ fn forceAndIntegrate(@builtin(global_invocation_id) id: vec3u) {
     }
   }
 
-  // Integration
-  let rho = max(pi_density, 0.01);
+  force[i * 2u] = fx;
+  force[i * 2u + 1u] = fy;
+}
+
+// Pass 4: Integrate. Each thread reads and writes only its own particle.
+@compute @workgroup_size(${WORKGROUP_SIZE})
+fn integratePass(@builtin(global_invocation_id) id: vec3u) {
+  let i = id.x;
+  let n = u32(params.n);
+  if (i >= n) { return; }
+  let px = pos[i * 2u];
+  let py = pos[i * 2u + 1u];
+  let vx = vel[i * 2u];
+  let vy = vel[i * 2u + 1u];
+  let fx = force[i * 2u];
+  let fy = force[i * 2u + 1u];
+  let rho = max(density[i], 0.01);
   var nvx = vx + (fx / rho) * params.dt;
   var nvy = vy + (fy / rho) * params.dt;
   let sp = sqrt(nvx * nvx + nvy * nvy);
@@ -1658,7 +1382,8 @@ fn forceAndIntegrate(@builtin(global_invocation_id) id: vec3u) {
     const clearPipeline = device.createComputePipeline({ layout: pipelineLayout, compute: { module: shaderModule, entryPoint: 'clearGrid' } });
     const insertPipeline = device.createComputePipeline({ layout: pipelineLayout, compute: { module: shaderModule, entryPoint: 'insertParticles' } });
     const densityPipeline = device.createComputePipeline({ layout: pipelineLayout, compute: { module: shaderModule, entryPoint: 'densityPass' } });
-    const forcePipeline = device.createComputePipeline({ layout: pipelineLayout, compute: { module: shaderModule, entryPoint: 'forceAndIntegrate' } });
+    const forcePipeline = device.createComputePipeline({ layout: pipelineLayout, compute: { module: shaderModule, entryPoint: 'forcePass' } });
+    const integratePipeline = device.createComputePipeline({ layout: pipelineLayout, compute: { module: shaderModule, entryPoint: 'integratePass' } });
 
     const bindGroup = device.createBindGroup({
       layout: bindGroupLayout,
@@ -1721,8 +1446,10 @@ fn forceAndIntegrate(@builtin(global_invocation_id) id: vec3u) {
       const p1 = encoder.beginComputePass(); p1.setPipeline(insertPipeline); p1.setBindGroup(0, bindGroup); p1.dispatchWorkgroups(particleGroups); p1.end();
       // Density + Pressure
       const p2 = encoder.beginComputePass(); p2.setPipeline(densityPipeline); p2.setBindGroup(0, bindGroup); p2.dispatchWorkgroups(particleGroups); p2.end();
-      // Forces + Integrate
+      // Forces (reads neighbors, writes force[])
       const p3 = encoder.beginComputePass(); p3.setPipeline(forcePipeline); p3.setBindGroup(0, bindGroup); p3.dispatchWorkgroups(particleGroups); p3.end();
+      // Integrate (own particle only, writes pos[] and vel[])
+      const p4 = encoder.beginComputePass(); p4.setPipeline(integratePipeline); p4.setBindGroup(0, bindGroup); p4.dispatchWorkgroups(particleGroups); p4.end();
 
       // Only copy to readback buffers if they're not being mapped
       if (readbackReady) {

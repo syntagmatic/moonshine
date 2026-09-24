@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How Often the Big Ones Come</title>
+<link href="../../vendor/fonts/sans-serif-mono-jp/fonts.css" rel="stylesheet">
+<script src="../../vendor/js/d3.v7.min.js"></script>
+<script src="../../vendor/js/topojson-client.min.js"></script>
+<script src="../../lib/motion.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --article-width: 740px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem; --line-height: 1.6;
+  --text: #1a1a2e; --text-2: #4a4a6a;
+  --accent: #2563eb; --accent-light: #dbeafe;
+  --bg: #fafafa; --fig-bg: #ffffff; --border: #e2e2e8;
+  --shindo-0: #b0bec5;
+  --shindo-1: #81d4fa;
+  --shindo-2: #4fc3f7;
+  --shindo-3: #29b6f6;
+  --shindo-4: #fdd835;
+  --shindo-5l: #ffb300;
+  --shindo-5u: #fb8c00;
+  --shindo-6l: #f4511e;
+  --shindo-6u: #d32f2f;
+  --shindo-7: #7b1fa2;
+}
+@media (prefers-reduced-motion: reduce) {html:not([data-motion="full"]) *, html:not([data-motion="full"]) *::before, html:not([data-motion="full"]) *::after { animation-duration: 0s !important; transition-duration: 0s !important; }
+}
+body { font-family: var(--body-font); font-size: var(--body-size); line-height: var(--line-height); color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased; }
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
+h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+p { margin: 0 0 1rem; }
+.figure { margin: 2rem 0; padding: 1.5rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; }
+.figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; }
+svg text { font-family: var(--heading-font); }
+html[lang="ja"] { --body-font: 'Noto Serif JP', Georgia, serif; --heading-font: 'Noto Sans JP', system-ui, sans-serif; }
+svg .axis text { font-size: 11px; fill: var(--text-2); }
+svg .axis line, svg .axis path { stroke: var(--border); }
+.subtitle { font-family: var(--heading-font); font-size: 1.1rem; color: var(--text-2); margin-bottom: 2rem; }
+.figure-wide { max-width: 900px; margin-left: -40px; margin-right: -40px; }
+.panel-label { font-family: var(--heading-font); font-size: 12px; font-weight: 600; }
+.gr-line { fill: none; stroke-width: 2; }
+.gr-dot { stroke: #fff; stroke-width: 0.5; }
+.map-dot { stroke: none; opacity: 0.6; }
+.map-dot.dimmed { opacity: 0.07; }
+.map-dot.highlighted { opacity: 0.85; }
+.region-outline { fill: none; stroke-width: 1.5; stroke-dasharray: 3,2; opacity: 0; }
+.region-outline.active { opacity: 0.6; }
+.small-panel { cursor: pointer; }
+.small-panel:hover rect.panel-bg { stroke-width: 2; }
+.small-panel rect.panel-bg { fill: var(--fig-bg); stroke: var(--border); stroke-width: 1; rx: 3; }
+.small-panel.active rect.panel-bg { stroke-width: 2.5; }
+.count-label { font-family: var(--heading-font); font-size: 10px; fill: var(--text-2); }
+.b-label { font-family: var(--mono-font); font-size: 9px; fill: var(--text-2); }
+.axis-label { font-family: var(--heading-font); font-size: 11px; fill: var(--text-2); }
+.map-label { font-family: var(--heading-font); font-size: 9px; fill: var(--text-2); pointer-events: none; }
+.tooltip { position: absolute; pointer-events: none; background: #fff; border: 1px solid var(--border); border-radius: 5px; padding: 0.5rem 0.7rem; font-family: var(--heading-font); font-size: 0.8rem; line-height: 1.4; box-shadow: 0 2px 8px rgba(0,0,0,0.12); max-width: 260px; opacity: 0; transition: opacity 0.15s; z-index: 10; }
+.tooltip strong { font-weight: 700; }
+.ref-slope { stroke: var(--border); stroke-width: 1; stroke-dasharray: 3,2; }
+.cum-dot { fill: #1a1a2e; }
+.fit-line { stroke: #dc2626; stroke-width: 2; }
+.pred-dot { fill: #dc2626; }
+.cutoff line { stroke: #dc2626; stroke-width: 1.5; stroke-dasharray: 4,3; }
+.cut-handle { fill: #dc2626; }
+.cut-label { font-family: var(--mono-font); font-size: 11px; fill: #dc2626; }
+.control-row { display: flex; align-items: center; gap: 0.6rem; font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.5rem; }
+.control-row input[type="range"] { width: 180px; }
+.mono { font-family: var(--mono-font); }
+.readout { font-family: var(--heading-font); font-size: 0.95rem; margin: 0.6rem 0 0; min-height: 2.8em; }
+.panel-cut { stroke: #dc2626; stroke-width: 1; stroke-dasharray: 2,2; }
+.panel-fit { stroke: #1a1a2e; stroke-width: 1.2; }
+.map-dot.below { opacity: 0.08; }
+.data-note { color: var(--text-2); font-size: 0.9rem; margin-top: 3rem; }
+</style>
+</head>
+<body>
+<div class="article">
+
+<h1 data-i18n="title">How Often the Big Ones Come</h1>
+<p class="subtitle" data-i18n="subtitle">The Gutenberg-Richter law, fitted to 26 years of Japan's earthquakes</p>
+
+<p data-i18n="p1">Small earthquakes are common and large ones are rare, and the ratio between them is remarkably steady. In 1944 Beno Gutenberg and Charles Richter wrote it down: count every earthquake at or above magnitude M, and the count falls by roughly a factor of ten for each unit of magnitude. On a log scale that is a straight line, log<sub>10</sub>&nbsp;N = a&nbsp;&minus;&nbsp;bM. The slope b is called the <em>b-value</em>, and a b of 1 means exactly a factor of ten per magnitude unit.</p>
+
+<p data-i18n="p2">The figure below tests the rule against the 16,792 earthquakes of M4.5 and larger that the USGS recorded around Japan from 2000 through 2025. Each point is the number of events at or above that magnitude. The solid line is a fit to every event above the cutoff, and the dashed line has b fixed at 1. Drag the cutoff line, or use the slider, to change where the fit starts.</p>
+
+<div class="figure">
+  <div id="gr-plot"></div>
+  <div class="control-row">
+    <label for="mc-slider" data-i18n="ctrl_cutoff">Cutoff magnitude</label>
+    <input type="range" id="mc-slider" min="4.5" max="6.5" step="0.1" value="4.5">
+    <span id="mc-value" class="mono">M4.5</span>
+  </div>
+  <p class="readout" id="gr-readout"></p>
+  <p class="figure-caption" data-i18n="cap_gr">Top: cumulative count of events at or above each magnitude (log scale), USGS catalog, M4.5+, 2000&ndash;2025, magnitudes rounded to 0.1. Solid line: maximum-likelihood fit above the cutoff. Dashed line: b = 1 from the same starting count. Bottom: for each 0.1-magnitude bin, the share of events whose magnitude is body-wave mb (gray) versus moment magnitude Mw (blue); other types in amber.</p>
+</div>
+
+<h2 data-i18n="h2_bend">Where the straight line bends</h2>
+
+<p data-i18n="p3">With the cutoff at M4.5, a b of 1 predicts 16,792 &divide; 10<sup>2.5</sup> &asymp; 53 earthquakes of M7 or larger. The catalog holds 33. Fitting b to the data misses in the other direction: the maximum-likelihood fit gives b &asymp; 1.21, which predicts only about 16. The curve is steeper at the small end than at the large end, so no single straight line from M4.5 fits both.</p>
+
+<p data-i18n="p4">Drag the cutoff upward and watch the fitted b fall. By M5.2 it is close to 1.0, and with the cutoff anywhere from M5.2 to M5.5 the prediction lands between 32 and 35, on top of the observed 33. The strip under the plot shows why the small end behaves differently. Below M5.0, nine events in ten are measured with the body-wave magnitude mb, a quick estimate from the first seconds of the P wave. Above M5.5, most get a moment magnitude Mw, computed from the whole rupture. The two scales don't agree exactly for moderate earthquakes, so the lower part of the curve is drawn with a different ruler than the upper part.</p>
+
+<p data-i18n="p5">A b-value is only as good as the cutoff and the magnitude scale behind it. With a consistent choice, the law becomes a forecasting tool. It says nothing about when the next large earthquake will come, only how often large ones come on average, and that average is what hazard maps, building codes and insurance models are built on.</p>
+
+<h2 data-i18n="h2_regions">Eight regions</h2>
+
+<p data-i18n="p6">The same fit can be run region by region. Below, the catalog is split into eight boxes, arranged roughly north to south. Each panel shows one region's cumulative curve and its maximum-likelihood b above the cutoff you set in the first figure, with a standard error. Hover a panel to find its box on the map; dots below the cutoff are faded.</p>
+
+<div class="figure figure-wide" id="main-figure">
+  <div id="combined-viz"></div>
+  <p class="figure-caption" data-i18n="cap_fig">Cumulative count (log scale) versus magnitude for each region, USGS catalog, M4.5+, 2000&ndash;2025. The vertical tick marks the cutoff; the solid line is the maximum-likelihood fit above it. n is the number of events at or above the cutoff.</p>
+</div>
+
+<p data-i18n="p7">Tohoku dominates, with 4,584 events since 2000. The 2011 earthquake and its aftershocks account for much of that, but the Japan Trench off Tohoku's Pacific coast is busy in every year of the record. Kanto comes second with 3,126, and its box includes the offshore Ibaraki end of the 2011 aftershock zone. Okinawa is third at 2,312: the Ryukyu Trench runs from Kyushu toward Taiwan, and the box catches events along the whole arc.</p>
+
+<p data-i18n="p8">Chubu, Kansai and Chugoku/Shikoku have the fewest events and the shortest lines. These regions sit away from the trenches, and their earthquakes come mostly from crustal faults. Kansai's largest event in the window is M5.8 and Chubu's is M6.2. A short line doesn't make a region safe: the 1995 Kobe earthquake (M6.9) was a crustal quake in Kansai, five years before this record starts.</p>
+
+<p data-i18n="p9">Set the cutoff to M5.0 and compare slopes. Tohoku (0.95) and Kyushu (0.97) sit near 1. Hokkaido (1.09), Okinawa (1.16) and Kanto (1.17) are steeper, so large events there are rarer relative to small ones. Among these well-sampled regions the gap between Tohoku and Kanto is about four times its uncertainty. The interior regions show the danger of reading too much into a slope. Chugoku/Shikoku gives 0.80 and Kansai 1.18, but from only 24 and 12 events, with standard errors of about 0.16 and 0.34. A b-value from a few dozen earthquakes says little about a region's physics.</p>
+
+<div class="tooltip" id="tooltip"></div>
+
+<p class="data-note" data-i18n="data_note">Data: USGS earthquake catalog, M4.5+, 2000&ndash;2025, magnitudes rounded to 0.1. Regions are latitude/longitude boxes, assigned in the order listed from north to south where boxes overlap. b-values are maximum-likelihood estimates (Aki 1965, with Utsu's half-bin correction), b = log<sub>10</sub>e / (mean M &minus; (M<sub>c</sub> &minus; 0.05)), with standard error b/&radic;n.</p>
+
+<footer style="margin-top: 4rem; padding-top: 2rem; border-top: 1px solid var(--border); font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2);">
+  <p><span data-i18n="footer_part_of">Part of</span> <a href="../index.html" style="color: var(--text-2);" data-i18n="footer_series">Japan Earthquakes</a>. <span data-i18n="footer_prev">Previous</span>: <a href="../03-when/" style="color: var(--accent);" data-i18n="footer_prev_title">When the Ground Won't Stop Shaking</a>. <span data-i18n="footer_next">Next</span>: <a href="../05-history/" style="color: var(--accent);" data-i18n="footer_next_title">Thirteen Centuries of Earthquakes</a>.</p>
+  <p><span data-i18n="footer_built">Built with</span> <a href="https://github.com/enjalot/moonshine" style="color: var(--text-2);">moonshine</a>.</p>
+</footer>
+
+</div>
+
+<script>
+// ---- Data and statistics --------------------------------------------------
+const REGIONS = ['Hokkaido','Tohoku','Kanto','Chubu','Kansai','Chugoku/Shikoku','Kyushu','Okinawa'];
+// [lonMin, lonMax, latMin, latMax]; first match wins where boxes overlap
+const BOUNDS = {
+  'Hokkaido': [138, 150, 41.5, 46], 'Tohoku': [138, 150, 37, 41.5], 'Kanto': [138.5, 150, 34, 37],
+  'Chubu': [136, 139, 35, 37], 'Kansai': [134, 136, 33.5, 35.5], 'Chugoku/Shikoku': [131, 134.5, 32.5, 35],
+  'Kyushu': [129, 132, 30, 33.5], 'Okinawa': [122, 132, 24, 30]
+};
+const regionJa = {
+  'Hokkaido': '北海道', 'Tohoku': '東北', 'Kanto': '関東', 'Chubu': '中部',
+  'Kansai': '関西', 'Chugoku/Shikoku': '中国・四国', 'Kyushu': '九州', 'Okinawa': '沖縄'
+};
+const regionColors = {
+  'Hokkaido': '#2563eb', 'Tohoku': '#dc2626', 'Kanto': '#16a34a', 'Chubu': '#9333ea',
+  'Kansai': '#ea580c', 'Chugoku/Shikoku': '#0891b2', 'Kyushu': '#c026d3', 'Okinawa': '#ca8a04'
+};
+const TYPE_COLORS = { mb: '#9ca3af', Mw: '#2563eb', other: '#f59e0b' };
+const lang = () => (window.getPageLang ? window.getPageLang() : 'en');
+
+function regionOf(lat, lon) {
+  for (const r of REGIONS) {
+    const [x0, x1, y0, y1] = BOUNDS[r];
+    if (lon >= x0 && lon < x1 && lat >= y0 && lat < y1) return r;
+  }
+  return null;
+}
+function magFamily(t) {
+  t = (t || '').toLowerCase();
+  if (t === 'mb') return 'mb';
+  if (t.startsWith('mw')) return 'Mw';
+  return 'other';
+}
+// Aki (1965) maximum-likelihood b with Utsu's half-bin correction, 0.1 bins
+function mleB(mags, mc) {
+  const s = mags.filter(m => m >= mc - 1e-9);
+  if (s.length < 2) return null;
+  const b = Math.LOG10E / (d3.mean(s) - (mc - 0.05));
+  return { b, n: s.length, se: b / Math.sqrt(s.length) };
+}
+// [[M, N(>=M)], ...] on the 0.1 grid, only where N > 0
+function cumulative(mags) {
+  const out = [];
+  const max = d3.max(mags);
+  for (let k = 45; k <= Math.round(max * 10); k++) {
+    const m = k / 10;
+    const n = mags.filter(x => x >= m - 1e-9).length;
+    if (n > 0) out.push([m, n]);
+  }
+  return out;
+}
+const fmt = d3.format(',');
+
+let quakes = [];
+let allMags = [];
+let Mc = 4.5;
+const listeners = [];
+function setMc(v, source) {
+  v = Math.round(Math.max(4.5, Math.min(6.5, v)) * 10) / 10;
+  if (v === Mc && source !== 'init') return;
+  Mc = v;
+  listeners.forEach(fn => fn(source));
+}
+
+d3.csv('../shared/data/earthquakes.csv', d => ({
+  lat: +d.latitude, lon: +d.longitude,
+  mag: Math.round(+d.mag * 10) / 10,
+  type: magFamily(d.magType)
+})).then(rows => {
+  quakes = rows;
+  quakes.forEach(q => { q.region = regionOf(q.lat, q.lon); });
+  allMags = quakes.map(q => q.mag);
+  buildGR();
+  buildRegions();
+  setMc(4.5, 'init');
+});
+
+// ---- Figure 1: whole-catalog Gutenberg-Richter plot ------------------------
+function buildGR() {
+  const W = 700, H1 = 300, H2 = 70, gap = 26;
+  const m = { top: 12, right: 20, bottom: 30, left: 56 };
+  const svg = d3.select('#gr-plot').append('svg')
+    .attr('viewBox', `0 0 ${W} ${m.top + H1 + gap + H2 + m.bottom}`)
+    .attr('width', '100%').style('display', 'block');
+  const g = svg.append('g').attr('transform', `translate(${m.left},${m.top})`);
+  const iw = W - m.left - m.right;
+
+  const x = d3.scaleLinear().domain([4.4, 9.3]).range([0, iw]);
+  const y = d3.scaleLog().domain([0.7, 30000]).range([H1, 0]);
+  const cum = cumulative(allMags);
+
+  g.append('g').attr('class', 'axis').call(d3.axisLeft(y).tickValues([1, 10, 100, 1000, 10000]).tickFormat(d3.format(',')));
+  g.append('g').attr('class', 'axis').attr('transform', `translate(0,${H1})`).call(d3.axisBottom(x).ticks(10));
+  g.append('text').attr('class', 'axis-label').attr('transform', `translate(-44,${H1 / 2}) rotate(-90)`)
+    .attr('text-anchor', 'middle').attr('data-i18n', 'svg_count_ge').text('Events at or above M');
+
+  const fitLine = g.append('line').attr('class', 'fit-line');
+  const refLine = g.append('line').attr('class', 'ref-slope');
+  g.selectAll('.cum-dot').data(cum).join('circle').attr('class', 'cum-dot')
+    .attr('cx', d => x(d[0])).attr('cy', d => y(d[1])).attr('r', 2.6);
+
+  // observed M7+ marker
+  const n7 = allMags.filter(v => v >= 7 - 1e-9).length;
+  g.append('circle').attr('cx', x(7)).attr('cy', y(n7)).attr('r', 5)
+    .attr('fill', 'none').attr('stroke', '#111').attr('stroke-width', 1);
+  const predDot = g.append('circle').attr('r', 4).attr('class', 'pred-dot');
+
+  // magnitude-type strip
+  const sg = g.append('g').attr('transform', `translate(0,${H1 + gap})`);
+  const bins = d3.range(45, 70).map(k => {
+    const mm = k / 10;
+    const inBin = quakes.filter(q => Math.abs(q.mag - mm) < 1e-9);
+    const c = { mb: 0, Mw: 0, other: 0 };
+    inBin.forEach(q => c[q.type]++);
+    return { m: mm, n: inBin.length, ...c };
+  }).filter(b => b.n > 0);
+  const bw = x(4.6) - x(4.5) - 1;
+  bins.forEach(b => {
+    let y0 = 0;
+    ['Mw', 'other', 'mb'].forEach(t => {
+      const h = H2 * b[t] / b.n;
+      sg.append('rect').attr('x', x(b.m) - bw / 2).attr('width', bw)
+        .attr('y', H2 - y0 - h).attr('height', h).attr('fill', TYPE_COLORS[t]);
+      y0 += h;
+    });
+  });
+  sg.append('text').attr('class', 'axis-label').attr('x', x(7.1)).attr('y', 12)
+    .attr('data-i18n', 'svg_type_strip').text('Share of each 0.1 bin by magnitude type');
+  [['mb', 'mb'], ['Mw', 'Mw (moment)'], ['other', 'other']].forEach(([t, label], i) => {
+    sg.append('rect').attr('x', x(7.1)).attr('y', 22 + i * 14).attr('width', 9).attr('height', 9).attr('fill', TYPE_COLORS[t]);
+    sg.append('text').attr('class', 'axis-label').attr('x', x(7.1) + 14).attr('y', 30 + i * 14).text(label);
+  });
+  g.append('text').attr('class', 'axis-label').attr('x', iw / 2).attr('y', H1 + gap + H2 + 26)
+    .attr('text-anchor', 'middle').attr('data-i18n', 'svg_magnitude').text('Magnitude');
+
+  // draggable cutoff
+  const cut = g.append('g').attr('class', 'cutoff');
+  cut.append('line').attr('y1', 0).attr('y2', H1 + gap + H2);
+  cut.append('rect').attr('class', 'cut-handle').attr('x', -7).attr('width', 14).attr('y', -2).attr('height', 18).attr('rx', 3);
+  const cutLabel = cut.append('text').attr('class', 'cut-label').attr('x', 10).attr('y', 12);
+  const overlay = g.append('rect').attr('width', iw).attr('height', H1 + gap + H2)
+    .attr('fill', 'transparent').style('cursor', 'ew-resize');
+  overlay.call(d3.drag()
+    .on('start drag', (ev) => setMc(x.invert(ev.x), 'drag')));
+  overlay.on('click', (ev) => setMc(x.invert(d3.pointer(ev)[0]), 'click'));
+
+  const slider = document.getElementById('mc-slider');
+  slider.addEventListener('input', () => setMc(+slider.value, 'slider'));
+
+  function update(source) {
+    const fit = mleB(allMags, Mc);
+    const nMc = fit.n;
+    const x0 = Mc, x1 = 9.1;
+    fitLine.attr('x1', x(x0)).attr('y1', y(nMc))
+      .attr('x2', x(x1)).attr('y2', y(Math.max(0.7, nMc * Math.pow(10, -fit.b * (x1 - x0)))));
+    refLine.attr('x1', x(x0)).attr('y1', y(nMc))
+      .attr('x2', x(x1)).attr('y2', y(Math.max(0.7, nMc * Math.pow(10, -(x1 - x0)))));
+    const pred = nMc * Math.pow(10, -fit.b * (7 - Mc));
+    const pred1 = nMc * Math.pow(10, -(7 - Mc));
+    predDot.attr('cx', x(7)).attr('cy', y(pred));
+    cut.attr('transform', `translate(${x(Mc)},0)`);
+    cutLabel.text('M' + Mc.toFixed(1));
+    if (source !== 'slider') slider.value = Mc.toFixed(1);
+    document.getElementById('mc-value').textContent = 'M' + Mc.toFixed(1);
+    const ro = document.getElementById('gr-readout');
+    if (lang() === 'ja') {
+      ro.innerHTML = `M${Mc.toFixed(1)}以上：${fmt(nMc)}件。最尤法によるb = <strong>${fit.b.toFixed(2)}</strong> ± ${fit.se.toFixed(2)}。このbではM7.0以上が<strong>${pred.toFixed(0)}</strong>件と予測される（b = 1なら${pred1.toFixed(0)}件）。カタログの実数は${n7}件。`;
+    } else {
+      ro.innerHTML = `Above M${Mc.toFixed(1)}: ${fmt(nMc)} events. Maximum-likelihood b = <strong>${fit.b.toFixed(2)}</strong> ± ${fit.se.toFixed(2)}. At this b the law predicts <strong>${pred.toFixed(0)}</strong> events of M7.0 or larger (${pred1.toFixed(0)} with b = 1). The catalog has ${n7}.`;
+    }
+  }
+  listeners.push(update);
+  window.addEventListener('langchange', () => update('lang'));
+}
+
+// ---- Figure 2: regions, small multiples + map -----------------------------
+function buildRegions() {
+  const mapW = 240, mapH = 500, gridGap = 20;
+  const cols = 2, rows = 4, panelW = 195, panelH = 110;
+  const pad = { top: 20, right: 12, bottom: 22, left: 38 };
+  const gapX = 10, gapY = 10;
+  const gridW = cols * panelW + (cols - 1) * gapX;
+  const gridH = rows * panelH + (rows - 1) * gapY;
+  const totalW = mapW + gridGap + gridW;
+  const totalH = Math.max(mapH, gridH) + 20;
+
+  const svg = d3.select('#combined-viz').append('svg')
+    .attr('viewBox', `0 0 ${totalW} ${totalH}`).attr('width', '100%').style('display', 'block');
+  const mapG = svg.append('g').attr('transform', 'translate(0, 10)');
+  const proj = d3.geoMercator().center([136, 35]).scale(560).translate([mapW / 2, mapH / 2]);
+  const pathGen = d3.geoPath().projection(proj);
+  mapG.append('rect').attr('width', mapW).attr('height', mapH).attr('fill', '#f3f6f9');
+  const worldG = mapG.append('g');
+  const landG = mapG.append('g');
+  d3.json('../../vendor/data/world-atlas/countries-50m.json').then(world => {
+    const land = topojson.feature(world, { type: 'GeometryCollection', geometries: world.objects.countries.geometries.filter(g => g.id !== '392') });
+    worldG.append('path').datum(land).attr('d', pathGen).attr('fill', '#e8e8e0').attr('stroke', '#bbb').attr('stroke-width', 0.5);
+  });
+  d3.json('../shared/japan.topojson').then(topo => {
+    landG.append('path').datum(topojson.feature(topo, topo.objects.japan)).attr('d', pathGen)
+      .attr('fill', '#e8e8e0').attr('stroke', '#bbb').attr('stroke-width', 0.4);
+  });
+  const clipId = 'gr-map-clip';
+  svg.append('clipPath').attr('id', clipId).append('rect').attr('width', mapW).attr('height', mapH);
+  mapG.attr('clip-path', `url(#${clipId})`);
+
+  const rScale = d3.scaleSqrt().domain([4.5, 9.1]).range([0.9, 6]);
+  const dots = mapG.append('g').selectAll('circle')
+    .data(quakes.slice().sort((a, b) => a.mag - b.mag))
+    .join('circle').attr('class', 'map-dot')
+    .attr('cx', d => proj([d.lon, d.lat])[0]).attr('cy', d => proj([d.lon, d.lat])[1])
+    .attr('r', d => rScale(d.mag))
+    .attr('fill', d => d.region ? regionColors[d.region] : '#9ca3af');
+
+  const boxLine = d3.line().x(d => proj(d)[0]).y(d => proj(d)[1]);
+  REGIONS.forEach(r => {
+    const [x0, x1, y0, y1] = BOUNDS[r];
+    mapG.append('path').datum([[x0, y0], [x1, y0], [x1, y1], [x0, y1], [x0, y0]])
+      .attr('d', boxLine).attr('class', 'region-outline').attr('data-region', r)
+      .attr('stroke', regionColors[r]);
+  });
+  mapG.append('text').attr('x', mapW / 2).attr('y', mapH - 6).attr('text-anchor', 'middle')
+    .attr('class', 'axis-label').attr('data-i18n', 'svg_map_title').text('M4.5+ earthquakes, 2000–2025');
+
+  const gridG = svg.append('g').attr('transform', `translate(${mapW + gridGap}, 10)`);
+  const x = d3.scaleLinear().domain([4.5, 9.2]).range([pad.left, panelW - pad.right]);
+  const y = d3.scaleLog().domain([1, 5000]).range([panelH - pad.bottom, pad.top]);
+  const grLine = d3.line().x(d => x(d[0])).y(d => y(d[1]));
+
+  const panels = REGIONS.map((region, i) => {
+    const col = i % cols, row = Math.floor(i / cols);
+    const mags = quakes.filter(q => q.region === region).map(q => q.mag);
+    const cum = cumulative(mags);
+    const g = gridG.append('g').attr('transform', `translate(${col * (panelW + gapX)},${row * (panelH + gapY)})`)
+      .attr('class', 'small-panel').attr('data-region', region);
+    g.append('rect').attr('class', 'panel-bg').attr('width', panelW).attr('height', panelH).attr('stroke', regionColors[region]);
+    [10, 100, 1000].forEach(v => g.append('line').attr('x1', pad.left).attr('x2', panelW - pad.right)
+      .attr('y1', y(v)).attr('y2', y(v)).attr('stroke', '#eee').attr('stroke-width', 0.5));
+    if (col === 0) g.append('g').attr('class', 'axis').attr('transform', `translate(${pad.left},0)`)
+      .call(d3.axisLeft(y).tickValues([1, 10, 100, 1000]).tickFormat(d3.format(',.0f')).tickSize(3));
+    if (row === rows - 1) g.append('g').attr('class', 'axis').attr('transform', `translate(0,${panelH - pad.bottom})`)
+      .call(d3.axisBottom(x).tickValues([5, 6, 7, 8, 9]).tickSize(3));
+    g.append('path').datum(cum).attr('d', grLine).attr('class', 'gr-line').attr('stroke', regionColors[region]);
+    g.selectAll('.gr-dot').data(cum).join('circle').attr('class', 'gr-dot')
+      .attr('cx', d => x(d[0])).attr('cy', d => y(d[1])).attr('r', 1.8).attr('fill', regionColors[region]);
+    g.append('text').attr('x', pad.left + 4).attr('y', pad.top + 10).attr('class', 'panel-label')
+      .attr('fill', regionColors[region]).attr('data-i18n', `svg_region_${region.replace(/\//g, '_').toLowerCase()}`).text(region);
+    const cutTick = g.append('line').attr('class', 'panel-cut').attr('y1', pad.top).attr('y2', panelH - pad.bottom);
+    const fit = g.append('line').attr('class', 'panel-fit');
+    const nLabel = g.append('text').attr('class', 'count-label').attr('text-anchor', 'end')
+      .attr('x', panelW - pad.right - 2).attr('y', pad.top + 10);
+    const bLabel = g.append('text').attr('class', 'b-label').attr('text-anchor', 'end')
+      .attr('x', panelW - pad.right - 2).attr('y', pad.top + 22);
+    return { region, mags, cutTick, fit, nLabel, bLabel };
+  });
+
+  gridG.append('text').attr('x', gridW / 2).attr('y', gridH + 14).attr('text-anchor', 'middle')
+    .attr('class', 'axis-label').attr('data-i18n', 'svg_magnitude').text('Magnitude');
+
+  function update() {
+    dots.classed('below', d => d.mag < Mc - 1e-9);
+    panels.forEach(p => {
+      p.cutTick.attr('x1', x(Mc)).attr('x2', x(Mc));
+      const f = mleB(p.mags, Mc);
+      if (!f) {
+        p.fit.attr('opacity', 0);
+        p.nLabel.text('n=' + p.mags.filter(m => m >= Mc - 1e-9).length);
+        p.bLabel.text('b: too few');
+        return;
+      }
+      const xEnd = Math.min(9.1, d3.max(p.mags) + 0.3);
+      p.fit.attr('opacity', 1).attr('x1', x(Mc)).attr('y1', y(f.n))
+        .attr('x2', x(xEnd)).attr('y2', y(Math.max(1, f.n * Math.pow(10, -f.b * (xEnd - Mc)))));
+      p.nLabel.text('n=' + fmt(f.n));
+      p.bLabel.text(`b=${f.b.toFixed(2)} ± ${f.se.toFixed(2)}`);
+    });
+  }
+  listeners.push(update);
+
+  let active = null;
+  function highlight(region) {
+    if (region === active) return;
+    active = region;
+    dots.classed('dimmed', d => region && d.region !== region);
+    mapG.selectAll('.region-outline').classed('active', function () { return this.dataset.region === region; });
+    gridG.selectAll('.small-panel').each(function () {
+      const el = d3.select(this), r = el.attr('data-region');
+      el.classed('active', r === region);
+      el.style('opacity', region && r !== region ? 0.35 : 1);
+    });
+  }
+  gridG.selectAll('.small-panel')
+    .on('mouseenter', function () { highlight(this.dataset.region); })
+    .on('mouseleave', () => highlight(null));
+
+  const tip = document.getElementById('tooltip');
+  dots.on('pointerenter', function (ev, d) {
+    if (d.region) highlight(d.region);
+    const name = d.region ? (lang() === 'ja' ? regionJa[d.region] : d.region) : '';
+    tip.innerHTML = `<strong>M${d.mag.toFixed(1)}</strong> ${d.type === 'other' ? '' : '(' + d.type + ')'}${name ? ', ' + name : ''}<br>${d.lat.toFixed(1)}°N, ${d.lon.toFixed(1)}°E`;
+    tip.style.opacity = 1;
+  }).on('pointermove', ev => {
+    let left = ev.pageX + 12;
+    if (left + 220 > window.innerWidth) left = ev.pageX - 230;
+    tip.style.left = left + 'px'; tip.style.top = (ev.pageY - 12) + 'px';
+  }).on('pointerleave', () => { highlight(null); tip.style.opacity = 0; });
+}
+</script>
+<script>
+window.PAGE_JA = {
+  title: "大地震はどれくらいの頻度で来るのか",
+  subtitle: "グーテンベルグ・リヒター則を、日本の26年分の地震に当てはめる",
+  p1: "小さな地震はありふれていて、大きな地震はまれだ。そしてその比率は驚くほど安定している。1944年、ベノー・グーテンベルグとチャールズ・リヒターはこれを式にした。マグニチュードM以上の地震をすべて数えると、その数はマグニチュードが1上がるごとにおよそ10分の1になる。対数スケールでは直線、log<sub>10</sub>&nbsp;N = a&nbsp;&minus;&nbsp;bM になる。この傾きbを<em>b値</em>と呼び、b = 1はマグニチュード1あたりちょうど10分の1を意味する。",
+  p2: "下の図は、USGSが2000年から2025年にかけて日本周辺で記録したM4.5以上の地震16,792件でこの法則を検証する。各点は、そのマグニチュード以上の地震の数だ。実線はカットオフ以上のすべての地震への当てはめ、破線はbを1に固定したもの。カットオフの線をドラッグするか、スライダーを使って、当てはめの始点を変えてみてほしい。",
+  ctrl_cutoff: "カットオフのマグニチュード",
+  cap_gr: "上：各マグニチュード以上の地震の累積数（対数スケール）。USGSカタログ、M4.5以上、2000〜2025年、マグニチュードは0.1単位に丸めている。実線：カットオフ以上への最尤推定。破線：同じ出発点からのb = 1。下：0.1刻みの各区間で、実体波マグニチュードmb（灰）とモーメントマグニチュードMw（青）の占める割合。その他の種類は琥珀色。",
+  h2_bend: "直線が曲がるところ",
+  p3: "カットオフをM4.5にすると、b = 1はM7以上の地震を16,792 &divide; 10<sup>2.5</sup> &asymp; 53件と予測する。カタログにあるのは33件だ。データからbを推定すると、今度は逆方向に外れる。最尤推定ではb &asymp; 1.21となり、予測はわずか約16件。曲線は小さい側で大きい側より急なので、M4.5から引いた1本の直線では両方に合わない。",
+  p4: "カットオフを上げていくと、推定されるbが下がっていくのが分かる。M5.2でほぼ1.0になり、カットオフがM5.2からM5.5のどこでも予測は32〜35件となって、実際の33件にぴたりと重なる。小さい側のふるまいが違う理由は、図の下の帯に表れている。M5.0未満では10件中9件が実体波マグニチュードmbで測られている。P波の最初の数秒から素早く求める値だ。M5.5を超えると、ほとんどが破壊全体から計算するモーメントマグニチュードMwになる。中規模の地震では2つの尺度は完全には一致しないので、曲線の下の部分は上の部分とは別の物差しで描かれていることになる。",
+  p5: "b値の信頼性は、その背後にあるカットオフとマグニチュードの尺度で決まる。一貫した選び方をすれば、この法則は予測の道具になる。次の大地震がいつ来るかは何も教えないが、大地震が平均してどれくらいの頻度で来るかは教えてくれる。ハザードマップ、建築基準、保険のモデルはその平均の上に築かれている。",
+  h2_regions: "8つの地域",
+  p6: "同じ当てはめを地域ごとに行うこともできる。下ではカタログを8つの範囲に分け、おおよそ北から南へ並べた。各パネルはその地域の累積曲線と、最初の図で設定したカットオフ以上での最尤推定b値を標準誤差とともに示す。パネルにカーソルを合わせると、地図上の範囲が分かる。カットオフ未満の点は薄く表示される。",
+  cap_fig: "各地域のマグニチュードに対する累積数（対数スケール）。USGSカタログ、M4.5以上、2000〜2025年。縦の目盛りがカットオフ、実線はそれ以上への最尤推定。nはカットオフ以上の地震の数。",
+  p7: "東北が圧倒的で、2000年以降4,584件。2011年の地震とその余震が大きな割合を占めるが、東北の太平洋沖にある日本海溝は記録のどの年も活発だ。2位は関東の3,126件で、この範囲には2011年の余震域の南端、茨城沖が含まれる。3位は沖縄の2,312件。琉球海溝は九州から台湾に向かって延びており、この範囲は弧全体の地震を拾っている。",
+  p8: "中部、関西、中国・四国は地震が最も少なく、線も最も短い。これらの地域は海溝から離れており、地震の多くは地殻内の断層で起きる。この期間の最大は関西でM5.8、中部でM6.2だ。線が短いからといって安全なわけではない。1995年の兵庫県南部地震（M6.9）は、この記録が始まる5年前に関西で起きた地殻内地震だった。",
+  p9: "カットオフをM5.0にして傾きを比べてみよう。東北（0.95）と九州（0.97）は1に近い。北海道（1.09）、沖縄（1.16）、関東（1.17）はより急で、小さな地震に比べて大きな地震が少ない。これらのサンプルが多い地域の中では、東北と関東の差は不確かさの約4倍ある。内陸の地域は、傾きを読みすぎる危険を示している。中国・四国は0.80、関西は1.18だが、それぞれわずか24件と12件からの値で、標準誤差は約0.16と0.34だ。数十件の地震から求めたb値は、その地域の物理についてほとんど何も語らない。",
+  data_note: "データ：USGSの地震カタログ、M4.5以上、2000〜2025年、マグニチュードは0.1単位に丸めている。地域は緯度・経度の範囲で、範囲が重なる場所では北から順に割り当てた。b値は最尤推定（Aki 1965、宇津の半区間補正つき）、b = log<sub>10</sub>e / (平均M &minus; (M<sub>c</sub> &minus; 0.05))、標準誤差はb/&radic;n。",
+  svg_count_ge: "M以上の地震の数",
+  svg_type_strip: "0.1区間ごとのマグニチュード種類の割合",
+  svg_magnitude: "マグニチュード",
+  svg_map_title: "M4.5以上の地震 2000〜2025年",
+  svg_region_hokkaido: "北海道",
+  svg_region_tohoku: "東北",
+  svg_region_kanto: "関東",
+  svg_region_chubu: "中部",
+  svg_region_kansai: "関西",
+  svg_region_chugoku_shikoku: "中国・四国",
+  svg_region_kyushu: "九州",
+  svg_region_okinawa: "沖縄",
+  footer_part_of: "シリーズ",
+  footer_series: "日本の地震",
+  footer_prev: "前",
+  footer_prev_title: "揺れが止まらないとき",
+  footer_next: "次",
+  footer_next_title: "13世紀にわたる地震",
+  footer_built: "作成："
+};
+</script>
+<script src="../shared/i18n.js"></script>
+</body>
+</html>

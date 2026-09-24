@@ -1,0 +1,1411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Laplacian Growth: DLA, Discharges and Rivers</title>
+<link href="../vendor/fonts/sans-serif-mono-alt/fonts.css" rel="stylesheet">
+<link rel="stylesheet" href="../vendor/katex@0.16.9/katex.min.css">
+<script defer src="../vendor/katex@0.16.9/katex.min.js"></script>
+<script src="../vendor/js/d3.v7.min.js"></script>
+<script src="../lib/motion.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --article-width: 740px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem;
+  --line-height: 1.6;
+  --text: #1a1a2e;
+  --text-2: #4a4a6a;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --bg: #fafafa;
+  --fig-bg: #ffffff;
+  --border: #e2e2e8;
+  --c-agent: #2563eb;
+  --c-rule: #0891b2;
+  --c-pattern: #8b5cf6;
+  --c-critical: #f59e0b;
+  --c-feedback: #ef4444;
+  --c-env: #10b981;
+  --c-danger: #ef4444;
+}
+body {
+  font-family: var(--body-font);
+  font-size: var(--body-size);
+  line-height: var(--line-height);
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
+h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+h3 { font-size: 1.15rem; margin: 2rem 0 0.75rem; }
+p { margin: 0 0 1rem; }
+a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+a:hover { color: #1d4ed8; }
+
+header { margin-bottom: 3rem; }
+.subtitle { font-family: var(--heading-font); font-size: 1.15rem; color: var(--text-2); max-width: 600px; }
+
+.figure { margin: 2rem 0; padding: 1.5rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.figure canvas { display: block; width: 100%; image-rendering: pixelated; border-radius: 3px; }
+.figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; line-height: 1.4; }
+.figure-label { font-weight: 600; color: var(--text); }
+.insight { background: var(--accent-light); border-left: 3px solid var(--accent); padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 4px 4px 0; }
+.insight p { margin: 0; }
+.insight p + p { margin-top: 0.75rem; }
+.controls { display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-end; margin-top: 1rem; font-family: var(--heading-font); font-size: 0.85rem; }
+.control-group { display: flex; flex-direction: column; gap: 0.25rem; }
+.control-group label { color: var(--text-2); font-weight: 600; }
+.control-group .slider-row { display: flex; align-items: center; gap: 0.5rem; }
+.control-group input[type="range"] { width: 120px; accent-color: var(--accent); }
+.control-group .val { font-family: var(--mono-font); font-variant-numeric: tabular-nums;
+  min-width: 2.5em; text-align: right; color: var(--text); }
+.btn { font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600;
+  padding: 0.45rem 1.1rem; border-radius: 5px; border: 1px solid var(--border);
+  background: var(--fig-bg); color: var(--text); cursor: pointer;
+  transition: background 0.15s, border-color 0.15s; user-select: none; }
+.btn:hover { border-color: var(--accent); background: var(--accent-light); }
+.btn.active { border-color: var(--accent); background: var(--accent); color: white; }
+.stat-row { display: flex; gap: 1.5rem; margin-top: 0.75rem; font-family: var(--heading-font); font-size: 0.85rem; }
+.stat-row .stat { display: flex; gap: 0.35rem; align-items: baseline; }
+.stat-row .stat-label { color: var(--text-2); font-weight: 600; }
+.stat-row .stat-val { font-family: var(--mono-font); font-variant-numeric: tabular-nums; color: var(--text); }
+.click-hint { font-family: var(--heading-font); font-size: 0.8rem; color: var(--text-2);
+  text-align: center; margin-top: 0.5rem; font-style: italic; }
+svg text { font-family: var(--heading-font); }
+
+.side-by-side { display: flex; gap: 1rem; }
+.side-by-side .side-panel { flex: 1; min-width: 0; }
+.side-by-side .side-panel canvas { width: 100%; }
+.side-label { font-family: var(--heading-font); font-size: 0.8rem; font-weight: 600;
+  color: var(--text-2); text-align: center; margin-top: 0.5rem; }
+
+.compare-row { display: flex; gap: 0.75rem; margin-top: 0.5rem; }
+.compare-row canvas { flex: 1; min-width: 0; border-radius: 3px; background: #0a0a1e;
+  image-rendering: auto; }
+.compare-label { font-family: var(--heading-font); font-size: 0.8rem; color: var(--text-2);
+  text-align: center; margin-top: 0.35rem; font-weight: 600; }
+.compare-col { flex: 1; min-width: 0; }
+.dbm-canvas { background: #0a0a1e; image-rendering: auto !important; }
+
+@media (prefers-reduced-motion: reduce) {html:not([data-motion="full"]) .figure canvas { outline: 2px dashed var(--border); outline-offset: -2px; }
+}
+@media (max-width: 600px) {
+  h1 { font-size: 1.75rem; }
+  .controls { gap: 0.6rem; }
+  .control-group input[type="range"] { width: 80px; }
+  .side-by-side { flex-direction: column; }
+  .compare-row { flex-direction: column; }
+}
+.back-link { font-family: var(--heading-font); font-size: 0.85rem; text-decoration: none; color: var(--text-2); display: inline-block; margin-bottom: 1rem; }
+.eq { margin: 1.25rem 0; text-align: center; overflow-x: auto; }
+.river-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1.25rem; align-items: start; }
+.order-chart svg { display: block; width: 100%; height: 230px; overflow: visible; }
+.chart-note { font-family: var(--heading-font); font-size: 0.8rem; color: var(--text-2); margin: 0.25rem 0 0; line-height: 1.35; }
+@media (max-width: 600px) { .river-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="article">
+
+<header>
+  <a href="index.html" class="back-link">&larr; Emergence Series</a>
+  <h1>Laplacian Growth</h1>
+  <p class="subtitle">Random walkers that stick where they land grow fractal trees. The field that steers them also shapes electrical discharges, and something like it carves river basins.</p>
+</header>
+
+<p>
+Place a seed particle. Release another far away and let it walk randomly until it bumps the first and sticks. Repeat. What grows is a fractal tree of nested branches.
+</p>
+
+<p>
+Witten and Sander introduced this model in 1981 and called it diffusion-limited aggregation (DLA): particles arrive slowly, by diffusion, and stick at once. The same arithmetic describes metal deposited from a solution, mineral dendrites on rock, and viscous fingers in a thin cell, because in each case the growth is set by a diffusing quantity that obeys Laplace's equation.
+</p>
+
+<h2>1. Walkers and the field that guides them</h2>
+
+<p>
+The simulation below places a seed at the center of the grid. Walkers are released from a circle just outside the cluster. Each walker steps up, down, left or right at random. When it lands next to an occupied cell it sticks and becomes part of the cluster, and a new walker is released.
+</p>
+
+<div class="figure" id="fig-algorithm">
+  <canvas id="canvas-algo"></canvas>
+  <div class="stat-row">
+    <div class="stat">
+      <span class="stat-label">Particles:</span>
+      <span class="stat-val" id="stat-algo-count">1</span>
+    </div>
+    <div class="stat">
+      <span class="stat-label">Radius:</span>
+      <span class="stat-val" id="stat-algo-radius">0</span>
+    </div>
+    <div class="stat">
+      <span class="stat-label">Fractal dim D:</span>
+      <span class="stat-val" id="stat-algo-dim">&ndash;</span>
+    </div>
+  </div>
+  <div class="controls">
+    <div class="control-group">
+      <label>Speed</label>
+      <div class="slider-row">
+        <input type="range" id="speed-slider" min="1" max="200" step="1" value="40">
+        <span class="val" id="speed-val">40</span>
+      </div>
+    </div>
+    <button class="btn" id="pause-algo">Pause</button>
+    <button class="btn" id="reset-algo">Reset</button>
+    <button class="btn" id="toggle-heatmap">Show arrival probability</button>
+  </div>
+  <p class="figure-caption"><span class="figure-label">Figure 1.</span> A DLA cluster growing from one seed; color encodes arrival order (dark early, gold late). <em>D</em> is the slope of log <em>N</em> against log <em>R</em><sub>g</sub> (radius of gyration) over the last fourfold growth in <em>N</em>; small clusters read high, and large 2D DLA clusters settle near 1.71. Growth stops before the cluster reaches the launch circle. "Show arrival probability" solves Laplace's equation around the current cluster and colors each perimeter site by the chance that the next walker lands there (bright green is high, relative to the most exposed site).</p>
+</div>
+
+<p>
+Why branches and not blobs? Let <em>u</em>(<em>x</em>) be the probability that a walker starting at <em>x</em> wanders back out to the launch circle before it touches the cluster. One step of the walk averages <em>u</em> over the four neighbors, so <em>u</em> satisfies the discrete Laplace equation, with <em>u</em> = 0 on the cluster and <em>u</em> = 1 on the circle. The chance that the next particle sticks at a perimeter site is set by how steeply <em>u</em> climbs away from it. At a tip, the contours of <em>u</em> crowd together and the slope is large. Inside a fjord, the surrounding branches have already absorbed the walkers that would have entered, <em>u</em> is nearly zero throughout, and almost nothing arrives.
+</p>
+
+<p>
+Turn on the overlay and the imbalance is stark: a handful of outer tips collect most of the walkers, and cells a few branch-widths inside a fjord receive almost none. Tips grow faster, so a small bump becomes a branch and the branch sprouts bumps of its own. This is the Mullins&ndash;Sekerka instability of a diffusion-limited front, the same one that grows dendrites on a solidifying crystal. It is also why lightning rods work: a protruding conductor concentrates the field around it.
+</p>
+
+<h2>2. Stickiness and scale</h2>
+
+<p>
+Suppose a walker that touches the cluster sticks only with probability <em>p</em> and otherwise keeps walking. It gets several chances to slip past the outer tips before it commits, so the screening that drives branching is weakened. At small sizes the cluster comes out denser, and its measured dimension is close to 2.
+</p>
+
+<p>
+The effect has a length scale, though. A bouncing walker explores only a limited neighborhood before it sticks. Once the branches are much longer than that neighborhood, the fjords between them are too deep to penetrate and screening takes over again. Low stickiness changes the texture of the cluster at short range; far enough out it crosses over to ordinary DLA.
+</p>
+
+<div class="figure" id="fig-stickiness">
+  <div class="side-by-side">
+    <div class="side-panel">
+      <canvas id="canvas-sticky-high"></canvas>
+      <div class="side-label" id="label-sticky-high">Stickiness: 1.00</div>
+    </div>
+    <div class="side-panel">
+      <canvas id="canvas-sticky-low"></canvas>
+      <div class="side-label" id="label-sticky-low">Stickiness: 0.05</div>
+    </div>
+  </div>
+  <div class="stat-row">
+    <div class="stat">
+      <span class="stat-label">Left particles:</span>
+      <span class="stat-val" id="stat-sticky-high">1</span>
+    </div>
+    <div class="stat">
+      <span class="stat-label">Left <em>D</em>:</span>
+      <span class="stat-val" id="stat-sticky-high-dim">&ndash;</span>
+    </div>
+    <div class="stat">
+      <span class="stat-label">Right particles:</span>
+      <span class="stat-val" id="stat-sticky-low">1</span>
+    </div>
+    <div class="stat">
+      <span class="stat-label">Right <em>D</em>:</span>
+      <span class="stat-val" id="stat-sticky-low-dim">&ndash;</span>
+    </div>
+  </div>
+  <div class="controls">
+    <div class="control-group">
+      <label>Right stickiness</label>
+      <div class="slider-row">
+        <input type="range" id="sticky-slider" min="0.01" max="1.0" step="0.01" value="0.05">
+        <span class="val" id="sticky-val">0.05</span>
+      </div>
+    </div>
+    <button class="btn" id="pause-sticky">Pause</button>
+    <button class="btn" id="reset-sticky">Reset Both</button>
+  </div>
+  <p class="figure-caption"><span class="figure-label">Figure 2.</span> Full stickiness (left) against reduced stickiness (right), each grown until it fills its canvas. <em>D</em> is measured as in Figure 1, over the most recent fourfold growth. Watch the right-hand value: it starts near 2 and drifts down as the cluster outgrows the crossover scale. At very low stickiness the crossover needs more particles than this canvas holds. Adjust the slider, then click Reset Both to apply.</p>
+</div>
+
+<h2>3. Dropping the walkers: the dielectric breakdown model</h2>
+
+<p>
+The walkers can be removed entirely. Solve Laplace's equation for a potential &phi; with &phi; = 1 on the cluster and &phi; = 0 on a distant boundary, then add one perimeter site, chosen with probability proportional to the local field raised to a power, |&nabla;&phi;|<sup>&eta;</sup>. Niemeyer, Pietronero and Wiesmann proposed this dielectric breakdown model (DBM) in 1984 to describe the branched discharges, called Lichtenberg figures, that form when an insulator breaks down.
+</p>
+
+<p>
+The exponent &eta; tunes how strongly growth favors the most exposed tips. At &eta; = 1 the clusters are statistically like DLA. At &eta; = 0 the field is ignored and every perimeter site is equally likely; this is Eden growth, a compact blob with a rough edge. At large &eta; nearly all growth goes to the single strongest tip and the cluster becomes a needle. Lightning is often drawn with this model at &eta; above 1, and the geometry is convincing, but a real stepped leader involves ionization and charge transport that the model leaves out.
+</p>
+
+<div class="figure" id="fig-eta">
+  <canvas id="canvas-eta" class="dbm-canvas"></canvas>
+  <div class="controls">
+    <button class="btn" id="play-eta">Pause</button>
+    <div class="control-group">
+      <label>&eta; (field exponent)</label>
+      <div class="slider-row">
+        <input type="range" id="eta-slider" min="0" max="5" step="0.5" value="1">
+        <span class="val" id="eta-val">1.0</span>
+      </div>
+    </div>
+    <div class="control-group">
+      <label>Speed</label>
+      <div class="slider-row">
+        <input type="range" id="eta-speed-slider" min="1" max="20" step="1" value="8">
+        <span class="val" id="eta-speed-val">8</span>
+      </div>
+    </div>
+    <div class="control-group">
+      <label>Regime</label>
+      <div class="slider-row">
+        <button class="btn" data-eta="0">Eden</button>
+        <button class="btn" data-eta="1">DLA</button>
+        <button class="btn" data-eta="4">Needle</button>
+      </div>
+    </div>
+    <button class="btn" id="reset-eta">Reset</button>
+  </div>
+  <div class="stat-row">
+    <div class="stat"><span class="stat-label">&eta;:</span>
+      <span class="stat-val" id="stat-eta">1.0</span></div>
+    <div class="stat"><span class="stat-label">Steps:</span>
+      <span class="stat-val" id="stat-eta-steps">0</span></div>
+    <div class="stat"><span class="stat-label">Tips:</span>
+      <span class="stat-val" id="stat-eta-tips">0</span></div>
+  </div>
+  <p class="figure-caption"><span class="figure-label">Figure 3.</span> A discharge grows downward from a point on the top edge; &phi; = 0 on the other edges. After every growth step the potential is relaxed by over-relaxed Gauss&ndash;Seidel sweeps, warm-started from the previous solution, and the next site is drawn with weight |&nabla;&phi;|<sup>&eta;</sup>. The background glow is &phi; itself. Changing &eta; restarts the growth.</p>
+</div>
+
+<h2>4. Rivers: a different field, a similar tree</h2>
+
+<p>
+River networks look like these trees, and it is tempting to call a river a discharge run in reverse, collecting where lightning spreads. The model below tests how far that holds. It is a stream-power landscape. Rain falls evenly, and each cell sends its water to its steepest downhill neighbor among the eight around it. The drainage area <em>A</em> of a cell is the number of cells whose water passes through it, itself included. The ground is pushed up at a uniform rate <em>U</em>, except along the bottom edge, which is held at sea level, and each cell is cut down at a rate that grows with the water it carries and the slope <em>S</em> to its downstream neighbor:
+</p>
+
+<div class="eq" data-tex="\frac{\partial h}{\partial t} = U - K\,A^{1/2}\,S"></div>
+
+<p>
+Closed depressions are filled before routing, as sediment would fill them, so every cell drains to the sea. The feedback is the same shape as in DLA. Where water collects, erosion is faster; faster erosion deepens the valley; a deeper valley steepens the slopes that lead into it and captures more area. A channel head collects more water than the hillslope around it, so channels extend headward into the hills the way DLA tips extend into empty space.
+</p>
+
+<div class="figure" id="fig-river">
+  <div class="river-grid">
+    <div>
+      <canvas id="canvas-river" class="river-canvas"></canvas>
+    </div>
+    <div class="order-chart">
+      <svg id="horton-chart" role="img" aria-label="Stream segment counts by Strahler order for the river, the DLA cluster and the discharge"></svg>
+      <p class="chart-note" id="horton-note">Hover a blue point to trace that order through the river network.</p>
+    </div>
+  </div>
+  <div class="controls">
+    <div class="control-group">
+      <label>Erodibility K</label>
+      <div class="slider-row">
+        <input type="range" id="erosion-slider" min="0.005" max="0.05" step="0.005" value="0.02">
+        <span class="val" id="erosion-val">0.020</span>
+      </div>
+    </div>
+    <div class="control-group">
+      <label>Uplift U</label>
+      <div class="slider-row">
+        <input type="range" id="uplift-slider" min="0.0001" max="0.001" step="0.0001" value="0.0005">
+        <span class="val" id="uplift-val">0.0005</span>
+      </div>
+    </div>
+    <div class="control-group">
+      <label>Speed</label>
+      <div class="slider-row">
+        <input type="range" id="river-speed-slider" min="1" max="8" step="1" value="3">
+        <span class="val" id="river-speed-val">3x</span>
+      </div>
+    </div>
+    <button class="btn" id="btn-play">Pause</button>
+    <button class="btn" id="btn-reset">New Terrain</button>
+  </div>
+  <div class="stat-row">
+    <div class="stat"><span class="stat-label">Steps:</span><span class="stat-val" id="stat-river-steps">0</span></div>
+    <div class="stat"><span class="stat-label">Max order:</span><span class="stat-val" id="stat-order">0</span></div>
+    <div class="stat"><span class="stat-label">Relief:</span><span class="stat-val" id="stat-relief">0</span></div>
+    <div class="stat"><span class="stat-label">Slope / steady-state prediction:</span><span class="stat-val" id="stat-steady">&ndash;</span></div>
+  </div>
+  <p class="figure-caption"><span class="figure-label">Figure 4.</span> Left: a 100 &times; 100 landscape, starting from low random noise; darker ground is higher, and blue marks channels, cells draining at least 20 cells. Water leaves across the bottom edge. Right: stream segments per Strahler order on a log scale, for this river network (blue), for the DLA cluster of Figure 1 (gold) and for the discharge of Figure 3 (violet), with the fitted bifurcation ratio of each. The last readout is the median, over channel cells, of the simulated slope divided by (<em>U</em>/<em>K</em>)<em>A</em><sup>&minus;1/2</sup>.</p>
+</div>
+
+<p>
+Unlike a DLA cluster, this landscape comes to rest. Uplift and erosion balance everywhere, and setting &part;<em>h</em>/&part;<em>t</em> = 0 gives <em>S</em> = (<em>U</em>/<em>K</em>)<em>A</em><sup>&minus;1/2</sup>: slopes flatten downstream as area grows. The last readout compares the simulated channel slopes with that prediction. From a fresh terrain it climbs from 0 to 1 over the first few hundred steps. Double <em>U</em> and it drops to 0.5, then recovers as the relief grows to twice its old height. After that the network changes only by occasional captures at the divides. A DLA cluster never settles: each particle is frozen where it sticks, and only the tips ever change.
+</p>
+
+<p>
+The chart uses Strahler's ordering. Channels with no tributaries are order 1, two streams of order &omega; join to make one of order &omega; + 1, and a smaller tributary does not raise the order. Horton noticed that the number of segments falls by a roughly constant factor from each order to the next, and that this bifurcation ratio <em>R</em><sub>b</sub> = <em>N</em><sub>&omega;</sub> / <em>N</em><sub>&omega;+1</sub> sits between 3 and 5 for real rivers. The DLA cluster and the discharge can be ordered the same way, treating each particle as a node hanging from the neighbor it attached to. All three land near that range.
+</p>
+
+<p>
+That agreement is weaker evidence than it looks. Kirchner showed in 1993 that almost any randomly branching tree has a bifurcation ratio near 4, so Horton's law says little about the process that built a network. The counts also depend on where a channel is declared to begin; here the river counts only cells draining at least 20 cells, while every particle of the clusters counts.
+</p>
+
+<p>
+What the two processes share is an instability: growth goes where a transported quantity is already concentrated, and the shape that growth builds decides where it concentrates next. In DLA the quantity is the flux of walkers, and it peaks at the tips. In a landscape it is water, which gathers in channels, and at a channel head it is the extra water that pushes the head into the hillslope. They differ in how that quantity is computed. In DLA it is a harmonic field, solved over all the empty space at once, so one tip can starve a fjord many branch-widths away. In the stream-power model it is drainage area, summed down the flow tree one cell at a time; a channel knows only what drains into it, and two neighboring basins interact only by capturing each other's cells at the divide. DLA grows at its tips and is frozen behind them, while a river network is eroded everywhere at once and relaxes to a steady state. And a DLA cluster is a sparse fractal with <em>D</em> &asymp; 1.71, while a drainage network reaches every cell of its basin.
+</p>
+
+<p>
+For one kind of river the analogy becomes exact. Streams fed by groundwater seepage, like those cut into the sand of the Florida panhandle, grow at their heads in proportion to the groundwater flowing into them, and the water table obeys a Poisson equation. Devauchelle and colleagues showed in 2012 that this Laplacian growth predicts the angle at which such streams split, 2&pi;/5 or 72&deg;, and found that angle in the field. Rivers cut by water running over the surface, like the one simulated here, follow the stream-power law instead.
+</p>
+
+<footer style="margin-top: 4rem; padding-top: 2rem; border-top: 1px solid var(--border); font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2);">
+  <p>&larr; Previous: <a href="07-sandpile.html" style="color: var(--accent);">Sandpile</a></p>
+  <p>Next: <a href="09-self-avoiding-walks.html" style="color: var(--accent);">Self-Avoiding Walks</a> &rarr;</p>
+  <p style="margin-top: 1rem;">References: T. A. Witten and L. M. Sander, Phys. Rev. Lett. 47, 1400 (1981). L. Niemeyer, L. Pietronero and H. J. Wiesmann, Phys. Rev. Lett. 52, 1033 (1984). R. E. Horton, Geol. Soc. Am. Bull. 56, 275 (1945). A. N. Strahler, Trans. Am. Geophys. Union 38, 913 (1957). J. W. Kirchner, Geology 21, 591 (1993). J. Braun and S. D. Willett, Geomorphology 180, 170 (2013). O. Devauchelle, A. P. Petroff, H. F. Seybold and D. H. Rothman, PNAS 109, 20832 (2012).</p>
+  <p style="margin-top: 1rem; opacity: 0.6;">Built with <a href="https://github.com/enjalot/moonshine" style="color: var(--text-2);">moonshine</a>.</p>
+</footer>
+
+</div><!-- .article -->
+
+<script>
+(function() {
+  "use strict";
+
+  var reducedMotion = Motion.reduced();
+
+  /* ---------------------------------------------------------------
+     Shared utilities
+  --------------------------------------------------------------- */
+
+  var DIRS = [[1,0],[-1,0],[0,1],[0,-1]];
+
+  function makeGrid(size) { return new Int16Array(size * size); }
+  function idx(x, y, size) { return y * size + x; }
+  function inBounds(x, y, size) { return x >= 0 && x < size && y >= 0 && y < size; }
+
+  function hasNeighbor(grid, x, y, size) {
+    for (var d = 0; d < 4; d++) {
+      var nx = x + DIRS[d][0], ny = y + DIRS[d][1];
+      if (inBounds(nx, ny, size) && grid[idx(nx, ny, size)] > 0) return true;
+    }
+    return false;
+  }
+
+  /* Return the grid value of a random occupied 4-neighbor (0 if none). */
+  function randomNeighborValue(grid, x, y, size) {
+    var start = Math.floor(Math.random() * 4);
+    for (var k = 0; k < 4; k++) {
+      var d = DIRS[(start + k) & 3];
+      var nx = x + d[0], ny = y + d[1];
+      if (inBounds(nx, ny, size)) {
+        var v = grid[idx(nx, ny, size)];
+        if (v > 0) return v;
+      }
+    }
+    return 0;
+  }
+
+  function launchWalker(cx, cy, radius, size) {
+    var launchR = Math.min(radius + 15, Math.floor(size * 0.45));
+    var angle = Math.random() * 2 * Math.PI;
+    var x = Math.round(cx + launchR * Math.cos(angle));
+    var y = Math.round(cy + launchR * Math.sin(angle));
+    x = Math.max(0, Math.min(size - 1, x));
+    y = Math.max(0, Math.min(size - 1, y));
+    return { x: x, y: y };
+  }
+
+  function stepWalker(w, size) {
+    var d = DIRS[Math.floor(Math.random() * 4)];
+    w.x += d[0];
+    w.y += d[1];
+    return w.x >= 0 && w.x < size && w.y >= 0 && w.y < size;
+  }
+
+  function killRadius(radius, size) { return Math.min(radius + 40, Math.floor(size * 0.48)); }
+
+  function walkerTooFar(w, cx, cy, kr) {
+    var dx = w.x - cx, dy = w.y - cy;
+    return (dx * dx + dy * dy) > kr * kr;
+  }
+
+  /* Mass-radius fractal dimension. N ~ c * Rg^D, so log N / log Rg is
+     biased by the prefactor c (it reads ~2.0 for a 3000-particle DLA).
+     Instead record (log N, log Rg) as the cluster grows and fit the slope
+     over the most recent fourfold growth in N. */
+  function DimTracker() {
+    this.reset();
+  }
+  DimTracker.prototype.reset = function() {
+    this.n = 1; this.sumR2 = 0; this.lastSample = 0;
+    this.lnN = []; this.lnR = []; this.nAt = [];
+  };
+  DimTracker.prototype.add = function(dx, dy) {
+    this.n++;
+    this.sumR2 += dx * dx + dy * dy;
+    if (this.n >= 20 && this.n >= this.lastSample * 1.04) {
+      this.lastSample = this.n;
+      this.nAt.push(this.n);
+      this.lnN.push(Math.log(this.n));
+      this.lnR.push(0.5 * Math.log(this.sumR2 / this.n));
+    }
+  };
+  DimTracker.prototype.estimate = function() {
+    if (this.n < 200) return null;
+    var lo = this.n / 4, sx = 0, sy = 0, sxy = 0, sxx = 0, m = 0;
+    for (var i = 0; i < this.nAt.length; i++) {
+      if (this.nAt[i] < lo) continue;
+      var x = this.lnR[i], y = this.lnN[i];
+      sx += x; sy += y; sxy += x * y; sxx += x * x; m++;
+    }
+    if (m < 5) return null;
+    var den = m * sxx - sx * sx;
+    if (den <= 0) return null;
+    return (m * sxy - sx * sy) / den;
+  };
+
+  /* Strahler ordering of a tree given as parent indices, where every
+     node's parent has a smaller index (insertion order). Returns segment
+     counts [N_1, N_2, ..., N_max]. */
+  function strahlerCounts(par, n) {
+    if (n < 2) return [];
+    var ord = new Uint8Array(n), um = new Uint8Array(n), uc = new Uint8Array(n);
+    for (var i = n - 1; i >= 0; i--) {
+      var o = um[i] === 0 ? 1 : um[i] + (uc[i] >= 2 ? 1 : 0);
+      ord[i] = o;
+      var p = par[i];
+      if (p < 0) continue;
+      if (o > um[p]) { um[p] = o; uc[p] = 1; }
+      else if (o === um[p]) uc[p]++;
+    }
+    var same = new Uint8Array(n);
+    for (var j = 0; j < n; j++) {
+      var q = par[j];
+      if (q >= 0 && ord[q] === ord[j]) same[q] = 1;
+    }
+    var counts = [];
+    for (var k = 0; k < n; k++) {
+      if (same[k]) continue;
+      var ok = ord[k];
+      while (counts.length < ok) counts.push(0);
+      counts[ok - 1]++;
+    }
+    return counts;
+  }
+
+  /* Bifurcation ratio from a least-squares fit of ln N_w against w. */
+  function fitRb(counts) {
+    if (!counts || counts.length < 3) return null;
+    var sx = 0, sy = 0, sxy = 0, sxx = 0, m = counts.length;
+    for (var i = 0; i < m; i++) {
+      var x = i + 1, y = Math.log(Math.max(1, counts[i]));
+      sx += x; sy += y; sxy += x * y; sxx += x * x;
+    }
+    var slope = (m * sxy - sx * sy) / (m * sxx - sx * sx);
+    return Math.exp(-slope);
+  }
+
+  /* Trees exposed by Figures 1 and 3 for the Horton chart in Figure 4. */
+  var Trees = { dla: null, dbm: null };
+
+  /* Colormap: arrival order 0..maxN through a dark-blue -> teal -> gold ramp. */
+  function buildColorLUT(maxN) {
+    var lut = new Uint8Array((maxN + 1) * 3);
+    for (var i = 0; i <= maxN; i++) {
+      var t = maxN > 1 ? i / maxN : 0;
+      var off = i * 3;
+      lut[off]     = 15 + t * 230 | 0;
+      lut[off + 1] = 30 + t * 100 + Math.max(0, t - 0.5) * 130 | 0;
+      lut[off + 2] = 120 - t * 80 | 0;
+    }
+    return lut;
+  }
+
+  function setupCanvas(canvasEl, size) {
+    canvasEl.width = size;
+    canvasEl.height = size;
+    return canvasEl.getContext("2d");
+  }
+
+  function renderGrid(ctx, grid, order, size, lut, imgData) {
+    var data = imgData.data;
+    for (var i = 0, px = 0; i < size * size; i++, px += 4) {
+      if (grid[i] > 0) {
+        var off = order[i] * 3;
+        data[px] = lut[off]; data[px + 1] = lut[off + 1]; data[px + 2] = lut[off + 2];
+      } else {
+        data[px] = 11; data[px + 1] = 11; data[px + 2] = 30;
+      }
+      data[px + 3] = 255;
+    }
+    ctx.putImageData(imgData, 0, 0);
+  }
+
+  function setPauseButton(btn, paused) {
+    btn.textContent = paused ? "Play" : "Pause";
+    btn.classList.toggle("active", paused);
+  }
+
+  /* ---------------------------------------------------------------
+     Figure 1: DLA with the arrival-probability field
+  --------------------------------------------------------------- */
+  (function() {
+    var S = 301;
+    var cx = S >> 1, cy = S >> 1;
+    var MAX_PARTICLES = 6000;
+    // Stop before the launch circle (radius + 15, capped at 0.45 S) runs into the cluster.
+    var MAX_RADIUS = Math.floor(S * 0.38);
+    var grid, order, par, particleCount, maxRadius, walker;
+    var dim = new DimTracker();
+    var paused = reducedMotion, visible = true, speed = 40, frame = 0;
+    var showHeatmap = false, field = null, fieldDirty = true, heat = null;
+
+    var figEl = document.getElementById("fig-algorithm");
+    var canvasEl = document.getElementById("canvas-algo");
+    var ctx = setupCanvas(canvasEl, S);
+    var imgData = ctx.createImageData(S, S);
+    var speedSlider = document.getElementById("speed-slider");
+    var speedVal = document.getElementById("speed-val");
+    var pauseBtn = document.getElementById("pause-algo");
+    var heatBtn = document.getElementById("toggle-heatmap");
+    var statCount = document.getElementById("stat-algo-count");
+    var statRadius = document.getElementById("stat-algo-radius");
+    var statDim = document.getElementById("stat-algo-dim");
+
+    function init() {
+      grid = makeGrid(S);
+      order = new Uint16Array(S * S);
+      par = new Int32Array(MAX_PARTICLES);
+      par[0] = -1;
+      particleCount = 1;
+      maxRadius = 0;
+      grid[idx(cx, cy, S)] = 1;          // grid stores particle index + 1
+      walker = null;
+      dim.reset();
+      field = null; heat = null; fieldDirty = true;
+      updateStats();
+      draw();
+    }
+
+    function simStep() {
+      if (particleCount >= MAX_PARTICLES || maxRadius >= MAX_RADIUS) return;
+      if (!walker) walker = launchWalker(cx, cy, maxRadius, S);
+      if (!stepWalker(walker, S)) { walker = null; return; }
+      if (walkerTooFar(walker, cx, cy, killRadius(maxRadius, S))) { walker = null; return; }
+      var nb = randomNeighborValue(grid, walker.x, walker.y, S);
+      if (nb > 0) {
+        var i = idx(walker.x, walker.y, S);
+        grid[i] = particleCount + 1;
+        order[i] = particleCount;
+        par[particleCount] = nb - 1;
+        particleCount++;
+        var dx = walker.x - cx, dy = walker.y - cy;
+        dim.add(dx, dy);
+        var r = Math.sqrt(dx * dx + dy * dy);
+        if (r > maxRadius) maxRadius = r;
+        walker = null;
+        fieldDirty = true;
+      }
+    }
+
+    /* u = 0 on the cluster, u = 1 on the launch circle, Laplace in between.
+       Successive over-relaxation, warm-started from the previous solution
+       (or from a logarithmic profile on the first call). */
+    function relaxField(sweeps) {
+      var R = Math.min(maxRadius + 15, Math.floor(S * 0.45));
+      var R2 = R * R;
+      if (!field) {
+        field = new Float32Array(S * S);
+        var lnR = Math.log(Math.max(R, 2));
+        for (var y0 = 0; y0 < S; y0++) {
+          for (var x0 = 0; x0 < S; x0++) {
+            var rr = Math.hypot(x0 - cx, y0 - cy);
+            field[idx(x0, y0, S)] = rr >= R ? 1 : (rr <= 1 ? 0 : Math.log(rr) / lnR);
+          }
+        }
+      }
+      var w = 1.9;
+      for (var it = 0; it < sweeps; it++) {
+        for (var y = 1; y < S - 1; y++) {
+          var dy = y - cy;
+          for (var x = 1; x < S - 1; x++) {
+            var i = y * S + x;
+            if (grid[i] > 0) { field[i] = 0; continue; }
+            var dx = x - cx;
+            if (dx * dx + dy * dy >= R2) { field[i] = 1; continue; }
+            var g = 0.25 * (field[i - 1] + field[i + 1] + field[i - S] + field[i + S]);
+            field[i] += w * (g - field[i]);
+          }
+        }
+      }
+      // Perimeter sites and their share of the arrival probability.
+      var sites = [], maxU = 0;
+      for (var y2 = 1; y2 < S - 1; y2++) {
+        for (var x2 = 1; x2 < S - 1; x2++) {
+          var k = y2 * S + x2;
+          if (grid[k] === 0 && hasNeighbor(grid, x2, y2, S)) {
+            var u = Math.max(0, field[k]);
+            sites.push(x2, y2, u);
+            if (u > maxU) maxU = u;
+          }
+        }
+      }
+      heat = { sites: sites, maxU: maxU };
+      fieldDirty = false;
+    }
+
+    function draw() {
+      renderGrid(ctx, grid, order, S, buildColorLUT(particleCount), imgData);
+      if (showHeatmap && heat) {
+        var s = heat.sites, maxU = heat.maxU || 1;
+        for (var i = 0; i < s.length; i += 3) {
+          var t = s[i + 2] / maxU;
+          if (t < 0.01) continue;
+          ctx.fillStyle = "rgba(" + Math.round(120 + 135 * t) + "," + Math.round(160 + 95 * t) + ",60," + (0.25 + 0.75 * t).toFixed(2) + ")";
+          ctx.fillRect(s[i] - 1, s[i + 1] - 1, 3, 3);
+        }
+      }
+      if (walker && !showHeatmap) {
+        ctx.fillStyle = "#ff6060";
+        ctx.fillRect(walker.x - 1, walker.y - 1, 3, 3);
+      }
+    }
+
+    function updateStats() {
+      statCount.textContent = particleCount;
+      statRadius.textContent = Math.round(maxRadius);
+      var d = dim.estimate();
+      statDim.textContent = d === null ? "–" : d.toFixed(2);
+    }
+
+    function loop() {
+      if (!paused && visible) {
+        for (var i = 0; i < speed; i++) {
+          for (var j = 0; j < 80; j++) simStep();
+        }
+        if (showHeatmap && fieldDirty && (frame % 10) === 0) relaxField(40);
+        draw();
+        updateStats();
+        frame++;
+      }
+      requestAnimationFrame(loop);
+    }
+
+    Trees.dla = function() {
+      return { counts: strahlerCounts(par, particleCount), n: particleCount };
+    };
+
+    speedSlider.addEventListener("input", function() {
+      speed = parseInt(this.value, 10);
+      speedVal.textContent = speed;
+    });
+    pauseBtn.addEventListener("click", function() {
+      paused = !paused;
+      setPauseButton(pauseBtn, paused);
+    });
+    document.getElementById("reset-algo").addEventListener("click", function() {
+      init();
+    });
+    heatBtn.addEventListener("click", function() {
+      showHeatmap = !showHeatmap;
+      if (showHeatmap) { field = null; relaxField(500); }
+      heatBtn.textContent = showHeatmap ? "Hide arrival probability" : "Show arrival probability";
+      heatBtn.classList.toggle("active", showHeatmap);
+      draw();
+    });
+    Motion.onVisible(figEl, function(v) { visible = v; });
+
+    setPauseButton(pauseBtn, paused);
+    init();
+    requestAnimationFrame(loop);
+  })();
+
+  /* ---------------------------------------------------------------
+     Figure 2: Stickiness comparison
+  --------------------------------------------------------------- */
+  (function() {
+    var S = 201;
+    var cx = S >> 1, cy = S >> 1;
+    var MAX_PARTICLES = 8000;
+    var MAX_RADIUS = Math.floor(S * 0.4);
+
+    function DLASim(canvasId, stickiness) {
+      var canvasEl = document.getElementById(canvasId);
+      var sCtx = setupCanvas(canvasEl, S);
+      var sImgData = sCtx.createImageData(S, S);
+      var grid, order, particleCount, maxRadius, walker;
+      var dim = new DimTracker();
+
+      function reset(newStick) {
+        if (newStick != null) stickiness = newStick;
+        grid = makeGrid(S);
+        order = new Uint16Array(S * S);
+        particleCount = 1;
+        maxRadius = 0;
+        walker = null;
+        grid[idx(cx, cy, S)] = 1;
+        dim.reset();
+      }
+
+      function step() {
+        if (particleCount >= MAX_PARTICLES || maxRadius >= MAX_RADIUS) return;
+        if (!walker) walker = launchWalker(cx, cy, maxRadius, S);
+        if (!stepWalker(walker, S)) { walker = null; return; }
+        if (walkerTooFar(walker, cx, cy, killRadius(maxRadius, S))) { walker = null; return; }
+        if (hasNeighbor(grid, walker.x, walker.y, S) && Math.random() < stickiness) {
+          grid[idx(walker.x, walker.y, S)] = 1;
+          order[idx(walker.x, walker.y, S)] = particleCount;
+          particleCount++;
+          var dx = walker.x - cx, dy = walker.y - cy;
+          dim.add(dx, dy);
+          var r = Math.sqrt(dx * dx + dy * dy);
+          if (r > maxRadius) maxRadius = r;
+          walker = null;
+        }
+      }
+
+      function draw() { renderGrid(sCtx, grid, order, S, buildColorLUT(particleCount), sImgData); }
+
+      reset();
+      return {
+        step: step, draw: draw, reset: reset,
+        count: function() { return particleCount; },
+        dim: function() { return dim.estimate(); }
+      };
+    }
+
+    var figEl = document.getElementById("fig-stickiness");
+    var simHigh = DLASim("canvas-sticky-high", 1.0);
+    var simLow = DLASim("canvas-sticky-low", 0.05);
+    var paused = reducedMotion, visible = true;
+
+    var stickySlider = document.getElementById("sticky-slider");
+    var stickyVal = document.getElementById("sticky-val");
+    var pauseBtn = document.getElementById("pause-sticky");
+    var statHigh = document.getElementById("stat-sticky-high");
+    var statLow = document.getElementById("stat-sticky-low");
+    var statHighDim = document.getElementById("stat-sticky-high-dim");
+    var statLowDim = document.getElementById("stat-sticky-low-dim");
+
+    function fmt(d) { return d === null ? "–" : d.toFixed(2); }
+    function render() {
+      simHigh.draw();
+      simLow.draw();
+      statHigh.textContent = simHigh.count();
+      statLow.textContent = simLow.count();
+      statHighDim.textContent = fmt(simHigh.dim());
+      statLowDim.textContent = fmt(simLow.dim());
+    }
+
+    function loop() {
+      if (!paused && visible) {
+        for (var i = 0; i < 3200; i++) simHigh.step();
+        // Low-stickiness walkers bounce many times before they stick.
+        for (var j = 0; j < 9600; j++) simLow.step();
+        render();
+      }
+      requestAnimationFrame(loop);
+    }
+
+    stickySlider.addEventListener("input", function() {
+      var v = parseFloat(stickySlider.value).toFixed(2);
+      stickyVal.textContent = v;
+      document.getElementById("label-sticky-low").textContent = "Stickiness: " + v;
+    });
+    pauseBtn.addEventListener("click", function() {
+      paused = !paused;
+      setPauseButton(pauseBtn, paused);
+    });
+    document.getElementById("reset-sticky").addEventListener("click", function() {
+      simHigh.reset(1.0);
+      simLow.reset(parseFloat(stickySlider.value));
+      render();
+    });
+    Motion.onVisible(figEl, function(v) { visible = v; });
+
+    setPauseButton(pauseBtn, paused);
+    render();
+    requestAnimationFrame(loop);
+  })();
+
+  /* ---------------------------------------------------------------
+     Figure 3: Dielectric breakdown model
+     phi = 1 on the cluster, phi = 0 on the edges; grow a perimeter site
+     with weight (1 - phi_site)^eta, the discrete field at that site.
+  --------------------------------------------------------------- */
+
+  var DPR = window.devicePixelRatio || 1;
+
+  function sizeDBMCanvas(canvas, aspectRatio, insetPx) {
+    var rect = canvas.parentElement.getBoundingClientRect();
+    var w = Math.floor(rect.width - (insetPx || 48));
+    var h = Math.floor(w * (aspectRatio || 0.75));
+    canvas.width = w * DPR;
+    canvas.height = h * DPR;
+    canvas.style.width = w + "px";
+    canvas.style.height = h + "px";
+    var ctx = canvas.getContext("2d");
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    return { w: w, h: h, ctx: ctx };
+  }
+
+  function DBM(canvas, opts) {
+    var self = this;
+    opts = opts || {};
+    self.cellSize = opts.cellSize || 3;
+    self.eta = opts.eta != null ? opts.eta : 1.0;
+    self.batchSize = opts.batchSize || 5;
+    self.steps = 0; self.tips = 0; self.done = false;
+    self.running = false; self.frameId = null; self.visible = true;
+
+    self.resize = function() {
+      var dim = sizeDBMCanvas(canvas, 0.75, 48);
+      self.W = dim.w; self.H = dim.h; self.ctx = dim.ctx;
+      self.cols = Math.floor(self.W / self.cellSize);
+      self.rows = Math.floor(self.H / self.cellSize);
+    };
+
+    self.init = function() {
+      self.steps = 0; self.tips = 0; self.done = false;
+      var total = self.cols * self.rows;
+      self.grid = new Uint8Array(total);
+      self.potential = new Float32Array(total);
+      self.nodeOf = new Int32Array(total).fill(-1);
+      self.par = new Int32Array(total);
+      self.nodes = 0;
+      var seed = Math.floor(self.cols / 2);
+      self.addCell(seed, -1);
+      self.relax(200);
+    };
+
+    self.addCell = function(k, parentNode) {
+      self.grid[k] = 1;
+      self.potential[k] = 1;
+      self.nodeOf[k] = self.nodes;
+      self.par[self.nodes] = parentNode;
+      self.nodes++;
+    };
+
+    /* Over-relaxed Gauss-Seidel, warm-started: the solution only needs to
+       adjust around the newly added cells between growth steps. */
+    self.relax = function(sweeps) {
+      var cols = self.cols, rows = self.rows, phi = self.potential, grid = self.grid;
+      var w = 1.85;
+      for (var it = 0; it < sweeps; it++) {
+        for (var y = 1; y < rows - 1; y++) {
+          for (var x = 1; x < cols - 1; x++) {
+            var k = y * cols + x;
+            if (grid[k] === 1) continue;
+            var g = 0.25 * (phi[k - 1] + phi[k + 1] + phi[k - cols] + phi[k + cols]);
+            phi[k] += w * (g - phi[k]);
+          }
+        }
+      }
+    };
+
+    self.growStep = function() {
+      if (self.done) return;
+      var cols = self.cols, rows = self.rows, grid = self.grid;
+      var candidates = [], weights = [], totalWeight = 0;
+      for (var y = 1; y < rows - 1; y++) {
+        for (var x = 1; x < cols - 1; x++) {
+          var k = y * cols + x;
+          if (grid[k] !== 0) continue;
+          if (!(grid[k - 1] || grid[k + 1] || grid[k - cols] || grid[k + cols])) continue;
+          var field = Math.max(1.0 - self.potential[k], 1e-4);
+          var w = self.eta === 0 ? 1 : Math.pow(field, self.eta);
+          candidates.push(k); weights.push(w); totalWeight += w;
+        }
+      }
+      if (candidates.length === 0 || totalWeight === 0) { self.done = true; return; }
+      var r = Math.random() * totalWeight, cumul = 0, chosen = candidates[candidates.length - 1];
+      for (var i = 0; i < candidates.length; i++) {
+        cumul += weights[i];
+        if (r <= cumul) { chosen = candidates[i]; break; }
+      }
+      var nbs = [chosen - 1, chosen + 1, chosen - cols, chosen + cols].filter(function(n) {
+        return n >= 0 && n < grid.length && grid[n] === 1;
+      });
+      var parentCell = nbs[Math.floor(Math.random() * nbs.length)];
+      self.addCell(chosen, self.nodeOf[parentCell]);
+      self.steps++;
+      if (Math.floor(chosen / cols) >= rows - 2) self.done = true;
+      self.relax(4);
+    };
+
+    self.countTips = function() {
+      var cols = self.cols, rows = self.rows, count = 0, g = self.grid;
+      for (var y = 1; y < rows - 1; y++) {
+        for (var x = 1; x < cols - 1; x++) {
+          var k = y * cols + x;
+          if (g[k] !== 1) continue;
+          var empty = (g[k - 1] === 0) + (g[k + 1] === 0) + (g[k - cols] === 0) + (g[k + cols] === 0);
+          if (empty >= 3) count++;
+        }
+      }
+      return count;
+    };
+
+    self.draw = function() {
+      var ctx = self.ctx, cs = self.cellSize, cols = self.cols, rows = self.rows;
+      var grad = ctx.createLinearGradient(0, 0, 0, self.H);
+      grad.addColorStop(0, "#0a0a1e");
+      grad.addColorStop(1, "#0f0f2a");
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, self.W, self.H);
+      for (var y = 0; y < rows; y++) {
+        for (var x = 0; x < cols; x++) {
+          var k = y * cols + x;
+          if (self.grid[k] === 1) continue;
+          var p = self.potential[k];
+          if (p > 0.05) {
+            ctx.fillStyle = "rgba(60,60,140," + (p * 0.35).toFixed(3) + ")";
+            ctx.fillRect(x * cs, y * cs, cs, cs);
+          }
+        }
+      }
+      ctx.shadowColor = "rgba(140,140,255,0.4)";
+      ctx.shadowBlur = 6;
+      ctx.fillStyle = "#c8c0ff";
+      for (var y2 = 0; y2 < rows; y2++) {
+        for (var x2 = 0; x2 < cols; x2++) {
+          if (self.grid[y2 * cols + x2] === 1) ctx.fillRect(x2 * cs, y2 * cs, cs, cs);
+        }
+      }
+      ctx.shadowBlur = 0;
+    };
+
+    self.start = function() {
+      if (self.running) return;
+      self.running = true;
+      function loop() {
+        if (!self.running) return;
+        if (self.visible) {
+          for (var i = 0; i < self.batchSize; i++) self.growStep();
+          self.draw();
+          self.tips = self.countTips();
+          if (opts.onTick) opts.onTick();
+        }
+        if (!self.done) self.frameId = requestAnimationFrame(loop);
+        else { self.running = false; if (opts.onTick) opts.onTick(); }
+      }
+      self.frameId = requestAnimationFrame(loop);
+    };
+
+    self.stop = function() {
+      self.running = false;
+      if (self.frameId) cancelAnimationFrame(self.frameId);
+    };
+  }
+
+  (function() {
+    var figEl = document.getElementById("fig-eta");
+    var canvas = document.getElementById("canvas-eta");
+    var etaSlider = document.getElementById("eta-slider");
+    var etaValSpan = document.getElementById("eta-val");
+    var playBtn = document.getElementById("play-eta");
+    var speedSlider = document.getElementById("eta-speed-slider");
+    var speedVal = document.getElementById("eta-speed-val");
+
+    var sim = new DBM(canvas, {
+      eta: 1.0, batchSize: 8,
+      onTick: function() {
+        document.getElementById("stat-eta").textContent = sim.eta.toFixed(1);
+        document.getElementById("stat-eta-steps").textContent = sim.steps;
+        document.getElementById("stat-eta-tips").textContent = sim.tips;
+        playBtn.textContent = sim.running ? "Pause" : (sim.done ? "Regrow" : "Play");
+      }
+    });
+
+    function reinit(autostart) {
+      sim.stop();
+      sim.resize();
+      sim.eta = parseFloat(etaSlider.value);
+      sim.batchSize = parseInt(speedSlider.value, 10);
+      sim.init();
+      sim.draw();
+      if (autostart) sim.start();
+      playBtn.textContent = sim.running ? "Pause" : "Play";
+    }
+
+    Trees.dbm = function() {
+      return sim.par ? { counts: strahlerCounts(sim.par, sim.nodes), n: sim.nodes } : null;
+    };
+
+    etaSlider.addEventListener("input", function() {
+      etaValSpan.textContent = parseFloat(this.value).toFixed(1);
+    });
+    etaSlider.addEventListener("change", function() { reinit(true); });
+    speedSlider.addEventListener("input", function() {
+      speedVal.textContent = this.value;
+      sim.batchSize = parseInt(this.value, 10);
+    });
+    playBtn.addEventListener("click", function() {
+      if (sim.done) { reinit(true); return; }
+      if (sim.running) { sim.stop(); playBtn.textContent = "Play"; }
+      else { sim.start(); playBtn.textContent = "Pause"; }
+    });
+    document.querySelectorAll("#fig-eta .btn[data-eta]").forEach(function(btn) {
+      btn.addEventListener("click", function() {
+        var v = parseFloat(btn.getAttribute("data-eta"));
+        etaSlider.value = v;
+        etaValSpan.textContent = v.toFixed(1);
+        reinit(true);
+      });
+    });
+    document.getElementById("reset-eta").addEventListener("click", function() { reinit(true); });
+
+    var lastWidth = 0;
+    new ResizeObserver(function(entries) {
+      var w = Math.round(entries[0].contentRect.width);
+      if (w === lastWidth) return;
+      var first = lastWidth === 0;
+      lastWidth = w;
+      reinit(first ? !reducedMotion : sim.running);
+    }).observe(figEl);
+    Motion.onVisible(figEl, function(v) { sim.visible = v; });
+  })();
+
+  /* ---------------------------------------------------------------
+     Figure 4: Stream-power landscape and Horton ratios
+     dh/dt = U - K A^m S, m = 1/2, n = 1. Each step: uplift, fill pits
+     (priority flood from the sea edge), D8 steepest-descent routing,
+     drainage-area accumulation, then an implicit erosion update
+     (Braun & Willett 2013), solved from the sea upstream.
+  --------------------------------------------------------------- */
+  (function() {
+    var N = 100, NN = N * N, M = 0.5, CHANNEL_A = 20, EPS = 1e-7;
+    var h = new Float64Array(NN), A = new Float64Array(NN);
+    var rec = new Int32Array(NN), recL = new Float64Array(NN);
+    var stack = new Int32Array(NN), order = new Uint8Array(NN), seen = new Uint8Array(NN);
+    var heapK = new Float64Array(NN), heapV = new Int32Array(NN), heapN = 0;
+    var K = 0.02, U = 0.0005, steps = 0;
+
+    function push(k, v) {
+      var i = heapN++;
+      while (i > 0) {
+        var p = (i - 1) >> 1;
+        if (heapK[p] <= k) break;
+        heapK[i] = heapK[p]; heapV[i] = heapV[p]; i = p;
+      }
+      heapK[i] = k; heapV[i] = v;
+    }
+    function pop() {
+      var top = heapV[0], k = heapK[--heapN], v = heapV[heapN], i = 0;
+      while (true) {
+        var c = 2 * i + 1;
+        if (c >= heapN) break;
+        if (c + 1 < heapN && heapK[c + 1] < heapK[c]) c++;
+        if (heapK[c] >= k) break;
+        heapK[i] = heapK[c]; heapV[i] = heapV[c]; i = c;
+      }
+      heapK[i] = k; heapV[i] = v;
+      return top;
+    }
+
+    function initTerrain() {
+      for (var i = 0; i < NN; i++) {
+        var r = (i / N) | 0;
+        h[i] = r === N - 1 ? 0 : Math.random() * 0.01;
+      }
+      steps = 0;
+      route();
+    }
+
+    /* Priority flood from the sea row fills closed depressions and yields
+       cells in an order where every receiver precedes its donors. */
+    function route() {
+      seen.fill(0); heapN = 0;
+      var sp = 0;
+      for (var c0 = 0; c0 < N; c0++) {
+        var s0 = (N - 1) * N + c0;
+        seen[s0] = 1; push(h[s0], s0);
+      }
+      while (heapN > 0) {
+        var i = pop();
+        stack[sp++] = i;
+        var r = (i / N) | 0, c = i % N;
+        for (var dr = -1; dr <= 1; dr++) {
+          for (var dc = -1; dc <= 1; dc++) {
+            if (!dr && !dc) continue;
+            var nr = r + dr, nc = c + dc;
+            if (nr < 0 || nr >= N || nc < 0 || nc >= N) continue;
+            var j = nr * N + nc;
+            if (seen[j]) continue;
+            seen[j] = 1;
+            if (h[j] <= h[i] + EPS) h[j] = h[i] + EPS;
+            push(h[j], j);
+          }
+        }
+      }
+      for (var k = 0; k < NN; k++) {
+        var rr = (k / N) | 0, cc = k % N;
+        if (rr === N - 1) { rec[k] = -1; continue; }
+        var best = -1, bs = 0, bl = 1;
+        for (var ddr = -1; ddr <= 1; ddr++) {
+          for (var ddc = -1; ddc <= 1; ddc++) {
+            if (!ddr && !ddc) continue;
+            var mr = rr + ddr, mc = cc + ddc;
+            if (mr < 0 || mr >= N || mc < 0 || mc >= N) continue;
+            var q = mr * N + mc;
+            var L = (ddr && ddc) ? Math.SQRT2 : 1;
+            var s = (h[k] - h[q]) / L;
+            if (s > bs) { bs = s; best = q; bl = L; }
+          }
+        }
+        rec[k] = best; recL[k] = bl;
+      }
+      A.fill(1);
+      for (var t = NN - 1; t >= 0; t--) {
+        var a = stack[t];
+        if (rec[a] >= 0) A[rec[a]] += A[a];
+      }
+    }
+
+    function step() {
+      for (var i = 0; i < NN - N; i++) h[i] += U;
+      route();
+      for (var k = 0; k < NN; k++) {
+        var c = stack[k], r = rec[c];
+        if (r < 0) continue;
+        var F = K * Math.pow(A[c], M) / recL[c];
+        h[c] = (h[c] + F * h[r]) / (1 + F);
+      }
+      steps++;
+    }
+
+    function strahlerRiver() {
+      order.fill(0);
+      var um = new Uint8Array(NN), uc = new Uint8Array(NN), maxO = 0;
+      for (var t = NN - 1; t >= 0; t--) {
+        var i = stack[t];
+        if (A[i] < CHANNEL_A) continue;
+        var o = um[i] === 0 ? 1 : um[i] + (uc[i] >= 2 ? 1 : 0);
+        order[i] = o;
+        if (o > maxO) maxO = o;
+        var d = rec[i];
+        if (d < 0) continue;
+        if (o > um[d]) { um[d] = o; uc[d] = 1; }
+        else if (o === um[d]) uc[d]++;
+      }
+      var same = new Uint8Array(NN);
+      for (var j = 0; j < NN; j++) {
+        if (A[j] < CHANNEL_A) continue;
+        var dd = rec[j];
+        if (dd >= 0 && order[dd] === order[j]) same[dd] = 1;
+      }
+      var counts = [];
+      for (var k = 0; k < NN; k++) {
+        if (A[k] < CHANNEL_A || same[k]) continue;
+        while (counts.length < order[k]) counts.push(0);
+        counts[order[k] - 1]++;
+      }
+      return counts;
+    }
+
+    function steadyRatio() {
+      var vals = [], pred = U / K;
+      for (var i = 0; i < NN; i++) {
+        if (rec[i] < 0 || A[i] < CHANNEL_A) continue;
+        var S = (h[i] - h[rec[i]]) / recL[i];
+        vals.push(S / (pred * Math.pow(A[i], -M)));
+      }
+      if (!vals.length) return null;
+      vals.sort(function(a, b) { return a - b; });
+      return vals[vals.length >> 1];
+    }
+
+    // --- View ---
+    var figEl = document.getElementById("fig-river");
+    var canvas = document.getElementById("canvas-river");
+    var ctx = setupCanvas(canvas, N);
+    var img = ctx.createImageData(N, N);
+    var chart = d3.select("#horton-chart");
+    var note = document.getElementById("horton-note");
+    var playBtn = document.getElementById("btn-play");
+    var playing = !reducedMotion, visible = true, stepsPerFrame = 3, frame = 0;
+    var highlighted = 0, lastSeries = null;
+    var COLORS = { river: "#2563eb", dla: "#c98a12", dbm: "#7c6fd6", hi: "#f59e0b" };
+    var DEFAULT_NOTE = "Hover a blue point to trace that order through the river network.";
+
+    function draw() {
+      var hmax = 1e-9;
+      for (var i = 0; i < NN; i++) if (h[i] > hmax) hmax = h[i];
+      var logMax = Math.log(NN);
+      var d = img.data;
+      for (var k = 0, p = 0; k < NN; k++, p += 4) {
+        if (A[k] >= CHANNEL_A) {
+          if (highlighted && order[k] === highlighted) {
+            d[p] = 245; d[p + 1] = 158; d[p + 2] = 11;
+          } else {
+            var t = Math.min(1, (Math.log(A[k]) - Math.log(CHANNEL_A)) / (logMax - Math.log(CHANNEL_A)));
+            d[p] = 150 - 120 * t; d[p + 1] = 195 - 115 * t; d[p + 2] = 235 - 90 * t;
+          }
+        } else {
+          var z = h[k] / hmax;
+          // Simple hillshade: light from the upper left.
+          var up = k >= N + 1 ? h[k - N - 1] : h[k];
+          var shade = Math.max(-1, Math.min(1, (h[k] - up) / hmax * 25));
+          var base = 236 - 120 * z + 28 * shade;
+          d[p] = base; d[p + 1] = base * 0.9 - 6; d[p + 2] = base * 0.74 - 10;
+        }
+        d[p + 3] = 255;
+      }
+      ctx.putImageData(img, 0, 0);
+    }
+
+    function drawChart(series) {
+      lastSeries = series;
+      var node = chart.node();
+      var width = Math.max(240, Math.round(node.getBoundingClientRect().width || 300));
+      var height = 230;
+      var m = { top: 64, right: 12, bottom: 34, left: 40 };
+      chart.attr("viewBox", "0 0 " + width + " " + height);
+      chart.selectAll("*").remove();
+
+      var maxOrder = 4, maxCount = 10;
+      series.forEach(function(s) {
+        if (!s.counts) return;
+        maxOrder = Math.max(maxOrder, s.counts.length);
+        s.counts.forEach(function(c) { maxCount = Math.max(maxCount, c); });
+      });
+      var x = d3.scaleLinear().domain([0.6, maxOrder + 0.4]).range([m.left, width - m.right]);
+      var y = d3.scaleLog().domain([1, maxCount * 1.2]).range([height - m.bottom, m.top]).nice();
+
+      var yAxis = chart.append("g").attr("transform", "translate(" + m.left + ",0)")
+        .call(d3.axisLeft(y).ticks(4, "~s").tickSizeOuter(0));
+      var xAxis = chart.append("g").attr("transform", "translate(0," + (height - m.bottom) + ")")
+        .call(d3.axisBottom(x).ticks(maxOrder).tickFormat(d3.format("d")).tickSizeOuter(0));
+      [xAxis, yAxis].forEach(function(g) {
+        g.selectAll("path, line").attr("stroke", "#c8c8d0");
+        g.selectAll("text").attr("fill", "#4a4a6a").style("font-size", "11px");
+      });
+      chart.append("text").attr("x", width - m.right).attr("y", height - 4)
+        .attr("text-anchor", "end").attr("fill", "#4a4a6a").style("font-size", "11px")
+        .text("Strahler order ω");
+      chart.append("text").attr("x", 4).attr("y", m.top - 10)
+        .attr("fill", "#4a4a6a").style("font-size", "11px").text("segments Nω");
+
+      series.forEach(function(s, si) {
+        var rb = fitRb(s.counts);
+        var lg = chart.append("text").attr("x", 4).attr("y", 13 + si * 15)
+          .attr("fill", s.color).style("font-size", "12px").style("font-weight", 600);
+        lg.append("tspan").text(s.label + ":  ");
+        if (s.counts && s.counts.length && rb !== null) {
+          lg.append("tspan").style("font-style", "italic").text("R");
+          lg.append("tspan").attr("dy", 3).style("font-size", "9px").text("b");
+          lg.append("tspan").attr("dy", -3).text(" ≈ " + rb.toFixed(1));
+        } else {
+          lg.append("tspan").text(s.counts && s.counts.length ? "too few orders" : s.empty);
+        }
+        if (!s.counts || !s.counts.length) return;
+        var pts = s.counts.map(function(c, i) { return { o: i + 1, c: Math.max(1, c) }; });
+        chart.append("path").datum(pts)
+          .attr("fill", "none").attr("stroke", s.color).attr("stroke-width", 1.5).attr("opacity", 0.8)
+          .attr("d", d3.line().x(function(d) { return x(d.o); }).y(function(d) { return y(d.c); }));
+        var dots = chart.append("g").selectAll("circle").data(pts).join("circle")
+          .attr("cx", function(d) { return x(d.o); })
+          .attr("cy", function(d) { return y(d.c); })
+          .attr("r", s.key === "river" ? 5 : 3.5)
+          .attr("fill", function(d) { return s.key === "river" && d.o === highlighted ? COLORS.hi : s.color; })
+          .attr("stroke", "#fff").attr("stroke-width", 1);
+        if (s.key === "river") {
+          dots.style("cursor", "pointer").attr("tabindex", 0)
+            .on("mouseenter focus", function(ev, d) {
+              highlighted = d.o;
+              note.textContent = "River order " + d.o + ": " + d.c + " segment" + (d.c === 1 ? "" : "s") + ", highlighted in the map.";
+              draw();
+              dots.attr("fill", function(e) { return e.o === highlighted ? COLORS.hi : s.color; });
+            })
+            .on("mouseleave blur", function() {
+              highlighted = 0;
+              note.textContent = DEFAULT_NOTE;
+              draw();
+              dots.attr("fill", s.color);
+            });
+        }
+      });
+    }
+
+    function updateStats() {
+      var riverCounts = strahlerRiver();
+      var hmax = 0;
+      for (var i = 0; i < NN; i++) if (h[i] > hmax) hmax = h[i];
+      document.getElementById("stat-river-steps").textContent = steps;
+      document.getElementById("stat-order").textContent = riverCounts.length;
+      document.getElementById("stat-relief").textContent = hmax.toFixed(3);
+      var ratio = steadyRatio();
+      document.getElementById("stat-steady").textContent = ratio === null ? "–" : ratio.toFixed(2);
+      var dla = Trees.dla ? Trees.dla() : null;
+      var dbm = Trees.dbm ? Trees.dbm() : null;
+      drawChart([
+        { key: "river", label: "River", color: COLORS.river, counts: riverCounts, empty: "no channels yet" },
+        { key: "dla", label: "DLA, Fig. 1", color: COLORS.dla,
+          counts: dla && dla.n > 50 ? dla.counts : null, empty: "grow Figure 1" },
+        { key: "dbm", label: "Discharge, Fig. 3", color: COLORS.dbm,
+          counts: dbm && dbm.n > 50 ? dbm.counts : null, empty: "grow Figure 3" }
+      ]);
+    }
+
+    function loop() {
+      if (visible) {
+        if (playing) {
+          for (var s = 0; s < stepsPerFrame; s++) step();
+          draw();
+        }
+        if ((frame++ % 10) === 0) updateStats();
+      }
+      requestAnimationFrame(loop);
+    }
+
+    document.getElementById("erosion-slider").addEventListener("input", function() {
+      K = +this.value;
+      document.getElementById("erosion-val").textContent = K.toFixed(3);
+    });
+    document.getElementById("uplift-slider").addEventListener("input", function() {
+      U = +this.value;
+      document.getElementById("uplift-val").textContent = U.toFixed(4);
+    });
+    document.getElementById("river-speed-slider").addEventListener("input", function() {
+      stepsPerFrame = +this.value;
+      document.getElementById("river-speed-val").textContent = stepsPerFrame + "x";
+    });
+    playBtn.addEventListener("click", function() {
+      playing = !playing;
+      setPauseButton(playBtn, !playing);
+    });
+    document.getElementById("btn-reset").addEventListener("click", function() {
+      initTerrain();
+      draw();
+      updateStats();
+    });
+    chart.on("mouseleave", function() {
+      if (!highlighted) return;
+      highlighted = 0;
+      note.textContent = DEFAULT_NOTE;
+      draw();
+      if (lastSeries) drawChart(lastSeries);
+    });
+    var lastW = 0;
+    new ResizeObserver(function(entries) {
+      var w = Math.round(entries[0].contentRect.width);
+      if (w === lastW) return;
+      lastW = w;
+      if (lastSeries) drawChart(lastSeries);
+    }).observe(figEl);
+    Motion.onVisible(figEl, function(v) { visible = v; });
+
+    setPauseButton(playBtn, !playing);
+    initTerrain();
+    draw();
+    updateStats();
+    requestAnimationFrame(loop);
+  })();
+
+  /* Display math */
+  function renderTex() {
+    if (!window.katex) return;
+    document.querySelectorAll("[data-tex]").forEach(function(el) {
+      katex.render(el.getAttribute("data-tex"), el, { displayMode: true, throwOnError: false });
+    });
+  }
+  if (document.readyState === "complete") renderTex();
+  else window.addEventListener("load", renderTex);
+})();
+</script>
+</body>
+</html>

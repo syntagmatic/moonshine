@@ -1,0 +1,945 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Coarsening and Consensus</title>
+<link href="../vendor/fonts/sans-serif-mono-alt/fonts.css" rel="stylesheet">
+<link rel="stylesheet" href="../vendor/katex@0.16.9/katex.min.css">
+<script defer src="../vendor/katex@0.16.9/katex.min.js"></script>
+<script defer src="../vendor/katex@0.16.9/auto-render.min.js" onload="var __r=function(){renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'\\[',right:'\\]',display:true},{left:'\\(',right:'\\)',display:false},{left:'$',right:'$',display:false}]});}; if (window.katex) __r(); else document.addEventListener('DOMContentLoaded', __r);"></script>
+<script src="../vendor/js/d3.v7.min.js"></script>
+<script src="../lib/motion.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --article-width: 740px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem;
+  --line-height: 1.6;
+  --text: #1a1a2e;
+  --text-2: #4a4a6a;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --bg: #fafafa;
+  --fig-bg: #ffffff;
+  --border: #e2e2e8;
+  --c-agent: #2563eb;
+  --c-rule: #0891b2;
+  --c-pattern: #8b5cf6;
+  --c-critical: #f59e0b;
+  --c-feedback: #ef4444;
+  --c-env: #10b981;
+  --c-danger: #ef4444;
+}
+body {
+  font-family: var(--body-font);
+  font-size: var(--body-size);
+  line-height: var(--line-height);
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+.article {
+  max-width: var(--article-width);
+  margin: 0 auto;
+  padding: 2rem 1.25rem 6rem;
+}
+h1, h2, h3 {
+  font-family: var(--heading-font);
+  font-weight: 700;
+  line-height: 1.2;
+}
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+h3 { font-size: 1.15rem; margin: 2rem 0 0.75rem; }
+p { margin: 0 0 1rem; }
+a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+a:hover { color: #1d4ed8; }
+code {
+  font-family: var(--mono-font);
+  font-size: 0.9em;
+  background: #f1f1f5;
+  padding: 0.15em 0.4em;
+  border-radius: 3px;
+}
+
+header { margin-bottom: 3rem; }
+.back-link { font-family: var(--heading-font); font-size: 0.85rem; text-decoration: none; color: var(--text-2); display: inline-block; margin-bottom: 1rem; }
+.subtitle { font-family: var(--heading-font); font-size: 1.15rem; color: var(--text-2); max-width: 600px; }
+
+.figure {
+  margin: 2rem 0;
+  padding: 1.5rem;
+  background: var(--fig-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.figure canvas {
+  display: block;
+  width: 100%;
+  border-radius: 3px;
+  image-rendering: pixelated;
+}
+.figure svg {
+  display: block;
+  width: 100%;
+  border-radius: 3px;
+  overflow: visible;
+}
+.figure-caption {
+  font-family: var(--heading-font);
+  font-size: 0.85rem;
+  color: var(--text-2);
+  margin-top: 0.75rem;
+  line-height: 1.4;
+}
+.figure-label { font-weight: 600; color: var(--text); }
+.insight {
+  background: var(--accent-light);
+  border-left: 3px solid var(--accent);
+  padding: 1rem 1.25rem;
+  margin: 1.5rem 0;
+  border-radius: 0 4px 4px 0;
+}
+.insight p { margin: 0; }
+.insight p + p { margin-top: 0.75rem; }
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: flex-end;
+  margin-top: 1rem;
+  font-family: var(--heading-font);
+  font-size: 0.85rem;
+}
+.control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.control-group label { color: var(--text-2); font-weight: 600; }
+.control-group .slider-row { display: flex; align-items: center; gap: 0.5rem; }
+.control-group input[type="range"] { width: 140px; accent-color: var(--accent); }
+.control-group .val {
+  font-family: var(--mono-font);
+  font-variant-numeric: tabular-nums;
+  min-width: 2.5em;
+  text-align: right;
+  color: var(--text);
+}
+.btn {
+  font-family: var(--heading-font);
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.45rem 1.1rem;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  background: var(--fig-bg);
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  user-select: none;
+}
+.btn:hover { border-color: var(--accent); background: var(--accent-light); }
+.btn.active { border-color: var(--accent); background: var(--accent); color: white; }
+.btn:disabled { opacity: 0.5; cursor: default; }
+.btn-group { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+.stat-row {
+  display: flex;
+  gap: 1.5rem;
+  margin-top: 0.75rem;
+  font-family: var(--heading-font);
+  font-size: 0.85rem;
+  flex-wrap: wrap;
+}
+.stat-row .stat { display: flex; gap: 0.35rem; align-items: baseline; }
+.stat-row .stat-label { color: var(--text-2); font-weight: 600; }
+.stat-row .stat-val {
+  font-family: var(--mono-font);
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+svg text { font-family: var(--heading-font); }
+
+@media (prefers-reduced-motion: reduce) {html:not([data-motion="full"]) .figure canvas { outline: 2px dashed var(--border); outline-offset: -2px; }
+}
+@media (max-width: 600px) {
+  h1 { font-size: 1.75rem; }
+  .controls { gap: 0.6rem; }
+  .control-group input[type="range"] { width: 80px; }
+}
+</style>
+</head>
+<body>
+<div class="article">
+
+<header>
+  <a href="index.html" class="back-link">&larr; Emergence Series</a>
+  <h1>Coarsening and Consensus</h1>
+  <p class="subtitle">Copy your neighbors and territories grow until one opinion holds the grid or the borders lock straight. Listen only to people who already agree with you and the population splits into a predictable number of camps.</p>
+</header>
+
+<p>
+Put a population on a grid and give each person one of two opinions at random.
+Each day someone looks at their four neighbors and adopts whatever most of them
+hold. There is no persuasion, no media, no leader. The only force is conformity
+to the people next door.
+</p>
+
+<p>
+Random noise snaps into patches within a few rounds. The patches then grow for
+as long as you care to watch, with their typical width rising as the square
+root of elapsed time. On a square grid that wraps around at the edges, about
+two runs in three end with one colour everywhere. The other third lock into
+straight bands that wrap all the way around, and those bands never move again.
+The second half of this essay swaps the two opinions for a continuum and adds
+one twist, that people ignore anyone too far from their own view. Then the
+population stops merging and settles into a set of camps whose number you can
+predict from the width of that tolerance.
+</p>
+
+<h2>1. The rule, and why the update order matters</h2>
+
+<p>
+The model is zero-temperature majority dynamics. Pick a cell at random. Count
+its four orthogonal neighbors. If three or four disagree with it, it switches.
+If exactly two disagree, it switches on a coin flip. One <em>sweep</em> is as
+many random picks as there are cells.
+</p>
+
+<p>
+The obvious alternative is to update every cell at once and give each a
+nine-cell vote over itself and its eight surrounding cells, which removes ties
+entirely. Try both below. The synchronous vote smooths the noise for a couple of
+dozen steps and then stops dead with domains only a few cells across.
+Every surviving border is straight enough that no cell on it is outvoted, and
+with no ties there is nothing left to move it. The random-order rule keeps going
+because a cell at a step in a border faces a 2&ndash;2 tie, so steps wander along
+the border until they meet and annihilate, and curved borders keep retreating.
+</p>
+
+<div class="figure" id="fig-rule">
+  <canvas id="canvas-rule"></canvas>
+  <div class="stat-row">
+    <div class="stat"><span class="stat-label" id="stat-rule-unit">Sweep:</span><span class="stat-val" id="stat-rule-step">0</span></div>
+    <div class="stat"><span class="stat-label">Black:</span><span class="stat-val" id="stat-rule-black">50%</span></div>
+    <div class="stat"><span class="stat-label">Status:</span><span class="stat-val" id="stat-rule-status">coarsening</span></div>
+  </div>
+  <div class="controls">
+    <div class="btn-group">
+      <button class="btn" id="rule-play">Play</button>
+      <button class="btn" id="rule-step">Step</button>
+      <button class="btn" id="rule-reset">Reset</button>
+    </div>
+    <div class="control-group">
+      <label>Update rule</label>
+      <div class="btn-group">
+        <button class="btn active" id="rule-async">Random order, 4 neighbors</button>
+        <button class="btn" id="rule-sync">All at once, 9-cell vote</button>
+      </div>
+    </div>
+    <div class="control-group">
+      <label>Sweeps per frame</label>
+      <div class="slider-row">
+        <input type="range" id="rule-speed" min="1" max="50" step="1" value="10">
+        <span class="val" id="rule-speed-val">10</span>
+      </div>
+    </div>
+  </div>
+  <p class="figure-caption"><span class="figure-label">Figure 1.</span> Majority dynamics on a 128&times;128 grid with wrap-around edges, starting from a 50/50 random mix. The random-order rule usually ends in consensus after several thousand sweeps; watch for it instead freezing into two or more straight bands. The synchronous nine-cell vote freezes within about 20 to 30 steps. Playback stops when nothing can change.</p>
+</div>
+
+<p>
+A cell deep inside a patch never flips. A cell on a convex bulge is outnumbered
+by the patch it pokes into and flips, so bulges retreat and small islands
+shrink and vanish. A perfectly straight border, horizontal or vertical, has no
+cell facing more than one disagreeing neighbor, so it cannot move at all. That
+is where the frozen bands come from.
+</p>
+
+<h2>2. Domains grow as the square root of time</h2>
+
+<p>
+Measure the typical domain width $L$ as the number of cells divided by the
+number of neighboring pairs that disagree. A border moves at a speed set by its
+curvature, roughly $1/L$, and a domain of width $L$ disappears once its border
+has travelled a distance $L$. Time to erase domains of size $L$ therefore grows
+as $L^2$, which gives $L \propto t^{1/2}$. This is the Allen&ndash;Cahn law for
+curvature-driven coarsening, the same law that governs grain growth in annealed
+metals and domain growth in a quenched magnet.
+</p>
+
+<div class="figure" id="fig-coarsening">
+  <div style="display:flex; gap:1.25rem; flex-wrap:wrap; align-items:flex-start;">
+    <canvas id="canvas-coarsening" style="width:200px; height:200px; flex:0 0 auto;"></canvas>
+    <div id="chart-coarsening" style="flex:1 1 260px; min-width:240px;"></div>
+  </div>
+  <div class="stat-row">
+    <div class="stat"><span class="stat-label">Sweep:</span><span class="stat-val" id="stat-coarsen-step">0</span></div>
+    <div class="stat"><span class="stat-label">Domain width L:</span><span class="stat-val" id="stat-coarsen-domain">--</span></div>
+    <div class="stat"><span class="stat-label">Fitted exponent (10 &le; t &le; 1000):</span><span class="stat-val" id="stat-coarsen-exponent">--</span></div>
+  </div>
+  <div class="controls">
+    <div class="btn-group">
+      <button class="btn" id="coarsen-play">Play</button>
+      <button class="btn" id="coarsen-reset">Reset</button>
+    </div>
+  </div>
+  <p class="figure-caption"><span class="figure-label">Figure 2.</span> Coarsening on a 200&times;200 grid, measured live on log&ndash;log axes up to 2000 sweeps. The dots are the measured $L(t)$; the dashed line has slope exactly 1/2 and is pinned to the measurement at $t = 10$. The fitted exponent is a least-squares slope of $\log L$ against $\log t$ for $10 \le t \le 1000$. In repeated runs it lands between about 0.42 and 0.54. Beyond $t \approx 1000$ only a handful of domains remain on the grid and single runs get noisy.</p>
+</div>
+
+<p>
+Nothing in the rule mentions a length or a speed. The $t^{1/2}$ comes out of
+the geometry of borders alone, which is why the same exponent turns up in
+alloys and foams that share none of the microscopic details. Add a temperature,
+so that cells occasionally flip against the majority, and this becomes the
+Ising model; below its critical temperature it coarsens the same way. That model
+has its own essay in the <a href="../lattice-simulation/06-ising-z2-breaking.html">lattice
+simulation series</a>.
+</p>
+
+<h2>3. Who wins, and how often nobody does</h2>
+
+<p>
+From an exact 50/50 start the rule has no preference, so black and white win
+equally often. The surprise is the third outcome. Spirin, Krapivsky and Redner
+found that on a periodic square grid a finite fraction of runs never reach
+consensus and freeze into straight stripes instead, and Barros, Krapivsky and
+Redner later tied that fraction to crossing probabilities in critical
+percolation, giving about 0.34. The sweep below measures it directly and then
+tilts the starting mix toward black.
+</p>
+
+<div class="figure" id="fig-bias">
+  <div id="chart-bias"></div>
+  <div class="stat-row">
+    <div class="stat"><span class="stat-label">Runs finished:</span><span class="stat-val" id="stat-bias-done">0</span></div>
+    <div class="stat"><span class="stat-label">Stripes at 50%:</span><span class="stat-val" id="stat-bias-stripes">--</span></div>
+  </div>
+  <div class="controls">
+    <div class="control-group">
+      <label>Grid size</label>
+      <div class="btn-group">
+        <button class="btn active" id="bias-32">32&times;32</button>
+        <button class="btn" id="bias-64">64&times;64</button>
+      </div>
+    </div>
+    <button class="btn" id="bias-sweep">Run sweep</button>
+  </div>
+  <p class="figure-caption"><span class="figure-label">Figure 3.</span> Outcome of random-order majority dynamics for starting black fractions from 50% to 56%. Each bar is 40 independent runs (20 on the 64&times;64 grid), each run until consensus or a frozen stripe state. Dark is black consensus, light is white consensus, blue is frozen stripes. A small grey cap marks any run still moving at the sweep limit.</p>
+</div>
+
+<p>
+At 50% the stripe fraction comes out near one third, and the two consensus
+outcomes split the rest. A two-point bias is enough to make black the likely
+winner, and the same bias matters more on the larger grid: at 53% the 32-cell
+grid still gives white a few wins, while the 64-cell grid almost never does.
+Early on, the dynamics erase detail finer than the current domain width, so the
+outcome is decided by which colour owns the large-scale connected regions. A
+small excess of black spread over a bigger area is a more reliable majority
+at that scale. Stripes also thin out with bias, because a stripe state needs
+both colours to span the grid.
+</p>
+
+<h2>4. Opinions on a continuum</h2>
+
+<p>
+Majority rule has two opinions and unlimited openness: every neighbor counts,
+however much they disagree. The bounded-confidence model of Deffuant, Neau,
+Amblard and Weisbuch flips both assumptions. Each opinion is a number between
+0 and 1, anyone can meet anyone, and when two people meet they move halfway
+toward each other only if their opinions differ by less than a tolerance
+$\varepsilon$. Otherwise they part unchanged.
+</p>
+
+<p>
+Averaging can only pull opinions together, so a large $\varepsilon$ ends in a
+single consensus near the middle. A small $\varepsilon$ does something the
+majority rule cannot. Opinions gather into clusters, and once two clusters sit
+further apart than $\varepsilon$ they never interact again. The population
+freezes into several camps, each internally unanimous and deaf to the others.
+</p>
+
+<div class="figure" id="fig-deffuant">
+  <canvas id="canvas-deffuant" style="width:100%; height:260px;"></canvas>
+  <div class="stat-row">
+    <div class="stat"><span class="stat-label">Meetings per person:</span><span class="stat-val" id="stat-def-t">0</span></div>
+    <div class="stat"><span class="stat-label">Clusters (&ge; 5% of people):</span><span class="stat-val" id="stat-def-clusters">--</span></div>
+    <div class="stat"><span class="stat-label">1/(2&epsilon;):</span><span class="stat-val" id="stat-def-pred">--</span></div>
+  </div>
+  <div class="controls">
+    <div class="control-group">
+      <label>Tolerance &epsilon;</label>
+      <div class="slider-row">
+        <input type="range" id="def-eps" min="0.05" max="0.5" step="0.01" value="0.15">
+        <span class="val" id="def-eps-val">0.15</span>
+      </div>
+    </div>
+    <div class="btn-group">
+      <button class="btn" id="def-play">Play</button>
+      <button class="btn" id="def-reset">Reset</button>
+    </div>
+  </div>
+  <p class="figure-caption"><span class="figure-label">Figure 4.</span> 300 people with opinions drawn uniformly from [0, 1]. Horizontal is time in meetings per person, vertical is opinion; each faint trace is one person. Changing $\varepsilon$ restarts the run. Near the ends of the range a few people often end up in small outlying clusters; the cluster count ignores groups smaller than 5% of the population.</p>
+</div>
+
+<p>
+The number of camps follows a simple rule. Starting from a uniform spread,
+people within $\varepsilon$ of each other pull together into a cluster that
+then captures everyone within about $\varepsilon$ on either side, so each
+cluster ends up owning a stretch of opinion roughly $2\varepsilon$ wide. That
+predicts about $1/(2\varepsilon)$ major clusters, the estimate Weisbuch and
+colleagues gave. The sweep below tests it.
+</p>
+
+<div class="figure" id="fig-phase">
+  <div id="chart-phase"></div>
+  <div class="controls">
+    <button class="btn" id="phase-run">Run sweep</button>
+    <span class="stat-row" style="margin:0;"><span class="stat"><span class="stat-label">Progress:</span><span class="stat-val" id="stat-phase-progress">--</span></span></span>
+  </div>
+  <p class="figure-caption"><span class="figure-label">Figure 5.</span> Final number of clusters against tolerance, measured by running 300 people to convergence (every gap between neighboring opinions either closed below 0.001 or wider than $\varepsilon$) five times at each $\varepsilon$. Filled dots count clusters holding at least 5% of people; open dots count every cluster, including small outliers. The dashed curve is $1/(2\varepsilon)$.</p>
+</div>
+
+<p>
+The major-cluster count tracks $1/(2\varepsilon)$ closely from about
+$\varepsilon = 0.1$ upward and falls a little short below that, where the
+clusters near the two ends absorb less than their share. One major camp is
+typical once $\varepsilon$ passes about 0.3. The open dots stay above the
+filled ones well past that point, because a few people who start near 0 or 1
+can miss the central cluster as it forms and stay stranded. Fortunato showed that
+on a complete graph every last person joins the consensus only once
+$\varepsilon$ exceeds 1/2.
+</p>
+
+<p>
+The two models fail to agree for different reasons. Majority dynamics can
+always make progress while a border is curved, and it stops only when the
+borders are straight, a geometric accident that grows rarer when one side
+starts with more territory. Bounded confidence stops for a structural reason:
+clusters more than $\varepsilon$ apart share no interactions at all, so their
+number is fixed by the tolerance and the size of the opinion range. In
+majority rule every neighboring pair of cells pulls toward agreement. The
+<a href="05-spin-glass.html">next essay</a> keeps the lattice and makes some of
+those pairs pull toward disagreement.
+</p>
+
+<footer style="margin-top: 4rem; padding-top: 2rem; border-top: 1px solid var(--border); font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); display: flex; justify-content: space-between; flex-wrap: wrap; gap: 1rem;">
+  <p>&larr; <a href="03-traffic-shockwaves.html" style="color: var(--accent);">Traffic Shockwaves</a></p>
+  <p><a href="05-spin-glass.html" style="color: var(--accent);">Spin Glass</a> &rarr;</p>
+  <p style="flex-basis: 100%; margin-top: 1rem;">References: G. Vichniac, Physica D 10, 96 (1984). S. M. Allen and J. W. Cahn, Acta Metall. 27, 1085 (1979). V. Spirin, P. L. Krapivsky and S. Redner, Phys. Rev. E 63, 036118 (2001). K. Barros, P. L. Krapivsky and S. Redner, Phys. Rev. E 80, 040101 (2009). G. Deffuant, D. Neau, F. Amblard and G. Weisbuch, Adv. Complex Syst. 3, 87 (2000). G. Weisbuch, G. Deffuant, F. Amblard and J.-P. Nadal, Complexity 7, 55 (2002). S. Fortunato, Int. J. Mod. Phys. C 15, 1301 (2004).</p>
+  <p style="flex-basis: 100%; margin-top: 1rem; opacity: 0.6;">Built with <a href="https://github.com/enjalot/moonshine" style="color: var(--text-2);">moonshine</a>.</p>
+</footer>
+
+</div><!-- .article -->
+
+<script>
+(function () {
+  "use strict";
+
+  var REDUCED = Motion.reduced();
+  var INK = "#1a1a2e", PAPER = "#f0f0f5", ACCENT = "#2563eb", MUTED = "#4a4a6a", GRID = "#e2e2e8";
+
+  function whenVisible(el, fn) {
+    var done = false;
+    var io = new IntersectionObserver(function (entries) {
+      if (!done && entries.some(function (e) { return e.isIntersecting; })) { done = true; io.disconnect(); fn(); }
+    }, { rootMargin: "100px" });
+    io.observe(el);
+  }
+
+  function drawGrid(ctx, grid, n) {
+    var img = ctx.createImageData(n, n), d = img.data;
+    for (var i = 0, j = 0; i < n * n; i++, j += 4) {
+      if (grid[i]) { d[j] = 26; d[j + 1] = 26; d[j + 2] = 46; }
+      else { d[j] = 240; d[j + 1] = 240; d[j + 2] = 245; }
+      d[j + 3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+  }
+
+  function randomFill(grid, p) {
+    for (var i = 0; i < grid.length; i++) grid[i] = Math.random() < p ? 1 : 0;
+  }
+
+  // Zero-temperature random-order majority: 4 orthogonal neighbours, ties by coin.
+  function sweepAsync(g, n) {
+    var N = n * n;
+    for (var k = 0; k < N; k++) {
+      var i = (Math.random() * N) | 0, x = i % n, y = (i / n) | 0, v = g[i];
+      var s = g[y * n + (x + 1) % n] + g[y * n + (x + n - 1) % n] + g[((y + 1) % n) * n + x] + g[((y + n - 1) % n) * n + x];
+      var opp = v ? 4 - s : s;
+      if (opp > 2 || (opp === 2 && Math.random() < 0.5)) g[i] = 1 - v;
+    }
+  }
+
+  // Synchronous 9-cell vote (self + Moore neighbourhood).
+  function stepSync(g, out, n) {
+    for (var y = 0; y < n; y++) {
+      var ym = (y + n - 1) % n, yp = (y + 1) % n;
+      for (var x = 0; x < n; x++) {
+        var xm = (x + n - 1) % n, xp = (x + 1) % n;
+        var c = g[ym * n + xm] + g[ym * n + x] + g[ym * n + xp] + g[y * n + xm] + g[y * n + x] + g[y * n + xp] + g[yp * n + xm] + g[yp * n + x] + g[yp * n + xp];
+        out[y * n + x] = c >= 5 ? 1 : 0;
+      }
+    }
+  }
+
+  // No cell can ever flip again under the random-order rule.
+  function frozenAsync(g, n) {
+    for (var y = 0; y < n; y++) for (var x = 0; x < n; x++) {
+      var i = y * n + x, v = g[i];
+      var s = g[y * n + (x + 1) % n] + g[y * n + (x + n - 1) % n] + g[((y + 1) % n) * n + x] + g[((y + n - 1) % n) * n + x];
+      if ((v ? 4 - s : s) >= 2) return false;
+    }
+    return true;
+  }
+
+  function countOnes(g) { var c = 0; for (var i = 0; i < g.length; i++) c += g[i]; return c; }
+
+  function unlikeBonds(g, n) {
+    var b = 0;
+    for (var y = 0; y < n; y++) for (var x = 0; x < n; x++) {
+      var v = g[y * n + x];
+      if (v !== g[y * n + (x + 1) % n]) b++;
+      if (v !== g[((y + 1) % n) * n + x]) b++;
+    }
+    return b;
+  }
+
+  function sameGrid(a, b) { for (var i = 0; i < a.length; i++) if (a[i] !== b[i]) return false; return true; }
+
+  function sizeSquareCanvas(canvas, fig, maxW) {
+    var w = Math.min(fig.clientWidth - 48, maxW);
+    if (w < 160) w = 160;
+    canvas.style.width = w + "px";
+    canvas.style.height = w + "px";
+  }
+
+  /* ---------------- Figure 1: the rule ---------------- */
+  (function () {
+    var n = 128, N = n * n;
+    var fig = document.getElementById("fig-rule");
+    var canvas = document.getElementById("canvas-rule");
+    canvas.width = n; canvas.height = n;
+    var ctx = canvas.getContext("2d");
+    var grid = new Uint8Array(N), next = new Uint8Array(N), prev = new Uint8Array(N);
+    var mode = "async", step = 0, status = "coarsening", playing = false, raf = null, spf = 10;
+    var playBtn = document.getElementById("rule-play");
+
+    function advance() {
+      if (mode === "async") {
+        sweepAsync(grid, n); step++;
+        var b = countOnes(grid);
+        if (b === 0 || b === N) status = "consensus";
+        else if (frozenAsync(grid, n)) status = "frozen stripes";
+      } else {
+        stepSync(grid, next, n); step++;
+        if (sameGrid(grid, next)) status = "frozen";
+        else if (sameGrid(prev, next)) status = "frozen (blinking)";
+        prev.set(grid);
+        var t = grid; grid = next; next = t;
+      }
+    }
+    function stopped() { return status !== "coarsening"; }
+    function stats() {
+      var b = countOnes(grid);
+      document.getElementById("stat-rule-unit").textContent = mode === "async" ? "Sweep:" : "Step:";
+      document.getElementById("stat-rule-step").textContent = step;
+      document.getElementById("stat-rule-black").textContent = (100 * b / N).toFixed(1) + "%";
+      document.getElementById("stat-rule-status").textContent = status;
+    }
+    function render() { drawGrid(ctx, grid, n); stats(); }
+    function tick() {
+      var k = mode === "async" ? spf : 1;
+      for (var i = 0; i < k && !stopped(); i++) advance();
+      render();
+      if (stopped()) { pause(); return; }
+      if (playing) raf = requestAnimationFrame(tick);
+    }
+    function play() { if (playing || stopped()) return; playing = true; playBtn.textContent = "Pause"; playBtn.classList.add("active"); raf = requestAnimationFrame(tick); }
+    function pause() { playing = false; playBtn.textContent = "Play"; playBtn.classList.remove("active"); if (raf) cancelAnimationFrame(raf); raf = null; }
+    function init() { pause(); randomFill(grid, 0.5); prev.fill(2); step = 0; status = "coarsening"; render(); }
+
+    playBtn.addEventListener("click", function () { playing ? pause() : play(); });
+    document.getElementById("rule-step").addEventListener("click", function () { pause(); if (!stopped()) advance(); render(); });
+    document.getElementById("rule-reset").addEventListener("click", init);
+    document.getElementById("rule-async").addEventListener("click", function () {
+      mode = "async"; this.classList.add("active"); document.getElementById("rule-sync").classList.remove("active"); init();
+    });
+    document.getElementById("rule-sync").addEventListener("click", function () {
+      mode = "sync"; this.classList.add("active"); document.getElementById("rule-async").classList.remove("active"); init();
+    });
+    document.getElementById("rule-speed").addEventListener("input", function () {
+      spf = +this.value; document.getElementById("rule-speed-val").textContent = spf;
+    });
+    new ResizeObserver(function () { sizeSquareCanvas(canvas, fig, 420); }).observe(fig);
+    init();
+  })();
+
+  /* ---------------- Figure 2: coarsening exponent ---------------- */
+  (function () {
+    var n = 200, N = n * n, TMAX = 2000;
+    var fig = document.getElementById("fig-coarsening");
+    var canvas = document.getElementById("canvas-coarsening");
+    canvas.width = n; canvas.height = n;
+    var ctx = canvas.getContext("2d");
+    var chartDiv = document.getElementById("chart-coarsening");
+    var grid = new Uint8Array(N), t = 0, pts = [], playing = false, raf = null, nextRec = 1;
+    var playBtn = document.getElementById("coarsen-play");
+
+    function record() {
+      var b = unlikeBonds(grid, n);
+      pts.push({ t: t, L: b > 0 ? N / b : n });
+    }
+    function fit() {
+      var w = pts.filter(function (p) { return p.t >= 10 && p.t <= 1000; });
+      if (w.length < 3) return null;
+      var sx = 0, sy = 0, sxx = 0, sxy = 0;
+      w.forEach(function (p) { var lx = Math.log(p.t), ly = Math.log(p.L); sx += lx; sy += ly; sxx += lx * lx; sxy += lx * ly; });
+      var m = w.length;
+      return (m * sxy - sx * sy) / (m * sxx - sx * sx);
+    }
+    function chart() {
+      d3.select(chartDiv).selectAll("svg").remove();
+      var W = Math.max(240, chartDiv.clientWidth), H = 200, m = { top: 10, right: 12, bottom: 36, left: 44 };
+      var iw = W - m.left - m.right, ih = H - m.top - m.bottom;
+      var svg = d3.select(chartDiv).append("svg").attr("width", W).attr("height", H);
+      var g = svg.append("g").attr("transform", "translate(" + m.left + "," + m.top + ")");
+      var x = d3.scaleLog().domain([1, TMAX]).range([0, iw]);
+      var y = d3.scaleLog().domain([1, 128]).range([ih, 0]);
+      g.append("g").attr("transform", "translate(0," + ih + ")").call(d3.axisBottom(x).ticks(4, "~s"));
+      g.append("g").call(d3.axisLeft(y).tickValues([1, 2, 4, 8, 16, 32, 64, 128]).tickFormat(d3.format("d")));
+      g.append("text").attr("x", iw / 2).attr("y", ih + 30).attr("text-anchor", "middle").attr("font-size", 11).attr("fill", MUTED).text("sweeps t");
+      g.append("text").attr("transform", "rotate(-90)").attr("x", -ih / 2).attr("y", -32).attr("text-anchor", "middle").attr("font-size", 11).attr("fill", MUTED).text("domain width L");
+      var ref = pts.filter(function (p) { return p.t >= 10; })[0];
+      if (ref) {
+        var k = ref.L / Math.sqrt(ref.t);
+        g.append("path").attr("fill", "none").attr("stroke", ACCENT).attr("stroke-width", 1.5).attr("stroke-dasharray", "5,4")
+          .attr("d", d3.line().x(function (d) { return x(d); }).y(function (d) { return y(Math.min(128, Math.max(1, k * Math.sqrt(d)))); })([1, 3, 10, 30, 100, 300, 1000, TMAX]));
+      }
+      g.selectAll("circle").data(pts.filter(function (p) { return p.t >= 1; })).enter().append("circle")
+        .attr("cx", function (d) { return x(d.t); }).attr("cy", function (d) { return y(Math.max(1, Math.min(128, d.L))); })
+        .attr("r", 2.5).attr("fill", INK);
+      var lg = g.append("g").attr("transform", "translate(8,6)");
+      lg.append("circle").attr("cx", 5).attr("cy", 5).attr("r", 2.5).attr("fill", INK);
+      lg.append("text").attr("x", 14).attr("y", 9).attr("font-size", 10).attr("fill", MUTED).text("measured");
+      lg.append("line").attr("x1", 0).attr("x2", 12).attr("y1", 19).attr("y2", 19).attr("stroke", ACCENT).attr("stroke-width", 1.5).attr("stroke-dasharray", "4,3");
+      lg.append("text").attr("x", 14).attr("y", 22).attr("font-size", 10).attr("fill", MUTED).text("slope 1/2");
+    }
+    function stats() {
+      document.getElementById("stat-coarsen-step").textContent = t;
+      document.getElementById("stat-coarsen-domain").textContent = pts.length ? pts[pts.length - 1].L.toFixed(1) : "--";
+      var e = fit();
+      document.getElementById("stat-coarsen-exponent").textContent = e === null ? "--" : e.toFixed(2);
+    }
+    function done() { var b = countOnes(grid); return t >= TMAX || b === 0 || b === N; }
+    function advanceFrame() {
+      var budget = Math.max(1, Math.min(40, Math.floor(t / 15)));
+      for (var i = 0; i < budget && !done(); i++) {
+        sweepAsync(grid, n); t++;
+        if (t >= nextRec) { record(); nextRec = Math.max(nextRec + 1, Math.round(nextRec * 1.15)); }
+      }
+    }
+    function render() { drawGrid(ctx, grid, n); chart(); stats(); }
+    function tick() {
+      advanceFrame(); render();
+      if (done()) { pause(); return; }
+      if (playing) raf = requestAnimationFrame(tick);
+    }
+    function play() { if (playing || done()) return; playing = true; playBtn.textContent = "Pause"; playBtn.classList.add("active"); raf = requestAnimationFrame(tick); }
+    function pause() { playing = false; playBtn.textContent = "Play"; playBtn.classList.remove("active"); if (raf) cancelAnimationFrame(raf); raf = null; }
+    function init() { pause(); randomFill(grid, 0.5); t = 0; pts = []; nextRec = 1; render(); }
+    playBtn.addEventListener("click", function () { playing ? pause() : play(); });
+    document.getElementById("coarsen-reset").addEventListener("click", init);
+    new ResizeObserver(function () { chart(); }).observe(fig);
+    init();
+    if (REDUCED) {
+      // Compute the full run without animating it.
+      whenVisible(fig, function () { while (!done()) advanceFrame(); render(); });
+    } else {
+      whenVisible(fig, play);
+    }
+  })();
+
+  /* ---------------- Figure 3: outcomes vs bias ---------------- */
+  (function () {
+    var fig = document.getElementById("fig-bias");
+    var chartDiv = document.getElementById("chart-bias");
+    var biases = [50, 51, 52, 53, 54, 55, 56];
+    var size = 32, results = {}, running = false, runToken = 0;
+    var sweepBtn = document.getElementById("bias-sweep");
+
+    function trialsFor(s) { return s === 32 ? 40 : 20; }
+    function capFor(s) { return s === 32 ? 8000 : 20000; }
+    function reset() { results = {}; biases.forEach(function (b) { results[b] = { black: 0, white: 0, stripes: 0, open: 0 }; }); }
+
+    function chart() {
+      d3.select(chartDiv).selectAll("svg").remove();
+      var W = Math.max(260, fig.clientWidth - 48), H = 220, m = { top: 26, right: 10, bottom: 36, left: 44 };
+      var iw = W - m.left - m.right, ih = H - m.top - m.bottom;
+      var svg = d3.select(chartDiv).append("svg").attr("width", W).attr("height", H);
+      var g = svg.append("g").attr("transform", "translate(" + m.left + "," + m.top + ")");
+      var x = d3.scaleBand().domain(biases).range([0, iw]).padding(0.25);
+      var y = d3.scaleLinear().domain([0, 1]).range([ih, 0]);
+      g.append("g").attr("transform", "translate(0," + ih + ")").call(d3.axisBottom(x).tickFormat(function (d) { return d + "%"; }));
+      g.append("g").call(d3.axisLeft(y).ticks(4, "%"));
+      g.append("text").attr("x", iw / 2).attr("y", ih + 30).attr("text-anchor", "middle").attr("font-size", 11).attr("fill", MUTED).text("initial black fraction");
+      var keys = [["black", INK], ["white", "#c9c9d6"], ["stripes", ACCENT], ["open", "#9ca3af"]];
+      biases.forEach(function (b) {
+        var r = results[b], tot = r.black + r.white + r.stripes + r.open;
+        if (!tot) return;
+        var acc = 0, full = trialsFor(size);
+        keys.forEach(function (kc) {
+          var v = r[kc[0]] / full;
+          if (v > 0) g.append("rect").attr("x", x(b)).attr("width", x.bandwidth()).attr("y", y(acc + v)).attr("height", y(acc) - y(acc + v)).attr("fill", kc[1]);
+          acc += v;
+        });
+      });
+      var lg = g.append("g").attr("transform", "translate(0,-20)");
+      var labels = [["black wins", INK], ["white wins", "#c9c9d6"], ["frozen stripes", ACCENT], ["still moving", "#9ca3af"]];
+      var off = 0;
+      labels.forEach(function (l) {
+        lg.append("rect").attr("x", off).attr("y", 0).attr("width", 10).attr("height", 10).attr("fill", l[1]);
+        lg.append("text").attr("x", off + 14).attr("y", 9).attr("font-size", 10).attr("fill", MUTED).text(l[0]);
+        off += 14 + l[0].length * 5.6 + 12;
+      });
+    }
+    function stats() {
+      var done = 0;
+      biases.forEach(function (b) { var r = results[b]; done += r.black + r.white + r.stripes + r.open; });
+      document.getElementById("stat-bias-done").textContent = done + " / " + biases.length * trialsFor(size);
+      var r50 = results[50], t50 = r50.black + r50.white + r50.stripes + r50.open;
+      document.getElementById("stat-bias-stripes").textContent = t50 ? (r50.stripes + " of " + t50) : "--";
+    }
+
+    // One trial is run as a resumable job so the page stays responsive.
+    function makeJob(n, p) {
+      var g = new Uint8Array(n * n); randomFill(g, p);
+      return { g: g, n: n, t: 0 };
+    }
+    function stepJob(job, maxSweeps, cap) {
+      var N = job.n * job.n;
+      for (var s = 0; s < maxSweeps; s++) {
+        sweepAsync(job.g, job.n); job.t++;
+        if (job.t % 10 === 0) {
+          var b = countOnes(job.g);
+          if (b === N) return "black";
+          if (b === 0) return "white";
+          if (frozenAsync(job.g, job.n)) return "stripes";
+        }
+        if (job.t >= cap) return "open";
+      }
+      return null;
+    }
+    function runSweep() {
+      var token = ++runToken;
+      reset(); chart(); stats();
+      running = true; sweepBtn.disabled = true; sweepBtn.textContent = "Running…";
+      var queue = [];
+      for (var k = 0; k < trialsFor(size); k++) biases.forEach(function (b) { queue.push(b); });
+      var qi = 0, job = null, cap = capFor(size);
+      function work() {
+        if (token !== runToken) return;
+        var t0 = performance.now();
+        while (performance.now() - t0 < 25) {
+          if (!job) {
+            if (qi >= queue.length) { running = false; sweepBtn.disabled = false; sweepBtn.textContent = "Run sweep"; chart(); stats(); return; }
+            job = makeJob(size, queue[qi] / 100); job.bias = queue[qi]; qi++;
+          }
+          var out = stepJob(job, 50, cap);
+          if (out) { results[job.bias][out]++; job = null; }
+        }
+        chart(); stats();
+        setTimeout(work, 0);
+      }
+      work();
+    }
+    function setSize(s) {
+      size = s;
+      document.getElementById("bias-32").classList.toggle("active", s === 32);
+      document.getElementById("bias-64").classList.toggle("active", s === 64);
+      runToken++; running = false; sweepBtn.disabled = false; sweepBtn.textContent = "Run sweep";
+      reset(); chart(); stats();
+    }
+    document.getElementById("bias-32").addEventListener("click", function () { setSize(32); });
+    document.getElementById("bias-64").addEventListener("click", function () { setSize(64); });
+    sweepBtn.addEventListener("click", runSweep);
+    new ResizeObserver(function () { chart(); }).observe(fig);
+    reset(); chart(); stats();
+    whenVisible(fig, runSweep);
+  })();
+
+  /* ---------------- Deffuant helpers ---------------- */
+  function deffuantInteract(a, eps, count) {
+    var N = a.length;
+    for (var s = 0; s < count; s++) {
+      var i = (Math.random() * N) | 0, j = (Math.random() * N) | 0;
+      if (i === j) continue;
+      var d = a[j] - a[i];
+      if (d < eps && d > -eps) { a[i] += 0.5 * d; a[j] -= 0.5 * d; }
+    }
+  }
+  // Returns cluster sizes if converged (every gap < 1e-3 or >= eps), else null. With force, always returns sizes.
+  function deffuantClusters(a, eps, force) {
+    var b = Array.prototype.slice.call(a).sort(function (x, y) { return x - y; });
+    var sizes = [1], lo = b[0], ok = true;
+    for (var k = 1; k < b.length; k++) {
+      var gap = b[k] - b[k - 1];
+      var split = force ? gap > 0.02 : gap >= eps;
+      if (split) { sizes.push(1); lo = b[k]; }
+      else { sizes[sizes.length - 1]++; if (gap >= 1e-3 || b[k] - lo >= eps) ok = false; }
+    }
+    return (ok || force) ? sizes : null;
+  }
+
+  /* ---------------- Figure 4: Deffuant trajectories ---------------- */
+  (function () {
+    var N = 300, TMAX = 200;
+    var fig = document.getElementById("fig-deffuant");
+    var canvas = document.getElementById("canvas-deffuant");
+    var ctx = canvas.getContext("2d");
+    var eps = 0.15, a, hist, t, playing = false, raf = null;
+    var playBtn = document.getElementById("def-play");
+    var dpr = window.devicePixelRatio || 1, W = 0, H = 260, m = { left: 36, right: 10, top: 8, bottom: 28 };
+
+    function resize() {
+      W = Math.max(260, fig.clientWidth - 48);
+      canvas.width = W * dpr; canvas.height = H * dpr;
+      canvas.style.width = W + "px"; canvas.style.height = H + "px";
+      draw();
+    }
+    function init() {
+      pause();
+      a = new Float64Array(N); for (var i = 0; i < N; i++) a[i] = Math.random();
+      hist = [a.slice()]; t = 0; draw(); stats();
+    }
+    function advance(steps) {
+      for (var s = 0; s < steps && t < TMAX; s++) {
+        deffuantInteract(a, eps, N); t++;
+        hist.push(a.slice());
+      }
+    }
+    function draw() {
+      if (!W || !hist) return;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, W, H);
+      var iw = W - m.left - m.right, ih = H - m.top - m.bottom;
+      var x = function (tt) { return m.left + iw * tt / TMAX; };
+      var y = function (v) { return m.top + ih * (1 - v); };
+      ctx.strokeStyle = GRID; ctx.lineWidth = 1;
+      ctx.strokeRect(m.left, m.top, iw, ih);
+      ctx.strokeStyle = "rgba(37, 99, 235, 0.18)"; ctx.lineWidth = 0.8;
+      for (var i = 0; i < N; i++) {
+        ctx.beginPath(); ctx.moveTo(x(0), y(hist[0][i]));
+        for (var k = 1; k < hist.length; k++) ctx.lineTo(x(k), y(hist[k][i]));
+        ctx.stroke();
+      }
+      ctx.fillStyle = MUTED; ctx.font = "11px 'Source Sans 3', system-ui, sans-serif";
+      ctx.textAlign = "right"; ctx.textBaseline = "middle";
+      [0, 0.5, 1].forEach(function (v) { ctx.fillText(v, m.left - 5, y(v)); });
+      ctx.textAlign = "center"; ctx.textBaseline = "top";
+      [0, 50, 100, 150, 200].forEach(function (v) { ctx.fillText(v, x(v), m.top + ih + 4); });
+      ctx.fillText("meetings per person", m.left + iw / 2, m.top + ih + 15);
+    }
+    function stats() {
+      document.getElementById("stat-def-t").textContent = t;
+      var sizes = deffuantClusters(a, eps, true);
+      document.getElementById("stat-def-clusters").textContent = sizes.filter(function (s) { return s >= 0.05 * N; }).length;
+      document.getElementById("stat-def-pred").textContent = (1 / (2 * eps)).toFixed(1);
+    }
+    function tick() {
+      advance(2); draw(); stats();
+      if (t >= TMAX) { pause(); return; }
+      if (playing) raf = requestAnimationFrame(tick);
+    }
+    function play() { if (playing) return; if (t >= TMAX) init(); playing = true; playBtn.textContent = "Pause"; playBtn.classList.add("active"); raf = requestAnimationFrame(tick); }
+    function pause() { playing = false; playBtn.textContent = "Play"; playBtn.classList.remove("active"); if (raf) cancelAnimationFrame(raf); raf = null; }
+    function start() { if (REDUCED) { advance(TMAX); draw(); stats(); } else play(); }
+    playBtn.addEventListener("click", function () { playing ? pause() : play(); });
+    document.getElementById("def-reset").addEventListener("click", init);
+    document.getElementById("def-eps").addEventListener("input", function () {
+      eps = +this.value; document.getElementById("def-eps-val").textContent = eps.toFixed(2);
+      init(); start();
+    });
+    new ResizeObserver(resize).observe(fig);
+    init();
+    whenVisible(fig, start);
+  })();
+
+  /* ---------------- Figure 5: cluster count vs tolerance ---------------- */
+  (function () {
+    var N = 300, TRIALS = 5, fig = document.getElementById("fig-phase"), chartDiv = document.getElementById("chart-phase");
+    var epsList = []; for (var e = 0.05; e <= 0.5001; e += 0.025) epsList.push(+e.toFixed(3));
+    var data = [], running = false, runBtn = document.getElementById("phase-run");
+
+    function runOne(eps) {
+      var a = new Float64Array(N); for (var i = 0; i < N; i++) a[i] = Math.random();
+      for (var block = 0; block < 60; block++) {
+        deffuantInteract(a, eps, N * 50);
+        var sizes = deffuantClusters(a, eps, false);
+        if (sizes) return { sizes: sizes, converged: true };
+      }
+      return { sizes: deffuantClusters(a, eps, true), converged: false };
+    }
+    function chart() {
+      d3.select(chartDiv).selectAll("svg").remove();
+      var W = Math.max(260, fig.clientWidth - 48), H = 230, m = { top: 10, right: 12, bottom: 36, left: 40 };
+      var iw = W - m.left - m.right, ih = H - m.top - m.bottom;
+      var svg = d3.select(chartDiv).append("svg").attr("width", W).attr("height", H);
+      var g = svg.append("g").attr("transform", "translate(" + m.left + "," + m.top + ")");
+      var x = d3.scaleLinear().domain([0.04, 0.51]).range([0, iw]);
+      var yMax = Math.max(11, d3.max(data, function (d) { return d.all; }) || 0);
+      var y = d3.scaleLinear().domain([0, yMax]).range([ih, 0]);
+      g.append("g").attr("transform", "translate(0," + ih + ")").call(d3.axisBottom(x).ticks(6));
+      g.append("g").call(d3.axisLeft(y).ticks(6));
+      g.append("text").attr("x", iw / 2).attr("y", ih + 30).attr("text-anchor", "middle").attr("font-size", 11).attr("fill", MUTED).text("tolerance ε");
+      g.append("text").attr("transform", "rotate(-90)").attr("x", -ih / 2).attr("y", -28).attr("text-anchor", "middle").attr("font-size", 11).attr("fill", MUTED).text("clusters");
+      var curve = d3.range(0.046, 0.51, 0.004);
+      g.append("path").attr("fill", "none").attr("stroke", ACCENT).attr("stroke-width", 1.5).attr("stroke-dasharray", "5,4")
+        .attr("d", d3.line().x(function (d) { return x(d); }).y(function (d) { return y(Math.min(yMax, 1 / (2 * d))); })(curve));
+      var jit = function (d) { return x(d.eps) + (d.k - (TRIALS - 1) / 2) * 2.2; };
+      g.selectAll("circle.all").data(data).enter().append("circle").attr("class", "all")
+        .attr("cx", jit).attr("cy", function (d) { return y(d.all); }).attr("r", 3)
+        .attr("fill", "none").attr("stroke", MUTED).attr("stroke-width", 1);
+      g.selectAll("circle.maj").data(data).enter().append("circle").attr("class", "maj")
+        .attr("cx", jit).attr("cy", function (d) { return y(d.major); }).attr("r", 3).attr("fill", INK).attr("fill-opacity", 0.75);
+      var lg = g.append("g").attr("transform", "translate(" + (iw - 150) + ",4)");
+      lg.append("circle").attr("cx", 5).attr("cy", 5).attr("r", 3).attr("fill", INK);
+      lg.append("text").attr("x", 14).attr("y", 9).attr("font-size", 10).attr("fill", MUTED).text("clusters ≥ 5% of people");
+      lg.append("circle").attr("cx", 5).attr("cy", 19).attr("r", 3).attr("fill", "none").attr("stroke", MUTED);
+      lg.append("text").attr("x", 14).attr("y", 23).attr("font-size", 10).attr("fill", MUTED).text("all clusters");
+      lg.append("line").attr("x1", 0).attr("x2", 10).attr("y1", 33).attr("y2", 33).attr("stroke", ACCENT).attr("stroke-width", 1.5).attr("stroke-dasharray", "4,3");
+      lg.append("text").attr("x", 14).attr("y", 37).attr("font-size", 10).attr("fill", MUTED).text("1/(2ε)");
+    }
+    function run() {
+      if (running) return;
+      running = true; data = []; runBtn.disabled = true; chart();
+      var i = 0;
+      function next() {
+        if (i >= epsList.length) { running = false; runBtn.disabled = false; document.getElementById("stat-phase-progress").textContent = "done"; chart(); return; }
+        var eps = epsList[i];
+        for (var k = 0; k < TRIALS; k++) {
+          var r = runOne(eps);
+          data.push({ eps: eps, k: k, all: r.sizes.length, major: r.sizes.filter(function (s) { return s >= 0.05 * N; }).length, converged: r.converged });
+        }
+        i++;
+        document.getElementById("stat-phase-progress").textContent = i + " / " + epsList.length;
+        chart();
+        setTimeout(next, 0);
+      }
+      next();
+    }
+    runBtn.addEventListener("click", run);
+    new ResizeObserver(function () { chart(); }).observe(fig);
+    chart();
+    whenVisible(fig, run);
+  })();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,1479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Clustered Heatmaps — Bioinformatics</title>
+<script src="../vendor/js/d3.v7.min.js"></script>
+<link href="../vendor/fonts/sans-serif-mono/fonts.css" rel="stylesheet">
+<script src="../lib/motion.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --article-width: 740px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem;
+  --line-height: 1.6;
+  --text: #1a1a2e;
+  --text-2: #4a4a6a;
+  --accent: #2563eb;
+  --accent-light: #dbeafe;
+  --bg: #fafafa;
+  --fig-bg: #ffffff;
+  --border: #e2e2e8;
+  --c-gene: #2563eb;
+  --c-sample: #0891b2;
+  --c-expression: #8b5cf6;
+  --c-significance: #ef4444;
+  --c-pathway: #10b981;
+  --muted: #94a3b8;
+  --grid: #e2e8f0;
+  /* Modality band colors (left-edge group labels) */
+  --band-expr: #f3e8ff;
+  --band-meth: #fef3c7;
+  --band-mut:  #f1f5f9;
+  --band-cn:   #fee2e2;
+  --c-up: #ef4444;
+  --c-down: #2563eb;
+  --c-neutral: #94a3b8;
+}
+
+body { font-family: var(--body-font); font-size: var(--body-size); line-height: var(--line-height); color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased; }
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
+h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+h3 { font-size: 1.05rem; margin: 1.5rem 0 0.6rem; color: var(--text-2); font-weight: 600; }
+p { margin: 0 0 1rem; }
+a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+
+.figure { margin: 2rem 0; padding: 1.5rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.figure-wide { margin-left: -2rem; margin-right: -2rem; }
+.figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; line-height: 1.4; }
+.figure-label { font-weight: 600; color: var(--text); }
+
+.insight { background: var(--accent-light); border-left: 3px solid var(--accent); padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 4px 4px 0; }
+.insight p { margin: 0; }
+
+.controls { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); }
+.controls label { display: flex; align-items: center; gap: 0.5rem; cursor: pointer; }
+
+.btn {
+  font-family: var(--heading-font); font-size: 0.82rem; font-weight: 600; padding: 0.3rem 0.75rem;
+  border-radius: 4px; border: 1px solid var(--border); background: var(--fig-bg); color: var(--text-2);
+  cursor: pointer; transition: all 0.12s; user-select: none;
+}
+.btn:hover { border-color: var(--accent); color: var(--accent); }
+.btn.active { border-color: var(--accent); background: var(--accent); color: white; }
+.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.toggle-group { display: flex; gap: 0; }
+.toggle-group .btn { border-radius: 0; }
+.toggle-group .btn:first-child { border-radius: 4px 0 0 4px; }
+.toggle-group .btn:last-child { border-radius: 0 4px 4px 0; }
+.toggle-group .btn + .btn { border-left: none; }
+
+.legend-row { display: flex; flex-wrap: wrap; gap: 0.75rem 1rem; margin-bottom: 0.75rem; font-family: var(--heading-font); font-size: 0.78rem; color: var(--text-2); }
+.legend-item { display: flex; align-items: center; gap: 0.35rem; }
+.legend-swatch { width: 14px; height: 8px; border-radius: 2px; }
+.legend-swatch.sq { width: 10px; height: 10px; }
+.legend-grad { width: 54px; height: 8px; border-radius: 2px; }
+
+.detail-card {
+  font-family: var(--heading-font); font-size: 0.82rem; color: var(--text-2);
+  background: #f8fafc; border: 1px solid var(--border); border-radius: 4px;
+  padding: 0.75rem 1rem; margin-top: 0.75rem; min-height: 3.6rem;
+}
+.detail-card .dc-title { font-weight: 700; color: var(--text); font-size: 0.95rem; margin-bottom: 0.3rem; }
+.detail-card .dc-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.35rem 1rem; font-family: var(--mono-font); font-size: 0.78rem; }
+.detail-card .dc-grid b { color: var(--text); font-weight: 700; }
+.detail-card .dc-hint { font-family: var(--heading-font); font-size: 0.8rem; opacity: 0.7; }
+
+svg text { font-family: var(--heading-font); }
+svg .track-name { font-size: 10px; font-weight: 700; fill: var(--text-2); }
+svg .row-name  { font-size: 9.5px; fill: var(--text-2); }
+svg .axis-label { font-size: 10px; fill: var(--text-2); }
+svg .group-name { font-size: 10px; font-weight: 700; fill: var(--text); letter-spacing: 0.06em; }
+
+.tip {
+  position: fixed; pointer-events: none;
+  background: var(--text); color: white;
+  font-family: var(--heading-font); font-size: 0.75rem;
+  padding: 0.4rem 0.6rem; border-radius: 4px; opacity: 0;
+  transition: opacity 0.12s; z-index: 10;
+  max-width: 280px; line-height: 1.4;
+}
+.tip .tip-k { color: #a1a1aa; font-weight: 500; margin-right: 0.3rem; }
+
+.cluster-chip {
+  display: inline-block;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  font-family: var(--heading-font); font-size: 0.75rem; font-weight: 700;
+  color: white;
+  margin-right: 0.25rem;
+}
+
+@media (max-width: 640px) { .figure-wide { margin-left: 0; margin-right: 0; } h1 { font-size: 1.75rem; } }
+@media (prefers-reduced-motion: reduce) {
+  html:not([data-motion="full"]) *,
+  html:not([data-motion="full"]) *::before,
+  html:not([data-motion="full"]) *::after {
+    transition-duration: 0.001ms !important;
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+  html:not([data-motion="full"]) .figure canvas { outline: 2px dashed var(--border); outline-offset: -2px; }
+}
+
+/* merged from source pages */
+.controls input[type="range"] { width: 120px; accent-color: var(--accent); }
+.control-note { flex-basis: 100%; font-size: 0.8rem; color: var(--text-2); }
+.figure-stat { margin-left: auto; font-variant-numeric: tabular-nums; font-size: 0.8rem; color: var(--text-2); }
+</style>
+</head>
+<body>
+<div class="article">
+  <header style="margin-bottom: 3rem;">
+    <a href="index.html" style="font-family: var(--heading-font); font-size: 0.85rem; text-decoration: none; color: var(--text-2); display: inline-block; margin-bottom: 1rem;">&larr; Bioinformatics Series</a>
+    <h1>Clustered Heatmaps</h1>
+    <p style="font-family: var(--heading-font); font-size: 1.15rem; color: var(--text-2); max-width: 620px;">
+      From a matrix of measurements to groups of genes and patients: hierarchical clustering, the dendrogram, and consensus clustering across several kinds of data at once.
+    </p>
+  </header>
+
+  <p>A gene expression experiment measures activity across thousands of genes and dozens of samples: tumor vs. healthy, treated vs. untreated, or different patients. After normalization, the result is a matrix: rows of genes, columns of samples, one abundance estimate in each cell. Differential expression tests the rows one at a time. A heatmap looks at the whole matrix at once, to find genes that move together and samples that look alike.</p>
+
+  <p>The matrix is too large to read as a table. A <strong>heatmap</strong> replaces numbers with colors so patterns become visible. In genomics, the most useful first view is often row-scaled: each gene is centered against its own average, so the color shows that gene's pattern across samples, not its absolute abundance.</p>
+
+<div class="figure figure-wide">
+    <div class="controls">
+      <div class="toggle-group" id="colorscale-toggle">
+        <button class="btn active" data-scale="blue-red" aria-label="Use a blue to red color scale">Blue-Red</button>
+        <button class="btn" data-scale="viridis" aria-label="Use the viridis color scale">Viridis</button>
+        <button class="btn" data-scale="yellow-blue" aria-label="Use a yellow to blue color scale">Yellow-Blue</button>
+      </div>
+      <div class="toggle-group" id="value-toggle" aria-label="Choose heatmap value transform">
+        <button class="btn active" data-mode="zscore">Row z-score</button>
+        <button class="btn" data-mode="abundance">Abundance</button>
+      </div>
+      <span class="figure-stat">Hover for values</span>
+      <div class="control-note" id="scale-note">Row z-score: red means above that gene's average, blue means below.</div>
+    </div>
+    <div id="heatmap-raw"></div>
+    <p class="figure-caption">
+      <span class="figure-label">Figure 1.</span> An unordered expression matrix.
+      Without a meaningful row or column order, even real structure can look like noise.
+      In the row-scaled view, color means relative expression within a gene, not up- or downregulation by itself.
+    </p>
+  </div>
+
+  <h2>Clustering</h2>
+
+  <p>Hierarchical clustering starts with a distance between expression profiles, then repeatedly joins the closest genes or clusters. The result is a tree called a <strong>dendrogram</strong>. Nearby leaves have similar profiles under the chosen distance and linkage rule.</p>
+
+  <p>The same data can look like noise or like clear structure depending on the row and column ordering. Here the clustering uses row-scaled expression and an average-linkage correlation distance, a common choice when the pattern across samples matters more than a gene's absolute abundance.</p>
+
+<div class="figure figure-wide">
+    <div class="controls">
+      <div class="toggle-group">
+        <button class="btn" id="btn-original">Original Order</button>
+        <button class="btn active" id="btn-cluster">Clustered</button>
+      </div>
+    </div>
+    <div id="heatmap-clustered"></div>
+    <p class="figure-caption">
+      <span class="figure-label">Figure 2.</span> The same data reordered by similarity.
+      Blocks of co-expressed genes emerge.
+    </p>
+  </div>
+
+  <h2>Reading the dendrogram</h2>
+
+  <p>The tree on the left of the heatmap is a dendrogram. Each leaf is a gene. The height where two branches merge is the dissimilarity at which those groups were joined. Low merges mean tight groups; high merges mean groups that were kept separate until late in the agglomeration.</p>
+
+<div class="figure">
+    <div class="controls">
+      <label>Cut height: <input type="range" id="cut-slider" min="0" max="100" value="50"> <span id="cut-val" style="min-width: 2.5em; font-variant-numeric: tabular-nums;">50%</span></label>
+      <span id="cluster-count" class="figure-stat"></span>
+    </div>
+    <div id="dendro-interactive"></div>
+    <p class="figure-caption">
+      <span class="figure-label">Figure 3.</span> Slicing the dendrogram.
+      Lowering the cut height asks for tighter groups, so the same tree breaks into more clusters.
+    </p>
+  </div>
+
+  <p>Nothing in the tree says where to cut it. Every cut height gives a valid set of clusters, and hierarchical clustering will produce a tree even from data with no groups at all. Deciding how many groups the data supports needs another tool, and the second half of this page uses one.</p>
+
+  <h2>Stacking modalities</h2>
+
+  <p>A gene can be inactivated by mutation, promoter hypermethylation, deletion of its chromosome region, or overactivation of its negative regulator. A <strong>multi-omics heatmap</strong> stacks these modalities on one shared column axis (patients) and reads the patterns across layers. Each row is normalized within its own measurement scale before it is drawn: expression is not comparable to methylation in raw units, but their aligned patterns can be read side by side.</p>
+
+  <p>The cohort below is synthetic. Its 80 patients were generated from four planted subtypes, built to echo the routes to p53 pathway failure in the <a href="01-five-views.html">five-views</a> essay: TP53-mutant tumors with low CDKN1A and a methylated CDKN1A promoter, MDM2-amplified tumors with wildtype TP53, hypermutated tumors with a high mutation burden, and quiet tumors with few alterations and a better outcome.</p>
+
+  <p>Sorting twenty of these patients by CDKN1A expression alone produces a tidy continuum. Stacking methylation, mutation, and copy number underneath splits the low-CDKN1A half into two different groups: TP53-mutant patients and MDM2-amplified patients. The expression panel alone shows one phenotype; the stack shows two routes to it.</p>
+
+<div class="figure figure-wide">
+    <div id="fig-why"></div>
+    <p class="figure-caption">
+      <span class="figure-label">Figure 4.</span> Twenty synthetic patients sorted by CDKN1A expression (low, left → high, right). The thin grey lines between panels mark that every column is the same patient in both views. Hover a column for the full multi-modal profile. The left-side bracket shows the two planted subgroups that the single "CDKN1A-low" label lumps together.
+    </p>
+  </div>
+
+  <h2>Consensus clustering</h2>
+
+  <p>The full cohort matrix needs a column order, and the order is itself a claim about which patients belong together. <strong>Consensus clustering</strong> (<a href="https://doi.org/10.1023/A:1023949509487">Monti et al., 2003</a>) makes that claim with a measure of its own stability. This page runs it in your browser, on all 23 features (six expression values, six promoter CpGs, three copy-number loci and eight mutation calls; the continuous ones standardized, the mutation calls left as 0 or 1). It draws 80% of the patients at random, clusters them into four groups with k-means, and repeats that 100 times. For every pair of patients it records the fraction of the draws containing both in which they landed in the same cluster. A final average-linkage clustering of those fractions gives the subtypes. The planted labels are never used.</p>
+
+<div class="figure figure-wide">
+    <div class="controls">
+      <span style="font-family: var(--heading-font); font-size: 0.82rem; color: var(--text-2);">Column ordering:</span>
+      <div class="toggle-group" id="sort-toggle">
+        <button class="btn active" data-sort="cluster">consensus cluster (computed)</button>
+        <button class="btn" data-sort="tp53">TP53 status</button>
+        <button class="btn" data-sort="cdkn1a">CDKN1A expression</button>
+        <button class="btn" data-sort="burden">mutation burden</button>
+        <button class="btn" data-sort="random">random</button>
+      </div>
+    </div>
+    <div class="legend-row" id="fig2-legend"></div>
+    <div id="fig-cohort"></div>
+    <div class="detail-card" id="cohort-detail">
+      <div class="dc-title">Hover a column for patient detail</div>
+      <div class="dc-hint">Every column is a multi-modal profile of one sample. The cluster strip on top is computed by consensus clustering from all four modalities together.</div>
+    </div>
+    <p class="figure-caption">
+      <span class="figure-label">Figure 5.</span> Row groups (top-down): expression (log₂ FC), promoter methylation (β, from 0 unmethylated to 1 methylated), somatic alterations (mutation × copy-number glyphs), and driver-locus copy number. Along the top: the consensus cluster computed on this page, then age, sex, stage, mutation burden, vital status. Along the right: per-row alteration frequency. Hover or focus any column for details; switch the sort to see how different orderings shape the visible pattern.
+    </p>
+  </div>
+
+  <p>Sorting by consensus cluster keeps the TP53-mutant and MDM2-amplified patients apart even though both lose p53 function. A sort by TP53 status alone hides the MDM2 amplifications inside the wildtype columns.</p>
+
+  <p>The consensus matrix itself shows how firm the grouping is. Each cell is the fraction of resamples in which two patients clustered together; patients are ordered by their computed subtype, and the strips along the edges show computed subtype (left) and planted subtype (top).</p>
+
+  <div class="figure">
+    <div id="fig-consensus"></div>
+    <div id="cc-readout" style="font-family: var(--heading-font); font-size: 0.82rem; color: var(--text-2); margin-top: 0.5rem;"></div>
+    <p class="figure-caption">
+      <span class="figure-label">Figure 6.</span> The consensus matrix: black means two patients always clustered together, white means never. Hover a cell for the value.
+    </p>
+  </div>
+
+  <p>The procedure recovers the planted subtype for 74 of the 80 patients. Most of the six misses are hypermutated tumors whose profiles sit close to the quiet group.</p>
+
+  <p>Dark, sharp-edged blocks on the diagonal mean the four groups come back in nearly every resample. Gray cells between blocks mark patients whose assignment depends on which other patients were drawn. With real data, running the same procedure for several values of k and comparing how clean the blocks are is one common way to choose the number of clusters.</p>
+
+  <p>Clinical ribbons are useful context, but they should not silently drive the discovery step unless that is the study design. If survival status or stage leaks into clustering, the subtype labels can become a circular explanation of the outcome they later claim to predict. Whether the subtypes differ in outcome is a separate question, for the <a href="08-clinical-evidence.html">survival analysis</a> essay.</p>
+
+  <footer style="margin-top: 4rem; padding-top: 2rem; border-top: 1px solid var(--border); font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2);">
+    <p>Previous: <a href="05-differential-expression.html" style="color: var(--accent);">Differential Expression</a> · Next: <a href="07-dimensionality-reduction.html" style="color: var(--accent);">Dimensionality Reduction</a> &rarr;</p>
+    <p style="margin-top: 1rem; opacity: 0.6;">Built with <a href="https://github.com/enjalot/moonshine" style="color: var(--text-2);">moonshine</a>. All data synthetic; glyph grammar follows cBioPortal convention.</p>
+  </footer>
+</div>
+
+<div class="tip" id="tip"></div>
+<script>
+// ── from 01-heatmap-dendrogram.html ──
+(function () {
+
+// --- State & Dispatch ---
+const state = {
+  clustered: true,
+  colorScale: 'blue-red',
+  valueMode: 'zscore',
+  cutPct: 50
+};
+const dispatch = d3.dispatch('update', 'colorChange');
+
+// --- Seeded RNG & Data Generation ---
+function mulberry32(s) { return () => { s |= 0; s = s + 0x6D2B79F5 | 0; let t = Math.imul(s ^ s >>> 15, 1 | s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const rng = mulberry32(42);
+function rnorm(mu, sigma) { const u1 = rng(), u2 = rng(); return mu + sigma * Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2); }
+
+const nGenes = 30, nSamples = 10;
+const geneNames = d3.range(nGenes).map(i => ['BRCA','TP53','MYC','EGFR','KRAS','PIK3','AKT','VEGF','PTEN','CDK','RB','STAT','JAK','MAPK','RAF','ERBB','NOTCH','WNT','FGF','IGF','HIF','MDM','BCL','BAX','CASP','TNF','IL6','TGFB','SMAD','FOXP'][i] + (i < 15 ? '1' : '2'));
+const sampleNames = d3.range(nSamples).map(i => i < 5 ? `Ctrl_${i+1}` : `Treat_${i-4}`);
+const conditions = d3.range(nSamples).map(i => i < 5 ? 'control' : 'treated');
+
+const data = d3.range(nGenes).map(g => d3.range(nSamples).map(s => {
+  let v = 5 + rnorm(0, 0.8);
+  if (g < 10 && s >= 5) v += 2.5 + rnorm(0, 0.3);
+  else if (g >= 10 && g < 20 && s >= 5) v -= 2.0 + rnorm(0, 0.3);
+  else v += rnorm(0, 0.5);
+  return Math.max(0, v);
+}));
+
+const rowStats = data.map(row => {
+  const mean = d3.mean(row);
+  const sd = d3.deviation(row) || 1;
+  return { mean, sd };
+});
+const zData = data.map((row, g) => row.map(v => (v - rowStats[g].mean) / rowStats[g].sd));
+
+const pathways = d3.range(nGenes).map(i => i < 10 ? 'Cell Proliferation' : i < 20 ? 'Immune Response' : 'Housekeeping');
+const pathwayColors = { 'Cell Proliferation': '#ef4444', 'Immune Response': '#2563eb', 'Housekeeping': '#94a3b8' };
+
+// --- Color Scales ---
+const abundanceExtent = [d3.min(data, r => d3.min(r)), d3.max(data, r => d3.max(r))];
+const zExtent = [-2.5, 2.5];
+function scaleFor(mode, palette) {
+  const extent = mode === 'zscore' ? zExtent : abundanceExtent;
+  if (palette === 'viridis') return d3.scaleSequential(d3.interpolateViridis).domain(extent);
+  if (palette === 'yellow-blue') return d3.scaleSequential(d3.interpolateYlGnBu).domain(mode === 'zscore' ? [extent[1], extent[0]] : extent);
+  return d3.scaleSequential(d3.interpolateRdBu).domain([extent[1], extent[0]]);
+}
+function valueFor(g, s) { return state.valueMode === 'zscore' ? zData[g][s] : data[g][s]; }
+function colorFor(g, s) { return scaleFor(state.valueMode, state.colorScale)(valueFor(g, s)); }
+function valueLabel(g, s) {
+  const raw = data[g][s].toFixed(2);
+  const z = zData[g][s].toFixed(2);
+  return state.valueMode === 'zscore' ? `z: ${z}<br>abundance: ${raw}` : `abundance: ${raw}<br>z: ${z}`;
+}
+
+// --- Clustering ---
+function euclidean(a, b) { return Math.sqrt(d3.sum(a, (v, i) => Math.pow(v - b[i], 2))); }
+function correlationDistance(a, b) {
+  const ma = d3.mean(a), mb = d3.mean(b);
+  let num = 0, da = 0, db = 0;
+  for (let i = 0; i < a.length; i++) {
+    const xa = a[i] - ma, xb = b[i] - mb;
+    num += xa * xb; da += xa * xa; db += xb * xb;
+  }
+  const corr = da && db ? num / Math.sqrt(da * db) : 0;
+  return 1 - Math.max(-1, Math.min(1, corr));
+}
+function hclust(vectors, distanceFn = euclidean) {
+  const n = vectors.length;
+  let clusters = vectors.map((v, i) => ({ id: i, members: [i] }));
+  const merges = [];
+  function clusterDistance(a, b) {
+    let total = 0, count = 0;
+    a.members.forEach(i => b.members.forEach(j => {
+      total += distanceFn(vectors[i], vectors[j]);
+      count += 1;
+    }));
+    return total / count;
+  }
+  while (clusters.length > 1) {
+    let minDist = Infinity, mi, mj;
+    for (let i = 0; i < clusters.length; i++) {
+      for (let j = i + 1; j < clusters.length; j++) {
+        const d = clusterDistance(clusters[i], clusters[j]);
+        if (d < minDist) { minDist = d; mi = i; mj = j; }
+      }
+    }
+    const a = clusters[mi], b = clusters[mj];
+    const members = [...a.members, ...b.members];
+    const node = { id: n + merges.length, members, merge: { left: a, right: b, height: minDist } };
+    merges.push(node);
+    clusters.splice(mj, 1); clusters.splice(mi, 1); clusters.push(node);
+  }
+  return { root: clusters[0], maxH: d3.max(merges, d => d.merge.height) };
+}
+
+function getOrder(node) { return node.merge ? [...getOrder(node.merge.left), ...getOrder(node.merge.right)] : node.members; }
+
+const rowClust = hclust(zData, correlationDistance);
+const colClust = hclust(d3.range(nSamples).map(s => d3.range(nGenes).map(g => zData[g][s])), correlationDistance);
+const rowOrder = getOrder(rowClust.root);
+const colOrder = getOrder(colClust.root);
+
+const tip = d3.select('#tip');
+
+// --- Shared Viz Utilities ---
+function drawDendrogram(node, x, y, w, h, maxH, orient, g, order, cellSize) {
+  const hScale = d3.scaleLinear().domain([0, maxH]).range([0, orient === 'left' ? w : h]);
+  function mergeHeight(d) { return d.merge ? d.merge.height : 0; }
+  function draw(d) {
+    if (!d.merge) {
+      const pos = order.indexOf(d.members[0]) * cellSize + cellSize / 2;
+      return orient === 'left'
+        ? { x: x + w, y: y + pos, height: 0 }
+        : { x: x + pos, y: y + h, height: 0 };
+    }
+    const left = draw(d.merge.left);
+    const right = draw(d.merge.right);
+    if (orient === 'left') {
+      const nx = x + w - hScale(d.merge.height);
+      const lx = x + w - hScale(mergeHeight(d.merge.left));
+      const rx = x + w - hScale(mergeHeight(d.merge.right));
+      g.append('path')
+        .attr('d', `M${lx},${left.y} H${nx} V${right.y} H${rx}`)
+        .attr('fill', 'none').attr('stroke', '#cbd5e1');
+      return { x: nx, y: (left.y + right.y) / 2, height: d.merge.height };
+    }
+    const ny = y + h - hScale(d.merge.height);
+    const ly = y + h - hScale(mergeHeight(d.merge.left));
+    const ry = y + h - hScale(mergeHeight(d.merge.right));
+    g.append('path')
+      .attr('d', `M${left.x},${ly} V${ny} H${right.x} V${ry}`)
+      .attr('fill', 'none').attr('stroke', '#cbd5e1');
+    return { x: (left.x + right.x) / 2, y: ny, height: d.merge.height };
+  }
+  draw(node);
+}
+
+function updateScaleNote() {
+  d3.select('#scale-note').text(state.valueMode === 'zscore'
+    ? "Row z-score: red means above that gene's average, blue means below."
+    : 'Abundance: color shows the normalized expression value before row-centering.');
+}
+
+// --- Figure 1: Raw Heatmap ---
+(function() {
+  const container = d3.select('#heatmap-raw');
+  function render() {
+    container.selectAll('*').remove();
+    const cellW = 44, cellH = 14;
+    const margin = { top: 30, right: 20, bottom: 10, left: 70 };
+    const width = margin.left + nSamples * cellW + margin.right;
+    const height = margin.top + nGenes * cellH + margin.bottom;
+
+    const svg = container.append('svg').attr('viewBox', `0 0 ${width} ${height}`).attr('role', 'img').attr('aria-label', 'Unordered gene expression heatmap').style('width', '100%').style('height', 'auto');
+    const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+
+    g.selectAll('.col-label').data(d3.range(nSamples)).enter().append('text')
+      .attr('x', (d, i) => i * cellW + cellW/2).attr('y', -6).attr('text-anchor', 'middle')
+      .style('font-size', '9px').style('fill', d => conditions[d] === 'treated' ? 'var(--c-up)' : 'var(--c-down)')
+      .text(d => sampleNames[d]);
+
+    g.selectAll('.row-label').data(d3.range(nGenes)).enter().append('text')
+      .attr('x', -6).attr('y', (d, i) => i * cellH + cellH/2).attr('dy', '0.35em').attr('text-anchor', 'end')
+      .style('font-size', '8px').style('fill', 'var(--text-2)').text(d => geneNames[d]);
+
+    const cells = [];
+    for(let i=0; i<nGenes; i++) for(let j=0; j<nSamples; j++) cells.push({g:i, s:j, v:data[i][j]});
+
+    g.selectAll('rect').data(cells).enter().append('rect')
+      .attr('x', d => d.s * cellW).attr('y', d => d.g * cellH).attr('width', cellW-1).attr('height', cellH-1)
+      .attr('fill', d => colorFor(d.g, d.s))
+      .on('mouseenter', (e, d) => {
+        tip.style('opacity', 1).html(`<strong>${geneNames[d.g]}</strong><br>${sampleNames[d.s]}<br>${valueLabel(d.g, d.s)}`);
+      })
+      .on('mousemove', e => tip.style('left', (e.clientX + 15) + 'px').style('top', (e.clientY - 10) + 'px'))
+      .on('mouseleave', () => tip.style('opacity', 0));
+  }
+  render();
+  dispatch.on('colorChange.raw', render);
+  new ResizeObserver(render).observe(container.node());
+})();
+
+// --- Figure 2: Clustered Heatmap ---
+(function() {
+  const container = d3.select('#heatmap-clustered');
+  function render() {
+    container.selectAll('*').remove();
+    const cellW = 40, cellH = 14, dw = 60, dh = 40;
+    const margin = { top: dh + 30, right: 20, bottom: 10, left: 70 + dw };
+    const width = margin.left + nSamples * cellW + margin.right;
+    const height = margin.top + nGenes * cellH + margin.bottom;
+
+    const svg = container.append('svg').attr('viewBox', `0 0 ${width} ${height}`).attr('role', 'img').attr('aria-label', 'Gene expression heatmap with optional hierarchical clustering').style('width', '100%').style('height', 'auto');
+    const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+
+    const curRows = state.clustered ? rowOrder : d3.range(nGenes);
+    const curCols = state.clustered ? colOrder : d3.range(nSamples);
+
+    g.selectAll('.col-label').data(curCols).enter().append('text')
+      .attr('x', (d, i) => i * cellW + cellW/2).attr('y', -6).attr('text-anchor', 'middle')
+      .style('font-size', '9px').style('fill', d => conditions[d] === 'treated' ? 'var(--c-up)' : 'var(--c-down)')
+      .text(d => sampleNames[d]);
+
+    g.selectAll('.row-label').data(curRows).enter().append('text')
+      .attr('x', -6).attr('y', (d, i) => i * cellH + cellH/2).attr('dy', '0.35em').attr('text-anchor', 'end')
+      .style('font-size', '8px').style('fill', 'var(--text-2)').text(d => geneNames[d]);
+
+    curRows.forEach((gi, i) => {
+      curCols.forEach((si, j) => {
+        g.append('rect').attr('x', j*cellW).attr('y', i*cellH).attr('width', cellW-1).attr('height', cellH-1)
+          .attr('fill', colorFor(gi, si))
+          .on('mouseenter', (e) => {
+            tip.style('opacity', 1).html(`<strong>${geneNames[gi]}</strong><br>${sampleNames[si]}<br>${valueLabel(gi, si)}`);
+          })
+          .on('mousemove', e => tip.style('left', (e.clientX + 15) + 'px').style('top', (e.clientY - 10) + 'px'))
+          .on('mouseleave', () => tip.style('opacity', 0));
+      });
+    });
+
+    if (state.clustered) {
+      drawDendrogram(rowClust.root, -dw-70, 0, dw, nGenes*cellH, rowClust.maxH, 'left', g, rowOrder, cellH);
+      drawDendrogram(colClust.root, 0, -dh-30, nSamples*cellW, dh, colClust.maxH, 'top', g, colOrder, cellW);
+    }
+  }
+  render();
+  dispatch.on('update.clustered', render);
+  dispatch.on('colorChange.clustered', render);
+})();
+
+// --- Figure 3: Dendrogram Slicing ---
+(function() {
+  const container = d3.select('#dendro-interactive');
+  function render() {
+    container.selectAll('*').remove();
+    const width = 660, height = 300, margin = { top: 20, right: 40, bottom: 50, left: 40 };
+    const w = width - margin.left - margin.right, h = height - margin.top - margin.bottom;
+
+    const svg = container.append('svg').attr('viewBox', `0 0 ${width} ${height}`).attr('role', 'img').attr('aria-label', 'Dendrogram cut by adjustable height').style('width', '100%').style('height', 'auto');
+    const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
+
+    const x = d3.scaleLinear().domain([0, nGenes - 1]).range([0, w]);
+    const y = d3.scaleLinear().domain([0, rowClust.maxH * 1.1]).range([h, 0]);
+
+    function drawNode(node) {
+      if (!node.merge) return;
+      const leftMid = d3.mean(node.merge.left.members, m => x(rowOrder.indexOf(m)));
+      const rightMid = d3.mean(node.merge.right.members, m => x(rowOrder.indexOf(m)));
+      const leftBase = node.merge.left.merge ? y(node.merge.left.merge.height) : h;
+      const rightBase = node.merge.right.merge ? y(node.merge.right.merge.height) : h;
+      const ny = y(node.merge.height);
+      g.append('path').attr('d', `M${leftMid},${leftBase} V${ny} H${rightMid} V${rightBase}`).attr('fill', 'none').attr('stroke', '#64748b').attr('stroke-width', 1.5);
+      drawNode(node.merge.left); drawNode(node.merge.right);
+    }
+    drawNode(rowClust.root);
+
+    const cutHeight = rowClust.maxH * (state.cutPct / 100);
+    const cutY = y(cutHeight);
+    g.append('line').attr('x1', -10).attr('x2', w+10).attr('y1', cutY).attr('y2', cutY).attr('stroke', 'var(--accent)').attr('stroke-dasharray', '4,4').attr('stroke-width', 2);
+
+    function clustersAtCut(node) {
+      if (!node.merge) return [node.members];
+      if (node.merge.height <= cutHeight) return [node.members];
+      return [...clustersAtCut(node.merge.left), ...clustersAtCut(node.merge.right)];
+    }
+    const clusters = clustersAtCut(rowClust.root)
+      .map(members => members.slice().sort((a, b) => rowOrder.indexOf(a) - rowOrder.indexOf(b)))
+      .sort((a, b) => rowOrder.indexOf(a[0]) - rowOrder.indexOf(b[0]));
+    const palette = d3.schemeTableau10;
+    clusters.forEach((members, i) => {
+      const xs = members.map(m => x(rowOrder.indexOf(m)));
+      const x0 = d3.min(xs), x1 = d3.max(xs);
+      g.append('rect')
+        .attr('x', x0 - 4).attr('y', h + 16)
+        .attr('width', Math.max(8, x1 - x0 + 8)).attr('height', 10)
+        .attr('rx', 2).attr('fill', palette[i % palette.length]).attr('opacity', 0.85);
+    });
+    g.append('text').attr('x', 0).attr('y', h + 42).style('font-size', '11px').style('fill', 'var(--text-2)').text('Genes grouped by this cut');
+    d3.select('#cluster-count').text(`${clusters.length} clusters`);
+  }
+  render();
+  dispatch.on('update.dendro', render);
+})();
+
+d3.selectAll('#colorscale-toggle .btn').on('click', function() {
+  d3.selectAll('#colorscale-toggle .btn').classed('active', false);
+  d3.select(this).classed('active', true);
+  state.colorScale = this.dataset.scale;
+  dispatch.call('colorChange');
+});
+
+d3.selectAll('#value-toggle .btn').on('click', function() {
+  d3.selectAll('#value-toggle .btn').classed('active', false);
+  d3.select(this).classed('active', true);
+  state.valueMode = this.dataset.mode;
+  updateScaleNote();
+  dispatch.call('colorChange');
+});
+
+d3.select('#btn-cluster').on('click', () => {
+  state.clustered = true;
+  d3.select('#btn-cluster').classed('active', true);
+  d3.select('#btn-original').classed('active', false);
+  dispatch.call('update');
+});
+
+d3.select('#btn-original').on('click', () => {
+  state.clustered = false;
+  d3.select('#btn-cluster').classed('active', false);
+  d3.select('#btn-original').classed('active', true);
+  dispatch.call('update');
+});
+
+d3.select('#cut-slider').on('input', function() {
+  state.cutPct = +this.value;
+  d3.select('#cut-val').text(state.cutPct + '%');
+  dispatch.call('update');
+});
+
+updateScaleNote();
+
+
+})();
+
+// ── from 12-multi-omics-heatmap.html ──
+(function () {
+
+// ─── Seeded RNG ─────────────────────────────────────────────────────────
+function mulberry32(seed) {
+  return function() {
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+function rnormF(rng) {
+  return (mu, sig) => { const u1 = rng() || 1e-9, u2 = rng(); return mu + sig * Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2); };
+}
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+// ─── Tooltip ────────────────────────────────────────────────────────────
+const tipEl = document.getElementById('tip');
+function tipShow(event, html) { tipEl.style.opacity = 1; tipEl.innerHTML = html; tipMove(event); }
+function tipMove(event) {
+  const w = tipEl.offsetWidth || 200;
+  let x = event.clientX + 14;
+  if (x + w > window.innerWidth - 8) x = event.clientX - w - 14;
+  tipEl.style.left = x + 'px';
+  tipEl.style.top = (event.clientY - 6) + 'px';
+}
+function tipHide() { tipEl.style.opacity = 0; }
+window.addEventListener('scroll', tipHide, { passive: true });
+window.addEventListener('blur', tipHide);
+document.addEventListener('mouseleave', tipHide);
+
+// ─── Palette ────────────────────────────────────────────────────────────
+const PAL = {
+  // Modality diverging / sequential scales
+  exprUp:   '#c0392b', exprDown: '#1f6feb', exprMid:  '#fafafa',
+  methHigh: '#5b21b6', methLow:  '#f5f3ff',
+  cnGain:   '#c0392b', cnLoss:   '#1f6feb', cnNeutral:'#f5f5f7',
+  // Mutation glyph colors (cBioPortal convention)
+  missense:   '#16a34a',
+  truncating: '#111827',
+  inframe:    '#a16207',
+  fusion:     '#8b5cf6',
+  // Clinical tracks
+  age:     d3.scaleLinear().domain([30, 80]).range(['#e0f2fe', '#0284c7']).clamp(true),
+  sexM:    '#0891b2',
+  sexF:    '#be185d',
+  stage:   ['#fef9c3', '#fde68a', '#fdba74', '#fb923c'],  // I, II, III, IV
+  vitalAlive: '#10b981',
+  vitalDead:  '#64748b',
+  tmbBar:  '#475569',
+  tp53Mut: '#ef4444',
+  tp53Wt:  '#0891b2',
+  // Subtype/cluster palette
+  clusters: ['#dc2626', '#2563eb', '#d97706', '#059669'],
+  clusterNames: ['A · TP53-mut', 'B · MDM2-amp', 'C · Hypermutator', 'D · Quiet'],
+  // UI
+  accent: '#2563eb', muted: '#94a3b8', grid: '#e2e8f0', text: '#1a1a2e', text2: '#4a4a6a'
+};
+
+// ─── Color scales (d3 needs real colors, not CSS vars) ──────────────────
+const exprColor = d3.scaleLinear().domain([-2.5, 0, 2.5]).range([PAL.exprDown, PAL.exprMid, PAL.exprUp]).clamp(true);
+const methColor = d3.scaleLinear().domain([0, 1]).range([PAL.methLow, PAL.methHigh]);
+const cnColor   = d3.scaleLinear().domain([-2, 0, 2]).range([PAL.cnLoss, PAL.cnNeutral, PAL.cnGain]).clamp(true);
+
+// ═══ DATA MODEL ═════════════════════════════════════════════════════════
+// Four integrative subtypes driving the cohort structure.
+const CLUSTER_SIZES = [22, 12, 18, 28];  // total 80
+const N = CLUSTER_SIZES.reduce((a, b) => a + b, 0);
+
+const exprGenes  = ['TP53', 'CDKN1A', 'MDM2', 'BAX', 'PUMA', 'CDK2'];
+const methSites  = ['CpG1_−900', 'CpG2_−500', 'CpG3_−200', 'CpG4_TSS', 'CpG5_+100', 'CpG6_+300'];
+const mutGenes   = ['TP53', 'CDKN1A', 'MDM2', 'ATM', 'BRCA1', 'PIK3CA', 'PTEN', 'RB1'];
+const cnLoci     = ['TP53_17p13', 'MDM2_12q15', 'MYC_8q24'];
+
+// Per-cluster data generation rules (returns a patient object)
+function makePatient(rng, cluster, idx) {
+  const rn = rnormF(rng);
+  const p = { id: 'P' + String(idx + 1).padStart(3, '0'), cluster };
+
+  // Clinical
+  p.age = Math.round(clamp(rn(cluster === 0 ? 64 : cluster === 1 ? 52 : cluster === 2 ? 58 : 56, 10), 30, 85));
+  p.sex = rng() < 0.52 ? 'F' : 'M';
+  const stageWeights = [
+    [0.05, 0.2, 0.4, 0.35], [0.1, 0.3, 0.4, 0.2],
+    [0.05, 0.25, 0.4, 0.3], [0.3, 0.4, 0.2, 0.1]
+  ][cluster];
+  let acc = 0, roll = rng(), s = 1;
+  for (let i = 0; i < 4; i++) { acc += stageWeights[i]; if (roll < acc) { s = i + 1; break; } }
+  p.stage = s;
+  p.vital = rng() < [0.35, 0.45, 0.4, 0.85][cluster] ? 'alive' : 'dead';
+
+  // Expression (log₂FC) — z-score style
+  p.expr = {};
+  exprGenes.forEach(g => {
+    let mu = 0;
+    if (cluster === 0) {  // TP53-mutant
+      if (g === 'CDKN1A') mu = -1.6; else if (g === 'BAX') mu = -0.8; else if (g === 'PUMA') mu = -0.9;
+      else if (g === 'CDK2') mu = 0.6; else if (g === 'MDM2') mu = -0.2; else if (g === 'TP53') mu = -0.4;
+    } else if (cluster === 1) {  // MDM2-amp
+      if (g === 'MDM2') mu = 2.0; else if (g === 'CDKN1A') mu = -1.3; else if (g === 'BAX') mu = -0.6;
+      else if (g === 'PUMA') mu = -0.5; else if (g === 'CDK2') mu = 0.4;
+    } else if (cluster === 2) {  // Hypermutator
+      mu = rn(0, 0.4);  // heterogeneous
+    } else {  // Quiet / wildtype
+      if (g === 'CDKN1A') mu = 0.8; else if (g === 'BAX') mu = 0.4; else if (g === 'PUMA') mu = 0.3;
+    }
+    p.expr[g] = clamp(rn(mu, 0.55), -3, 3);
+  });
+
+  // Methylation (β values) — inverse to expression roughly
+  p.meth = {};
+  methSites.forEach((site, si) => {
+    let mu;
+    if (cluster === 0) mu = si >= 2 && si <= 4 ? 0.72 : 0.35;  // promoter hypermeth
+    else if (cluster === 1) mu = 0.30;
+    else if (cluster === 2) mu = 0.20;
+    else mu = 0.18;
+    p.meth[site] = clamp(rn(mu, 0.10), 0, 1);
+  });
+
+  // Mutations: record (gene → {type, cnv}). Each gene gets one mutation call.
+  p.mut = {};
+  mutGenes.forEach(g => { p.mut[g] = null; });
+
+  // Per-cluster mutation probabilities and types
+  const mutProfile = [
+    // 0: TP53-mutant
+    { TP53: [0.9, ['missense', 'truncating']], CDKN1A: [0.03, ['missense']], MDM2: [0.02, ['missense']],
+      ATM: [0.1, ['missense']], BRCA1: [0.05, ['missense', 'truncating']], PIK3CA: [0.15, ['missense']],
+      PTEN: [0.05, ['truncating']], RB1: [0.05, ['truncating']] },
+    // 1: MDM2-amp
+    { TP53: [0.05, ['missense']], MDM2: [0.15, ['missense']], ATM: [0.05, ['missense']],
+      PIK3CA: [0.12, ['missense']] },
+    // 2: Hypermutator
+    { TP53: [0.35, ['missense', 'truncating']], CDKN1A: [0.2, ['missense']], ATM: [0.4, ['missense', 'truncating']],
+      BRCA1: [0.3, ['truncating', 'missense']], PIK3CA: [0.45, ['missense']], PTEN: [0.35, ['truncating']],
+      RB1: [0.25, ['truncating']], MDM2: [0.05, ['missense']] },
+    // 3: Quiet
+    { TP53: [0.03, ['missense']], PIK3CA: [0.08, ['missense']] }
+  ][cluster];
+
+  for (const g in mutProfile) {
+    const [prob, types] = mutProfile[g];
+    if (rng() < prob) {
+      const t = types[Math.floor(rng() * types.length)];
+      p.mut[g] = { type: t };
+    }
+  }
+  // Small chance of inframe or fusion in any cluster
+  if (rng() < 0.03) {
+    const g = mutGenes[Math.floor(rng() * mutGenes.length)];
+    if (!p.mut[g]) p.mut[g] = { type: rng() < 0.5 ? 'inframe' : 'fusion' };
+  }
+
+  // Copy number: log₂ ratio at driver loci
+  p.cn = {};
+  cnLoci.forEach(loc => {
+    let v;
+    if (loc === 'TP53_17p13') {
+      v = cluster === 0 ? rn(-0.8, 0.4) : cluster === 2 ? rn(-0.4, 0.5) : rn(0, 0.2);
+    } else if (loc === 'MDM2_12q15') {
+      v = cluster === 1 ? rn(1.8, 0.3) : rn(0, 0.15);
+    } else { // MYC
+      v = cluster === 2 ? rn(0.5, 0.6) : rn(0, 0.2);
+    }
+    p.cn[loc] = clamp(v, -2.5, 2.5);
+  });
+
+  // Tag mutation cells with CNV state for layered glyphs:
+  // if gene == 'TP53', carry TP53_17p13 CN; if 'MDM2', carry MDM2_12q15.
+  mutGenes.forEach(g => {
+    let cnVal = 0;
+    if (g === 'TP53') cnVal = p.cn['TP53_17p13'];
+    else if (g === 'MDM2') cnVal = p.cn['MDM2_12q15'];
+    if (!p.mut[g] && Math.abs(cnVal) > 0.8) {
+      p.mut[g] = { type: null, cnv: cnVal };  // CNV-only alteration
+    } else if (p.mut[g]) {
+      p.mut[g].cnv = cnVal;
+    }
+  });
+
+  // TMB (mutation count + noisy passenger load); clamp to >= 0 since the
+  // normal-noise term can otherwise sample a negative value.
+  p.tmb = Math.max(0, Object.values(p.mut).filter(m => m && m.type).length
+         + (cluster === 2 ? Math.floor(rn(8, 3)) : Math.floor(rn(1, 1))));
+  p.tp53_mutant = !!(p.mut.TP53 && p.mut.TP53.type);
+  return p;
+}
+
+const rngGlobal = mulberry32(24601);
+const patients = [];
+let pid = 0;
+for (let c = 0; c < CLUSTER_SIZES.length; c++) {
+  for (let i = 0; i < CLUSTER_SIZES[c]; i++) patients.push(makePatient(rngGlobal, c, pid++));
+}
+const randomRankRng = mulberry32(12013);
+const randomRanks = new Map(patients.map(p => [p.id, randomRankRng()]));
+
+// ─── Shared mutation-cell glyph renderer (used by Figures 1 & 2) ────────
+function drawGlyph(parent, x, y, w, h, ex) {
+  // Sanitize: a stray transient size during transition / responsive layout
+  // can pass w<=0 or h<=0; bail without emitting invalid SVG attrs.
+  const wSafe = Math.max(0, w), hSafe = Math.max(0, h);
+  const g = parent.append('g').attr('transform', `translate(${x},${y})`);
+  g.append('rect')
+    .attr('x', 0).attr('y', 0).attr('width', wSafe).attr('height', hSafe)
+    .attr('fill', ex.cnv !== 0 ? cnColor(ex.cnv) : PAL.cnNeutral)
+    .attr('stroke', '#fff').attr('stroke-width', 0.6);
+  // Below ~3px the type glyph is unreadable anyway; skip it rather than
+  // emit negative width/height rects when the inset eats the whole cell.
+  if (wSafe < 3 || hSafe < 3) return g;
+
+  const inset = Math.min(Math.max(0.5, Math.min(wSafe, hSafe) * 0.12), Math.min(wSafe, hSafe) / 2 - 0.25);
+  const innerW = Math.max(0.5, wSafe - 2 * inset);
+  const barH = Math.max(0.5, Math.min(hSafe - 2 * inset, hSafe * 0.42));
+  if (ex.type === 'missense') {
+    g.append('rect').attr('x', inset).attr('y', inset).attr('width', innerW).attr('height', Math.max(0.5, hSafe - 2 * inset))
+      .attr('fill', PAL.missense);
+  } else if (ex.type === 'truncating') {
+    g.append('rect').attr('x', inset).attr('y', hSafe / 2 - barH / 2).attr('width', innerW).attr('height', barH)
+      .attr('fill', PAL.truncating);
+  } else if (ex.type === 'inframe') {
+    g.append('rect').attr('x', inset).attr('y', hSafe / 2 - barH / 2).attr('width', innerW).attr('height', barH)
+      .attr('fill', PAL.inframe);
+  } else if (ex.type === 'fusion') {
+    const cx = wSafe / 2, cy = hSafe / 2, r = Math.min(wSafe, hSafe) * 0.32;
+    [0, 60, 120].forEach(a => {
+      const t = a * Math.PI / 180;
+      g.append('line')
+        .attr('x1', cx - Math.cos(t) * r).attr('y1', cy - Math.sin(t) * r)
+        .attr('x2', cx + Math.cos(t) * r).attr('y2', cy + Math.sin(t) * r)
+        .attr('stroke', PAL.fusion).attr('stroke-width', 2).attr('stroke-linecap', 'round');
+    });
+  }
+  return g;
+}
+window.__drawMutGlyph = (parent, x, y, w, h, cnv, type) => drawGlyph(parent, x, y, w, h, { cnv, type });
+
+// ═══ FIGURE 1: WHY STACK MODALITIES ═════════════════════════════════════
+(function() {
+  const container = d3.select('#fig-why');
+
+  // Assemble a 20-patient subcohort: 10 CDKN1A-low (5 TP53-mut cluster + 5 MDM2-amp
+  // cluster) and 10 CDKN1A-high (all from the 'quiet' cluster). Picking the lowest/
+  // highest CDKN1A values per cluster makes the pedagogical contrast sharp.
+  const lowMutant = patients.filter(p => p.cluster === 0).sort((a, b) => a.expr.CDKN1A - b.expr.CDKN1A).slice(0, 5);
+  const lowAmp    = patients.filter(p => p.cluster === 1).sort((a, b) => a.expr.CDKN1A - b.expr.CDKN1A).slice(0, 5);
+  const highQuiet = patients.filter(p => p.cluster === 3).sort((a, b) => b.expr.CDKN1A - a.expr.CDKN1A).slice(0, 10);
+  const subcohort = [...lowMutant, ...lowAmp, ...highQuiet].sort((a, b) => a.expr.CDKN1A - b.expr.CDKN1A);
+  const Nsub = subcohort.length;
+
+  let hoveredIdx = -1;
+
+  function render() {
+    container.selectAll('*').remove();
+    const width = container.node().getBoundingClientRect().width || 700;
+    const margin = { top: 26, right: 14, bottom: 56, left: 108 };
+    const cellH = 20;
+    const groupGap = 28;  // gap between the two panels (for connecting lines)
+    const bottomRows = 4;
+
+    const bodyW = width - margin.left - margin.right;
+    const cellW = bodyW / Nsub;
+
+    // Heights: top panel = 1 row, bottom panel = 4 rows
+    const topPanelH = cellH;
+    const botPanelH = bottomRows * cellH;
+    const totalH = margin.top + topPanelH + groupGap + botPanelH + margin.bottom;
+
+    const svg = container.append('svg')
+      .attr('viewBox', `0 0 ${width} ${totalH}`).style('width', '100%').style('height', 'auto');
+
+    // Panel titles
+    svg.append('text')
+      .attr('x', margin.left).attr('y', 14)
+      .style('font-size', '10px').style('font-weight', 700).style('letter-spacing', '0.08em')
+      .style('text-transform', 'uppercase').attr('fill', PAL.text2)
+      .text('One modality: CDKN1A expression alone');
+    const botY0 = margin.top + topPanelH + groupGap;
+    svg.append('text')
+      .attr('x', margin.left).attr('y', botY0 - 8)
+      .style('font-size', '10px').style('font-weight', 700).style('letter-spacing', '0.08em')
+      .style('text-transform', 'uppercase').attr('fill', PAL.text2)
+      .text('Four modalities stacked: the low half splits into two mechanisms');
+
+    // Row definitions
+    const topRow = {
+      label: 'CDKN1A expr',
+      fill: p => exprColor(p.expr.CDKN1A),
+      valFn: p => p.expr.CDKN1A.toFixed(2),
+      unit: 'log₂FC'
+    };
+    const botRows = [
+      { label: 'CDKN1A expr',    fill: p => exprColor(p.expr.CDKN1A), valFn: p => p.expr.CDKN1A.toFixed(2), unit: 'log₂FC' },
+      { label: 'CpG3 methylation', fill: p => methColor(p.meth['CpG3_−200']), valFn: p => p.meth['CpG3_−200'].toFixed(2), unit: 'β' },
+      { label: 'TP53 mutation', isMut: true, muGene: 'TP53' },
+      { label: 'MDM2 copy num.', fill: p => cnColor(p.cn.MDM2_12q15), valFn: p => p.cn.MDM2_12q15.toFixed(2), unit: 'log₂' }
+    ];
+
+    // ─── Top panel: single row ───
+    svg.append('text').attr('class', 'row-name')
+      .attr('x', margin.left - 6).attr('y', margin.top + cellH / 2).attr('dy', '0.35em').attr('text-anchor', 'end')
+      .text(topRow.label);
+    subcohort.forEach((p, i) => {
+      svg.append('rect')
+        .attr('x', margin.left + i * cellW).attr('y', margin.top)
+        .attr('width', cellW - 0.6).attr('height', cellH - 1)
+        .attr('fill', topRow.fill(p));
+    });
+
+    // ─── Connecting lines between panels ───
+    subcohort.forEach((p, i) => {
+      const cx = margin.left + i * cellW + (cellW - 0.6) / 2;
+      svg.append('line')
+        .attr('x1', cx).attr('x2', cx)
+        .attr('y1', margin.top + cellH).attr('y2', botY0)
+        .attr('stroke', PAL.grid).attr('stroke-width', 0.8);
+    });
+
+    // ─── Bottom panel: four rows ───
+    botRows.forEach((row, ri) => {
+      const ry = botY0 + ri * cellH;
+      svg.append('text').attr('class', 'row-name')
+        .attr('x', margin.left - 6).attr('y', ry + cellH / 2).attr('dy', '0.35em').attr('text-anchor', 'end')
+        .text(row.label);
+      subcohort.forEach((p, i) => {
+        if (row.isMut) {
+          const m = p.mut[row.muGene] || { cnv: 0, type: null };
+          drawGlyph(svg, margin.left + i * cellW, ry + 0.5, cellW - 0.6, cellH - 1, { cnv: m.cnv || 0, type: m.type || null });
+        } else {
+          svg.append('rect')
+            .attr('x', margin.left + i * cellW).attr('y', ry + 0.5)
+            .attr('width', cellW - 0.6).attr('height', cellH - 1)
+            .attr('fill', row.fill(p));
+        }
+      });
+    });
+
+    // ─── Subgroup brackets under the bottom panel ───
+    const bracketY = botY0 + botPanelH + 6;
+    const bracketH = 7;
+    function bracket(startI, endI, label, color) {
+      const x0 = margin.left + startI * cellW;
+      const x1 = margin.left + (endI + 1) * cellW - 0.6;
+      svg.append('path')
+        .attr('d', `M${x0},${bracketY} L${x0},${bracketY + bracketH} L${x1},${bracketY + bracketH} L${x1},${bracketY}`)
+        .attr('stroke', color).attr('stroke-width', 1.2).attr('fill', 'none');
+      svg.append('text')
+        .attr('x', (x0 + x1) / 2).attr('y', bracketY + bracketH + 14)
+        .attr('text-anchor', 'middle').style('font-size', '10px').style('font-weight', 700)
+        .attr('fill', color).text(label);
+    }
+    // Where are the two subgroups? They're interleaved in the bottom 10 positions.
+    // Find each patient's cluster and group them.
+    const mutIndices = [], ampIndices = [], quietIndices = [];
+    subcohort.forEach((p, i) => {
+      if (p.planted === 0 || (p.planted == null && p.cluster === 0)) mutIndices.push(i);
+      else if (p.planted === 1 || (p.planted == null && p.cluster === 1)) ampIndices.push(i);
+      else quietIndices.push(i);
+    });
+    // Draw brackets only if contiguous enough; otherwise just label the mixed low-half
+    const lowStart = 0, lowEnd = mutIndices.length + ampIndices.length - 1;
+    const highStart = lowEnd + 1, highEnd = Nsub - 1;
+    bracket(lowStart, lowEnd, 'CDKN1A-low → mixed mechanisms', PAL.significance);
+    bracket(highStart, highEnd, 'CDKN1A-high → unaltered', PAL.pathway);
+
+    // ─── Column hover overlay ───
+    subcohort.forEach((p, i) => {
+      const x = margin.left + i * cellW;
+      svg.append('rect')
+        .attr('x', x).attr('y', margin.top).attr('width', cellW).attr('height', botY0 + botPanelH - margin.top)
+        .attr('fill', 'transparent').style('cursor', 'crosshair')
+        .on('mouseenter', (ev) => {
+          hoveredIdx = i; drawHighlight();
+          const mut = p.mut.TP53 && p.mut.TP53.type ? `${p.mut.TP53.type}` : 'wildtype';
+          const cn = p.cn.MDM2_12q15 > 0.5 ? 'amp' : p.cn.MDM2_12q15 < -0.5 ? 'loss' : 'neutral';
+          tipShow(ev, `<span class="tip-k">${p.id}</span><br>
+            <span class="tip-k">planted subtype</span>${PAL.clusterNames[p.planted == null ? p.cluster : p.planted]}<br>
+            <span class="tip-k">CDKN1A</span>${p.expr.CDKN1A.toFixed(2)} log₂FC<br>
+            <span class="tip-k">CpG3 β</span>${p.meth['CpG3_−200'].toFixed(2)}<br>
+            <span class="tip-k">TP53 mut</span>${mut}<br>
+            <span class="tip-k">MDM2 CN</span>${cn}`);
+        })
+        .on('mousemove', tipMove)
+        .on('mouseleave', () => { hoveredIdx = -1; drawHighlight(); tipHide(); });
+    });
+
+    const hl = svg.append('rect').attr('y', margin.top).attr('height', botY0 + botPanelH - margin.top)
+      .attr('fill', 'none').attr('stroke', PAL.accent).attr('stroke-width', 1.5)
+      .attr('opacity', 0).style('pointer-events', 'none');
+
+    function drawHighlight() {
+      if (hoveredIdx < 0) { hl.attr('opacity', 0); return; }
+      hl.attr('x', margin.left + hoveredIdx * cellW - 1)
+        .attr('width', cellW + 1).attr('opacity', 1);
+    }
+  }
+  render();
+  new ResizeObserver(render).observe(container.node());
+})();
+
+
+// ═══ CONSENSUS CLUSTERING (Monti et al. 2003) ═══════════════════════════
+// The planted subtype of each patient is kept as p.planted. The subtype shown
+// in the figures (p.cluster) is recomputed here from the data alone:
+// resample 80% of patients R times, run k-means (k = 4) on standardized
+// features each time, record how often each pair lands in the same cluster,
+// then cluster the resulting consensus matrix with average linkage.
+const CC = (function () {
+  const K = 4, R = 100, FRAC = 0.8;
+  const rng = mulberry32(90210);
+  const cols = [];
+  exprGenes.forEach(g => cols.push(p => p.expr[g]));
+  methSites.forEach(s => cols.push(p => p.meth[s]));
+  cnLoci.forEach(l => cols.push(p => p.cn[l]));
+  mutGenes.forEach(g => cols.push(p => (p.mut[g] && p.mut[g].type) ? 1 : 0));
+  const raw = patients.map(p => cols.map(f => f(p)));
+  const X = raw.map(r => r.slice());
+  // Continuous features are standardized and capped at 3 SD; mutation calls stay
+  // 0/1, so a rare mutation cannot become an extreme outlier that captures a cluster.
+  const nCont = exprGenes.length + methSites.length + cnLoci.length;
+  cols.forEach((_, j) => {
+    if (j >= nCont) return;
+    const v = raw.map(r => r[j]), m = d3.mean(v), s = d3.deviation(v) || 1;
+    X.forEach(r => { r[j] = Math.max(-3, Math.min(3, (r[j] - m) / s)); });
+  });
+  const dist2 = (a, b) => { let s = 0; for (let j = 0; j < a.length; j++) s += (a[j] - b[j]) ** 2; return s; };
+
+  // Best of several k-means runs (lowest within-cluster sum of squares).
+  function kmeansBest(idx) {
+    let best = null, bestSS = Infinity;
+    for (let t = 0; t < 5; t++) {
+      const lab = kmeans(idx);
+      let ss = 0;
+      for (let c = 0; c < K; c++) {
+        const mem = idx.filter((_, u) => lab[u] === c);
+        if (!mem.length) continue;
+        const cen = X[0].map((_, j) => d3.mean(mem, i => X[i][j]));
+        mem.forEach(i => { ss += dist2(X[i], cen); });
+      }
+      if (ss < bestSS) { bestSS = ss; best = lab; }
+    }
+    return best;
+  }
+  function kmeans(idx) {
+    // k-means++ initialization, then Lloyd iterations; each resample keeps the best of 5 runs
+    const cent = [X[idx[Math.floor(rng() * idx.length)]].slice()];
+    while (cent.length < K) {
+      const d = idx.map(i => d3.min(cent, c => dist2(X[i], c)));
+      let r = rng() * d3.sum(d), k = 0;
+      while (r > d[k] && k < d.length - 1) { r -= d[k]; k++; }
+      cent.push(X[idx[k]].slice());
+    }
+    let lab = new Array(idx.length).fill(0);
+    for (let it = 0; it < 25; it++) {
+      lab = idx.map(i => d3.minIndex(cent, c => dist2(X[i], c)));
+      for (let c = 0; c < K; c++) {
+        const mem = idx.filter((_, t) => lab[t] === c);
+        if (mem.length) cent[c] = X[0].map((_, j) => d3.mean(mem, i => X[i][j]));
+      }
+    }
+    return lab;
+  }
+
+  const n = patients.length;
+  const together = d3.range(n).map(() => new Float64Array(n));
+  const sampled = d3.range(n).map(() => new Float64Array(n));
+  for (let r = 0; r < R; r++) {
+    const idx = d3.shuffler(rng)(d3.range(n)).slice(0, Math.round(FRAC * n)).sort((a, b) => a - b);
+    const lab = kmeansBest(idx);
+    for (let a = 0; a < idx.length; a++) for (let b = 0; b < idx.length; b++) {
+      sampled[idx[a]][idx[b]]++;
+      if (lab[a] === lab[b]) together[idx[a]][idx[b]]++;
+    }
+  }
+  const M = together.map((row, i) => Array.from(row, (t, j) => sampled[i][j] ? t / sampled[i][j] : 0));
+
+  // Average-linkage agglomeration on 1 - M, stopped at K clusters.
+  let groups = d3.range(n).map(i => [i]);
+  const avgD = (A, B) => d3.mean(A, i => d3.mean(B, j => 1 - M[i][j]));
+  while (groups.length > K) {
+    let best = [0, 1], bd = Infinity;
+    for (let a = 0; a < groups.length; a++) for (let b = a + 1; b < groups.length; b++) {
+      const dd = avgD(groups[a], groups[b]);
+      if (dd < bd) { bd = dd; best = [a, b]; }
+    }
+    groups[best[0]] = groups[best[0]].concat(groups[best[1]]);
+    groups.splice(best[1], 1);
+  }
+  // Name each computed cluster after the planted subtype it overlaps most,
+  // choosing the one-to-one matching with the largest total overlap.
+  const overlap = groups.map(gr => d3.range(K).map(c => gr.filter(i => patients[i].cluster === c).length));
+  let bestPerm = null, bestScore = -1;
+  (function permute(arr, used) {
+    if (arr.length === K) {
+      const s = d3.sum(arr, (c, gi) => overlap[gi][c]);
+      if (s > bestScore) { bestScore = s; bestPerm = arr.slice(); }
+      return;
+    }
+    for (let c = 0; c < K; c++) if (!used.has(c)) { used.add(c); arr.push(c); permute(arr, used); arr.pop(); used.delete(c); }
+  })([], new Set());
+  patients.forEach(p => { p.planted = p.cluster; });
+  groups.forEach((gr, gi) => gr.forEach(i => { patients[i].cluster = bestPerm[gi]; }));
+  const sizes = d3.range(K).map(c => patients.filter(p => p.cluster === c).length);
+  CLUSTER_SIZES.splice(0, K, ...sizes);
+  const agree = patients.filter(p => p.cluster === p.planted).length;
+  return { M, agree, sizes };
+})();
+
+// ═══ FIGURE 2: COHORT MATRIX ════════════════════════════════════════════
+(function() {
+  const container = d3.select('#fig-cohort');
+  const card = d3.select('#cohort-detail');
+  const legend = d3.select('#fig2-legend');
+
+  // Legend once
+  legend.append('div').attr('class', 'legend-item').html(`<span class="legend-swatch sq" style="background: ${PAL.missense};"></span> missense`);
+  legend.append('div').attr('class', 'legend-item').html(`<span class="legend-swatch sq" style="background: ${PAL.truncating};"></span> truncating`);
+  legend.append('div').attr('class', 'legend-item').html(`<span class="legend-swatch sq" style="background: ${PAL.inframe};"></span> inframe`);
+  legend.append('div').attr('class', 'legend-item').html(`<span class="legend-swatch sq" style="background: ${PAL.fusion};"></span> fusion`);
+  legend.append('div').attr('class', 'legend-item').html(`<span class="legend-swatch" style="background: ${PAL.cnGain};"></span> amplification`);
+  legend.append('div').attr('class', 'legend-item').html(`<span class="legend-swatch" style="background: ${PAL.cnLoss};"></span> deep deletion`);
+  legend.append('div').attr('class', 'legend-item').html(`<span class="legend-grad" style="background: linear-gradient(to right, ${PAL.exprDown}, ${PAL.exprMid}, ${PAL.exprUp});"></span> expression log₂FC`);
+  legend.append('div').attr('class', 'legend-item').html(`<span class="legend-grad" style="background: linear-gradient(to right, ${PAL.methLow}, ${PAL.methHigh});"></span> methylation β`);
+
+  let sortMode = 'cluster';
+  let hoveredIdx = -1;
+
+  function orderPatients() {
+    const arr = patients.slice();
+    if (sortMode === 'cluster') {
+      arr.sort((a, b) => a.cluster - b.cluster || b.tmb - a.tmb);
+    } else if (sortMode === 'tp53') {
+      arr.sort((a, b) => (b.tp53_mutant - a.tp53_mutant) || b.tmb - a.tmb);
+    } else if (sortMode === 'cdkn1a') {
+      arr.sort((a, b) => b.expr.CDKN1A - a.expr.CDKN1A);
+    } else if (sortMode === 'burden') {
+      arr.sort((a, b) => b.tmb - a.tmb);
+    } else {
+      arr.sort((a, b) => randomRanks.get(a.id) - randomRanks.get(b.id));
+    }
+    return arr;
+  }
+
+  // Compute per-row alteration frequency (constant across sort)
+  const rowFreq = {};
+  mutGenes.forEach(g => {
+    rowFreq['mut_' + g] = patients.filter(p => p.mut[g] && (p.mut[g].type || Math.abs(p.mut[g].cnv || 0) > 0.8)).length / N;
+  });
+  cnLoci.forEach(loc => {
+    rowFreq['cn_' + loc] = patients.filter(p => Math.abs(p.cn[loc]) > 0.8).length / N;
+  });
+  exprGenes.forEach(g => {
+    rowFreq['expr_' + g] = patients.filter(p => Math.abs(p.expr[g]) > 1).length / N;
+  });
+  methSites.forEach(site => {
+    rowFreq['meth_' + site] = patients.filter(p => p.meth[site] > 0.5).length / N;
+  });
+
+  function render() {
+    container.selectAll('*').remove();
+    const order = orderPatients();
+    const width = container.node().getBoundingClientRect().width || 720;
+
+    // Layout
+    const leftBand = 14;         // colored group band
+    const labelW = 108;          // row labels
+    const rightPad = 70;         // right-side frequency bar region
+    const gapPx = 14;            // between row groups
+    const cellH = 11.5;
+    const ribbonGap = 6;
+    const topBarH = 30;          // mutation burden bar
+    const ribbonRow = 11;        // each clinical track
+    const clusterBarH = 14;      // cluster ID bar
+
+    // Rows in order (top → bottom)
+    const rowGroups = [
+      { key: 'expr', name: 'EXPR',  color: PAL.exprUp,   rows: exprGenes.map(g => ({ key: 'expr_' + g, label: g, value: p => p.expr[g], fill: p => exprColor(p.expr[g]) })) },
+      { key: 'meth', name: 'METH',  color: PAL.methHigh, rows: methSites.map(s => ({ key: 'meth_' + s, label: s, value: p => p.meth[s], fill: p => methColor(p.meth[s]) })) },
+      { key: 'mut',  name: 'MUT',   color: '#111827',    rows: mutGenes.map(g => ({ key: 'mut_' + g, label: g, value: p => p.mut[g], isMut: true })) },
+      { key: 'cn',   name: 'CN',    color: PAL.cnGain,   rows: cnLoci.map(loc => ({ key: 'cn_' + loc, label: loc, value: p => p.cn[loc], fill: p => cnColor(p.cn[loc]) })) }
+    ];
+
+    const nRows = rowGroups.reduce((s, g) => s + g.rows.length, 0);
+    const matrixH = nRows * cellH + (rowGroups.length - 1) * gapPx;
+    const ribbonH = clusterBarH + 4 * ribbonRow + 5 * ribbonGap;
+    const topSection = topBarH + ribbonGap + ribbonH;
+    const totalH = 12 + topSection + 12 + matrixH + 20;
+
+    const matrixX = labelW + leftBand;
+    const matrixW = width - matrixX - rightPad;
+    // Column width (factor in cluster gutters if in cluster mode)
+    let clusterGutters = [];
+    if (sortMode === 'cluster') {
+      let acc = 0;
+      for (let c = 0; c < CLUSTER_SIZES.length - 1; c++) { acc += CLUSTER_SIZES[c]; clusterGutters.push(acc); }
+    }
+    const gutterPx = 4;
+    const cellW = (matrixW - (clusterGutters.length * gutterPx)) / N;
+    const colX = (i) => {
+      let gutters = clusterGutters.filter(g => i >= g).length;
+      return matrixX + i * cellW + gutters * gutterPx;
+    };
+
+    const svg = container.append('svg')
+      .attr('viewBox', `0 0 ${width} ${totalH}`).style('width', '100%').style('height', 'auto');
+
+    // ─── TOP: mutation burden barplot per patient ──────────────────────
+    const topY = 12;
+    const maxTMB = d3.max(patients, p => p.tmb);
+    const tmbScale = d3.scaleLinear().domain([0, maxTMB]).range([0, topBarH - 4]);
+
+    svg.append('text').attr('class', 'track-name')
+      .attr('x', matrixX - 8).attr('y', topY + topBarH / 2).attr('dy', '0.35em').attr('text-anchor', 'end')
+      .text('TMB');
+
+    order.forEach((p, i) => {
+      const h = tmbScale(p.tmb);
+      svg.append('rect')
+        .attr('x', colX(i)).attr('y', topY + topBarH - h)
+        .attr('width', cellW - 0.4).attr('height', h)
+        .attr('fill', PAL.tmbBar).attr('opacity', 0.82);
+    });
+
+    // ─── Clinical ribbon ───────────────────────────────────────────────
+    let y = topY + topBarH + ribbonGap;
+
+    // Cluster strip
+    svg.append('text').attr('class', 'track-name')
+      .attr('x', matrixX - 8).attr('y', y + clusterBarH / 2).attr('dy', '0.35em').attr('text-anchor', 'end')
+      .text('cluster');
+    order.forEach((p, i) => {
+      svg.append('rect')
+        .attr('x', colX(i)).attr('y', y)
+        .attr('width', cellW - 0.4).attr('height', clusterBarH)
+        .attr('fill', PAL.clusters[p.cluster]);
+    });
+    // Cluster labels overlaid on the cluster strip (white text over colored blocks)
+    if (sortMode === 'cluster') {
+      let acc = 0;
+      CLUSTER_SIZES.forEach((sz, c) => {
+        const firstX = colX(acc);
+        const lastX  = colX(acc + sz - 1) + cellW;
+        svg.append('text')
+          .attr('x', (firstX + lastX) / 2).attr('y', y + clusterBarH / 2 + 3.5)
+          .attr('text-anchor', 'middle').style('font-size', '10px').style('font-weight', 700)
+          .attr('fill', '#fff').style('pointer-events', 'none')
+          .text(PAL.clusterNames[c]);
+        acc += sz;
+      });
+    }
+    y += clusterBarH + ribbonGap;
+
+    // Age
+    svg.append('text').attr('class', 'track-name')
+      .attr('x', matrixX - 8).attr('y', y + ribbonRow / 2).attr('dy', '0.35em').attr('text-anchor', 'end').text('age');
+    order.forEach((p, i) => {
+      svg.append('rect').attr('x', colX(i)).attr('y', y).attr('width', cellW - 0.4).attr('height', ribbonRow)
+        .attr('fill', PAL.age(p.age));
+    });
+    y += ribbonRow + ribbonGap;
+
+    // Sex
+    svg.append('text').attr('class', 'track-name')
+      .attr('x', matrixX - 8).attr('y', y + ribbonRow / 2).attr('dy', '0.35em').attr('text-anchor', 'end').text('sex');
+    order.forEach((p, i) => {
+      svg.append('rect').attr('x', colX(i)).attr('y', y).attr('width', cellW - 0.4).attr('height', ribbonRow)
+        .attr('fill', p.sex === 'F' ? PAL.sexF : PAL.sexM).attr('opacity', 0.78);
+    });
+    y += ribbonRow + ribbonGap;
+
+    // Stage
+    svg.append('text').attr('class', 'track-name')
+      .attr('x', matrixX - 8).attr('y', y + ribbonRow / 2).attr('dy', '0.35em').attr('text-anchor', 'end').text('stage');
+    order.forEach((p, i) => {
+      svg.append('rect').attr('x', colX(i)).attr('y', y).attr('width', cellW - 0.4).attr('height', ribbonRow)
+        .attr('fill', PAL.stage[p.stage - 1]);
+    });
+    y += ribbonRow + ribbonGap;
+
+    // Vital status
+    svg.append('text').attr('class', 'track-name')
+      .attr('x', matrixX - 8).attr('y', y + ribbonRow / 2).attr('dy', '0.35em').attr('text-anchor', 'end').text('vital');
+    order.forEach((p, i) => {
+      svg.append('rect').attr('x', colX(i)).attr('y', y).attr('width', cellW - 0.4).attr('height', ribbonRow)
+        .attr('fill', p.vital === 'alive' ? PAL.vitalAlive : PAL.vitalDead).attr('opacity', 0.85);
+    });
+    y += ribbonRow + ribbonGap;
+
+    // ─── Matrix body ──────────────────────────────────────────────────
+    const bodyY = y;
+    rowGroups.forEach((grp, gi) => {
+      const groupStart = y;
+      const groupHeight = grp.rows.length * cellH;
+
+      // Left colored band
+      svg.append('rect')
+        .attr('x', labelW).attr('y', groupStart)
+        .attr('width', leftBand).attr('height', groupHeight)
+        .attr('fill', grp.color).attr('opacity', 0.45);
+      svg.append('text')
+        .attr('transform', `translate(${labelW + leftBand / 2},${groupStart + groupHeight / 2}) rotate(-90)`)
+        .attr('text-anchor', 'middle').attr('class', 'group-name')
+        .text(grp.name);
+
+      grp.rows.forEach((row, ri) => {
+        const ry = groupStart + ri * cellH;
+
+        // Row label
+        svg.append('text').attr('class', 'row-name')
+          .attr('x', labelW - 6).attr('y', ry + cellH / 2).attr('dy', '0.35em').attr('text-anchor', 'end')
+          .text(row.label);
+
+        // Cells
+        order.forEach((p, i) => {
+          if (row.isMut) {
+            const m = p.mut[row.label] || { cnv: 0, type: null };
+            window.__drawMutGlyph(svg, colX(i), ry + 0.5, cellW - 0.4, cellH - 1, m.cnv || 0, m.type || null);
+          } else {
+            svg.append('rect')
+              .attr('x', colX(i)).attr('y', ry + 0.5)
+              .attr('width', cellW - 0.4).attr('height', cellH - 1)
+              .attr('fill', row.fill(p));
+          }
+        });
+
+        // Right-side frequency bar
+        const freq = rowFreq[row.key] || 0;
+        const barMaxW = rightPad - 20;
+        const barW = freq * barMaxW;
+        svg.append('rect')
+          .attr('x', matrixX + matrixW + 4).attr('y', ry + 1.5)
+          .attr('width', barW).attr('height', cellH - 3)
+          .attr('fill', grp.color).attr('opacity', 0.55);
+        svg.append('text')
+          .attr('x', matrixX + matrixW + 4 + barMaxW + 2).attr('y', ry + cellH / 2).attr('dy', '0.35em')
+          .attr('text-anchor', 'end').style('font-size', '8.5px').attr('fill', PAL.text2)
+          .text(`${Math.round(freq * 100)}%`);
+      });
+
+      y += groupHeight + (gi < rowGroups.length - 1 ? gapPx : 0);
+    });
+
+    // ─── Cluster gutters (vertical lines) ─────────────────────────────
+    if (sortMode === 'cluster') {
+      let acc = 0;
+      CLUSTER_SIZES.forEach((sz, c) => {
+        if (c === CLUSTER_SIZES.length - 1) return;
+        acc += sz;
+        const gx = colX(acc) - 2;
+        svg.append('rect')
+          .attr('x', gx).attr('y', topY).attr('width', 2).attr('height', y - topY)
+          .attr('fill', '#fff');
+      });
+    }
+
+    // ─── Column hover overlay (full-height per column) ────────────────
+    const overlayY = topY;
+    const overlayH = y - topY;
+    order.forEach((p, i) => {
+      svg.append('rect')
+        .attr('x', colX(i)).attr('y', overlayY)
+        .attr('width', cellW).attr('height', overlayH)
+        .attr('fill', 'transparent').style('cursor', 'crosshair')
+        .attr('tabindex', 0)
+        .attr('role', 'img')
+        .attr('aria-label', `${p.id}, ${PAL.clusterNames[p.cluster]}, CDKN1A ${p.expr.CDKN1A.toFixed(2)}, TMB ${p.tmb}`)
+        .on('mouseenter', (ev) => {
+          hoveredIdx = i;
+          drawHighlight();
+          updateCard(p);
+        })
+        .on('focus', () => {
+          hoveredIdx = i;
+          drawHighlight();
+          updateCard(p);
+        })
+        .on('mouseleave', () => {
+          hoveredIdx = -1;
+          drawHighlight();
+          resetCard();
+        })
+        .on('blur', () => {
+          hoveredIdx = -1;
+          drawHighlight();
+          resetCard();
+        });
+    });
+
+    // Highlight rect (redrawn)
+    const highlight = svg.append('rect')
+      .attr('class', 'hl').attr('y', overlayY).attr('height', overlayH)
+      .attr('fill', 'none').attr('stroke', PAL.accent).attr('stroke-width', 1.5).attr('opacity', 0)
+      .style('pointer-events', 'none');
+
+    function drawHighlight() {
+      if (hoveredIdx < 0) { highlight.attr('opacity', 0); return; }
+      highlight.attr('x', colX(hoveredIdx) - 1).attr('width', cellW + 1).attr('opacity', 1);
+    }
+  }
+
+  function updateCard(p) {
+    const row = (label, val, color) => `<div><span class="tip-k">${label}</span><b ${color ? `style="color:${color};"` : ''}>${val}</b></div>`;
+    const mutList = Object.entries(p.mut).filter(([_, m]) => m && m.type).map(([g, m]) => `${g}(${m.type[0]})`).join(' · ') || '—';
+    card.html(`
+      <div class="dc-title">
+        <span class="cluster-chip" style="background: ${PAL.clusters[p.cluster]};">${PAL.clusterNames[p.cluster]}</span>
+        ${p.id} · age ${p.age} · ${p.sex} · stage ${['I','II','III','IV'][p.stage-1]} · ${p.vital}
+      </div>
+      <div class="dc-grid">
+        ${row('TMB', p.tmb)}
+        ${row('mutations', mutList)}
+        ${row('CDKN1A expr', p.expr.CDKN1A.toFixed(2))}
+        ${row('MDM2 expr',   p.expr.MDM2.toFixed(2))}
+        ${row('mean meth β', (d3.mean(methSites, s => p.meth[s])).toFixed(2))}
+        ${row('TP53 17p CN', p.cn.TP53_17p13.toFixed(2))}
+        ${row('MDM2 12q CN', p.cn.MDM2_12q15.toFixed(2))}
+      </div>
+    `);
+  }
+  function resetCard() {
+    card.html(`<div class="dc-title">Hover a column for patient detail</div><div class="dc-hint">Every column is a multi-modal profile of one sample. The cluster strip on top is computed by consensus clustering from all four modalities together.</div>`);
+  }
+
+  d3.selectAll('#sort-toggle .btn').on('click', function() {
+    d3.selectAll('#sort-toggle .btn').classed('active', false);
+    d3.select(this).classed('active', true);
+    d3.selectAll('#sort-toggle .btn').attr('aria-pressed', 'false');
+    d3.select(this).attr('aria-pressed', 'true');
+    sortMode = this.dataset.sort;
+    render();
+  });
+  d3.selectAll('#sort-toggle .btn').attr('aria-pressed', function() { return this.classList.contains('active') ? 'true' : 'false'; });
+
+  render();
+  new ResizeObserver(render).observe(container.node());
+})();
+
+
+// ═══ FIGURE: THE CONSENSUS MATRIX ═══════════════════════════════════════
+(function () {
+  const container = d3.select('#fig-consensus');
+  document.getElementById('cc-readout').textContent =
+    'Consensus clustering assigned ' + CC.agree + ' of ' + patients.length +
+    ' patients to the subtype they were generated from. Cluster sizes: ' +
+    CC.sizes.map((s, c) => PAL.clusterNames[c].split(' · ')[0] + ' ' + s).join(', ') + '.';
+  function render() {
+    container.selectAll('*').remove();
+    const order = patients.map((p, i) => i).sort((a, b) => patients[a].cluster - patients[b].cluster || patients[a].planted - patients[b].planted);
+    const W = Math.min(440, container.node().getBoundingClientRect().width || 440);
+    const pad = 16, cell = (W - pad) / order.length;
+    const svg = container.append('svg').attr('width', W).attr('height', W).style('display', 'block').style('margin', '0 auto');
+    const col = d3.scaleSequential(d3.interpolateGreys).domain([0, 1]);
+    order.forEach((i, r) => {
+      svg.append('rect').attr('x', 0).attr('y', pad + r * cell).attr('width', pad - 3).attr('height', cell + 0.2).attr('fill', PAL.clusters[patients[i].cluster]);
+      svg.append('rect').attr('x', pad + r * cell).attr('y', 0).attr('width', cell + 0.2).attr('height', pad - 3).attr('fill', PAL.clusters[patients[i].planted]);
+      order.forEach((j, c) => {
+        svg.append('rect').attr('class', 'cc-cell').attr('x', pad + c * cell).attr('y', pad + r * cell)
+          .attr('width', cell + 0.2).attr('height', cell + 0.2).attr('fill', col(CC.M[i][j]))
+          .on('mouseenter', ev => tipShow(ev, `${patients[i].id} and ${patients[j].id}: together in <b>${Math.round(CC.M[i][j] * 100)}%</b> of the resamples that drew both`))
+          .on('mousemove', tipMove).on('mouseleave', tipHide);
+      });
+    });
+  }
+  render();
+  new ResizeObserver(render).observe(container.node());
+})();
+
+})();
+
+</script>
+</body>
+</html>

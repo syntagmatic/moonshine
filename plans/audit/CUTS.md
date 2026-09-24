@@ -78,3 +78,48 @@ final ruling.
 - Cutting information-geometry breaks links from modular-forms 14 and 20.
   Other cross-series links need a sweep after the cuts.
 - Delete outright (git keeps the history) or move to an unlisted archive?
+
+## Status (2026-09-24)
+
+Batch 1 is merged. There are now 158 registered articles, down from 369, and
+all 184 pages pass the render check. Per-track records, including errors
+confirmed, errors rejected and unresolved items, are in `findings/<track>.md`.
+
+| Series | Before | After |
+|---|---|---|
+| 7 whole-series cuts | 112 | 0 |
+| emergence / lattice-simulation | 43 / 15 | 14 / 6 |
+| exceptional-atlas / parallel-coordinates | 17 / 23 | 9 / 12 |
+| algorithms-ml / bioinformatics / decision-trees | 12 / 15 / 8 | 6 / 8 / 6 |
+| modular-forms | 20 | 14 |
+| game-is-the-math | 15 | 10 |
+| japan-earthquakes | 20 | 7 |
+| quasicrystals | 4 (shells) | 4 (rewritten) |
+
+Batch 2 was merged on 2026-09-24. There are now 139 registered articles, and all
+163 pages pass the render check and the internal link check.
+
+| Series | Before | After |
+|---|---|---|
+| mathematical-diagrams | 23 | 10 |
+| noether | 15 | 13 |
+| lithium-ion / sph | 7 / 4 | 5 / 2 |
+| grateful-dead | 7 | 4 |
+| foam / cohomology | 3 / 6 | 3 / 6 (foam gets an index and a homepage entry) |
+
+Findings are in `findings/diagrams.md`, `noether.md`, `li-sph.md`,
+`grateful-dead.md` and `foam-cohomology.md`.
+
+Needs a human:
+- The Nankai 30-year probability (japan/02, revised in 2025).
+- The Japanese translations of rewritten japan paragraphs.
+- Numbers in the emergence flocking and traffic prose (their workers left no
+  notes).
+- Citations marked "from memory" in the findings files.
+- sph is Ian Johnson's series, imported from enjalot/moonshine, and batch 2 cut it
+  from 4 articles to 2. Confirm with him, as was done for japan.
+- The lithium-ion runaway-propagation parameters are the track's own modelling
+  choices; they need a check by someone who knows battery safety.
+- grateful-dead 03 colors songs by type using a hand classification.
+- About 150 em dashes remain in untouched prose across noether and cohomology,
+  left for the prose pass.
