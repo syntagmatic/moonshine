@@ -97,6 +97,7 @@ svg text { font-family: var(--heading-font); }
   .stats-row { gap: 1rem; }
   .control-group input[type="range"] { width: 80px; }
 }
+.katex-display { overflow-x: auto; overflow-y: hidden; }
 </style>
 </head>
 <body>
@@ -123,7 +124,7 @@ at once.
 </p>
 
 <div class="figure" id="fig-forest">
-  <canvas id="forest-canvas"></canvas>
+  <canvas id="forest-canvas" role="img" aria-label="Forest-fire grid: green trees, orange burning, dark ash, tan empty ground. Click a tree to ignite it, or use the Ignite buttons."></canvas>
   <div class="controls">
     <div class="control-group">
       <label>Density</label>
@@ -245,7 +246,7 @@ giant cluster spans the grid. At the critical point clusters of all sizes exist.
 </p>
 
 <div class="figure" id="fig-clusters">
-  <canvas id="cluster-canvas"></canvas>
+  <canvas id="cluster-canvas" role="img" aria-label="Random forest at the chosen density with each connected cluster of trees shaded; the largest cluster is red, the rest are shades of green."></canvas>
   <div class="controls">
     <div class="control-group">
       <label>Density</label>
@@ -278,7 +279,7 @@ Power laws at the critical point are the signature of a continuous phase transit
 </p>
 
 <div class="figure" id="fig-distribution">
-  <svg id="distribution-svg"></svg>
+  <svg id="distribution-svg" role="img" aria-label="Log-log scatter of cluster count against cluster size for the forest in Figure 3."></svg>
   <p class="figure-caption">
     <span class="figure-label">Figure 4.</span>
     Cluster size distribution on log-log axes.
@@ -329,7 +330,7 @@ already reached.
 </p>
 
 <div class="figure" id="fig-sir">
-  <svg id="sir-svg"></svg>
+  <svg id="sir-svg" role="img" aria-label="Final outbreak size against transmissibility on a square lattice: faint dots for single outbreaks, a line for their mean, and dashed lines at T = 1/3 and T = 1/2."></svg>
   <div class="controls">
     <div class="control-group">
       <button class="btn" id="btn-sir-run">Run sweep</button>
@@ -385,7 +386,7 @@ tuning it, which is what self-organized criticality means.
 </p>
 
 <div class="figure" id="fig-soc">
-  <canvas id="soc-canvas"></canvas>
+  <canvas id="soc-canvas" role="img" aria-label="Drossel-Schwabl forest: trees grow and lightning burns clusters. Green trees, red burning, pale empty ground."></canvas>
   <div class="controls">
     <div class="control-group">
       <label>Growth (p)</label>
@@ -465,7 +466,7 @@ from the threshold.
 </p>
 
 <div class="figure" id="fig-soc-hist">
-  <svg id="soc-svg-hist"></svg>
+  <svg id="soc-svg-hist" role="img" aria-label="Log-log plot of fires per unit size against fire size from the running Drossel-Schwabl simulation, with a dashed least-squares fit line and its slope."></svg>
   <p class="figure-caption">
     <span class="figure-label">Figure 7.</span>
     Fire-size distribution on log-log axes. Bins are logarithmic, and each count is
@@ -730,8 +731,9 @@ const state = { density: 0.59 };
 
   // ── Play / step controls ──────────────────────────────────────────
   var lastFrame = 0;
+  var onScreen = true;
   function animLoop(ts) {
-    if (!playing) return;
+    if (!playing || !onScreen) { animRAF = null; return; }
     animRAF = requestAnimationFrame(animLoop);
     var interval = REDUCED_MOTION ? 200 : Math.max(16, 300 / speed);
     if (ts - lastFrame < interval) return;
@@ -779,6 +781,16 @@ const state = { density: 0.59 };
     generateForest();
   });
 
+  // Figure 2's draggable line sets this forest's density.
+  window._forest = {
+    setDensity: function (d) {
+      density = d;
+      densitySlider.value = Math.round(d * 100);
+      densityVal.textContent = Math.round(d * 100) + '%';
+      generateForest();
+    }
+  };
+
   speedSlider.addEventListener('input', function () {
     speed = +this.value;
     speedVal.textContent = this.value;
@@ -797,6 +809,12 @@ const state = { density: 0.59 };
   });
 
   btnReset.addEventListener('click', function () { generateForest(); });
+
+  // The fire pauses while the figure is off-screen and resumes on return.
+  Motion.onVisible(figEl, function (v) {
+    onScreen = v;
+    if (v && playing && !animRAF) { lastFrame = 0; animRAF = requestAnimationFrame(animLoop); }
+  });
 
   canvas.addEventListener('click', function (e) {
     var rect = canvas.getBoundingClientRect();
@@ -938,6 +956,7 @@ const state = { density: 0.59 };
   var margin = { top: 20, right: 20, bottom: 50, left: 60 };
   var width, height;
   var svg, xScale, yScale, xAxis, yAxis, line, dots, critLine, dragLine;
+  var curP = 0.59;
 
   var PC = 0.5927; // critical threshold for site percolation on square lattice
 
@@ -1054,20 +1073,44 @@ const state = { density: 0.59 };
       .attr('width', 20).attr('height', height)
       .attr('fill', 'transparent').attr('cursor', 'ew-resize');
 
+    function setP(p, silent) {
+      p = Math.max(0, Math.min(1, p));
+      curP = p;
+      dragLine.attr('x1', xScale(p)).attr('x2', xScale(p));
+      dragHit.attr('x', xScale(p) - 10);
+      dragLabel.attr('x', xScale(p) + 4)
+        .text('density = ' + Math.round(p * 100) + '%');
+      d3.select(svgEl).attr('aria-valuenow', Math.round(p * 100));
+      if (silent) return;
+      if (window._forest) window._forest.setDensity(p);
+      if (window._clusters) window._clusters.setDensity(p);
+    }
+    if (curP !== 0.59) setP(curP, true);
+
     var drag = d3.drag()
       .on('drag', function (event) {
-        var p = xScale.invert(Math.max(0, Math.min(width, event.x)));
-        p = Math.max(0, Math.min(1, p));
-        dragLine.attr('x1', xScale(p)).attr('x2', xScale(p));
-        dragHit.attr('x', xScale(p) - 10);
-        dragLabel.attr('x', xScale(p) + 4)
-          .text('density = ' + Math.round(p * 100) + '%');
-        if (window._forest) window._forest.setDensity(p);
-        if (window._clusters) window._clusters.setDensity(p);
+        setP(xScale.invert(Math.max(0, Math.min(width, event.x))));
       });
 
     dragHit.call(drag);
     dragLine.call(drag);
+    // Tap anywhere on the plot to move the line; arrow keys nudge it by 1%.
+    d3.select(svgEl)
+      .attr('tabindex', 0)
+      .attr('role', 'slider')
+      .attr('aria-label', 'Fraction of trees burned against tree density, with a draggable line that sets the density of the forest figures above. Arrow keys move the line.')
+      .attr('aria-valuemin', 0).attr('aria-valuemax', 100)
+      .attr('aria-valuenow', Math.round(curP * 100))
+      .on('click', function (event) {
+        var pt = d3.pointer(event, svg.node());
+        if (pt[1] >= 0 && pt[1] <= height) setP(xScale.invert(Math.max(0, Math.min(width, pt[0]))));
+      })
+      .on('keydown', function (event) {
+        var d = { ArrowRight: 0.01, ArrowUp: 0.01, ArrowLeft: -0.01, ArrowDown: -0.01 }[event.key];
+        if (!d) return;
+        event.preventDefault();
+        setP(Math.round((curP + d) * 100) / 100);
+      });
 
     updateDots();
   }
@@ -1132,6 +1175,15 @@ const state = { density: 0.59 };
   var chartRO = new ResizeObserver(function () { setupChart(); });
   chartRO.observe(figEl);
   setupChart();
+  // Fill the plot the first time it scrolls into view, so it is never empty.
+  if ('IntersectionObserver' in window) {
+    var io = new IntersectionObserver(function (entries) {
+      if (entries.some(function (e) { return e.isIntersecting; })) { io.disconnect(); if (!sweepData.length) runSweep(); }
+    }, { rootMargin: '200px' });
+    io.observe(figEl);
+  } else {
+    runSweep();
+  }
 })();
 </script>
 
@@ -1625,12 +1677,16 @@ const state = { density: 0.59 };
     ctx.putImageData(imageData, 0, 0);
   }
 
+  var socRAF = null, socOnScreen = true;
   function loop() {
+    socRAF = null;
+    if (paused || !socOnScreen) return;
     var effSpeed = REDUCED_MOTION ? 1 : speed;
     for (var s = 0; s < effSpeed; s++) step();
     draw();
-    requestAnimationFrame(loop);
+    socRAF = requestAnimationFrame(loop);
   }
+  function kick() { if (!socRAF && !paused && socOnScreen) socRAF = requestAnimationFrame(loop); }
 
   function clearActivePreset() {
     [btnSmall, btnCritical, btnLarge].forEach(function (b) { b.classList.remove('active'); });
@@ -1657,6 +1713,7 @@ const state = { density: 0.59 };
   });
   btnPause.addEventListener('click', function () {
     paused = !paused; btnPause.textContent = paused ? 'Resume' : 'Pause';
+    kick();
   });
   // Presets explore the f/p ratio that governs the large-fire tail.
   btnSmall.addEventListener('click', function () { applyPreset(0.05, 0.001, btnSmall); });
@@ -1784,10 +1841,16 @@ const state = { density: 0.59 };
 
   new ResizeObserver(function () { updateHist(lastHistory); }).observe(histContainer);
 
-  // Init
+  // Init. With reduced motion, run the model ahead synchronously so the
+  // forest and histogram show a settled state, and wait for Resume.
+  if (REDUCED_MOTION) {
+    for (var w = 0; w < 1500; w++) step();
+    paused = true;
+    btnPause.textContent = 'Resume';
+  }
   sizeCanvas();
   updateHist(lastHistory);
-  loop();
+  Motion.onVisible(figEl, function (v) { socOnScreen = v; kick(); });
 })();
 </script>
 

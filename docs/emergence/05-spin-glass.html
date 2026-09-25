@@ -172,6 +172,8 @@ svg text { font-family: var(--heading-font); }
   transition: border-color 0.15s;
 }
 .run-chip:hover, .run-chip.selected { border-color: var(--accent); }
+.katex-display { overflow-x: auto; overflow-y: hidden; }
+svg circle[tabindex]:focus { outline: none; stroke: #1a1a2e; stroke-width: 3; }
 .run-chip .swatch {
   display: inline-block;
   width: 8px;
@@ -566,7 +568,9 @@ as the traveling salesman problem.
     svg = container.append("svg")
       .attr("width", w)
       .attr("height", h)
-      .attr("viewBox", "0 0 " + w + " " + h);
+      .attr("viewBox", "0 0 " + w + " " + h)
+      .attr("role", "group")
+      .attr("aria-label", "Triangular lattice of 30 spins, red up and blue down. Green bonds are satisfied, red are not, dashed bonds are antiferromagnetic, and orange triangles are frustrated. Each spin is a button that flips it.");
 
     gTriangles = svg.append("g");
     gEdges = svg.append("g");
@@ -616,10 +620,12 @@ as the traveling salesman problem.
         .attr("stroke", "#fff")
         .attr("stroke-width", 2)
         .attr("cursor", "pointer")
-        .on("click", function () {
-          d.spin *= -1;
-          render();
-          updateStats();
+        .attr("tabindex", 0)
+        .attr("role", "button")
+        .attr("aria-label", "Spin at row " + (d.row + 1) + ", column " + (d.col + 1) + ", " + (d.spin === 1 ? "up" : "down") + ". Flip it.")
+        .on("click", function () { flip(d); })
+        .on("keydown", function (ev) {
+          if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); flip(d); }
         });
 
       gNodes.append("text")
@@ -633,6 +639,15 @@ as the traveling salesman problem.
         .attr("pointer-events", "none")
         .text(d.spin === 1 ? "+" : "\u2212");
     });
+  }
+
+  // Flip one spin and keep keyboard focus on it across the redraw.
+  function flip(d) {
+    d.spin *= -1;
+    render();
+    updateStats();
+    var el = gNodes.selectAll("circle").nodes()[d.id];
+    if (el) el.focus();
   }
 
   function updateStats() {
@@ -770,7 +785,9 @@ as the traveling salesman problem.
     svgLattice = latticeContainer.append("svg")
       .attr("width", w)
       .attr("height", h)
-      .attr("viewBox", "0 0 " + w + " " + h);
+      .attr("viewBox", "0 0 " + w + " " + h)
+      .attr("role", "group")
+      .attr("aria-label", "The 30-spin lattice being annealed, red up and blue down; green bonds satisfied, red unsatisfied. While paused, each spin is a button that flips it.");
 
     gEdgesA = svgLattice.append("g");
     gNodesA = svgLattice.append("g");
@@ -803,22 +820,31 @@ as the traveling salesman problem.
       .attr("stroke", "#fff")
       .attr("stroke-width", 1.5)
       .attr("cursor", "pointer")
-      .on("click", function (ev, d) {
-        // Manual flip only allowed when paused or idle (not running)
-        if (running && !paused) return;
-        d.spin *= -1;
-        renderLattice();
-        updateAnnealStats(lastT, totalEnergy(), lastStep);
+      .attr("tabindex", 0)
+      .attr("role", "button")
+      .on("click", function (ev, d) { manualFlip(d, this); })
+      .on("keydown", function (ev, d) {
+        if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); manualFlip(d, this); }
       })
       .merge(nodeSel)
       .attr("cx", function (d) { return nodeX(d); })
       .attr("cy", function (d) { return nodeY(d); })
-      .attr("fill", function (d) { return d.spin === 1 ? "#ef4444" : "#3b82f6"; });
+      .attr("fill", function (d) { return d.spin === 1 ? "#ef4444" : "#3b82f6"; })
+      .attr("aria-label", function (d) { return "Spin at row " + (d.row + 1) + ", column " + (d.col + 1) + ", " + (d.spin === 1 ? "up" : "down"); });
+  }
+
+  // Manual flip only allowed when paused or idle (not running)
+  function manualFlip(d, el) {
+    if (running && !paused) return;
+    d.spin *= -1;
+    renderLattice();
+    updateAnnealStats(lastT, totalEnergy(), lastStep);
+    if (el) el.focus();
   }
 
   // --- Energy chart ---
   var chartW, chartH;
-  var chartMargin = { top: 15, right: 45, bottom: 30, left: 45 };
+  var chartMargin = { top: 15, right: 45, bottom: 36, left: 45 };
   var svgChart, xScale, yScale, yTempScale, gXAxis, gYAxis, gYTempAxis, gLines, gTempLine, gProgress;
   var runs = [];
   var runColors = d3.schemeTableau10;
@@ -826,11 +852,13 @@ as the traveling salesman problem.
   function initChart() {
     chartContainer.selectAll("svg").remove();
     chartW = Math.min(chartContainer.node().getBoundingClientRect().width, 700);
-    chartH = 180;
+    chartH = 186;
 
     svgChart = chartContainer.append("svg")
       .attr("width", chartW)
-      .attr("height", chartH);
+      .attr("height", chartH)
+      .attr("role", "img")
+      .attr("aria-label", "Energy against cooling progress for each annealing run, one coloured line per run, with the temperature schedule as a dashed grey curve on a right-hand axis.");
 
     var innerW = chartW - chartMargin.left - chartMargin.right;
     var innerH = chartH - chartMargin.top - chartMargin.bottom;
@@ -959,7 +987,8 @@ as the traveling salesman problem.
     var strip = d3.select("#run-strip");
     var chips = strip.selectAll(".run-chip").data(runs, function (d) { return d.id; });
     chips.exit().remove();
-    chips.enter().append("span")
+    chips.enter().append("button")
+      .attr("type", "button")
       .attr("class", "run-chip")
       .on("click", function (ev, d) {
         // Show this run's final configuration
@@ -1040,8 +1069,9 @@ as the traveling salesman problem.
     renderRunChips();
   }
 
+  var onScreen = true;
   function frame() {
-    if (!running || paused) { rafId = null; return; }
+    if (!running || paused || !onScreen) { rafId = null; return; }
     var speed = parseInt(document.getElementById("slider-speed").value, 10);
     var stepsThisFrame = speed; // macro-steps per frame (was fixed at 8)
     var N = nodes.length;
@@ -1134,6 +1164,12 @@ as the traveling salesman problem.
     updateAnnealStats("--", totalEnergy(), 0);
     setButtonStates();
   }
+
+  // A run pauses while the figure is off-screen and resumes when it returns.
+  Motion.onVisible(document.getElementById("fig-annealing"), function (v) {
+    onScreen = v;
+    if (v && running && !paused && rafId == null) frame();
+  });
 
   buildAnnealing();
   initLatticeSVG();
@@ -1286,7 +1322,9 @@ as the traveling salesman problem.
     d3.select(chartDiv).selectAll("svg").remove();
     var W = Math.max(260, fig.clientWidth - 48), H = 240, m = { top: 12, right: 12, bottom: 38, left: 48 };
     var iw = W - m.left - m.right, ih = H - m.top - m.bottom;
-    var svg = d3.select(chartDiv).append("svg").attr("width", W).attr("height", H);
+    var svg = d3.select(chartDiv).append("svg").attr("width", W).attr("height", H)
+      .attr("role", "img").attr("tabindex", 0)
+      .attr("aria-label", "Scatter of all " + valleys.length + " valleys: energy above the lowest valley against the share of quenches that end there, log scale. Use the arrow keys to step through valleys.");
     var g = svg.append("g").attr("transform", "translate(" + m.left + "," + m.top + ")");
     var maxX = Math.max(12, d3.max(valleys, function (v) { return v.energy - Emin; }));
     var x = d3.scaleLinear().domain([-1, maxX + 1]).range([0, iw]);
@@ -1312,11 +1350,22 @@ as the traveling salesman problem.
       .attr("fill-opacity", 0.7)
       .attr("stroke", function (d) { return d.v === selected ? "#1a1a2e" : "none"; }).attr("stroke-width", 1.5)
       .style("cursor", "pointer")
-      .on("mouseenter click", function (ev, d) {
-        selected = d.v; renderMini();
-        dots.attr("r", function (e) { return e.v === selected ? 6 : 4; })
-          .attr("stroke", function (e) { return e.v === selected ? "#1a1a2e" : "none"; });
-      });
+      .on("mouseenter click", function (ev, d) { select(d.v); });
+    function select(v) {
+      selected = v; renderMini();
+      dots.attr("r", function (e) { return e.v === selected ? 6 : 4; })
+        .attr("stroke", function (e) { return e.v === selected ? "#1a1a2e" : "none"; });
+    }
+    // Keyboard: arrows step through valleys in order of energy.
+    var order = pts.slice().sort(function (a, b) { return a.v.energy - b.v.energy || b.v.hits - a.v.hits; }).map(function (p) { return p.v; });
+    svg.on("keydown", function (ev) {
+      var dir = (ev.key === "ArrowRight" || ev.key === "ArrowDown") ? 1 : (ev.key === "ArrowLeft" || ev.key === "ArrowUp") ? -1 : 0;
+      if (!dir) return;
+      ev.preventDefault();
+      var i = order.indexOf(selected);
+      i = i < 0 ? 0 : (i + dir + order.length) % order.length;
+      select(order[i]);
+    });
   }
 
   function renderMini() {
@@ -1324,7 +1373,8 @@ as the traveling salesman problem.
     var v = selected || valleys.filter(function (u) { return u.energy === Emin; })[0];
     if (!v) return;
     var sp = 34, W = COLS * sp + sp * 1.5, H = ROWS * sp * 0.866 + sp * 1.2 + 18;
-    var svg = d3.select(miniDiv).append("svg").attr("width", W).attr("height", H).style("display", "block").style("margin", "0.75rem auto 0");
+    var svg = d3.select(miniDiv).append("svg").attr("width", W).attr("height", H).style("display", "block").style("margin", "0.75rem auto 0")
+      .attr("role", "img").attr("aria-label", "One configuration from the selected valley, red up and blue down, with unsatisfied bonds drawn heavy red.");
     var px = function (i) { var r = Math.floor(i / COLS), c = i % COLS; return c * sp + (r % 2 === 1 ? sp * 0.5 : 0) + sp * 0.6; };
     var py = function (i) { return Math.floor(i / COLS) * sp * 0.866 + sp * 0.6; };
     var spin = function (i) { return (v.rep >> i) & 1 ? 1 : -1; };

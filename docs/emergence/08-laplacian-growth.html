@@ -70,9 +70,9 @@ header { margin-bottom: 3rem; }
   transition: background 0.15s, border-color 0.15s; user-select: none; }
 .btn:hover { border-color: var(--accent); background: var(--accent-light); }
 .btn.active { border-color: var(--accent); background: var(--accent); color: white; }
-.stat-row { display: flex; gap: 1.5rem; margin-top: 0.75rem; font-family: var(--heading-font); font-size: 0.85rem; }
+.stat-row { display: flex; flex-wrap: wrap; gap: 0.35rem 1.5rem; margin-top: 0.75rem; font-family: var(--heading-font); font-size: 0.85rem; }
 .stat-row .stat { display: flex; gap: 0.35rem; align-items: baseline; }
-.stat-row .stat-label { color: var(--text-2); font-weight: 600; }
+.stat-row .stat-label { color: var(--text-2); font-weight: 600; white-space: nowrap; }
 .stat-row .stat-val { font-family: var(--mono-font); font-variant-numeric: tabular-nums; color: var(--text); }
 .click-hint { font-family: var(--heading-font); font-size: 0.8rem; color: var(--text-2);
   text-align: center; margin-top: 0.5rem; font-style: italic; }
@@ -107,6 +107,7 @@ svg text { font-family: var(--heading-font); }
 .order-chart svg { display: block; width: 100%; height: 230px; overflow: visible; }
 .chart-note { font-family: var(--heading-font); font-size: 0.8rem; color: var(--text-2); margin: 0.25rem 0 0; line-height: 1.35; }
 @media (max-width: 600px) { .river-grid { grid-template-columns: 1fr; } }
+.katex-display { overflow-x: auto; overflow-y: hidden; }
 </style>
 </head>
 <body>
@@ -133,7 +134,7 @@ Below, each walker starts on a circle just outside the cluster and steps up, dow
 </p>
 
 <div class="figure" id="fig-algorithm">
-  <canvas id="canvas-algo"></canvas>
+  <canvas id="canvas-algo" role="img" aria-label="A diffusion-limited aggregation cluster growing from a central seed, colored from dark (early particles) to gold (late ones)."></canvas>
   <div class="stat-row">
     <div class="stat">
       <span class="stat-label">Particles:</span>
@@ -184,11 +185,11 @@ The effect has a length scale. A bouncing walker explores only a limited neighbo
 <div class="figure" id="fig-stickiness">
   <div class="side-by-side">
     <div class="side-panel">
-      <canvas id="canvas-sticky-high"></canvas>
+      <canvas id="canvas-sticky-high" role="img" aria-label="DLA cluster grown with full stickiness: thin, open branches."></canvas>
       <div class="side-label" id="label-sticky-high">Stickiness: 1.00</div>
     </div>
     <div class="side-panel">
-      <canvas id="canvas-sticky-low"></canvas>
+      <canvas id="canvas-sticky-low" role="img" aria-label="DLA cluster grown with reduced stickiness, set by the slider: thicker, denser branches."></canvas>
       <div class="side-label" id="label-sticky-low">Stickiness: 0.05</div>
     </div>
   </div>
@@ -235,7 +236,7 @@ The exponent &eta; tunes how strongly growth favors the most exposed tips. At &e
 </p>
 
 <div class="figure" id="fig-eta">
-  <canvas id="canvas-eta" class="dbm-canvas"></canvas>
+  <canvas id="canvas-eta" class="dbm-canvas" role="img" aria-label="Dielectric breakdown model: a discharge growing down from the top edge over a glow showing the electric potential."></canvas>
   <div class="controls">
     <button class="btn" id="play-eta">Pause</button>
     <div class="control-group">
@@ -288,11 +289,11 @@ Closed depressions are filled before routing, as sediment would fill them, so ev
 <div class="figure" id="fig-river">
   <div class="river-grid">
     <div>
-      <canvas id="canvas-river" class="river-canvas"></canvas>
+      <canvas id="canvas-river" class="river-canvas" role="img" aria-label="Eroding landscape: shaded elevation with river channels in blue."></canvas>
     </div>
     <div class="order-chart">
       <svg id="horton-chart" role="img" aria-label="Stream segment counts by Strahler order for the river, the DLA cluster and the discharge"></svg>
-      <p class="chart-note" id="horton-note">Hover a blue point to trace that order through the river network.</p>
+      <p class="chart-note" id="horton-note">Hover, tap or tab to a blue point to trace that order through the river network.</p>
     </div>
   </div>
   <div class="controls">
@@ -708,6 +709,13 @@ For one kind of river the analogy becomes exact. Streams fed by groundwater seep
 
     setPauseButton(pauseBtn, paused);
     init();
+    // Reduced motion: grow a cluster up front (about 0.3 s of work) so the
+    // figure shows DLA before the reader presses Play.
+    if (reducedMotion) {
+      var t0 = performance.now();
+      while (performance.now() - t0 < 300) for (var k = 0; k < 4000; k++) simStep();
+      draw(); updateStats();
+    }
     requestAnimationFrame(loop);
   })();
 
@@ -815,6 +823,13 @@ For one kind of river the analogy becomes exact. Streams fed by groundwater seep
     Motion.onVisible(figEl, function(v) { visible = v; });
 
     setPauseButton(pauseBtn, paused);
+    if (reducedMotion) {
+      var t0 = performance.now();
+      while (performance.now() - t0 < 300) {
+        for (var k = 0; k < 800; k++) simHigh.step();
+        for (var k2 = 0; k2 < 2400; k2++) simLow.step();
+      }
+    }
     render();
     requestAnimationFrame(loop);
   })();
@@ -1053,6 +1068,15 @@ For one kind of river the analogy becomes exact. Streams fed by groundwater seep
       var first = lastWidth === 0;
       lastWidth = w;
       reinit(first ? !reducedMotion : sim.running);
+      if (first && reducedMotion) {
+        // Grow part of the discharge up front so the static figure is not empty.
+        var t0 = performance.now();
+        while (!sim.done && performance.now() - t0 < 300) sim.growStep();
+        sim.tips = sim.countTips();
+        sim.draw();
+        document.getElementById("stat-eta-steps").textContent = sim.steps;
+        document.getElementById("stat-eta-tips").textContent = sim.tips;
+      }
     }).observe(figEl);
     Motion.onVisible(figEl, function(v) { sim.visible = v; });
   })();
@@ -1217,7 +1241,7 @@ For one kind of river the analogy becomes exact. Streams fed by groundwater seep
     var playing = !reducedMotion, visible = true, stepsPerFrame = 3, frame = 0;
     var highlighted = 0, lastSeries = null;
     var COLORS = { river: "#2563eb", dla: "#c98a12", dbm: "#7c6fd6", hi: "#f59e0b" };
-    var DEFAULT_NOTE = "Hover a blue point to trace that order through the river network.";
+    var DEFAULT_NOTE = "Hover, tap or tab to a blue point to trace that order through the river network.";
 
     function draw() {
       var hmax = 1e-9;
@@ -1250,7 +1274,7 @@ For one kind of river the analogy becomes exact. Streams fed by groundwater seep
       var node = chart.node();
       var width = Math.max(240, Math.round(node.getBoundingClientRect().width || 300));
       var height = 230;
-      var m = { top: 64, right: 12, bottom: 34, left: 40 };
+      var m = { top: 72, right: 12, bottom: 34, left: 40 };
       chart.attr("viewBox", "0 0 " + width + " " + height);
       chart.selectAll("*").remove();
 
@@ -1302,7 +1326,7 @@ For one kind of river the analogy becomes exact. Streams fed by groundwater seep
           .attr("stroke", "#fff").attr("stroke-width", 1);
         if (s.key === "river") {
           dots.style("cursor", "pointer").attr("tabindex", 0)
-            .on("mouseenter focus", function(ev, d) {
+            .on("mouseenter focus click", function(ev, d) {
               highlighted = d.o;
               note.textContent = "River order " + d.o + ": " + d.c + " segment" + (d.c === 1 ? "" : "s") + ", highlighted in the map.";
               draw();

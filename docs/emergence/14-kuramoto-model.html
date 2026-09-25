@@ -150,7 +150,7 @@ header { margin-bottom: 3rem; }
 }
 svg text { font-family: var(--heading-font); }
 
-/* Gauge readout */
+/* Order-parameter readout */
 .readout-row {
   display: flex;
   align-items: center;
@@ -162,16 +162,10 @@ svg text { font-family: var(--heading-font); }
 .readout-label { color: var(--text-2); font-weight: 600; }
 .readout-value {
   font-family: var(--mono-font);
-  font-size: 1.1rem;
   font-variant-numeric: tabular-nums;
-  color: var(--accent);
-  font-weight: 600;
+  color: var(--text);
 }
-.gauge-wrap {
-  width: 90px;
-  height: 50px;
-  position: relative;
-}
+.katex-display { overflow-x: auto; overflow-y: hidden; }
 
 /* Distribution toggle buttons */
 .dist-buttons {
@@ -261,11 +255,9 @@ parameter $r$ measures coherence: 0 is incoherent, 1 fully synced.
 </p>
 
 <div class="figure" id="fig-circle">
-  <canvas id="canvas-circle"></canvas>
+  <canvas id="canvas-circle" role="img" aria-label="Fifty oscillators as dots on a unit circle, colored by natural frequency, with an arrow from the center whose length is the order parameter r"></canvas>
   <div class="readout-row">
-    <span class="readout-label">Order parameter $r =$</span>
-    <span class="readout-value" id="r-value">0.00</span>
-    <svg id="gauge" class="gauge-wrap" viewBox="0 0 90 50"></svg>
+    <span class="readout-label">Order parameter $r =$ <span class="readout-value" id="r-value">0.00</span></span>
   </div>
   <div class="controls">
     <div class="control-group">
@@ -299,7 +291,7 @@ $r = \sqrt{1 - K_c/K}$. The $K$ you pick in Figure 2 also drives the circle abov
 </p>
 
 <div class="figure" id="fig-transition">
-  <svg id="svg-transition"></svg>
+  <svg id="svg-transition" role="img" tabindex="0" aria-label="Order parameter r against coupling strength K: measured points, the infinite-N prediction, and the critical coupling Kc. Drag, or use the left and right arrow keys, to set K for Figure 1"></svg>
   <p class="click-hint">Drag the vertical line to set $K$</p>
   <p class="figure-caption"><span class="figure-label">Figure 2.</span> The order parameter $r$ as a function of coupling strength $K$. The blue curve joins measured points, each the mean of 5 runs of 50 oscillators with Lorentzian frequencies ($\gamma = 0.5$), started from random phases. The dashed red line marks $K_c = 2\gamma$, and the gray curve is the infinite-$N$ prediction $\sqrt{1 - K_c/K}$. Below $K_c$ the measured $r$ sits at a level of order $1/\sqrt{N}$ rather than zero, the residual coherence of 50 random phases.</p>
 </div>
@@ -317,10 +309,10 @@ by $K = 3$ the clusters have merged into one.
 <div class="figure" id="fig-freq">
   <div class="freq-layout">
     <div>
-      <svg id="svg-histogram"></svg>
+      <svg id="svg-histogram" role="img" aria-label="Histogram of the natural frequencies drawn from the chosen distribution"></svg>
     </div>
     <div>
-      <canvas id="canvas-freq-circle"></canvas>
+      <canvas id="canvas-freq-circle" role="img" aria-label="The oscillators drawn from that distribution on a unit circle, with the order-parameter arrow"></canvas>
     </div>
   </div>
   <div class="controls">
@@ -354,7 +346,7 @@ perturb a region and watch the field heal.
 </p>
 
 <div class="figure" id="fig-fireflies">
-  <canvas id="canvas-fireflies" class="firefly-canvas"></canvas>
+  <canvas id="canvas-fireflies" class="firefly-canvas" role="img" tabindex="0" aria-label="A 40 by 30 grid of pulse-coupled fireflies; each dot glows when it flashes. Click, or press Enter, to force a patch to flash"></canvas>
   <div class="controls">
     <div class="control-group">
       <label>Coupling</label>
@@ -370,6 +362,7 @@ perturb a region and watch the field heal.
         <span class="val" id="val-firefly-speed">1.00&times;</span>
       </div>
     </div>
+    <button class="btn" id="btn-pause-fireflies">Pause</button>
     <button class="btn" id="btn-reset-fireflies">Reset</button>
   </div>
   <p class="click-hint">Click on the grid to perturb a region</p>
@@ -393,7 +386,7 @@ coupling. With sound on, each flash is a click pitched by ring position.
 </p>
 
 <div class="figure" id="fig-ring">
-  <canvas id="canvas-ring" class="ring-canvas"></canvas>
+  <canvas id="canvas-ring" class="ring-canvas" role="img" aria-label="Twelve oscillators on a ring, each drawn as a pie showing its phase, with a mean-phase arrow at the center"></canvas>
   <div class="controls">
     <div class="control-group">
       <label>Coupling</label>
@@ -411,6 +404,7 @@ coupling. With sound on, each flash is a click pitched by ring position.
     </div>
     <button class="btn" id="btn-ring-perturb">Perturb 3</button>
     <button class="btn" id="btn-ring-sound">Sound: off</button>
+    <button class="btn" id="btn-ring-pause">Pause</button>
     <button class="btn" id="btn-ring-reset">Reset</button>
   </div>
   <div class="stats-row">
@@ -489,8 +483,15 @@ function kuramotoStep(phases, freqs, K, N, dt) {
   }
 }
 
+// Lorentzian samples have heavy tails, so colour and histogram ranges use the
+// 5th to 95th percentile; values outside take the end colour or end bin.
+function robustRange(freqs) {
+  const sorted = Array.from(freqs).sort((a, b) => a - b);
+  return [d3.quantile(sorted, 0.05), d3.quantile(sorted, 0.95)];
+}
+
 function freqToColor(freq, minF, maxF) {
-  const t = (freq - minF) / (maxF - minF || 1);
+  const t = Math.max(0, Math.min(1, (freq - minF) / (maxF - minF || 1)));
   // Cool blue to warm orange
   const r = Math.round(40 + 200 * t);
   const g = Math.round(80 + 80 * (1 - Math.abs(t - 0.5) * 2));
@@ -512,7 +513,7 @@ function freqToColor(freq, minF, maxF) {
 
   let phases = new Float64Array(N);
   let freqs = sampleFrequencies(N, 'lorentzian');
-  const minF = Math.min(...freqs), maxF = Math.max(...freqs);
+  const [minF, maxF] = robustRange(freqs);
   const colors = Array.from(freqs).map(f => freqToColor(f, minF, maxF));
   let K = 0;
   let dpr = window.devicePixelRatio || 1;
@@ -531,33 +532,6 @@ function freqToColor(freq, minF, maxF) {
     canvas.style.height = h + 'px';
     canvas.width = w * dpr;
     canvas.height = h * dpr;
-  }
-
-  function drawGauge(r) {
-    const svg = d3.select('#gauge');
-    svg.selectAll('*').remove();
-    const w = 90, h = 50;
-    const cx = w / 2, cy = h - 4;
-    const radius = 36;
-    // Arc background
-    const arcBg = d3.arc()
-      .innerRadius(radius - 6).outerRadius(radius)
-      .startAngle(-Math.PI / 2).endAngle(Math.PI / 2);
-    const arcFill = d3.arc()
-      .innerRadius(radius - 6).outerRadius(radius)
-      .startAngle(-Math.PI / 2).endAngle(-Math.PI / 2 + Math.PI * r);
-    const g = svg.append('g').attr('transform', `translate(${cx},${cy})`);
-    g.append('path').attr('d', arcBg).attr('fill', '#e2e2e8');
-    g.append('path').attr('d', arcFill).attr('fill', '#2563eb');
-    // Needle
-    const angle = -Math.PI / 2 + Math.PI * r;
-    const nx = (radius - 10) * Math.cos(angle);
-    const ny = (radius - 10) * Math.sin(angle);
-    g.append('line').attr('x1', 0).attr('y1', 0)
-      .attr('x2', nx).attr('y2', ny)
-      .attr('stroke', '#1a1a2e').attr('stroke-width', 1.5)
-      .attr('stroke-linecap', 'round');
-    g.append('circle').attr('r', 2.5).attr('fill', '#1a1a2e');
   }
 
   function draw() {
@@ -603,29 +577,37 @@ function freqToColor(freq, minF, maxF) {
 
     // Update readouts
     rValueEl.textContent = order.r.toFixed(2);
-    drawGauge(Math.min(order.r, 1));
   }
 
-  let lastT = 0;
+  // Reduced motion: no animation; integrate 20 time units at once and draw
+  // where the oscillators end up.
+  function settle() {
+    if (!reducedMotion) return;
+    for (let s = 0; s < 400; s++) kuramotoStep(phases, freqs, K, N, 0.05);
+    draw();
+  }
+  let lastT = 0, visible = false, running = false;
   function tick(t) {
+    if (!visible) { running = false; lastT = 0; return; }
     if (!lastT) lastT = t;
     const dt = Math.min((t - lastT) / 1000, 0.05);
     lastT = t;
     kuramotoStep(phases, freqs, K, N, dt);
     draw();
-    circleRAF = requestAnimationFrame(tick);
+    requestAnimationFrame(tick);
   }
-  let circleRAF;
 
   sliderK.addEventListener('input', () => {
     K = parseFloat(sliderK.value);
     valK.textContent = K.toFixed(1);
     // Also update transition chart marker if it exists
     if (window._updateTransitionMarker) window._updateTransitionMarker(K);
+    settle();
   });
 
   btnReset.addEventListener('click', () => {
     resetPhases();
+    if (reducedMotion) draw();
   });
 
   // Preset K values jump to canonical regimes so readers feel the
@@ -635,19 +617,25 @@ function freqToColor(freq, minF, maxF) {
       const k = +btn.dataset.k;
       K = k; sliderK.value = k; valK.textContent = k.toFixed(1);
       if (window._updateTransitionMarker) window._updateTransitionMarker(k);
+      settle();
     });
   });
 
-  const ro = new ResizeObserver(() => { resize(); });
+  const ro = new ResizeObserver(() => { resize(); draw(); });
   ro.observe(canvas.parentElement);
   resize();
-  circleRAF = requestAnimationFrame(tick);
+  draw();
+  Motion.onVisible(canvas, v => {
+    visible = v;
+    if (v && !running && !reducedMotion) { running = true; requestAnimationFrame(tick); }
+  });
 
   // Expose for section 2 linkage
   window._circleSetK = function(k) {
     K = k;
     sliderK.value = k;
     valK.textContent = k.toFixed(1);
+    settle();
   };
 })();
 
@@ -692,7 +680,7 @@ function freqToColor(freq, minF, maxF) {
   function render() {
     const containerW = svgEl.parentElement.getBoundingClientRect().width - 48;
     width = containerW - margin.left - margin.right;
-    height = Math.min(280, containerW * 0.45) - margin.top - margin.bottom;
+    height = Math.min(280, Math.max(200, containerW * 0.45)) - margin.top - margin.bottom;
     svgEl.setAttribute('width', containerW);
     svgEl.setAttribute('height', height + margin.top + margin.bottom);
     svg.selectAll('*').remove();
@@ -778,15 +766,16 @@ function freqToColor(freq, minF, maxF) {
       .attr('r', 5).attr('fill', '#1a1a2e');
 
     // Drag behavior
-    const drag = d3.drag()
-      .on('drag', (event) => {
-        const kv = Math.max(0, Math.min(8, xScale.invert(event.x)));
-        const idx = Kvals.reduce((best, v, i) =>
-          Math.abs(v - kv) < Math.abs(Kvals[best] - kv) ? i : best, 0);
-        markerLine.attr('x1', xScale(kv)).attr('x2', xScale(kv));
-        markerDot.attr('cx', xScale(kv)).attr('cy', yScale(rVals[idx] || 0));
-        if (window._circleSetK) window._circleSetK(kv);
-      });
+    // 'start' as well as 'drag', so a tap sets K too.
+    const setFromEvent = (event) => {
+      const kv = Math.max(0, Math.min(8, xScale.invert(event.x)));
+      const idx = Kvals.reduce((best, v, i) =>
+        Math.abs(v - kv) < Math.abs(Kvals[best] - kv) ? i : best, 0);
+      markerLine.attr('x1', xScale(kv)).attr('x2', xScale(kv));
+      markerDot.attr('cx', xScale(kv)).attr('cy', yScale(rVals[idx] || 0));
+      if (window._circleSetK) window._circleSetK(kv);
+    };
+    const drag = d3.drag().on('start', setFromEvent).on('drag', setFromEvent);
 
     // Invisible drag target
     g.append('rect')
@@ -802,6 +791,15 @@ function freqToColor(freq, minF, maxF) {
       markerDot.attr('cx', xScale(kv)).attr('cy', yScale(rVals[idx] || 0));
     };
   }
+
+  svgEl.addEventListener('keydown', (e) => {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    e.preventDefault();
+    const cur = parseFloat(document.getElementById('slider-K').value);
+    const kv = Math.max(0, Math.min(8, Math.round((cur + (e.key === 'ArrowRight' ? 0.1 : -0.1)) * 10) / 10));
+    if (window._circleSetK) window._circleSetK(kv);
+    if (window._updateTransitionMarker) window._updateTransitionMarker(kv);
+  });
 
   const ro = new ResizeObserver(() => render());
   ro.observe(svgEl.parentElement);
@@ -830,9 +828,10 @@ function freqToColor(freq, minF, maxF) {
   function resetSim() {
     freqs = sampleFrequencies(N, dist);
     for (let i = 0; i < N; i++) phases[i] = Math.random() * TWO_PI;
-    const minF = Math.min(...freqs), maxF = Math.max(...freqs);
+    const [minF, maxF] = robustRange(freqs);
     colors = Array.from(freqs).map(f => freqToColor(f, minF, maxF));
     drawHistogram();
+    settle();
   }
   resetSim();
 
@@ -857,11 +856,16 @@ function freqToColor(freq, minF, maxF) {
     svgHist.selectAll('*').remove();
     const g = svgHist.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
 
-    const extent = d3.extent(freqs);
+    const extent = robustRange(freqs);
     const pad = (extent[1] - extent[0]) * 0.15 || 1;
     const xDomain = [Math.min(extent[0] - pad, -3), Math.max(extent[1] + pad, 3)];
     const x = d3.scaleLinear().domain(xDomain).range([0, w]);
-    const bins = d3.bin().domain(xDomain).thresholds(25)(Array.from(freqs));
+    // Heavy-tail outliers are piled into the end bins and counted there.
+    const eps = (xDomain[1] - xDomain[0]) * 1e-6;
+    const clamped = Array.from(freqs).map(f => Math.max(xDomain[0], Math.min(xDomain[1] - eps, f)));
+    const nLow = Array.from(freqs).filter(f => f < xDomain[0]).length;
+    const nHigh = Array.from(freqs).filter(f => f >= xDomain[1]).length;
+    const bins = d3.bin().domain(xDomain).thresholds(25)(clamped);
     const y = d3.scaleLinear().domain([0, d3.max(bins, d => d.length)]).range([h, 0]).nice();
 
     g.append('g').attr('transform', `translate(0,${h})`)
@@ -885,6 +889,8 @@ function freqToColor(freq, minF, maxF) {
       .attr('height', d => h - y(d.length))
       .attr('fill', '#2563eb').attr('opacity', 0.6)
       .attr('rx', 1);
+    if (nLow) g.append('text').attr('x', 2).attr('y', 10).attr('font-size', 10).attr('fill', '#4a4a6a').text('\u2190 ' + nLow + ' further out');
+    if (nHigh) g.append('text').attr('x', w - 2).attr('y', 10).attr('text-anchor', 'end').attr('font-size', 10).attr('fill', '#4a4a6a').text(nHigh + ' further out \u2192');
   }
 
   function drawCircle() {
@@ -920,8 +926,14 @@ function freqToColor(freq, minF, maxF) {
     }
   }
 
-  let lastT = 0;
+  function settle() {
+    if (!reducedMotion) return;
+    for (let s = 0; s < 400; s++) kuramotoStep(phases, freqs, K, N, 0.05);
+    drawCircle();
+  }
+  let lastT = 0, visible = false, running = false;
   function tick(t) {
+    if (!visible) { running = false; lastT = 0; return; }
     if (!lastT) lastT = t;
     const dt = Math.min((t - lastT) / 1000, 0.05);
     lastT = t;
@@ -942,12 +954,18 @@ function freqToColor(freq, minF, maxF) {
   sliderK.addEventListener('input', () => {
     K = parseFloat(sliderK.value);
     valK.textContent = K.toFixed(1);
+    settle();
   });
 
-  const ro = new ResizeObserver(() => { resizeCanvas(); drawHistogram(); });
+  const ro = new ResizeObserver(() => { resizeCanvas(); drawHistogram(); drawCircle(); });
   ro.observe(canvas.parentElement);
   resizeCanvas();
-  requestAnimationFrame(tick);
+  settle();
+  drawCircle();
+  Motion.onVisible(canvas, v => {
+    visible = v;
+    if (v && !running && !reducedMotion) { running = true; requestAnimationFrame(tick); }
+  });
 })();
 
 // ──────────────────────────────────────────────────────────────
@@ -961,6 +979,7 @@ function freqToColor(freq, minF, maxF) {
   const sliderSpeed = document.getElementById('slider-firefly-speed');
   const valSpeed = document.getElementById('val-firefly-speed');
   const btnReset = document.getElementById('btn-reset-fireflies');
+  const btnPause = document.getElementById('btn-pause-fireflies');
 
   const cols = 40, rows = 30;
   const N = cols * rows;
@@ -1072,13 +1091,18 @@ function freqToColor(freq, minF, maxF) {
     }
   }
 
-  // Click to perturb
+  // Click (or Enter/Space on the focused canvas) to perturb
   canvas.addEventListener('click', (e) => {
     const rect = canvas.getBoundingClientRect();
-    const mx = (e.clientX - rect.left) / rect.width;
-    const my = (e.clientY - rect.top) / rect.height;
-    const cc = Math.floor(mx * cols);
-    const cr = Math.floor(my * rows);
+    perturbAt(Math.floor((e.clientX - rect.left) / rect.width * cols),
+              Math.floor((e.clientY - rect.top) / rect.height * rows));
+  });
+  canvas.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    e.preventDefault();
+    perturbAt(Math.floor(Math.random() * cols), Math.floor(Math.random() * rows));
+  });
+  function perturbAt(cc, cr) {
     const perturbR = 5;
     for (let dr = -perturbR; dr <= perturbR; dr++) {
       for (let dc = -perturbR; dc <= perturbR; dc++) {
@@ -1091,10 +1115,15 @@ function freqToColor(freq, minF, maxF) {
         }
       }
     }
-  });
+  }
 
+  // Flashing is the motion here, so under reduced motion the grid starts
+  // paused, drawn after 30 simulated seconds, and Play starts it.
+  let paused = reducedMotion, visible = false, running = false;
+  if (paused) { btnPause.textContent = 'Play'; btnPause.classList.add('active'); }
   let lastT = 0;
   function tick(t) {
+    if (paused || !visible) { running = false; lastT = 0; return; }
     if (!lastT) lastT = t;
     const rawDt = Math.min((t - lastT) / 1000, 0.05);
     lastT = t;
@@ -1102,6 +1131,17 @@ function freqToColor(freq, minF, maxF) {
     drawFireflies();
     requestAnimationFrame(tick);
   }
+  function kick() {
+    if (running || paused || !visible) return;
+    running = true;
+    requestAnimationFrame(tick);
+  }
+  btnPause.addEventListener('click', () => {
+    paused = !paused;
+    btnPause.textContent = paused ? 'Play' : 'Pause';
+    btnPause.classList.toggle('active', paused);
+    kick();
+  });
 
   sliderK.addEventListener('input', () => {
     coupling = parseFloat(sliderK.value);
@@ -1115,12 +1155,15 @@ function freqToColor(freq, minF, maxF) {
 
   btnReset.addEventListener('click', () => {
     initFireflies();
+    drawFireflies();
   });
 
-  const ro = new ResizeObserver(() => resize());
+  const ro = new ResizeObserver(() => { resize(); drawFireflies(); });
   ro.observe(canvas.parentElement);
   resize();
-  requestAnimationFrame(tick);
+  if (reducedMotion) for (let s = 0; s < 600; s++) stepFireflies(0.05);
+  drawFireflies();
+  Motion.onVisible(canvas, v => { visible = v; kick(); });
 })();
 
 // ──────────────────────────────────────────────────────────────
@@ -1144,6 +1187,7 @@ function freqToColor(freq, minF, maxF) {
   let dpr = window.devicePixelRatio || 1;
   let oscs = [];
   let perturbTime = null;
+  let simT = 0; // simulated seconds, so a pause does not count toward recovery time
   const recoveryThreshold = 0.8;
 
   // Audio is user-gated. Nothing plays until the user toggles sound on.
@@ -1316,7 +1360,7 @@ function freqToColor(freq, minF, maxF) {
 
     statOrder.textContent = od.r.toFixed(2);
     if (perturbTime !== null && od.r > recoveryThreshold) {
-      const elapsed = ((performance.now() - perturbTime) / 1000).toFixed(1);
+      const elapsed = (simT - perturbTime).toFixed(1);
       statRecovery.textContent = elapsed + 's';
       perturbTime = null;
     }
@@ -1337,8 +1381,9 @@ function freqToColor(freq, minF, maxF) {
       if (Math.hypot(mx - x, my - y) < dotR * 2) {
         oscs[i].phase = Math.random() * TWO_PI;
         oscs[i].flashing = 1.0;
-        perturbTime = performance.now();
+        perturbTime = simT;
         statRecovery.textContent = '...';
+        draw();
         break;
       }
     }
@@ -1350,8 +1395,9 @@ function freqToColor(freq, minF, maxF) {
       oscs[k].phase = Math.random() * TWO_PI;
       oscs[k].flashing = 1.0;
     }
-    perturbTime = performance.now();
+    perturbTime = simT;
     statRecovery.textContent = '...';
+    draw();
   });
 
   btnSound.addEventListener('click', () => {
@@ -1362,7 +1408,7 @@ function freqToColor(freq, minF, maxF) {
     if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
   });
 
-  btnReset.addEventListener('click', makeOscs);
+  btnReset.addEventListener('click', () => { makeOscs(); draw(); });
 
   sliderK.addEventListener('input', () => {
     valK.textContent = parseFloat(sliderK.value).toFixed(2);
@@ -1372,20 +1418,37 @@ function freqToColor(freq, minF, maxF) {
     makeOscs();
   });
 
+  const btnPause = document.getElementById('btn-ring-pause');
+  let paused = reducedMotion, visible = false, running = false;
+  if (paused) { btnPause.textContent = 'Play'; btnPause.classList.add('active'); }
   let lastT = 0;
   function tick(t) {
+    if (paused || !visible) { running = false; lastT = 0; return; }
     if (!lastT) lastT = t;
     const dt = Math.min((t - lastT) / 1000, 0.05);
     lastT = t;
+    simT += dt;
     step(dt);
     draw();
     requestAnimationFrame(tick);
   }
+  function kick() {
+    if (running || paused || !visible) return;
+    running = true;
+    requestAnimationFrame(tick);
+  }
+  btnPause.addEventListener('click', () => {
+    paused = !paused;
+    btnPause.textContent = paused ? 'Play' : 'Pause';
+    btnPause.classList.toggle('active', paused);
+    kick();
+  });
 
-  const ro = new ResizeObserver(() => resize());
+  const ro = new ResizeObserver(() => { resize(); draw(); });
   ro.observe(canvas.parentElement);
   resize();
-  requestAnimationFrame(tick);
+  draw();
+  Motion.onVisible(canvas, v => { visible = v; kick(); });
 })();
 </script>
 </body>

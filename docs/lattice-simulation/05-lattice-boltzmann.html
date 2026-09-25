@@ -79,7 +79,7 @@ a:hover { color: #1d4ed8; }
 .btn-row { display: flex; flex-wrap: wrap; gap: 0.45rem; margin-bottom: 0.75rem; }
 
 
-.katex-display { margin: 1.25rem 0; }
+.katex-display { margin: 1.25rem 0; overflow-x: auto; overflow-y: hidden; }
 svg text { font-family: var(--heading-font); }
 
 .panel {
@@ -99,6 +99,8 @@ svg text { font-family: var(--heading-font); }
 .canvas-wrap { position: relative; background: #fff; border: 1px solid var(--border); border-radius: 4px; }
 canvas.flow { display: block; width: 100%; image-rendering: pixelated; image-rendering: crisp-edges; cursor: crosshair; }
 
+.eq-key { font-family: var(--heading-font); font-size: 0.82rem; line-height: 1.4; color: var(--text-2); }
+@media (max-width: 560px) { .overlay-stencil { display: none; } }
 .overlay-stencil {
   position: absolute;
   right: 8px;
@@ -278,7 +280,7 @@ canvas.flow { display: block; width: 100%; image-rendering: pixelated; image-ren
         <div class="row"><span class="k">Σ <i>f<sub>i</sub></i><sup>eq</sup></span><span class="v" id="eq-rho">1.000</span></div>
         <div class="row"><span class="k">Σ <i>f<sub>i</sub></i><sup>eq</sup> <b>c</b><sub><i>i</i></sub></span><span class="v" id="eq-mom">(0.00, 0.00)</span></div>
       </div>
-      <div class="info-box" style="line-height: 1.4;">
+      <div class="eq-key">
         Blue bars are axis channels, purple are diagonals, grey is the rest. The outline shows the isotropic equilibrium at <b>u</b> = <b>0</b>. Filled bars show the current drifted equilibrium.
       </div>
     </div>
@@ -302,7 +304,7 @@ canvas.flow { display: block; width: 100%; image-rendering: pixelated; image-ren
   <div class="panel">
     <div>
       <div class="canvas-wrap" id="flow-wrap">
-        <canvas class="flow" id="flow-canvas" width="300" height="90"></canvas>
+        <canvas class="flow" id="flow-canvas" width="300" height="90" role="img" aria-label="Lattice-Boltzmann flow past an obstacle on a 300 by 90 grid, coloured by vorticity (blue negative, red positive) or by speed."></canvas>
         <div class="overlay-stencil" id="stencil-overlay"></div>
       </div>
       <div class="legend-bar">
@@ -446,7 +448,8 @@ function feq(i, rho, ux, uy) {
   var width = 360, height = 300;
   var svg = d3.select('#eq-svg').append('svg')
     .attr('viewBox', '0 0 ' + width + ' ' + height)
-    .attr('width', '100%').style('max-width', width + 'px');
+    .attr('width', '100%').style('max-width', width + 'px')
+    .attr('role', 'img').attr('aria-label', 'D2Q9 equilibrium populations: a bar for each of the eight moving channels and a circle for the rest channel, filled for the current velocity u and outlined for u = 0.');
 
   var cx = width / 2, cy = 150;
   var arrowLen = 55;
@@ -464,7 +467,8 @@ function feq(i, rho, ux, uy) {
 
   // Max possible equilibrium value ~ w_i * (1 + 3*|c|*|u| + ...) ~ 0.45 for small u
   // We scale bar length to a max ~ 80 px
-  var maxVal = 0.6;
+  var maxVal = 0.6;       // rest-channel circle scale
+  var barScale = 0.2;     // moving-channel bar scale (their f_eq stays below ~0.2)
   var barMaxPx = 78;
 
   function dirAngle(i) {
@@ -494,8 +498,8 @@ function feq(i, rho, ux, uy) {
     // and of length proportional to f_i^eq
     for (var i = 1; i < 9; i++) {
       var a = dirAngle(i);
-      var len = (feq(i, rho, ux, uy) / maxVal) * barMaxPx;
-      var baseLen = (W[i] / maxVal) * barMaxPx;
+      var len = Math.min(feq(i, rho, ux, uy) / barScale, 1) * barMaxPx;
+      var baseLen = (W[i] / barScale) * barMaxPx;
       var dx = Math.cos(a), dy = -Math.sin(a);  // svg y flip
       var x0 = cx + dx * 22, y0 = cy + dy * 22;
       // Baseline outline (unit u=0)
@@ -577,7 +581,8 @@ function feq(i, rho, ux, uy) {
 (function () {
   var W0 = 80, H0 = 80;
   var svg = d3.select('#stencil-overlay').append('svg')
-    .attr('viewBox', '0 0 ' + W0 + ' ' + H0).attr('width', W0).attr('height', H0);
+    .attr('viewBox', '0 0 ' + W0 + ' ' + H0).attr('width', W0).attr('height', H0)
+    .attr('aria-hidden', 'true');
   var cx = W0 / 2, cy = H0 / 2;
   var r = 26;
   var defs = svg.append('defs');
@@ -1097,19 +1102,14 @@ function feq(i, rho, ux, uy) {
   }
   requestAnimationFrame(loop);
 
-  // Gate rAF loop on visibility: pause playing state when scrolled away; user must hit play to resume.
+  // The loop only steps while the figure is on screen, so it pauses off screen
+  // and resumes on return; with reduced motion it waits for Play.
   var figLbm = document.getElementById('fig-lbm');
+  if (window.Motion && Motion.reduced()) { uiState.running = false; playBtn.textContent = 'Play'; }
   if (figLbm && typeof IntersectionObserver === 'function') {
+    inView = false;
     var io = new IntersectionObserver(function (entries) {
-      entries.forEach(function (e) {
-        if (!e.isIntersecting && uiState.running) {
-          uiState.running = false;
-          playBtn.textContent = 'Play';
-          inView = false;
-        } else if (e.isIntersecting) {
-          inView = true;
-        }
-      });
+      entries.forEach(function (e) { inView = e.isIntersecting; });
     }, { threshold: 0.05 });
     io.observe(figLbm);
   }
