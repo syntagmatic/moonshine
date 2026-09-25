@@ -156,7 +156,7 @@ Needs a human, from batch 3 (details in the findings files):
   - The Delsarte bound values.
   - The Extra-Trees default m (decision-trees 03).
   - The Inselberg collision-detection claim (PC 09).
-- Unrerun numbers:
+- Numbers never rerun:
   - Traffic wave speeds and jam fronts (emergence 03).
   - "Ten million flips per second" (lattice 06).
   - The Domineering and Hex solve dates.
