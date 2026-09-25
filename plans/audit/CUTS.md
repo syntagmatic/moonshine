@@ -123,3 +123,44 @@ Needs a human:
 - grateful-dead 03 colors songs by type using a hand classification.
 - About 150 em dashes remain in untouched prose across noether and cohomology,
   left for the prose pass.
+
+Batch 3, the prose pass, was merged on 2026-09-24. It ran as six tracks (data,
+forms, sim, atlas, noether-games, applied) under `PROSE-BRIEF.md`; their
+records are `findings/prose-<track>.md`. The site still has 163 pages, and all
+of them pass the render check and the internal link check. Reader-visible em
+dashes are at zero, apart from the exceptions below. Page titles use
+"Title · Series". Prose cuts ranged from 3% to 21%, because the pages
+restructured in batches 1 and 2 were already lean. The worst errors fixed by
+confirmed derivation were in exceptional-atlas 09 (the Leech lattice built from
+E₈³, and the Conway groups called quotients), noether 02 and 08, cohomology
+02 and 03, and lithium-ion 03.
+
+Em dash exceptions: sph (excluded until Ian OKs it), one language-neutral
+missing-value mark in japan 06, and the unregistered `lib/test.html` pages.
+
+Needs a human, from batch 3 (details in the findings files):
+- Japanese translations for the seven English paragraphs changed in
+  japan-earthquakes (`findings/prose-applied.md` lists old and new text).
+- Figure bugs that the prose pass was not allowed to fix:
+  - emergence 06: the hardcoded "α ≈ 2" versus a histogram that is not
+    normalised by bin width.
+  - noether 04: the "broken rotation" potential is still rotationally
+    symmetric about (0, 2).
+  - lattice 06: status pill.
+  - PC 11 Fig 5: can't reach non-convex Pareto points.
+- Specialist checks:
+  - modular-forms 10: the Shimura/CM attribution, the Frey conductor
+    normalisation, and saying that FLT for n = 3 and 4 is classical.
+  - The Gannon proof date (2012 or 2016).
+  - The Lepowsky–Meurman 1982 citation (EA 09).
+  - The Delsarte bound values.
+  - The Extra-Trees default m (decision-trees 03).
+  - The Inselberg collision-detection claim (PC 09).
+- Unrerun numbers:
+  - Traffic wave speeds and jam fronts (emergence 03).
+  - "Ten million flips per second" (lattice 06).
+  - The Domineering and Hex solve dates.
+- Dead CSS for removed callouts in md 05–07, noether and cohomology. Dead
+  navigator JS in EA 06.
+- Open structural suggestions: merge PC 08 into 05; possibly cut deeper in
+  game-is-the-math 07, 09 and 10.
