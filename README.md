@@ -45,7 +45,8 @@ The `/shine` command guides you through:
 1. **Story discovery** Clarify the concept, audience, key insight, and progression of understanding
 2. **Interaction design** Decide where static prose, interactive explorations, linked views, and scroll-driven narrative serve the explanation best
 3. **Project scaffolding** Generate a self-contained HTML file with D3 visualizations and moonshine typography
-4. **Iterative building** Start with prose and static figures, add interaction only where it genuinely helps
+4. **Iterative building** Build the most important figure first, then the rest, with prose written alongside
+5. **Verification** Check every claim against a derivation, a computation, or a source (the ledger), and test each figure at phone width, in dark mode, from the keyboard, and with reduced motion
 
 Moonshine includes a built-in D3 visualization reference (`VISUALS.md`) covering chart types (line, bar, scatter, network, hierarchy, heatmap, distributions), interaction patterns (brushing, scroll-driven narrative, linked views), and the editorial style foundation. No external dependencies needed.
 
@@ -54,9 +55,9 @@ Moonshine includes a built-in D3 visualization reference (`VISUALS.md`) covering
 ```
 plugins/
 └── moonshine/
-    ├── SKILL.md          skill workflow and design principles
+    ├── SKILL.md          workflow, the claims ledger, editorial and design rules
+    ├── ARTICLE.md        HTML scaffold, shared helpers, layout, series structure
     ├── VISUALS.md        D3 visualization patterns and recipes
-    ├── RESEARCH.md       background research and inspiration catalog
     └── commands/
         └── shine.md      /shine command definition
 ```
@@ -68,7 +69,8 @@ Each explanation lives in `~/.agent/moonshine/project-name/`:
 ```
 ~/.agent/moonshine/project-name/
   index.html          # Self-contained explanation
-  data/               # Optional external datasets
+  LEDGER.md           # Each claim and how it was checked
+  data/               # Real datasets, as fetched from their source
 ```
 
 ## Inspirations

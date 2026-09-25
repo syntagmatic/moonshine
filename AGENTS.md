@@ -11,7 +11,7 @@ no dependencies, no tests; `package.json` is plugin-marketplace metadata only.
   - `SKILL.md` — workflow (story discovery → outline → build one section → complete),
     editorial tone, anti-slop rules, design principles, pedagogy
   - `ARTICLE.md` — HTML scaffold, CSS foundation, layout patterns, series structure
-  - `VISUALS.md` / `PROSE-VISUALS.md` — D3 patterns, interaction, live KaTeX formulas
+  - `VISUALS.md` — D3 patterns, interaction, live KaTeX formulas, data, accessibility
   - `commands/shine.md` — the `/shine` command definition
 - `docs/` — the published gallery (one directory per series, e.g. `autoresearch/`,
   `emergence/`, `modular-forms/`). Each series has its own `index.html` (an article
@@ -76,6 +76,10 @@ sandbox and keeps them working offline.
 
 - The skill's docs say output goes to `~/.agent/moonshine/<project>/`; essays in
   this repo live in `docs/<series>/` instead. Follow the repo convention here.
+  The skill's claims ledger goes in `plans/<series>/LEDGER.md`, not next to
+  the pages, so it isn't published.
+- Repo pages use `docs/lib/motion.js` (`Motion.reduced()`, `Motion.onVisible`)
+  where the plugin scaffold has its own `reducedMotion()` / `loop()` helpers.
 - Respect reduced motion: animations should check `Motion.reduced()` and only run
   when in view (IntersectionObserver).
 - Editorial: no em dashes, no KPI cards / metric grids / status badges / colored

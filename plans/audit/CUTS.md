@@ -216,3 +216,19 @@ Needs a human, from batch 4:
     the same interaction on different data.
 - The per-series `theme.css` files map colors by exact hex value, so a new
   color added to a figure stays light in dark mode.
+
+Phase 5 (the skill itself), 2026-09-24:
+- SKILL.md now leads with the claims ledger (derived / computed / sourced),
+  the data rule (real file or labeled simulated), and a Phase 5 Verify step
+  whose checks mirror what the audit fixed: captions vs figures, every control
+  exercised, 390px, dark mode, keyboard, reduced motion.
+- The ARTICLE.md scaffold has dark mode, phone layout, scrolling equations and
+  shared helpers (mulberry32 `rng`, `css`, `responsive`, `loop`, `keyHandle`)
+  built in, and was tested at 390px dark and 1200px reduced-motion.
+- VISUALS.md: the "design the data to show the pattern" advice is replaced by
+  real vs simulated data rules; tap, keyboard and reduced-motion paths added;
+  an accessibility floor.
+- PROSE-VISUALS.md (orphaned, superseded) deleted; RESEARCH.md (React-era
+  notes) moved to plans/_archive/moonshine-research.md. Plugin version 0.4.0.
+- Not done: shipping lint/interact scripts with the plugin (they were never
+  built; render-check lives outside the repo).

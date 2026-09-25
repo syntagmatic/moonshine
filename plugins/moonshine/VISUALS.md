@@ -7,9 +7,9 @@ description: D3 v7 visualization patterns for interactive technical explanations
 
 D3 v7 visualization patterns for moonshine explanations. For the HTML scaffold, CSS foundation, and article layout, see `ARTICLE.md`.
 
-D3 owns the DOM. No framework abstraction layer. Use `.join()` for data binding, `selection.call()` for reusable chart functions, `d3.dispatch` for cross-chart communication (see State Coordination in `ARTICLE.md`). Load D3 from CDN: `https://d3js.org/d3.v7.min.js`.
+D3 owns the DOM, with no framework layer. Use `.join()` for data binding, `selection.call()` for reusable chart functions, and `d3.dispatch` for cross-chart communication (see State Coordination in `ARTICLE.md`). The scaffold's helpers (`rng`, `css`, `responsive`, `loop`, `keyHandle`, `narrow`, `reducedMotion`) are used throughout this file.
 
-Use CSS custom properties from the article scaffold (`var(--text)`, `var(--accent)`, etc.) in SVG style attributes. Never hardcode colors the palette already defines.
+Colors come from the scaffold's palette: `var(--text)` in `.style()` calls, and `css('--text')` (the resolved hex) wherever a scale, interpolator, or canvas computes with the color. See "Colors in figures" in `ARTICLE.md`.
 
 ## Rendering Technology
 
@@ -25,7 +25,7 @@ Choose the technology that fits each figure. Start with SVG and only switch when
 
 **Hybrid** Canvas for the data layer, SVG for axes and labels, HTML for controls and tooltips. Often the right answer for complex figures.
 
-**Libraries:** D3 v7 is the primary tool. Use additional libraries when they're the right fit: d3-sankey for Sankey diagrams, topojson-client for geographic data, KaTeX for math. Load from CDN. Prefer fewer dependencies.
+**Libraries:** D3 v7 is the primary tool. Add a library when it is the right fit (d3-sankey for Sankey diagrams, topojson-client for maps, KaTeX for math), loaded from a version-pinned CDN URL. Prefer fewer dependencies.
 
 **Judgment:** The explanation's job is to communicate, not to benchmark. Switch to Canvas only when you hit a performance wall you can feel.
 
@@ -85,6 +85,8 @@ svg.append("rect").attr("width", w).attr("height", h)
 ```
 
 **Pitfall:** Positioning tooltip with `pageX`/`pageY` while using `position: fixed`. Use `clientX`/`clientY` for fixed positioning, `pageX`/`pageY` for absolute.
+
+**Tap and keyboard:** a phone has no hover, and a keyboard user has no pointer. Whatever hover reveals must also appear on tap (`pointerdown` or `click` toggles the same highlight) and on focus. For a handful of marks, give each `tabindex="0"` and bind `focus`/`blur` to the hover handlers. For dense marks, use a **roving tabindex**: the figure takes one tab stop, arrow keys move a highlighted index through the data, and the tooltip or readout follows it.
 
 ### Brushing & Selection
 
@@ -150,7 +152,9 @@ const drag = d3.drag()
 handle.call(drag);
 ```
 
-**Pitfall:** Forgetting to set `cursor: grab` on the draggable and `cursor: grabbing` during drag. Without visual cues, users don't discover the interaction.
+**Keyboard:** every draggable also moves with arrow keys: `keyHandle(node, "Learning rate", (dx) => setRate(rate + dx * 0.01))`. Keep the drag and key paths calling the same update function.
+
+**Pitfall:** Forgetting to set `cursor: grab` on the draggable and `cursor: grabbing` during drag. Without visual cues, users don't discover the interaction. On touch, give small handles a larger invisible hit circle (radius 12px or more) and set `touch-action: none` on the drag surface.
 
 **Pitfall:** Hover information stopping during drag. If a figure supports both hover (showing values) and drag (moving elements), both should work simultaneously. Don't let drag suppress hover updates.
 
@@ -164,7 +168,7 @@ For continuous mappings, constrain drag to the valid range. For discrete mapping
 
 ### Live Formulas (reactive KaTeX)
 
-When a reader drags a handle that has a symbolic counterpart — `τ` in a metric, `k` in a kernel, a learning rate in an update rule — render the formula *beside* the handle and re-render it on drag so the numeric substitution tracks the motion. The formula IS the caption of the motion.
+When a reader drags a handle that has a symbolic counterpart (`τ` in a metric, `k` in a kernel, a learning rate in an update rule), render the formula *beside* the handle and re-render it on drag so the numeric substitution tracks the motion. The formula IS the caption of the motion.
 
 Template the TeX with placeholders for live values, color-match the substituted numbers to the handle, and re-render inside `requestAnimationFrame` to coalesce rapid drags.
 
@@ -193,7 +197,7 @@ function renderLive(ctx) {
 // Call once on init, then from each drag tick.
 ```
 
-Keep the original *static* formula alongside the live one. The reader sees the symbolic form and its numeric instance at once — that pairing is the pedagogical payload.
+Keep the original *static* formula alongside the live one. The reader sees the symbolic form and its numeric instance at once, and that pairing is the pedagogical payload.
 
 **When to use:** short formulas whose symbols map 1:1 to a handle the reader is actively manipulating. One or two live values, not a wall of numbers.
 
@@ -201,7 +205,7 @@ Keep the original *static* formula alongside the live one. The reader sees the s
 
 **Pair with color:** match the color of the dragged handle to the color of the corresponding symbol in the formula using the KaTeX `\color{#hex}{}` macro. The visual link between the moving dot and the moving number is the whole point.
 
-**Performance:** coalesce re-renders in `requestAnimationFrame`. One KaTeX render per frame is fine; ten is not. KaTeX's `render()` rebuilds the subtree each call — keep the target element small and don't nest a live formula inside another reactive container.
+**Performance:** coalesce re-renders in `requestAnimationFrame`. One KaTeX render per frame is fine; ten is not. KaTeX's `render()` rebuilds the subtree each call, so keep the target element small and don't nest a live formula inside another reactive container.
 
 **Fallback:** if a live value is `NaN` or `undefined` during a transient state (drag outside bounds, before init), render the symbolic form only. Never show `NaN` to a reader.
 
@@ -227,6 +231,8 @@ svg.selectAll("circle")
 ```
 
 Interrupt previous transitions before starting new ones: `selection.interrupt()`.
+
+**Reduced motion:** CSS can't stop a JS animation. Transitions use `.duration(reducedMotion() ? 0 : 500)`, and every `requestAnimationFrame` simulation runs through `loop(el, frame, showFinal)`, which starts it only on screen and, under reduced motion, draws the end state instead.
 
 Easing: `easeCubicOut` for responsive UI (fast start, gentle stop). `easeLinear` for continuous data playback. `easeCubicInOut` for smooth position changes.
 
@@ -346,7 +352,7 @@ Responsive ticks: `ticks(Math.max(2, innerWidth / 80))`. Label collision: reduce
 
 Sequential: `interpolateBlues` (single hue) or `interpolateViridis` (multi-hue, colorblind-safe). Diverging: `scaleDiverging` with meaningful midpoint. Categorical: `schemeTableau10` (up to 10). Colorblind-safe: Tableau10, viridis, Tol Bright.
 
-WCAG contrast: 4.5:1 minimum for text against background.
+WCAG contrast: 4.5:1 minimum for text against background, in both light and dark mode. Sequential ramps that end near white vanish on a dark background; anchor them on `css('--fig-bg')` or pick a ramp per scheme, and rebuild the scale on each render.
 
 ### Annotation
 
@@ -360,25 +366,23 @@ Direct labeling beats legends for 5 or fewer series. Leader lines connect data p
 
 Font: use `var(--heading-font)` for all SVG text. Body font is for article prose, not chart labels.
 
-**Math rendering:** KaTeX from CDN for equations. `katex.render(expression, element)` for display, `katex.renderToString(expression)` for inline.
-
-**Hover cross-references:** When a term in prose is hovered, highlight the corresponding element in a figure. Implement with `data-ref` attributes and shared hover events.
-
 **Pitfall:** `getComputedTextLength()` returns 0 if text is not yet in the DOM. Append first, then measure. For pre-layout measurement, use [pretext](https://github.com/chenglou/pretext) which computes text metrics from font tables directly.
 
 ## Data
 
-### Inline Data
+Every dataset in a figure is either real or labeled simulated (see The Ledger in `SKILL.md`).
 
-For explanations, embed data directly as JS arrays or objects. No external fetches. The explanation must work offline. For synthetic data, use a seeded random number generator for reproducibility.
+### Real Data
+
+Fetch the dataset from its source (UCI, a government catalog, a paper's supplement), save it under `data/`, and embed it as a JS array, or load it with `d3.csv` when it is large. Cite it in the caption and the footer. Keep it exactly as published: when you drop rows (missing values) or columns, say so in a code comment and, if it changes a number the reader sees, in the prose. Check a few rows against the source after embedding.
 
 ### Transformations
 
-Group, aggregate, bin, sort, normalize, pivot. Use D3's built-in: `d3.group`, `d3.rollup`, `d3.bin`, `d3.stack`, `d3.hierarchy`, etc.
+Group, aggregate, bin, sort, normalize, pivot with D3's built-ins: `d3.group`, `d3.rollup`, `d3.bin`, `d3.stack`, `d3.hierarchy`.
 
-### Generated Data
+### Simulated Data
 
-When explaining a concept (not a dataset), generate synthetic data that demonstrates the concept clearly. Design the data to show the pattern. The data is in service of the explanation.
+When explaining a concept rather than a dataset, generate data from a stated process (a known distribution, a model with named parameters) using the seeded `rng`, so the figure is the same on every load and matches its caption. Choose parameters that make the pattern visible, and say in the caption that the data is simulated. Simulated data never borrows the name, column labels, or row labels of a real dataset or study.
 
 ## Iteration
 
@@ -388,7 +392,7 @@ Generating a visualization in one pass often produces something that works but d
 2. **Legibility** Can the reader identify values? Do labels fit? Is the palette accessible?
 3. **Interaction** Does this interaction build intuition that prose alone can't? Is it discoverable? Does it work on touch?
 4. **Narrative** Does an annotation highlight the key insight? Is the caption informative? Does the visual flow match the article's progression?
-5. **Stress** What happens at extreme values? During rapid interaction? At narrow widths (400px)? With `prefers-reduced-motion`?
+5. **Stress** What happens at extreme values? During rapid interaction? At 390px wide, in dark mode, from the keyboard alone, and with reduced motion on? `SKILL.md` Phase 5 lists the checks.
 
 When an article has multiple figures, iterate across them: consistent color encoding, consistent scales where comparison matters, linked interactions that don't loop, and a visual progression that matches the narrative arc.
 
@@ -402,4 +406,13 @@ When an article has multiple figures, iterate across them: consistent color enco
 
 ## Accessibility
 
-Keyboard navigation via Tab/Arrow keys. ARIA labels on figures. Hidden data table as fallback for complex charts. Respect `prefers-reduced-motion` (instant state changes, not duration 0). Every figure needs a caption describing what the reader should notice.
+The floor for every figure:
+
+- **Named.** An SVG or canvas gets `role="img"` and an `aria-label` saying what it shows; an interactive one gets `role="group"` plus labels on its parts. Every figure has a caption.
+- **Reachable.** Every control and draggable is reachable with Tab and operable with keys (`keyHandle`, roving tabindex for dense marks). Focus is visible (`:focus-visible` in the scaffold).
+- **Not hover-only.** What hover shows, focus and tap show too.
+- **Announced.** A live readout that changes with interaction sits in an `aria-live="polite"` element.
+- **Motion-safe.** Under reduced motion, animations show their end state (`loop`, zero-duration transitions).
+- **Not color-only.** Categories differ in shape, position, or a label as well as color.
+
+A hidden data table can back up a complex chart for screen readers.

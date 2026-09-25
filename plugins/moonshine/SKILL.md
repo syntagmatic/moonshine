@@ -1,187 +1,154 @@
 ---
 name: moonshine
-description: Help users create interactive explanations of technical concepts, inspired by Distill.pub
+description: Build interactive explanatory articles of technical concepts, inspired by Distill.pub. Use when the user wants to explain a concept with an explorable essay, an interactive figure, or an article series.
 user_invocable: true
 ---
 
 # Moonshine: Interactive Technical Explanations
 
-Moonshine helps create interactive, web-based explanations of technical concepts. Inspired by [Distill.pub](https://distill.pub)'s argument that research distillation is valuable creative work, it provides scaffolding to turn complex ideas into explorable, visual, interactive articles.
-
-AI tools generate complexity faster than people can consume it. Moonshine is for bridging that gap: helping people digest and communicate technical concepts clearly.
+Moonshine turns a technical idea into an explorable article: prose that carries an argument, and interactive figures that let the reader test it. It follows [Distill.pub](https://distill.pub)'s view that distilling research is creative work worth doing well.
 
 **Reference files:**
-- `ARTICLE.md` HTML scaffold, CSS foundation, layout patterns, series structure
-- `VISUALS.md` D3 visualization patterns, interaction, rendering technology, iteration
+- `ARTICLE.md`: the HTML scaffold (with dark mode, phone layout, and the shared helpers built in), layout patterns, series structure. Read it before writing the first page.
+- `VISUALS.md`: D3 patterns for interaction, motion, charts, data, and accessibility. Read the section for each figure type as you build it.
 
 ## Articles, Not Dashboards
 
-This is the central principle. Everything else follows from it.
+Everything else follows from this. An article has an author's voice and a progression of ideas; each figure sits inside that argument and exists to make one step of it visible. A dashboard has widgets that stand alone and compete for attention. When a design choice is unclear, ask whether it would feel at home in a Distill article or in a Grafana panel, and pick the article.
 
-Moonshine makes explanatory articles where prose drives understanding and interactive figures serve the narrative. We are not making dashboards, data products, or slide decks. The difference matters because it shapes every decision:
+Show equations and their behavior through figures, not code listings. Keep pseudocode minimal and paired with its equation; show implementation code only when the article is about programming.
 
-- An article has an author's voice and a progression of ideas. A dashboard has widgets.
-- An article's figures are embedded in an argument. A dashboard's charts stand alone.
-- An article earns attention through clarity. A dashboard demands attention through density.
+## The Ledger
 
-When in doubt about a design choice, ask: "Would this feel at home in a Distill.pub article, or in a Grafana dashboard?" If the answer is dashboard, reconsider.
+Every checkable claim in an article goes in a **ledger**: each theorem, number, formula, date, attribution, quote, and dataset, with how you know it. An entry is one of:
 
-We are also not making coding tutorials. Equations and their connection to behavior should be shown through interactive visualizations, not code listings. If pseudocode helps connect math to implementation, keep it minimal and pair it with the equation. Never show implementation code (framework boilerplate, shader code, API calls) unless the article is specifically about programming.
+- **Derived**: you worked it out, and the working is in the article or checked in code.
+- **Computed**: a figure or a node script calculates it from the stated model or data.
+- **Sourced**: you read it in a named primary source (paper, dataset, official catalog), not recalled it.
+
+A claim with no ledger entry gets cut or reworded until it has one. Keep the ledger in the project directory (`LEDGER.md`) and update it as you write. This is the most important rule in the skill: in an audit of 400 generated articles, every series had wrong claims in its prose, and the costliest failures were confident inventions (a theorem number that doesn't exist, a quote nobody said, invented rows presented as a real dataset).
+
+Rules that follow from the ledger:
+
+- **Data is real or labeled simulated.** When a figure uses a named dataset (Iris, a USGS catalog, a published study), embed the real file, fetched from its source, and cite it in the caption. Otherwise the caption says "simulated" and the data carries no real names: "Study A", not a real consortium; never "simulated from the distributions of" a named dataset. Public datasets are almost always small enough to embed.
+- **Figures compute what they show.** Every value a figure displays comes from running the stated model or data at runtime. A figure that animates a canned answer, or a readout that prints a hardcoded result, is cut or rebuilt.
+- **Verdicts can fail.** A figure that reports pass/fail, same/different, or converged/diverged must be shown producing both outcomes. Try an input that should fail.
+- **Models get tested.** Before building a figure on a model function (an integrator, a rate law, a classifier), run it in node against a known answer: a closed form, a textbook value, a conserved quantity, a limiting case.
+- **Exaggeration is labeled.** Pedagogical defaults can exaggerate a parameter so the effect is visible, but the prose or caption gives the real value.
 
 ## The Process
 
-**Do not skip to code.** The most common failure mode is jumping straight to scaffolding without understanding what the user is trying to explain and who they're explaining it to. The second most common failure mode is asking a few questions upfront and then writing the entire article in one shot.
-
-Moonshine is a conversation, not a generation pipeline. The process has natural checkpoints where you stop and check in with the user before continuing.
+Moonshine is a conversation, with checkpoints where you stop and confirm with the user. The two failures to steer around are jumping straight to scaffolding, and asking a few questions then writing the whole article in one pass.
 
 ### Phase 1: Story Discovery
 
-Before writing any code, have a conversation with the user. Ask questions and listen. You need to understand:
+Ask one or two questions at a time, starting with "What are you trying to explain?", and follow the thread until you know:
 
-- **What concept are you explaining?** Get specific. Not "machine learning" but "how gradient descent finds minima."
-- **Who is the audience?** What can they already be assumed to know? What's new to them?
-- **What is the key insight?** What is the single thing the reader should walk away understanding?
-- **What is the progression of understanding?** What does the reader need to learn first, second, third to arrive at the insight? Map the dependency chain of ideas.
-- **What misconceptions exist?** What do people commonly get wrong, and how can interaction expose the correct mental model?
+- **The concept**, specifically: not "machine learning" but "how gradient descent finds minima".
+- **The audience**: what they already know, what is new.
+- **The key insight**: the one thing the reader should leave understanding.
+- **The progression**: what the reader must learn first, second, third to reach it.
+- **The misconceptions**: what people get wrong, and how an interaction could expose it.
 
-Ask these questions one or two at a time. Start with "What are you trying to explain?" and follow the thread. Wait for answers before moving on. If the user gives you all the context upfront, you can move faster, but if they give a brief prompt, slow down and ask.
+If the user gives full context up front, move faster.
 
-**Checkpoint:** Before moving to Phase 2, confirm the concept, audience, insight, and progression with the user. "Here's what I think we're building..." This is the single most important moment in the process. Get it wrong and everything downstream is wasted effort.
+**Checkpoint:** state back concept, audience, insight, and progression ("Here's what I think we're building...") and get a yes.
 
 ### Phase 2: Article Structure
 
-Now design the article at a high level. Present the user with a proposed structure:
+Look at what already exists in the output directory first. A new series should not re-explain a topic an existing one covers; link to it instead.
 
-- What sections will the article have?
-- What is the role of each section in the progression? (introduces concept, builds intuition, shows application, etc.)
-- Where will interactive figures go, and what will they show?
-- What kind of interaction will each figure use? (slider, brush, scroll-driven, hover, etc.)
-- Is this a single article or a series?
-- If a series, does it need a semantic color vocabulary for recurring concepts? (see CSS Foundation in `ARTICLE.md`)
-
-Write this as a short outline, not code. For each figure, describe it in prose: what it shows, what the reader can do with it, and what they should learn from it. This prose description is the spec. Something like:
+Write a short outline, not code. For each section give its role in the progression, and for each figure a prose spec: what it shows, what the reader does, what they should learn, and **the claim it computes**. A figure whose claim you can't name is decoration; cut it. Each figure in a piece should differ from the others in chart type or data, not reuse one base view with new controls.
 
 ```
-1. Opening: what gradient descent is trying to do
-   Prose + static diagram of a loss landscape as a 3D surface
-
-2. The naive approach: why random search fails
-   Interactive: click to place random guesses on the surface, watch them miss the minimum
-
 3. Following the slope: the gradient points downhill
-   Interactive: drag a point on the surface, an arrow shows the gradient direction and magnitude
-
-4. Step size matters: too big overshoots, too small stalls
-   Explorable: slider controls learning rate, animation shows convergence path on the surface
-
-5. Putting it together: watch gradient descent solve a real problem
-   Scroll-driven: each scroll step reveals the next iteration, building the path incrementally
+   Interactive: drag a point on the surface; an arrow shows the gradient.
+   Computes: the arrow is -grad f at the dragged point, from f's closed form.
 ```
 
-**Checkpoint:** Share this outline with the user. Ask if the progression makes sense. Are there concepts missing? Is the order right? Should any section be interactive that isn't, or static that is? Do the prose descriptions of the figures capture what the user has in mind? This is cheap to change now and expensive to change after building.
+Decide whether it is one article or a series, and for a series, its semantic color vocabulary (see CSS Foundation in `ARTICLE.md`). Start the ledger with the claims the outline depends on.
+
+**Checkpoint:** share the outline. Ask whether the progression, the order, and the figure specs match what the user has in mind. Changes are cheap now.
 
 ### Phase 3: Build One Section
 
-Pick the most important interactive section and build it first. Not the whole article. One section.
-
-Open it in the browser. Show the user. Ask:
-- Does this interaction teach what we intended?
-- Is the data/example well chosen?
-- Does the visual encoding make sense?
-
-Iterate on this section until it works before building the rest.
+Build the most important interactive section first, from the `ARTICLE.md` scaffold. Open it in a browser and show the user: does the interaction teach what we intended, is the example well chosen, does the encoding make sense? Iterate until it works before building the rest.
 
 ### Phase 4: Complete the Article
 
-Build the remaining sections, following the structure from Phase 2. After each major section, open in the browser to verify. Prose should be written alongside the figures, not after, because the prose frames what the reader should notice in each figure.
+Build the remaining sections, writing prose alongside each figure, since the prose frames what the reader should notice. Write each caption after its figure runs, from what the figure actually shows.
 
-**Checkpoint:** Before delivering, review the complete article against the Anti-Slop checklist below.
+### Phase 5: Verify
+
+The article is done when every item below holds. Check each one; don't infer it from the code.
+
+1. **Ledger complete**: every checkable claim in the prose and captions has an entry, and every entry was checked this session.
+2. **Captions match figures**: for each figure, each visual claim in its caption and the surrounding prose (what rises, what crosses, which color is which, left/right) is true of the rendered figure at its default state.
+3. **Every control exercised**: click, drag, and key through every control in a real browser, including the extremes of each slider. No console errors, no NaN on screen, no empty figure on load.
+4. **Phone width**: at 390px wide there is no sideways page scroll, SVG text is at least 11px, and multi-panel figures stack. Captions say "above/below" rather than "left/right" when panels stack.
+5. **Dark mode**: with the OS in dark mode, every figure's text, lines, and fills are legible.
+6. **Keyboard**: every interactive element is reachable with Tab and operable with keys; anything shown on hover also shows on focus and tap.
+7. **Reduced motion**: with reduced motion on, animations show their final or a static state; loops run only while on screen.
+8. **Anti-slop pass**: the Editorial and Anti-Slop sections below, applied line by line.
+
+Then deliver: tell the user what the article covers and anything in the ledger you could not verify.
 
 ### Output
 
-Create projects in `~/.agent/moonshine/project-name/`. Each explanation is a self-contained HTML file. See `ARTICLE.md` for the scaffold template, layout patterns, and series structure.
+Create projects in `~/.agent/moonshine/project-name/` unless the user or the repo names another location. Each article is a self-contained HTML file; see `ARTICLE.md` for the scaffold and series layout. Open the result in a browser.
 
-After building, open the result in the browser.
+## Editorial
 
-## Editorial Tone
+Write like a knowledgeable colleague at a whiteboard: clear, humble, direct.
 
-Moonshine articles should have clear and humble prose. We are helping people digest, not force-feeding them.
-
-- Avoid em dashes. Use commas, periods, or restructure the sentence.
-- Don't oversell. Say "this can help" not "this is a game-changer." Say "an appropriate metaphor" not "a precise metaphor."
-- State what things do, not how important they are. Let the reader decide the importance.
-- Prefer short, direct sentences. If a paragraph feels like it's building to a dramatic reveal, flatten it.
-- Use "tries to", "can", "helps" instead of absolute claims.
-
-The writing should feel like a knowledgeable colleague explaining something at a whiteboard, not a keynote presentation.
+- State what things do and let the reader judge importance. Prefer "can", "tries to", "helps" over universal claims.
+- Use commas, colons, periods, or parentheses where an em dash would go. Visible text has no em dashes.
+- Short, direct sentences. If a paragraph builds toward a dramatic reveal, flatten it.
+- End a section when its point is made. No closing summary, "Takeaways" list, or restatement of the article.
+- Captions say what to notice in the figure, not what the prose already said.
+- Prose over numbered lists, unless the content really is a sequence.
 
 ## Anti-Slop
 
-AI coding tools have strong defaults that produce generic, recognizable output. Moonshine articles should not look like AI made them. They should look like a thoughtful person made them.
+The test: does this look like an article a thoughtful person made, or like a dashboard or a generic AI page? Every rule here is a case of that test.
 
-The test is simple: does this look like an article, or does it look like a dashboard? Every rule below is a specific case of that question.
+- **Numbers live in sentences.** A quantity goes in prose, a caption, or a one-line readout under the figure, never in KPI cards, metric grids, stat tiles, or status pills.
+- **Structure comes from typography and whitespace**, not stacks of shadowed cards or colored callout boxes. If something matters, write it as a strong sentence in the text.
+- **Visual choices relate to the content.** Use the moonshine type stack (Source Serif 4, Source Sans 3, Source Code Pro) or fonts chosen for the piece, and a palette drawn from the subject. The generic tells are Inter/system-ui everywhere, the default blue-and-purple accent pair, glows, pulsing animations, gradient borders, emoji headers, and gradient hero banners.
+- **The swap test:** if you could swap in a different topic and nothing but the text would change, the design is too generic.
 
-**Dashboard patterns to avoid:**
-
-- **Numbered KPI cards** (big number + label + colored border). These are for monitoring, not explaining. If you need to show a quantity, put it in a sentence or a figure caption.
-- **Metric grids** (3-4 cards in a row showing counts/percentages). Same problem. An article introduces numbers in context, not in a grid of isolated stats.
-- **Status badges** (green/yellow/red pills). These encode operational state. Articles explain concepts, not system health.
-- **Card-heavy layouts** where every section is a rounded-corner box with a shadow. Articles use whitespace and typography for structure, not containers.
-- **Colored callout boxes** (blue "insight" boxes, green "tip" boxes). Information should flow as prose within the narrative. Callouts break reading flow. If something is important enough to highlight, write it as a strong sentence in the text.
-
-**Generic AI visual patterns to avoid:**
-
-- Inter, Roboto, or system-ui as the only font. Use the moonshine type stack (Source Serif 4, Source Sans 3, Source Code Pro) or choose fonts with intention.
-- Default blue (#3B82F6) + purple (#8B5CF6) accent palette. Choose colors that relate to the content.
-- Glowing box-shadows, pulsing animations, or gradient borders. These are decorative, not informative.
-- Emoji as section headers or bullet markers.
-- "Hero" sections with giant centered text and a gradient background on every page.
-
-**Prose patterns to avoid:**
-
-- Em dashes everywhere (covered in Editorial Tone).
-- Bold claims stated as universal truth ("This fundamentally changes...").
-- Numbered lists where prose would flow better. Not everything is a "3-step process."
-- Ending with a grand summary that restates everything just said.
-
-**The check:** Before delivering, scan the output. If you swapped the content for a different topic and nothing else needed to change, the design is too generic. The visual choices should relate to what's being explained.
-
-Adapted from the anti-slop patterns in [visual-explainer](https://github.com/nicobailon/visual-explainer) by nicobailon.
+Adapted in part from the anti-slop patterns in [visual-explainer](https://github.com/nicobailon/visual-explainer) by nicobailon.
 
 ## Design Principles
 
-These principles come from [Distill.pub](https://distill.pub) and the broader tradition of explanatory writing:
+From [Distill.pub](https://distill.pub) and the tradition of explanatory writing:
 
-**Information hierarchy.** Three levels, always distinguishable. Primary: the key insight and its argument. Secondary: context, definitions, related concepts. Tertiary: technical details, proofs, edge cases (margin notes or expandable sections). Typography, spacing, and visual weight make this hierarchy clear without the reader having to read a word.
+**Information hierarchy.** Three levels, always distinguishable: the key insight and its argument; context and definitions; technical detail, proofs, and edge cases (margin notes or expandable sections). Typography and spacing carry the hierarchy.
 
-**Visual encoding.** Position and length are the most accurate channels; use them for the most important data. Color works for categories, highlights, and quantitative values, especially in dense or spatial displays. Redundant encoding (color + position) improves accessibility. Consistent visual language across all figures.
+**Visual encoding.** Position and length are the most accurate channels; spend them on the most important quantity. Color suits categories, highlights, and dense or spatial fields. Encode redundantly (color plus position or shape) so color is never the only cue. Keep one visual language across all figures.
 
-**Typography.** Large readable body (18-20px), generous line height (1.5-1.6), constrained line length (60-75 chars), clear heading hierarchy. Monospace for code, KaTeX for math. Margin notes over footnotes.
+**Typography.** 18-20px body, 1.5-1.6 line height, 60-75 character lines, clear heading levels. KaTeX for math, monospace for code, margin notes over footnotes.
 
 **Interaction patterns.**
 
-| Pattern | Use When |
+| Pattern | Use when |
 |---------|----------|
 | Details-on-demand | Supplementary info would clutter the narrative |
-| Explorable explanation | The concept involves a parameter space to explore |
-| Linked views | The same data has multiple meaningful representations |
+| Explorable explanation | The concept has a parameter space to explore |
+| Linked views | The same data has several meaningful representations |
 | Scroll-driven narrative | The explanation has a natural sequence of reveals |
-| Animated transition | The path between two states is meaningful |
+| Animated transition | The path between two states is itself meaningful |
 
 ## Pedagogy
 
-These principles come from building real moonshine articles and noticing what gets corrected most often.
+**Exaggerate for clarity.** Choose defaults that make the phenomenon obvious: crank the viscosity, pick parameters where two methods clearly disagree. Label the exaggeration and give the real value (see The Ledger).
 
-**Exaggerate for clarity.** Default parameter values should make phenomena dramatically visible. If you're showing viscosity, crank it up so the effect is obvious. If you're showing divergence between two methods, pick parameters where they clearly disagree. Pedagogical clarity trumps physical realism. The reader can always dial things down; they can't learn from effects too subtle to see.
+**Interesting before touched.** Every figure shows the concept on load: a default element selected, data populated, the simulation already in a telling state, pre-run if it needs time to develop.
 
-**Sensible defaults.** Every interactive figure must show something interesting before the reader touches anything. No blank canvases, no "click a particle to start", no grids of dots waiting to settle. Pre-select a default element, pre-populate with data, start the simulation in a state that already demonstrates the concept.
+**Slow enough to follow.** Animations move slowly enough to track cause and effect. When unsure, go slower; the reader can speed up.
 
-**Slow enough to follow.** Animated demonstrations should move slowly enough that the reader can track cause and effect. When a particle moves through a field, the reader needs to see the field respond. When in doubt, go slower. The reader can always speed things up.
+**One convention per concept.** A radius drawn dotted in one figure is dotted in all of them; a variable colored blue in an equation is that blue everywhere.
 
-**Consistent conventions across figures.** If you show a radius as a dotted circle in one figure, show it the same way in every figure. If you color-code a variable blue in an equation, use that same blue everywhere it appears. Inconsistency forces the reader to re-learn the visual language in each figure.
+**Loops reset cleanly.** A looping demonstration returns to its initial state each cycle, with no accumulated values carried over.
 
-**Looping animations reset cleanly.** If a demonstration loops, it should reset to its initial state, not carry over physics or accumulated values from the previous iteration.
-
-## Reference Skills
-
-- **grill-me** Approach to guided question-asking to help users clarify their thinking.
+**Seeded randomness.** Random data and simulations use a seeded generator (`rng` in the scaffold), so the figure the reader sees matches the caption you wrote.
