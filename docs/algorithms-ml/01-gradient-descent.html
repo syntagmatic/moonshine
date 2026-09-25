@@ -257,16 +257,45 @@ svg text {
 /* Batch arrow legend */
 .arrow-legend {
   display: flex;
-  gap: 1.5rem;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.5rem;
   font-family: var(--heading-font);
   font-size: 0.82rem;
   margin-top: 0.75rem;
   align-items: center;
 }
 .arrow-legend .swatch {
+  white-space: nowrap;
   display: flex;
   align-items: center;
   gap: 0.4rem;
+}
+.arrow-legend .swatch-color {
+  width: 14px;
+  height: 3px;
+  border-radius: 1.5px;
+}
+
+/* Dark mode and phone width */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --text: #e6e6ee; --text-2: #a3a3b8;
+    --accent: #60a5fa; --accent-light: #1e3a5f;
+    --bg: #14141c; --fig-bg: #1c1c28; --border: #34344a;
+    color-scheme: dark;
+    --c-data: #60a5fa; --c-model: #a78bfa; --c-prediction: #22d3ee;
+    --c-loss: #f87171; --c-target: #34d399;
+  }
+  a:hover { color: #93c5fd; }
+  code { background: #262636; }
+  .btn.active, .btn-accent, button[aria-pressed="true"] { color: #14141c; }
+  .btn-accent:hover { background: #93c5fd; }
+  #generated-notice { background: var(--fig-bg) !important; border-color: var(--border) !important; color: var(--text-2) !important; }
+  #generated-notice button { background: var(--bg) !important; border-color: var(--border) !important; color: var(--text) !important; }
+}
+@media (max-width: 560px) {
+  .figure { padding: 0.75rem; }
+  .figure-wide { margin-left: 0; margin-right: 0; }
 }
 </style>
 </head>
@@ -309,14 +338,15 @@ unable to sense the deeper valley past the ridge.
 <div class="figure figure-wide" id="fig-landscape">
   <div id="landscape-viz"></div>
   <div class="controls">
+    <button class="btn" id="landscape-random">Random start</button>
     <button class="btn" id="landscape-clear">Clear walkers</button>
     <span style="flex:1"></span>
     <span class="control-group">
       <span class="val" id="walker-count">0 walkers</span>
     </span>
   </div>
-  <div class="click-hint">Click on the contour map to drop walkers</div>
-  <div class="figure-caption"><span class="figure-label">Figure 1.</span> A 2D loss surface with multiple minima. Each walker follows the negative gradient from its starting point. Color encodes loss (viridis: dark = low, bright = high).</div>
+  <div class="click-hint">Click or tap the contour map to drop walkers, or press Random start</div>
+  <div class="figure-caption"><span class="figure-label">Figure 1.</span> A 2D loss surface with multiple minima. Each walker follows the negative gradient from its starting point. Color encodes loss (viridis: bright = low, dark = high).</div>
 </div>
 
 <p>
@@ -407,7 +437,7 @@ to keep.</div>
     <div class="swatch"><div class="swatch-color" style="background:#f59e0b"></div> Momentum</div>
     <div class="swatch"><div class="swatch-color" style="background:#10b981"></div> Adam</div>
   </div>
-  <div class="click-hint">Click on the map to set the starting point, or use Race to compare all three</div>
+  <div class="click-hint">Click or tap the map (or focus it and use the arrow keys) to set the starting point, or use Race to compare all three</div>
   <div class="figure-caption"><span class="figure-label">Figure 3.</span> SGD, momentum and Adam on the same elongated valley.</div>
 </div>
 
@@ -449,7 +479,7 @@ roughly the right way but wanders, and a larger batch is cleaner but costs more.
     <div class="swatch"><div class="swatch-color" style="background:var(--c-loss); height:3px;"></div> Walker path</div>
     <div class="swatch"><div class="swatch-color" style="background:var(--c-target); height:3px;"></div> True minimum</div>
   </div>
-  <div class="figure-caption"><span class="figure-label">Figure 4.</span> The regression loss over <em>(w, b)</em>; darker contours are lower, and the green dot is the optimum. From the open circle, the walker takes fifty steps, each on a fresh random mini-batch. At batch size 1 it zigzags; at 64 it heads almost straight for the minimum.</div>
+  <div class="figure-caption"><span class="figure-label">Figure 4.</span> The regression loss over <em>(w, b)</em>; shading deepens as the loss rises, and the green dot is the optimum. From the open circle, the walker takes fifty steps, each on a fresh random mini-batch. At batch size 1 it zigzags; at 64 it heads almost straight for the minimum.</div>
 </div>
 
 <p>
@@ -468,11 +498,21 @@ better one, and it biases the model toward flatter minima, which tend to general
 // ---------- shared utilities ----------
 const reducedMotion = Motion.reduced();
 const dur = reducedMotion ? 0 : 400;
+// Resolved theme colors (hex), for KaTeX and anything fed to a scale.
+const cssVar = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+// Run fn once, the first time el scrolls into view.
+function onFirstVisible(el, fn) {
+  let done = false, stop = null;
+  stop = Motion.onVisible(el, (v) => {
+    if (v && !done) { done = true; fn(); if (stop) stop(); }
+  });
+  if (done && stop) stop();
+}
 
 // ---------- color-coded equations ----------
 function renderEquations() {
   if (typeof katex === 'undefined') { setTimeout(renderEquations, 50); return; }
-  const M = '#8b5cf6', L = '#ef4444', P = '#0891b2', T = '#10b981', D = '#2563eb';
+  const M = cssVar('--c-model'), L = cssVar('--c-loss'), P = cssVar('--c-prediction'), T = cssVar('--c-target'), D = cssVar('--c-data');
   katex.render(
     `\\color{${M}}{\\theta_{t+1}} = \\color{${M}}{\\theta_t} - \\eta \\, \\color{${L}}{\\nabla \\mathcal{L}(\\theta_t)}`,
     document.getElementById('eq-update'),
@@ -574,10 +614,11 @@ const rng = mulberry32(42);
 
   // Color scale
   const colorScale = d3.scaleSequential(d3.interpolateViridis)
-    .domain([vMax, vMin]); // inverted: dark = low
+    .domain([vMax, vMin]); // inverted: bright = low
 
   const svg = container.append('svg')
-    .attr('aria-label', 'Contour plot of a 2D loss surface. Click to drop walkers that follow the gradient downhill.');
+    .attr('role', 'img')
+    .attr('aria-label', 'Contour plot of a 2D loss surface with one global minimum and three local minima. Walkers dropped on it follow the negative gradient downhill.');
 
   const gMain = svg.append('g');
   const gContours = gMain.append('g');
@@ -711,15 +752,23 @@ const rng = mulberry32(42);
   }
 
   // Click to add walker
+  function addWalker(x0, y0) {
+    const walker = { path: [[x0, y0]], done: false };
+    walkers.push(walker);
+    animateWalker(walker);
+  }
   svg.on('pointerdown', function(event) {
     const [px, py] = d3.pointer(event, gMain.node());
     const x0 = xScale.invert(px);
     const y0 = yScale.invert(py);
     if (x0 < xDomain[0] || x0 > xDomain[1] || y0 < yDomain[0] || y0 > yDomain[1]) return;
-
-    const walker = { path: [[x0, y0]], done: false };
-    walkers.push(walker);
-    animateWalker(walker);
+    addWalker(x0, y0);
+  });
+  // Keyboard and touch equivalent: starts drawn from a seeded sequence
+  const startRng = mulberry32(7);
+  d3.select('#landscape-random').on('click', () => {
+    addWalker(xDomain[0] + 0.1 + startRng() * (xDomain[1] - xDomain[0] - 0.2),
+              yDomain[0] + 0.1 + startRng() * (yDomain[1] - yDomain[0] - 0.2));
   });
 
   function animateWalker(walker) {
@@ -794,7 +843,8 @@ const rng = mulberry32(42);
   const startX = 3.2;
 
   const svg = container.append('svg')
-    .attr('aria-label', 'Three panels showing gradient descent with small, medium, and large learning rates.');
+    .attr('role', 'img')
+    .attr('aria-label', 'Three panels of the same 1D loss curve. A dot descends it with a small, a medium and a large learning rate: the first creeps, the second settles in the minimum, the third overshoots.');
 
   let animFrameId = null;
   let panels = [];
@@ -862,8 +912,8 @@ const rng = mulberry32(42);
       g.append('circle')
         .attr('class', 'gd-dot')
         .attr('r', 6)
-        .attr('fill', '#ef4444')
-        .attr('stroke', 'white')
+        .attr('fill', 'var(--c-loss)')
+        .attr('stroke', 'var(--fig-bg)')
         .attr('stroke-width', 2)
         .attr('cx', xSc(startX))
         .attr('cy', ySc(lossFn(startX)));
@@ -883,8 +933,12 @@ const rng = mulberry32(42);
         .text('lr = ' + panel.lr.toFixed(3));
     });
 
-    startAnimation();
+    if (seen) startAnimation();
   }
+
+  // Hold the first run until the figure is on screen, so the reader sees it.
+  let seen = false;
+  onFirstVisible(container.node(), () => { seen = true; startAnimation(); });
 
   function startAnimation() {
     if (animFrameId) cancelAnimationFrame(animFrameId);
@@ -939,20 +993,31 @@ const rng = mulberry32(42);
               .attr('y1', panel.ySc(Math.max(0.5, Math.min(5, lossFn(prev)))))
               .attr('x2', panel.xSc(ccx))
               .attr('y2', panel.ySc(Math.max(0.5, Math.min(5, lossFn(curr)))))
-              .attr('stroke', '#ef4444')
+              .attr('stroke', 'var(--c-loss)')
               .attr('stroke-width', 1)
               .attr('stroke-opacity', 0.4);
           }
 
           if (reducedMotion) {
-            // run all steps instantly
+            // run all steps instantly, drawing each step line
+            const cl = v => Math.max(xDomain[0], Math.min(xDomain[1], v));
             while (st.step < maxSteps && !st.diverged) {
+              const prev = st.x;
               const g2 = lossGrad(st.x);
               st.x -= lrs[i] * g2;
               st.history.push(st.x);
               st.step++;
               if (Math.abs(st.x) > 20 || !isFinite(st.x)) st.diverged = true;
+              stepsG.append('line')
+                .attr('x1', panel.xSc(cl(prev)))
+                .attr('y1', panel.ySc(Math.max(0.5, Math.min(5, lossFn(prev)))))
+                .attr('x2', panel.xSc(cl(st.x)))
+                .attr('y2', panel.ySc(Math.max(0.5, Math.min(5, lossFn(st.x)))))
+                .attr('stroke', 'var(--c-loss)')
+                .attr('stroke-width', 1)
+                .attr('stroke-opacity', 0.4);
             }
+            if (st.diverged) dot.attr('opacity', 0.3);
           }
         }
       });
@@ -1050,7 +1115,9 @@ const rng = mulberry32(42);
   const colorScale = d3.scaleSequential(d3.interpolateViridis).domain([vClamp, vMin]);
 
   const svg = container.append('svg')
-    .attr('aria-label', 'Contour plot comparing SGD, Momentum, and Adam optimizers.');
+    .attr('role', 'img')
+    .attr('tabindex', 0)
+    .attr('aria-label', 'Contour plot of an elongated curved valley with the paths of SGD, momentum and Adam from a shared start point. Arrow keys move the start point.');
   const gMain = svg.append('g');
   const gContours = gMain.append('g');
   const gPaths = gMain.append('g');
@@ -1303,6 +1370,19 @@ const rng = mulberry32(42);
     animateOptPaths();
   });
 
+  // Keyboard: arrow keys nudge the start point
+  svg.on('keydown', function(event) {
+    const d = { ArrowLeft: [-0.1, 0], ArrowRight: [0.1, 0], ArrowUp: [0, 0.1], ArrowDown: [0, -0.1] }[event.key];
+    if (!d) return;
+    event.preventDefault();
+    startPos = [
+      Math.max(xDomain[0], Math.min(xDomain[1], startPos[0] + d[0])),
+      Math.max(yDomain[0], Math.min(yDomain[1], startPos[1] + d[1]))
+    ];
+    computePaths();
+    drawOptPaths();
+  });
+
   // Toggle buttons
   d3.selectAll('#fig-optimizers .toggle-group .btn').on('click', function() {
     racing = false;
@@ -1419,6 +1499,7 @@ const rng = mulberry32(42);
   }
 
   const svg = container.append('svg')
+    .attr('role', 'img')
     .attr('aria-label', 'Loss-landscape contours in parameter space with a walker performing stochastic gradient descent from a fixed starting point toward the true minimum.');
   const gMain = svg.append('g');
   const gContours = gMain.append('g').attr('class', 'contours');
@@ -1461,14 +1542,18 @@ const rng = mulberry32(42);
       }
     });
     const geoPath = d3.geoPath().projection(project);
-    const color = d3.scaleSequential().domain([maxLoss, minLoss]).interpolator(d3.interpolateBlues);
+    // Opaque bands, so each point shows its own band's color in either theme:
+    // near the figure background at the minimum, deeper blue as the loss rises.
+    const color = d3.scaleSequential()
+      .domain([minLoss, maxLoss])
+      .interpolator(t => d3.interpolateRgb(cssVar('--fig-bg'), cssVar('--c-data'))(0.06 + 0.6 * Math.pow(t, 0.6)));
 
     gContours.selectAll('path')
       .data(contours)
       .join('path')
       .attr('d', geoPath)
       .attr('fill', d => color(d.value))
-      .attr('fill-opacity', 0.42)
+      .attr('fill-opacity', 1)
       .attr('stroke', 'var(--c-data)')
       .attr('stroke-opacity', 0.25)
       .attr('stroke-width', 0.6);
@@ -1514,7 +1599,7 @@ const rng = mulberry32(42);
     gMarkers.append('circle')
       .attr('cx', xScale(trueW)).attr('cy', yScale(trueB))
       .attr('r', 5).attr('fill', 'var(--c-target)')
-      .attr('stroke', '#fff').attr('stroke-width', 2);
+      .attr('stroke', 'var(--fig-bg)').attr('stroke-width', 2);
     gMarkers.append('text')
       .attr('x', xScale(trueW) + 9).attr('y', yScale(trueB) + 4)
       .attr('fill', 'var(--c-target)').style('font-size', '0.72rem')
@@ -1579,7 +1664,9 @@ const rng = mulberry32(42);
   });
 
   recompute();
+  // Draw the markers now; replay the walker once the figure is on screen.
   render();
+  onFirstVisible(container.node(), () => drawWalker());
   new ResizeObserver(() => render()).observe(container.node());
 })();
 </script>

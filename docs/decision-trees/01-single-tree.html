@@ -98,6 +98,10 @@ svg text { font-family: var(--heading-font); }
 .slider-row .val { font-family: var(--mono-font); color: var(--text); min-width: 3rem; text-align: right; font-weight: 600; }
 .slider-row input[type="range"] { width: 100%; }
 
+.grow-wrap { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+@media (max-width: 520px) { .grow-wrap { grid-template-columns: 1fr; } .figure { padding: 0.9rem; } }
+.grow-leaf:focus { outline: none; }
+.grow-leaf:focus-visible circle { stroke: var(--accent); stroke-width: 3; }
 .preset-row { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.4rem; }
 .preset-row .btn { padding: 0.3rem 0.5rem; font-size: 0.72rem; }
 
@@ -108,6 +112,23 @@ svg text { font-family: var(--heading-font); }
 
 @media (prefers-reduced-motion: reduce) { html:not([data-motion="full"]) * { transition-duration: 0s !important; animation-duration: 0s !important; } }
 @media (max-width: 680px) { h1 { font-size: 1.75rem; } .article { padding: 1.5rem 1rem 4rem; } }
+
+/* Dark mode: same hues, lighter shades */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --text: #e6e6ee; --text-2: #a3a3b8;
+    --accent: #60a5fa; --accent-light: #1e3a5f;
+    --bg: #14141c; --fig-bg: #1c1c28; --border: #34344a;
+    --c-pos: #60a5fa; --c-neg: #f87171; --c-gini: #a78bfa; --c-entropy: #22d3ee; --c-misclass: #fb923c; --c-split: #34d399; --c-gain: #4ade80; --c-truth: #34d399; --c-pred: #60a5fa;
+  }
+  html { color-scheme: dark; }
+  a:hover { color: #93c5fd; }
+  code { background: #262636; }
+  .btn.active, button[aria-pressed="true"] { color: #14141c; }
+  /* motion.js notice uses inline light styles; override here (lib is out of scope) */
+  #generated-notice { background: var(--fig-bg) !important; border-color: var(--border) !important; color: var(--text-2) !important; }
+  #generated-notice button { background: var(--bg) !important; border-color: var(--border) !important; color: var(--text) !important; }
+}
 </style>
 </head>
 <body>
@@ -217,7 +238,7 @@ svg text { font-family: var(--heading-font); }
     <button class="btn" id="btn-best-grow">Best depth-2 tree</button>
     <button class="btn" id="btn-new-xor">New XOR sample</button>
   </div>
-  <div id="grow-wrap" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+  <div id="grow-wrap" class="grow-wrap">
     <div id="grow-scatter"></div>
     <div id="grow-tree"></div>
   </div>
@@ -355,7 +376,20 @@ function trueFn(x) { return 0.5 + 0.4 * Math.sin(x * Math.PI * 1.8); }
   var W = 440, H = 340;
   var svg = d3.select('#main-viz').append('svg')
     .attr('viewBox', '0 0 ' + W + ' ' + H)
-    .attr('width', '100%').style('max-width', W + 'px');
+    .attr('width', '100%').style('max-width', W + 'px')
+    .attr('role', 'img').attr('tabindex', 0)
+    .attr('aria-label', 'Impurity curves for Gini, entropy and misclassification against fraction positive, with a strip of 40 labelled points above. The green split line divides the strip; markers show parent and child impurity and the gain. Arrow keys move the split.');
+
+  // Keyboard: arrow keys move the split line (classify mode)
+  svg.on('keydown', function (event) {
+    if (state.mode !== 'classify') return;
+    var step = event.shiftKey ? 0.1 : 0.025;
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowDown') state.thresh = Math.max(0.02, state.thresh - step);
+    else if (event.key === 'ArrowRight' || event.key === 'ArrowUp') state.thresh = Math.min(0.98, state.thresh + step);
+    else return;
+    event.preventDefault();
+    render();
+  });
 
   // Layers
   var bgLayer = svg.append('g');
@@ -389,7 +423,7 @@ function trueFn(x) { return 0.5 + 0.4 * Math.sin(x * Math.PI * 1.8); }
       .attr('fill', 'var(--bg)').attr('stroke', 'var(--border)').attr('rx', 3);
     bgLayer.append('text').attr('x', padX).attr('y', stripY - 4)
       .attr('font-size', 10).attr('fill', 'var(--text-2)').attr('font-weight', 600)
-      .text('data strip, 40 rows: drag the green line');
+      .text('data strip, 40 rows: drag the green line (or focus and use arrow keys)');
 
     // Chart axes
     bgLayer.append('line').attr('x1', padX).attr('y1', chartBot).attr('x2', W - padX).attr('y2', chartBot).attr('stroke', 'var(--border)');
@@ -399,7 +433,7 @@ function trueFn(x) { return 0.5 + 0.4 * Math.sin(x * Math.PI * 1.8); }
         .attr('font-size', 10).attr('fill', 'var(--text-2)').text(p);
     });
     bgLayer.append('text').attr('x', padX).attr('y', chartTop - 5).attr('font-size', 10).attr('fill', 'var(--text-2)').text('impurity');
-    bgLayer.append('text').attr('x', W - padX).attr('y', chartBot + 14).attr('text-anchor', 'end').attr('font-size', 10).attr('fill', 'var(--text-2)').text('fraction positive →');
+    bgLayer.append('text').attr('x', padX + 0.75 * wInner).attr('y', chartBot + 14).attr('text-anchor', 'middle').attr('font-size', 10).attr('fill', 'var(--text-2)').text('fraction positive →');
 
     // Draw data
     var stripCY = stripY + stripH / 2;
@@ -441,15 +475,15 @@ function trueFn(x) { return 0.5 + 0.4 * Math.sin(x * Math.PI * 1.8); }
     var gain = parentImp - wc;
 
     splitLayer.append('circle').attr('cx', chartX(st.parent.p)).attr('cy', chartY(parentImp)).attr('r', 4)
-      .attr('fill', color).attr('stroke', 'white').attr('stroke-width', 1.5);
+      .attr('fill', color).attr('stroke', 'var(--fig-bg)').attr('stroke-width', 1.5);
     splitLayer.append('text').attr('x', chartX(st.parent.p)).attr('y', chartY(parentImp) - 10)
       .attr('text-anchor', 'middle').attr('font-size', 10).attr('fill', 'var(--text)').attr('font-weight', 600).text('parent');
     if (st.left.n > 0) {
-      splitLayer.append('circle').attr('cx', chartX(st.left.p)).attr('cy', chartY(leftImp)).attr('r', 3.5).attr('fill', 'white').attr('stroke', color).attr('stroke-width', 1.8);
+      splitLayer.append('circle').attr('cx', chartX(st.left.p)).attr('cy', chartY(leftImp)).attr('r', 3.5).attr('fill', 'var(--fig-bg)').attr('stroke', color).attr('stroke-width', 1.8);
       splitLayer.append('text').attr('x', chartX(st.left.p)).attr('y', chartY(leftImp) + 14).attr('text-anchor', 'middle').attr('font-size', 9).attr('fill', 'var(--text-2)').text('L');
     }
     if (st.right.n > 0) {
-      splitLayer.append('circle').attr('cx', chartX(st.right.p)).attr('cy', chartY(rightImp)).attr('r', 3.5).attr('fill', 'white').attr('stroke', color).attr('stroke-width', 1.8);
+      splitLayer.append('circle').attr('cx', chartX(st.right.p)).attr('cy', chartY(rightImp)).attr('r', 3.5).attr('fill', 'var(--fig-bg)').attr('stroke', color).attr('stroke-width', 1.8);
       splitLayer.append('text').attr('x', chartX(st.right.p)).attr('y', chartY(rightImp) + 14).attr('text-anchor', 'middle').attr('font-size', 9).attr('fill', 'var(--text-2)').text('R');
     }
     if (st.left.n > 0 && st.right.n > 0) {
@@ -538,7 +572,12 @@ function trueFn(x) { return 0.5 + 0.4 * Math.sin(x * Math.PI * 1.8); }
     document.getElementById('m-red').textContent = (100 * (1 - residSq / rootSq)).toFixed(1) + '%';
   }
 
+  var ARIA = {
+    classify: svg.attr('aria-label'),
+    regress: 'Regression tree fit: noisy points around a dashed sine wave, with one flat blue segment per leaf from greedy variance-reduction splits.'
+  };
   function render() {
+    svg.attr('aria-label', ARIA[state.mode]).attr('tabindex', state.mode === 'classify' ? 0 : null);
     if (state.mode === 'classify') {
       document.getElementById('class-controls').style.display = '';
       document.getElementById('regress-controls').style.display = 'none';
@@ -630,8 +669,13 @@ function trueFn(x) { return 0.5 + 0.4 * Math.sin(x * Math.PI * 1.8); }
 (function () {
   'use strict';
   var reduced = window.Motion && Motion.reduced();
-  var CLS_COLORS = ['#2563eb', '#dc2626'];
-  var CLS_BG = ['rgba(37,99,235,0.16)', 'rgba(220,38,38,0.16)'];
+  // Class colors follow the page theme; resolved to hex/rgba at render time.
+  var CLS_COLORS, CLS_BG;
+  function cssVar(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+  function resolveColors() {
+    CLS_COLORS = [cssVar('--c-pos'), cssVar('--c-neg')];
+    CLS_BG = CLS_COLORS.map(function (c) { var k = d3.color(c); k.opacity = 0.16; return k.formatRgb(); });
+  }
   var DOMAIN = { x: [0, 8], y: [0, 8] };
   var FULL = { x0: 0, x1: 8, y0: 0, y1: 8 };
   var MAX_DEPTH = 6;
@@ -775,7 +819,7 @@ function trueFn(x) { return 0.5 + 0.4 * Math.sin(x * Math.PI * 1.8); }
     renderBoth();
   }
 
-  function renderBoth() { renderScatter(); renderTreeDiagram(); }
+  function renderBoth() { resolveColors(); renderScatter(); renderTreeDiagram(); }
 
   function renderScatter() {
     scatterContainer.selectAll('*').remove();
@@ -785,20 +829,22 @@ function trueFn(x) { return 0.5 + 0.4 * Math.sin(x * Math.PI * 1.8); }
     var w = W - m.left - m.right, h = H - m.top - m.bottom;
     var x = d3.scaleLinear().domain(DOMAIN.x).range([0, w]);
     var y = d3.scaleLinear().domain(DOMAIN.y).range([h, 0]);
-    var svg = scatterContainer.append('svg').attr('width', W).attr('height', H);
+    var svg = scatterContainer.append('svg').attr('width', W).attr('height', H)
+      .attr('role', 'img')
+      .attr('aria-label', 'Scatter of ' + pts().length + ' points in two classes (' + (state.data === 'xor' ? 'XOR pattern' : 'two clusters') + '), shaded by the decision regions of the current tree, with its split lines in green.');
     var g = svg.append('g').attr('transform', 'translate(' + m.left + ',' + m.top + ')');
     collectLeaves(tree).forEach(function (lf) {
       var b = lf.bounds;
       g.append('rect').attr('class', 'grow-region')
         .attr('x', x(b.x0)).attr('y', y(b.y1)).attr('width', x(b.x1) - x(b.x0)).attr('height', y(b.y0) - y(b.y1))
         .attr('fill', CLS_BG[lf.majority])
-        .attr('stroke', highlightedLeaf === lf ? '#1a1a2e' : 'none').attr('stroke-width', 2)
+        .attr('stroke', highlightedLeaf === lf ? 'var(--text)' : 'none').attr('stroke-width', 2)
         .attr('opacity', highlightedLeaf && highlightedLeaf !== lf ? 0.3 : 1);
     });
     (function drawSplits(node) {
       if (node.isLeaf) return;
       var b = node.bounds;
-      var ln = g.append('line').attr('stroke', '#059669').attr('stroke-width', 1.6);
+      var ln = g.append('line').attr('stroke', 'var(--c-split)').attr('stroke-width', 1.6);
       if (node.feature === 'x') ln.attr('x1', x(node.threshold)).attr('x2', x(node.threshold)).attr('y1', y(b.y1)).attr('y2', y(b.y0));
       else ln.attr('x1', x(b.x0)).attr('x2', x(b.x1)).attr('y1', y(node.threshold)).attr('y2', y(node.threshold));
       drawSplits(node.left); drawSplits(node.right);
@@ -806,7 +852,7 @@ function trueFn(x) { return 0.5 + 0.4 * Math.sin(x * Math.PI * 1.8); }
     g.selectAll('.pt').data(pts()).enter().append('circle').attr('class', 'pt')
       .attr('cx', function (d) { return x(d.x); }).attr('cy', function (d) { return y(d.y); })
       .attr('r', 3.5).attr('fill', function (d) { return CLS_COLORS[d.cls]; })
-      .attr('stroke', '#fff').attr('stroke-width', 1);
+      .attr('stroke', 'var(--fig-bg)').attr('stroke-width', 1);
     g.append('g').attr('transform', 'translate(0,' + h + ')').call(d3.axisBottom(x).ticks(4)).selectAll('text').attr('font-size', 9);
     g.append('g').call(d3.axisLeft(y).ticks(4)).selectAll('text').attr('font-size', 9);
   }
@@ -815,9 +861,14 @@ function trueFn(x) { return 0.5 + 0.4 * Math.sin(x * Math.PI * 1.8); }
     treeContainer.selectAll('*').remove();
     var W = treeContainer.node().getBoundingClientRect().width;
     var H = Math.min(320, W * 0.9);
-    var svg = treeContainer.append('svg').attr('width', W).attr('height', H);
     var nodes = collectNodes(tree);
     var maxD = d3.max(nodes, function (d) { return d.node.depth; });
+    // Stacked (phone) layout: size the diagram to the tree's depth instead of leaving a tall empty box.
+    var stacked = W > 0.8 * document.getElementById('grow-wrap').getBoundingClientRect().width;
+    if (stacked) H = Math.min(H, (maxD + 2) * 56);
+    var svg = treeContainer.append('svg').attr('width', W).attr('height', H)
+      .attr('role', 'group')
+      .attr('aria-label', 'Tree diagram with ' + collectLeaves(tree).length + ' leaves. Each leaf is a button showing how many training points reach it; activate one to highlight its region in the scatter.');
     var levelH = H / (maxD + 2);
     var xPos = 0;
     (function inorder(node) {
@@ -830,7 +881,7 @@ function trueFn(x) { return 0.5 + 0.4 * Math.sin(x * Math.PI * 1.8); }
       if (d.parentId == null) return;
       var p = nodes[d.parentId].node;
       svg.append('line').attr('x1', xs(p._x)).attr('y1', yOf(p)).attr('x2', xs(d.node._x)).attr('y2', yOf(d.node))
-        .attr('stroke', '#e2e2e8').attr('stroke-width', 1.5);
+        .attr('stroke', 'var(--border)').attr('stroke-width', 1.5);
     });
     nodes.forEach(function (d) {
       var nd = d.node;
@@ -839,14 +890,23 @@ function trueFn(x) { return 0.5 + 0.4 * Math.sin(x * Math.PI * 1.8); }
         var hl = highlightedLeaf === nd;
         g.style('cursor', 'pointer').attr('class', 'grow-leaf');
         g.append('circle').attr('r', hl ? 13 : 10).attr('fill', CLS_COLORS[nd.majority])
-          .attr('stroke', hl ? '#1a1a2e' : '#fff').attr('stroke-width', 2).attr('opacity', 0.85);
+          .attr('stroke', hl ? 'var(--text)' : 'var(--fig-bg)').attr('stroke-width', 2).attr('opacity', 0.85);
         g.append('text').attr('dy', '0.35em').attr('text-anchor', 'middle').attr('font-size', 9)
-          .attr('fill', '#fff').attr('font-weight', 600).text(nd.points.length);
-        g.on('click', function () { highlightedLeaf = highlightedLeaf === nd ? null : nd; renderBoth(); });
+          .attr('fill', 'var(--fig-bg)').attr('font-weight', 600).text(nd.points.length);
+        var toggleLeaf = function () {
+          highlightedLeaf = highlightedLeaf === nd ? null : nd; renderBoth();
+          var again = treeContainer.selectAll('.grow-leaf').filter(function () { return this.__leaf === nd; }).node();
+          if (again) again.focus();
+        };
+        g.attr('tabindex', 0).attr('role', 'button').attr('aria-pressed', hl ? 'true' : 'false')
+          .attr('aria-label', 'Leaf predicting class ' + (nd.majority ? 'red' : 'blue') + ', ' + nd.points.length + ' points');
+        g.node().__leaf = nd;
+        g.on('click', toggleLeaf);
+        g.on('keydown', function (event) { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggleLeaf(); } });
       } else {
         g.append('rect').attr('x', -25).attr('y', -11).attr('width', 50).attr('height', 22).attr('rx', 4)
-          .attr('fill', '#f0f0f6').attr('stroke', '#e2e2e8');
-        g.append('text').attr('dy', '0.35em').attr('text-anchor', 'middle').attr('font-size', 9).attr('fill', '#4a4a6a')
+          .attr('fill', 'var(--bg)').attr('stroke', 'var(--border)');
+        g.append('text').attr('dy', '0.35em').attr('text-anchor', 'middle').attr('font-size', 9).attr('fill', 'var(--text-2)')
           .text(nd.feature + ' ≤ ' + nd.threshold.toFixed(1));
       }
     });
