@@ -88,6 +88,8 @@ svg text { font-family: var(--heading-font); }
 @media (prefers-reduced-motion: reduce) { html:not([data-motion="full"]) * { transition-duration: 0s !important; animation-duration: 0s !important; } }
 @media (max-width: 600px) { h1 { font-size: 1.75rem; } .article { padding: 1.5rem 1rem 4rem; } .controls input[type="range"] { width: 120px; } }
 </style>
+<link rel="stylesheet" href="lib/theme.css">
+<script src="lib/figkit.js"></script>
 </head>
 <body>
 <div class="article">
@@ -264,9 +266,12 @@ svg text { font-family: var(--heading-font); }
 
   // ────────────────────────────────────────── Figure 1: Rips builder ──
   (function () {
-    var W = 700, H = 320;
+    // Drawn at the host's width so points stay draggable on a phone.
+    var W = FigKit.width(document.getElementById('viz-rips'), 700), H = W < 500 ? 300 : 320;
     var svg = d3.select('#viz-rips').append('svg').attr('viewBox', '0 0 ' + W + ' ' + H)
-      .attr('width', '100%').style('display', 'block').style('touch-action', 'none');
+      .attr('width', '100%').style('display', 'block').style('touch-action', 'none')
+      .attr('role', 'img')
+      .attr('aria-label', 'Point cloud with discs of radius epsilon over 2 and the Rips complex they span; points can be dragged, and triangles that are in the Rips but not the Cech complex are amber');
     var gDisc = svg.append('g'), gTri = svg.append('g'), gEdge = svg.append('g'), gPt = svg.append('g');
     var pts = [], maxEps = 1, frac = 0.3;
 
@@ -329,11 +334,13 @@ svg text { font-family: var(--heading-font); }
     }
 
     d3.select('#rips-eps').on('input', function () { frac = +this.value / 100; update(); });
-    d3.select('#rips-annulus').on('click', function () { load(TDA.points.annulus(36, 0.6, 1.0, 0.05)); });
-    d3.select('#rips-clusters').on('click', function () { load(TDA.points.clusters(36, 3, 0.2)); });
-    d3.select('#rips-figure8').on('click', function () { load(TDA.points.figureEight(40, 0.4, 0.03)); });
+    // The named presets are seeded, so they look the same on every visit; the
+    // random button stays random on purpose.
+    d3.select('#rips-annulus').on('click', function () { load(FigKit.seeded(55, function () { return TDA.points.annulus(36, 0.6, 1.0, 0.05); })); });
+    d3.select('#rips-clusters').on('click', function () { load(FigKit.seeded(12, function () { return TDA.points.clusters(36, 3, 0.2); })); });
+    d3.select('#rips-figure8').on('click', function () { load(FigKit.seeded(13, function () { return TDA.points.figureEight(40, 0.4, 0.03); })); });
     d3.select('#rips-random').on('click', function () { load(TDA.points.random(36, 1, 0.45)); });
-    load(TDA.points.annulus(36, 0.6, 1.0, 0.05));
+    load(FigKit.seeded(55, function () { return TDA.points.annulus(36, 0.6, 1.0, 0.05); }));
   })();
 
   // ────────────────────────────────────────── Figure 2: pipeline ──
@@ -355,10 +362,15 @@ svg text { font-family: var(--heading-font); }
 
   var state = { kind: 'annulus', raw: null, pts: null, frac: 0.7, maxEps: 1, filt: null, bars: [], sel: -1 };
 
-  function mkSvg(sel, h) {
-    return d3.select(sel).append('svg').attr('viewBox', '0 0 700 ' + h).attr('width', '100%').style('display', 'block');
+  // All three panels are drawn at the panel width, so text keeps its size on a phone.
+  var PW = FigKit.width(document.getElementById('viz-top'), 700);
+  function mkSvg(sel, h, label) {
+    return d3.select(sel).append('svg').attr('viewBox', '0 0 ' + PW + ' ' + h).attr('width', '100%').style('display', 'block')
+      .attr('role', label[0]).attr('aria-label', label[1]);
   }
-  var topSvg = mkSvg('#viz-top', 300), barSvg = mkSvg('#viz-bars', 190), botSvg = mkSvg('#viz-bottom', 300);
+  var topSvg = mkSvg('#viz-top', 300, ['img', 'Rips complex of the sample at epsilon, with the selected H1 cocycle highlighted on its edges']),
+      barSvg = mkSvg('#viz-bars', 190, ['group', 'Barcode of the filtration, H0 bars blue and H1 bars green, with the current epsilon as a dashed line. Tab to an H1 bar and press Enter to select it.']),
+      botSvg = mkSvg('#viz-bottom', 300, ['img', 'Each point coloured by its circular coordinate, the angle read off the selected cocycle']);
   var topL = { tri: topSvg.append('g'), edge: topSvg.append('g'), pt: topSvg.append('g') };
   var botL = { edge: botSvg.append('g'), pt: botSvg.append('g'), legend: botSvg.append('g'), msg: botSvg.append('g') };
   var barG = barSvg.append('g');
@@ -366,7 +378,7 @@ svg text { font-family: var(--heading-font); }
   function life(b) { return (b.death === Infinity ? state.maxEps : b.death) - b.birth; }
 
   function recompute() {
-    state.pts = fitToBox(state.raw, 700, 300, 18);
+    state.pts = fitToBox(state.raw, PW, 300, 18);
     state.maxEps = diameter(state.raw) * 0.4;
     state.filt = TDA.filtration.rips(state.raw, state.maxEps, 2);
     var pc = PC.compute(state.filt);
@@ -445,7 +457,7 @@ svg text { font-family: var(--heading-font); }
 
   function renderBars(eps) {
     barG.selectAll('*').remove();
-    var W = 700, H = 190, pad = { l: 20, r: 30, t: 10, b: 28 };
+    var W = PW, H = 190, pad = { l: 20, r: 30, t: 10, b: 28 };
     var bars = state.bars.map(function (b, i) { return { b: b, i: i }; })
       .sort(function (x, y) { return x.b.dim !== y.b.dim ? y.b.dim - x.b.dim : life(y.b) - life(x.b); });
     var rowH = 6, maxRows = Math.floor((H - pad.t - pad.b) / rowH);
@@ -453,7 +465,7 @@ svg text { font-family: var(--heading-font); }
     bars = bars.slice(0, maxRows);
     var x = d3.scaleLinear().domain([0, state.maxEps]).range([pad.l, W - pad.r]);
     barG.append('g').attr('transform', 'translate(0,' + (H - pad.b) + ')')
-      .call(d3.axisBottom(x).ticks(6).tickSizeOuter(0))
+      .call(d3.axisBottom(x).ticks(W < 500 ? 4 : 6).tickSizeOuter(0))
       .call(function (g) { g.selectAll('text').attr('fill', '#64748b'); g.selectAll('line,path').attr('stroke', '#94a3b8'); });
     bars.forEach(function (o, row) {
       var b = o.b, y = pad.t + row * rowH, x2 = x(b.death === Infinity ? state.maxEps : b.death);
@@ -467,7 +479,14 @@ svg text { font-family: var(--heading-font); }
         // A wider invisible hit target so short bars are clickable.
         barG.append('rect').attr('class', 'bar-hit').attr('x', x(b.birth) - 4).attr('y', y - 1).attr('width', Math.max(10, x2 - x(b.birth) + 8)).attr('height', rowH + 1)
           .attr('fill', 'transparent').style('cursor', 'pointer')
-          .on('click', function () { state.sel = o.i; update(); });
+          .attr('data-bar', o.i)
+          .on('click', function () { state.sel = o.i; update(); })
+          .call(FigKit.pressable, 'H1 bar born at ' + b.birth.toFixed(2) + (b.death === Infinity ? ', never dies' : ', dies at ' + b.death.toFixed(2)) + (sel ? ', selected' : ''),
+            function () {
+              state.sel = o.i; update();
+              var el = barG.select('[data-bar="' + o.i + '"]').node();
+              if (el) el.focus();
+            });
       }
     });
     barG.append('line').attr('x1', x(eps)).attr('x2', x(eps)).attr('y1', pad.t - 6).attr('y2', H - pad.b)
@@ -502,15 +521,17 @@ svg text { font-family: var(--heading-font); }
     botL.msg.selectAll('*').remove();
     var msg = !bar ? 'No H¹ bar in this sample: there is no loop to turn into an angle.'
       : !alive ? 'The selected bar is not alive at this ε. Move ε inside the bar.' : null;
-    if (msg) botL.msg.append('text').attr('x', 350).attr('y', 20).attr('text-anchor', 'middle')
+    if (msg) botL.msg.append('text').attr('x', PW / 2).attr('y', 20).attr('text-anchor', 'middle')
       .attr('font-size', 13).attr('fill', '#4a4a6a').text(msg);
   }
 
   d3.select('#eps-slider').on('input', function () { state.frac = +this.value / 100; update(); });
-  d3.select('#data-select').on('change', function () { state.kind = this.value; state.raw = genData(state.kind); recompute(); });
+  var SEEDS = { annulus: 55, figure8: 22, twocircles: 23, disk: 24 };
+  function seededData(kind) { return FigKit.seeded(SEEDS[kind] || 20, function () { return genData(kind); }); }
+  d3.select('#data-select').on('change', function () { state.kind = this.value; state.raw = seededData(state.kind); recompute(); });
   d3.select('#btn-resample').on('click', function () { state.raw = genData(state.kind); recompute(); });
 
-  state.raw = genData('annulus');
+  state.raw = seededData('annulus');
   recompute();
 })();
 </script>

@@ -10,6 +10,7 @@
 <link href="../vendor/fonts/sans-serif-mono/fonts.css" rel="stylesheet">
 <script src="lib/modular-math.js"></script>
 <script src="../lib/motion.js"></script>
+<script src="lib/figkit.js"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -79,6 +80,7 @@ svg text { font-family: var(--heading-font); }
 @media (prefers-reduced-motion: reduce) {html:not([data-motion="full"]) * { transition-duration: 0s !important; animation-duration: 0s !important; } }
 @media (max-width: 600px) { h1 { font-size: 1.75rem; } .article { padding: 1.5rem 1rem 4rem; } }
 </style>
+<link rel="stylesheet" href="lib/theme.css">
 </head>
 <body>
 <div class="article">
@@ -105,7 +107,7 @@ svg text { font-family: var(--heading-font); }
     <button class="btn" data-pair="-1/2,2/3">&minus;1/2 &harr; 2/3</button>
   </div>
   <div id="cusp-status" class="status-bar"></div>
-  <p class="figure-caption"><span class="figure-label">Figure 1.</span> Two rational cusps on the real axis, the geodesic joining them through &#x210D;, and the matrix &gamma; &isin; SL&#x2082;(&#x2124;) that maps one to the other.</p>
+  <p class="figure-caption"><span class="figure-label">Figure 1.</span> Two rational cusps on the real axis, the geodesic joining them through &#x210D;, and the matrix &gamma; &isin; SL&#x2082;(&#x2124;) that maps one to the other. Each shaded region is the tile of the tessellation whose spike ends at that cusp; the view zooms to fit the pair.</p>
 </div>
 
 <h2>What is a cusp?</h2>
@@ -154,10 +156,11 @@ svg text { font-family: var(--heading-font); }
     <button class="btn active" data-form="E4">E&#x2084;</button>
     <button class="btn" data-form="E6">E&#x2086;</button>
     <button class="btn" data-form="D">&Delta;</button>
-    <label style="margin-left:1rem;">terms kept: <input type="range" id="qexp-n" min="1" max="8" step="1" value="2" style="width:110px;"> <span id="qexp-terms">2</span></label>
+    <label>terms kept: <input type="range" id="qexp-n" min="1" max="8" step="1" value="2" style="width:110px;"> <span id="qexp-terms">2</span></label>
+    <label>probe y: <input type="range" id="qexp-y" min="0.3" max="2" step="0.01" value="1" style="width:110px;"></label>
   </div>
   <div id="qexp-status" class="status-bar"></div>
-  <p class="figure-caption"><span class="figure-label">Figure 2.</span> The solid curve is |f(iy)| summed to 300 terms; the dashed red curve keeps only the first N terms. Move the pointer across the plot to read values. High up, one or two terms agree to many digits; toward the real axis the truncation fails. E<sub>6</sub> dips to zero at y = 1 because E<sub>6</sub>(i) = 0.</p>
+  <p class="figure-caption"><span class="figure-label">Figure 2.</span> The solid curve is |f(iy)| summed to 300 terms; the dashed red curve keeps only the first N terms. Move the pointer across the plot, or the probe slider, to read values. High up, one or two terms agree to many digits; toward the real axis the truncation fails. E<sub>6</sub> dips to zero at y = 1 because E<sub>6</sub>(i) = 0.</p>
 </div>
 
 <div class="nav-footer">
@@ -209,84 +212,87 @@ function matInv(m) { return [[m[1][1], -m[0][1]], [-m[1][0], m[0][0]]]; }
 
 // ────────────────────────────────────────── Figure 1: cusp equivalence ──
 (function () {
-  var W = 680, H = 280;
-  var xMin = -2, xMax = 2, yMin = 0.01, yMax = 3;
-  var xS = d3.scaleLinear().domain([xMin, xMax]).range([0, W]);
-  var yS = d3.scaleLinear().domain([yMax, yMin]).range([0, H]);
+  // Drawn at the host's width with equal x and y scales. The view zooms to the two
+  // cusps, and each cusp gets the tile M·F whose spike ends there (M sends i∞ to it).
   var host = document.getElementById('cusp-svg-host');
+  var W = FigKit.width(host, 680), H = Math.round(Math.max(220, Math.min(280, W * 0.42)));
   var svg = d3.select(host).append('svg')
     .attr('viewBox', '0 0 ' + W + ' ' + H)
-    .attr('width', '100%').style('max-width', W + 'px');
+    .attr('width', '100%').style('max-width', W + 'px')
+    .attr('role', 'img')
+    .attr('aria-label', 'Two cusps on the real axis joined by a geodesic, each with the tile of the tessellation whose spike ends at it');
+  var baseY = H - 22;
+  var scene = svg.append('g');
 
-  // Real axis
-  svg.append('line').attr('x1', 0).attr('y1', yS(yMin)).attr('x2', W).attr('y2', yS(yMin))
-    .attr('stroke', 'var(--c-axis)').attr('stroke-width', 1.5);
-
-  // Fundamental domain
-  var fdPts = Mod.sl2z.fundDomainPath(yMax + 1);
-  var fdD = 'M' + fdPts.map(function (p) {
-    return xS(p.re) + ',' + yS(Math.min(p.im, yMax));
-  }).join('L') + 'Z';
-  svg.append('path').attr('d', fdD).attr('fill', 'var(--accent)').attr('fill-opacity', 0.06)
-    .attr('stroke', 'var(--accent)').attr('stroke-width', 0.8).attr('stroke-dasharray', '3,3');
-
-  var tg = svg.append('g');
-  for (var i = -4; i <= 4; i++) {
-    var tx = xS(i/2); if (tx < 10 || tx > W-10) continue;
-    tg.append('line').attr('x1',tx).attr('y1',yS(yMin)-4).attr('x2',tx).attr('y2',yS(yMin)+4).attr('stroke','var(--c-axis)').attr('stroke-width',0.8);
-    tg.append('text').attr('x',tx).attr('y',yS(yMin)+16).attr('text-anchor','middle').attr('font-size',10).attr('fill','var(--c-axis)').text(i%2===0?(i/2).toString():i+'/2');
-  }
-
-  var arcPath = svg.append('path').attr('fill','none').attr('stroke','var(--c-geodesic)').attr('stroke-width',2.5).attr('stroke-dasharray','6,3');
-  var cusp1 = svg.append('circle').attr('r',6).attr('fill','var(--c-point)').attr('stroke','#fff').attr('stroke-width',1.5);
-  var cusp2 = svg.append('circle').attr('r',6).attr('fill','#dc2626').attr('stroke','#fff').attr('stroke-width',1.5);
-  var label1 = svg.append('text').attr('font-size',13).attr('font-weight',600).attr('fill','var(--c-point)');
-  var label2 = svg.append('text').attr('font-size',13).attr('font-weight',600).attr('fill','#dc2626');
-  var matLabel = svg.append('text').attr('font-size',12).attr('fill','var(--text-2)').attr('text-anchor','middle');
+  function fmtRat(r) { return r.q === 0 ? 'i∞' : (r.q === 1 ? String(r.p) : r.p + '/' + r.q); }
 
   function drawCusps(r1, r2) {
-    var x1 = (r1.q === 0) ? 0 : r1.p / r1.q;
-    var x2 = (r2.q === 0) ? 0 : r2.p / r2.q;
-    var s1 = (r1.q === 0) ? 'i\u221E' : (r1.q === 1 ? r1.p.toString() : r1.p + '/' + r1.q);
-    var s2 = (r2.q === 0) ? 'i\u221E' : (r2.q === 1 ? r2.p.toString() : r2.p + '/' + r2.q);
+    scene.selectAll('*').remove();
+    var fin1 = r1.q !== 0, fin2 = r2.q !== 0;
+    var x1 = fin1 ? r1.p / r1.q : null, x2 = fin2 ? r2.p / r2.q : null;
+    var xs = [x1, x2].filter(function (v) { return v !== null; });
+    var lo = Math.min.apply(null, xs.length ? xs : [0]), hi = Math.max.apply(null, xs.length ? xs : [0]);
+    var span = Math.max(hi - lo, 0.02);
+    var half = (fin1 && fin2) ? Math.max(span * 0.8, 0.02) : 1.6;
+    var cx = (lo + hi) / 2;
+    var xS = d3.scaleLinear().domain([cx - half, cx + half]).range([0, W]);
+    var ppu = W / (2 * half);
+    var yS = function (im) { return baseY - im * ppu; };
+    var yTop = baseY / ppu;
 
-    // Position cusps on real axis (or top for i∞)
-    var cx1 = xS(Math.max(xMin + 0.1, Math.min(xMax - 0.1, x1)));
-    var cy1 = (r1.q === 0) ? yS(yMax) : yS(yMin);
-    var cx2 = xS(Math.max(xMin + 0.1, Math.min(xMax - 0.1, x2)));
-    var cy2 = (r2.q === 0) ? yS(yMax) : yS(yMin);
+    // Tiles whose spikes end at each cusp.
+    var F = Mod.sl2z.fundDomainPath(Math.max(60, 4 * yTop));
+    [[r1, '#2563eb'], [r2, '#dc2626']].forEach(function (e) {
+      var M = matToInfty(e[0].p, e[0].q);
+      var pts = F.map(function (z) { return e[0].q === 0 ? z : Mod.sl2z.mobius(M, z); });
+      scene.append('path')
+        .attr('d', 'M' + pts.map(function (z) { return xS(z.re) + ',' + yS(Math.min(z.im, yTop + 1)); }).join('L') + 'Z')
+        .attr('fill', e[1]).attr('fill-opacity', 0.12).attr('stroke', e[1]).attr('stroke-width', 1)
+        .attr('stroke-dasharray', '3,3');
+    });
 
-    cusp1.attr('cx', cx1).attr('cy', cy1);
-    cusp2.attr('cx', cx2).attr('cy', cy2);
-    label1.attr('x', cx1).attr('y', cy1 - 12).attr('text-anchor', 'middle').text(s1);
-    label2.attr('x', cx2).attr('y', cy2 - 12).attr('text-anchor', 'middle').text(s2);
+    // Real axis and ticks.
+    scene.append('line').attr('x1', 0).attr('y1', baseY).attr('x2', W).attr('y2', baseY)
+      .attr('stroke', 'var(--c-axis)').attr('stroke-width', 1.5);
+    xS.ticks(W < 500 ? 5 : 8).forEach(function (v) {
+      if (xS(v) < 16 || xS(v) > W - 16) return;
+      scene.append('line').attr('x1', xS(v)).attr('x2', xS(v)).attr('y1', baseY - 3).attr('y2', baseY + 3)
+        .attr('stroke', 'var(--c-axis)').attr('stroke-width', 0.8);
+      scene.append('text').attr('x', xS(v)).attr('y', baseY + 15).attr('text-anchor', 'middle')
+        .attr('font-size', 10).attr('fill', 'var(--c-axis)').text(d3.format('~g')(+v.toFixed(4)));
+    });
+
+    // Geodesic between the cusps.
+    var d;
+    if (fin1 && fin2 && Math.abs(x1 - x2) > 1e-9) {
+      var mid = (x1 + x2) / 2, rad = Math.abs(x2 - x1) / 2, arc = [];
+      for (var i = 0; i <= 60; i++) {
+        var ang = Math.PI * i / 60;
+        arc.push(xS(mid + rad * Math.cos(ang)) + ',' + yS(rad * Math.sin(ang)));
+      }
+      d = 'M' + arc.join('L');
+    } else {
+      var fx = fin1 ? x1 : fin2 ? x2 : 0;
+      d = 'M' + xS(fx) + ',' + baseY + 'L' + xS(fx) + ',0';
+    }
+    scene.append('path').attr('d', d).attr('fill', 'none').attr('stroke', 'var(--c-geodesic)')
+      .attr('stroke-width', 2.5).attr('stroke-dasharray', '6,3');
+
+    // Cusp markers and labels (a label for i∞ goes at the top edge).
+    [[r1, x1, '#2563eb', -1], [r2, x2, '#dc2626', 1]].forEach(function (e) {
+      var px = e[1] === null ? W / 2 : xS(e[1]), py = e[1] === null ? 8 : baseY;
+      scene.append('circle').attr('cx', px).attr('cy', py).attr('r', 6)
+        .attr('fill', e[2]).attr('stroke', '#fff').attr('stroke-width', 1.5);
+      var both = fin1 && fin2;
+      scene.append('text').attr('x', both ? px + e[3] * 9 : px + 10).attr('y', e[1] === null ? 22 : baseY - 10)
+        .attr('text-anchor', both ? (e[3] < 0 ? 'end' : 'start') : 'start')
+        .attr('font-size', 13).attr('font-weight', 600).attr('fill', e[2]).text(fmtRat(e[0]));
+    });
 
     var gamma = Mod.sl2z.matMul(matToInfty(r1.p, r1.q), matInv(matToInfty(r2.p, r2.q)));
-
-    // Geodesic arc between cusps
-    if (r1.q !== 0 && r2.q !== 0 && Math.abs(x1 - x2) > 0.01) {
-      var midX = (x1 + x2) / 2, radius = Math.abs(x2 - x1) / 2;
-      var pts = [], sa = (x1 < x2) ? Math.PI : 0, ea = (x1 < x2) ? 0 : Math.PI;
-      for (var i = 0; i <= 50; i++) {
-        var a = sa + (ea - sa) * i / 50;
-        pts.push(xS(midX + radius * Math.cos(a)) + ',' + yS(radius * Math.sin(a)));
-      }
-      arcPath.attr('d', 'M' + pts.join('L'));
-    } else {
-      var fx = (r1.q === 0) ? x2 : (r2.q === 0) ? x1 : x1;
-      arcPath.attr('d', 'M' + xS(fx) + ',' + yS(0.02) + 'L' + xS(fx) + ',' + yS(yMax));
-    }
-
-    var mx = (cx1 + cx2) / 2, my = Math.min(cy1, cy2) - 30;
-    if (r1.q !== 0 && r2.q !== 0 && Math.abs(x1 - x2) > 0.01) my = yS(Math.abs(x2 - x1) / 2 * 0.85);
-    matLabel.attr('x', mx).attr('y', Math.max(20, my));
-    matLabel.text('\u03B3 = [[' + gamma[0][0] + ',' + gamma[0][1] + '],[' +
-                  gamma[1][0] + ',' + gamma[1][1] + ']]');
-
-    var status = document.getElementById('cusp-status');
-    status.textContent = s1 + ' \u2194 ' + s2 + '  via  \u03B3 = [' +
-      gamma[0].join(', ') + ' ; ' + gamma[1].join(', ') +
-      '],  det = ' + (gamma[0][0] * gamma[1][1] - gamma[0][1] * gamma[1][0]);
+    document.getElementById('cusp-status').textContent = fmtRat(r1) + ' ↔ ' + fmtRat(r2) +
+      ' via γ = [' + gamma[0].join(', ') + ' ; ' + gamma[1].join(', ') +
+      '], det = ' + (gamma[0][0] * gamma[1][1] - gamma[0][1] * gamma[1][0]);
   }
 
   function go() { drawCusps(parseRat(document.getElementById('cusp-r1').value), parseRat(document.getElementById('cusp-r2').value)); }
@@ -317,14 +323,17 @@ function matInv(m) { return [[m[1][1], -m[0][1]], [-m[1][0], m[0][0]]]; }
     D:  { a: D,  label: 'Δ', cusp: true }
   };
 
-  var W = 680, H = 320, pad = { top: 20, bottom: 40, left: 60, right: 20 };
-  var svg = d3.select('#qexp-svg-host').append('svg')
-    .attr('viewBox', '0 0 ' + W + ' ' + H).attr('width', '100%').style('max-width', W + 'px');
+  var host = document.getElementById('qexp-svg-host');
+  var W = FigKit.width(host, 680), H = W < 500 ? 280 : 320, pad = { top: 20, bottom: 40, left: 52, right: 14 };
+  var svg = d3.select(host).append('svg')
+    .attr('viewBox', '0 0 ' + W + ' ' + H).attr('width', '100%').style('max-width', W + 'px')
+    .attr('role', 'img')
+    .attr('aria-label', 'Absolute value of a modular form on the imaginary axis, log scale, from 300 q-expansion terms (solid) and from the first N terms (dashed), with a probe line');
   var yMin = 0.3, yMax = 2.0;
   var xS = d3.scaleLinear().domain([yMin, yMax]).range([pad.left, W - pad.right]);
   var vS = d3.scaleLog().domain([1e-6, 1e4]).range([H - pad.bottom, pad.top]).clamp(true);
   svg.append('g').attr('transform', 'translate(0,' + (H - pad.bottom) + ')')
-    .call(d3.axisBottom(xS).ticks(8)).attr('font-size', 10);
+    .call(d3.axisBottom(xS).ticks(W < 500 ? 5 : 8)).attr('font-size', 10);
   svg.append('g').attr('transform', 'translate(' + pad.left + ',0)')
     .call(d3.axisLeft(vS).tickValues([1e-6, 1e-4, 1e-2, 1, 1e2, 1e4])
       .tickFormat(function (v) { var e = Math.round(Math.log10(v)); return e === 0 ? '1' : '10' + Mod.fmt.sup(e); }))
@@ -367,11 +376,12 @@ function matInv(m) { return [[m[1][1], -m[0][1]], [-m[1][0], m[0][0]]]; }
     marker.attr('x1', xS(probe)).attr('x2', xS(probe));
     var full = evalAt(a, probe, NQ + 1), tr = evalAt(a, probe, nTerms);
     document.getElementById('qexp-terms').textContent = nTerms;
+    document.getElementById('qexp-y').value = probe;
     document.getElementById('qexp-status').textContent =
       f.label + '(' + probe.toFixed(2) + 'i) = ' + fmt(full) +
-      '   first ' + nTerms + ' term' + (nTerms > 1 ? 's' : '') + ': ' + fmt(tr) +
-      '   relative error ' + (Math.abs(full) > 1e-9 ? Math.abs((tr - full) / full).toExponential(1) : 'n/a (zero of f)') +
-      '   |q| = ' + Math.exp(-2 * Math.PI * probe).toExponential(2);
+      ' · first ' + nTerms + ' term' + (nTerms > 1 ? 's' : '') + ': ' + fmt(tr) +
+      ' · relative error ' + (Math.abs(full) > 1e-9 ? Math.abs((tr - full) / full).toExponential(1) : 'n/a (zero of f)') +
+      ' · |q| = ' + Math.exp(-2 * Math.PI * probe).toExponential(2);
   }
 
   d3.selectAll('#qexp-controls .btn[data-form]').on('click', function () {
@@ -381,7 +391,8 @@ function matInv(m) { return [[m[1][1], -m[0][1]], [-m[1][0], m[0][0]]]; }
     update();
   });
   document.getElementById('qexp-n').addEventListener('input', function () { nTerms = +this.value; update(); });
-  svg.on('mousemove click', function (event) {
+  document.getElementById('qexp-y').addEventListener('input', function () { probe = +this.value; update(); });
+  svg.on('pointermove click', function (event) {
     var x = d3.pointer(event)[0];
     probe = Math.max(yMin, Math.min(yMax, xS.invert(x)));
     update();

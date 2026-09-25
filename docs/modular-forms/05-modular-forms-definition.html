@@ -10,6 +10,7 @@
 <link href="../vendor/fonts/sans-serif-mono/fonts.css" rel="stylesheet">
 <script src="lib/modular-math.js"></script>
 <script src="../lib/motion.js"></script>
+<script src="lib/figkit.js"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -87,6 +88,7 @@ svg text { font-family: var(--heading-font); }
 @media (prefers-reduced-motion: reduce) {html:not([data-motion="full"]) * { transition-duration: 0s !important; animation-duration: 0s !important; } }
 @media (max-width: 600px) { h1 { font-size: 1.75rem; } .article { padding: 1.5rem 1rem 4rem; } }
 </style>
+<link rel="stylesheet" href="lib/theme.css">
 </head>
 <body>
 <div class="article">
@@ -174,7 +176,7 @@ svg text { font-family: var(--heading-font); }
     <button class="btn active" data-g="S">S</button>
     <button class="btn" data-g="T">T</button>
     <button class="btn" data-g="ST">ST</button>
-    <span style="margin-left: 1rem;">Weight k:</span>
+    <span>Weight k:</span>
     <button class="btn active" data-ck="4">4</button>
     <button class="btn" data-ck="6">6</button>
     <button class="btn" data-ck="8">8</button>
@@ -387,13 +389,16 @@ function fmtComplex(z) {
   canvas.width = W; canvas.height = H;
   canvas.style.maxWidth = '100%';
   canvas.style.borderRadius = '4px';
+  canvas.setAttribute('role', 'img');
+  canvas.setAttribute('aria-label', 'Heatmap of log |E_k(tau)| on the fundamental domain for the selected weight; dark spots are zeros');
   host.appendChild(canvas);
   var ctx = canvas.getContext('2d');
 
   var svg = d3.select(host).append('svg')
     .attr('viewBox', '0 0 ' + W + ' ' + H)
     .attr('width', W).style('max-width', '100%')
-    .style('position', 'absolute').style('left', '0').style('top', '0');
+    .style('position', 'absolute').style('left', '0').style('top', '0')
+    .attr('aria-hidden', 'true');
   host.style.position = 'relative';
   host.style.width = W + 'px';
   host.style.maxWidth = '100%';
@@ -448,7 +453,7 @@ function fmtComplex(z) {
     colorScale.domain(ext);
 
     ctx.clearRect(0, 0, W, H);
-    ctx.fillStyle = '#f0f0f0';
+    ctx.fillStyle = FigKit.dark() ? '#282838' : '#f0f0f0';
     ctx.fillRect(0, 0, W, H);
 
     for (var i = 0; i < pixels.length; i++) {
@@ -500,15 +505,18 @@ function fmtComplex(z) {
 
 // ────────────────────────────────────────── Figure 2: transformation law checker ──
 (function () {
-  var W = 680, H = 340;
-  var xMin = -3, xMax = 3, yMin = 0.05, yMax = 4;
+  // Drawn at the host's width with equal x and y scales; the readout sits below the plot.
+  var host = document.getElementById('checker-svg-host');
+  var W = FigKit.width(host, 680), H = Math.round(Math.max(260, Math.min(340, W * 0.5)));
+  var yMin = 0.05, yMax = 4;
+  var xMax = W / (H / (yMax - yMin)) / 2, xMin = -xMax;
   var xS = d3.scaleLinear().domain([xMin, xMax]).range([0, W]);
   var yS = d3.scaleLinear().domain([yMax, yMin]).range([0, H]);
-
-  var host = document.getElementById('checker-svg-host');
   var svg = d3.select(host).append('svg')
     .attr('viewBox', '0 0 ' + W + ' ' + H)
-    .attr('width', '100%').style('max-width', W + 'px');
+    .attr('width', '100%').style('max-width', W + 'px')
+    .attr('role', 'group')
+    .attr('aria-label', 'A draggable point tau and its image under the chosen gamma, for checking the weight-k transformation law');
 
   // Real axis
   svg.append('line').attr('x1', 0).attr('y1', yS(yMin)).attr('x2', W).attr('y2', yS(yMin))
@@ -550,13 +558,14 @@ function fmtComplex(z) {
   var labelGamma = svg.append('text').attr('font-size', 12).attr('font-weight', 600).attr('fill', '#dc2626');
 
   // Result readout
-  var readout = svg.append('foreignObject').attr('x', 10).attr('y', 10).attr('width', 380).attr('height', 110);
-  var readoutDiv = readout.append('xhtml:div')
+  var readoutDiv = d3.select(host).append('div')
+    .attr('aria-live', 'polite')
     .style('font-family', 'var(--heading-font)')
-    .style('font-size', '12px')
+    .style('font-size', '0.85rem')
     .style('color', 'var(--text-2)')
-    .style('background', 'rgba(255,255,255,0.92)')
+    .style('margin-top', '0.5rem')
     .style('padding', '8px 10px')
+    .style('overflow-wrap', 'anywhere')
     .style('border-radius', '4px')
     .style('border', '1px solid var(--border)');
 
@@ -574,10 +583,8 @@ function fmtComplex(z) {
     arrowLine.attr('x1', xS(tau.re)).attr('y1', yS(tau.im))
       .attr('x2', xS(gx)).attr('y2', yS(gy));
 
-    labelTau.attr('x', xS(tau.re) + 10).attr('y', yS(tau.im) - 10)
-      .text('\u03c4');
-    labelGamma.attr('x', xS(gx) + 10).attr('y', yS(gy) - 10)
-      .text(gammaLabel[gammaKey] + '\u03c4');
+    FigKit.fit(labelTau.text('\u03c4'), xS(tau.re), yS(tau.im), W);
+    FigKit.fit(labelGamma.text(gammaLabel[gammaKey] + '\u03c4'), xS(gx), yS(gy), W);
 
     // Compute both sides of the transformation law
     var fGammaTau = evalEk(checkerK, gTau);
@@ -598,7 +605,7 @@ function fmtComplex(z) {
 
     document.getElementById('checker-status').textContent =
       '\u03c4 = ' + tau.re.toFixed(3) + ' + ' + tau.im.toFixed(3) + 'i' +
-      '    \u03b3\u03c4 = ' + gTau.re.toFixed(3) + ' + ' + gTau.im.toFixed(3) + 'i';
+      ' · \u03b3\u03c4 = ' + gTau.re.toFixed(3) + ' + ' + gTau.im.toFixed(3) + 'i';
   }
 
   pointTau.call(d3.drag().on('drag', function (e) {
@@ -606,6 +613,11 @@ function fmtComplex(z) {
     tau.im = Math.max(0.15, yS.invert(e.y));
     update();
   }));
+  FigKit.keyMove(pointTau, 'Point tau: arrow keys move it', function (dx, dy) {
+    tau.re = Math.max(xMin, Math.min(xMax, tau.re + 0.05 * dx));
+    tau.im = Math.min(yMax, Math.max(0.15, tau.im + 0.05 * dy));
+    update();
+  });
 
   svg.on('click', function (event) {
     var coords = d3.pointer(event);
@@ -635,14 +647,16 @@ function fmtComplex(z) {
 (function () {
   var NQ = 16;            // coefficients q^0 .. q^15
   var KMAX = 48;
-  var W = 680, H = 190;
-  var margin = { top: 14, right: 16, bottom: 34, left: 40 };
+  var W = FigKit.width(document.getElementById('dims-svg-host'), 680), H = 190;
+  var margin = { top: 14, right: 12, bottom: 34, left: 32 };
   var innerW = W - margin.left - margin.right;
   var innerH = H - margin.top - margin.bottom;
 
   var svg = d3.select('#dims-svg-host').append('svg')
     .attr('viewBox', '0 0 ' + W + ' ' + H)
-    .attr('width', '100%').style('max-width', W + 'px');
+    .attr('width', '100%').style('max-width', W + 'px')
+    .attr('role', 'img')
+    .attr('aria-label', 'Bar chart of dim M_k and dim S_k for even weights up to 48; the selected weight is highlighted');
   var g = svg.append('g').attr('transform', 'translate(' + margin.left + ',' + margin.top + ')');
   var slider = document.getElementById('dims-k');
   var kLabel = document.getElementById('dims-k-label');
@@ -735,7 +749,7 @@ function fmtComplex(z) {
     var x = d3.scaleBand().domain(weights).range([0, innerW]).padding(0.2);
     var y = d3.scaleLinear().domain([0, dimM(KMAX) + 0.3]).range([innerH, 0]);
     g.append('g').attr('transform', 'translate(0,' + innerH + ')')
-      .call(d3.axisBottom(x).tickValues(weights.filter(function (k) { return k % 4 === 0; })).tickSizeOuter(0))
+      .call(d3.axisBottom(x).tickValues(weights.filter(function (k) { return k % (W < 500 ? 8 : 4) === 0; })).tickSizeOuter(0))
       .selectAll('text').attr('font-size', 10);
     g.append('g').call(d3.axisLeft(y).ticks(dimM(KMAX)).tickFormat(d3.format('d'))).selectAll('text').attr('font-size', 10);
     g.append('text').attr('x', innerW / 2).attr('y', innerH + 30).attr('text-anchor', 'middle')

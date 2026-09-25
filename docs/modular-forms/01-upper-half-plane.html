@@ -10,6 +10,7 @@
 <link href="../vendor/fonts/sans-serif-mono/fonts.css" rel="stylesheet">
 <script src="lib/modular-math.js"></script>
 <script src="../lib/motion.js"></script>
+<script src="lib/figkit.js"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -79,6 +80,7 @@ svg text { font-family: var(--heading-font); }
 @media (prefers-reduced-motion: reduce) {html:not([data-motion="full"]) * { transition-duration: 0s !important; animation-duration: 0s !important; } }
 @media (max-width: 600px) { h1 { font-size: 1.75rem; } .article { padding: 1.5rem 1rem 4rem; } }
 </style>
+<link rel="stylesheet" href="lib/theme.css">
 </head>
 <body>
 <div class="article">
@@ -151,7 +153,7 @@ svg text { font-family: var(--heading-font); }
     <div id="disk-disk-host"></div>
   </div>
   <div id="disk-status" class="status-bar"></div>
-  <p class="figure-caption"><span class="figure-label">Figure 3.</span> The same point and geodesic in both models. Drag the blue point in either panel and the other follows through the Cayley transform. The shaded region is the fundamental domain of SL₂(ℤ), the subject of Part 3.</p>
+  <p class="figure-caption"><span class="figure-label">Figure 3.</span> The same point in both models. Drag the blue point in either panel and the other follows through the Cayley transform. The shaded region is the fundamental domain of SL₂(ℤ), the subject of Part 3.</p>
 </div>
 
 <h2>Where modular forms come in</h2>
@@ -182,18 +184,24 @@ math('math-cayley',
 
 // ────────────────────────────────────────── Figure 1: metric tensor ──
 (function () {
-  var W = 680, H = 340;
-  var xMin = -2.5, xMax = 2.5, yMin = 0.05, yMax = 3.5;
+  // Drawn at the host's width with equal x and y scales, so a Euclidean circle
+  // looks like one and labels keep their size on a phone.
+  var host = document.getElementById('metric-svg-host');
+  var W = FigKit.width(host, 680), H = Math.round(Math.max(260, Math.min(340, W * 0.5)));
+  var yMin = 0.05, yMax = 3.5;
+  var halfX = W / (H / (yMax - yMin)) / 2;
+  var xMin = -halfX, xMax = halfX;
   var xS = d3.scaleLinear().domain([xMin, xMax]).range([0, W]);
   var yS = d3.scaleLinear().domain([yMax, yMin]).range([0, H]);
-  var host = document.getElementById('metric-svg-host');
   var svg = d3.select(host).append('svg')
     .attr('viewBox', '0 0 ' + W + ' ' + H)
     .attr('width', '100%').style('max-width', W + 'px')
-    .style('cursor', 'crosshair');
+    .style('cursor', 'crosshair')
+    .attr('role', 'group')
+    .attr('aria-label', 'The upper half-plane with a draggable point tau and the hyperbolic disk of radius 0.4 around it');
 
   // Grid
-  for (var gx = -2; gx <= 2; gx++) {
+  for (var gx = Math.ceil(xMin); gx <= Math.floor(xMax); gx++) {
     svg.append('line').attr('x1', xS(gx)).attr('y1', 0).attr('x2', xS(gx)).attr('y2', H)
       .attr('stroke', '#e2e2e8').attr('stroke-width', 0.5);
   }
@@ -258,11 +266,13 @@ math('math-cayley',
     metricFill.attr('cx', px).attr('cy', cy).attr('rx', rx).attr('ry', ry);
     point.attr('cx', px).attr('cy', py);
     var lbl = 'τ = ' + tau.re.toFixed(2) + ' + ' + tau.im.toFixed(2) + 'i';
-    label.attr('x', px + 10).attr('y', py - 10).text(lbl);
+    var flip = px > W - 150;
+    label.attr('x', flip ? px - 10 : px + 10).attr('y', py - 10)
+      .attr('text-anchor', flip ? 'end' : 'start').text(lbl);
     var status = document.getElementById('metric-status');
     status.textContent = 'Im τ = ' + tau.im.toFixed(3) +
-      '    ds²/|dτ|² = 1/(Im τ)² = ' + (1 / (tau.im * tau.im)).toFixed(3) +
-      '    disk of hyperbolic radius ' + R_HYP + ': Euclidean radius ' + rr.toFixed(3);
+      ' · ds²/|dτ|² = 1/(Im τ)² = ' + (1 / (tau.im * tau.im)).toFixed(3) +
+      ' · disk of hyperbolic radius ' + R_HYP + ': Euclidean radius ' + rr.toFixed(3);
     renderLive();
   }
 
@@ -273,6 +283,11 @@ math('math-cayley',
       update();
     });
   point.call(drag);
+  FigKit.keyMove(point, 'Point tau: arrow keys move it', function (dx, dy) {
+    tau.re = Math.max(xMin, Math.min(xMax, tau.re + 0.05 * dx));
+    tau.im = Math.min(2.6, Math.max(0.1, tau.im + 0.05 * dy));
+    update();
+  });
   svg.on('click', function (event) {
     var coords = d3.pointer(event);
     tau.re = xS.invert(coords[0]);
@@ -284,14 +299,19 @@ math('math-cayley',
 
 // ────────────────────────────────────────── Figure 2: geodesics ──
 (function () {
-  var W = 680, H = 340;
-  var xMin = -3, xMax = 3, yMin = 0.01, yMax = 4;
+  // Equal x and y scales, so semicircular geodesics are drawn as semicircles.
+  var host = document.getElementById('geodesic-svg-host');
+  var W = FigKit.width(host, 680), H = Math.round(Math.max(260, Math.min(340, W * 0.5)));
+  var yMin = 0.01, yMax = 4;
+  var halfX = W / (H / (yMax - yMin)) / 2;
+  var xMin = -halfX, xMax = halfX;
   var xS = d3.scaleLinear().domain([xMin, xMax]).range([0, W]);
   var yS = d3.scaleLinear().domain([yMax, yMin]).range([0, H]);
-  var host = document.getElementById('geodesic-svg-host');
   var svg = d3.select(host).append('svg')
     .attr('viewBox', '0 0 ' + W + ' ' + H)
-    .attr('width', '100%').style('max-width', W + 'px');
+    .attr('width', '100%').style('max-width', W + 'px')
+    .attr('role', 'group')
+    .attr('aria-label', 'Two draggable points in the upper half-plane, the hyperbolic geodesic between them and the straight Euclidean segment');
 
   // Real axis
   svg.append('line').attr('x1', 0).attr('y1', yS(yMin)).attr('x2', W).attr('y2', yS(yMin))
@@ -334,6 +354,15 @@ math('math-cayley',
   p2.call(d3.drag().on('drag', function (e) {
     z2.re = xS.invert(e.x); z2.im = Math.max(0.05, yS.invert(e.y)); updateGeo();
   }));
+  function keyStep(z) {
+    return function (dx, dy) {
+      z.re = Math.max(xMin, Math.min(xMax, z.re + 0.05 * dx));
+      z.im = Math.min(yMax, Math.max(0.05, z.im + 0.05 * dy));
+      updateGeo();
+    };
+  }
+  FigKit.keyMove(p1, 'Endpoint tau 1: arrow keys move it', keyStep(z1));
+  FigKit.keyMove(p2, 'Endpoint tau 2: arrow keys move it', keyStep(z2));
 
   var presets = {
     vert: [{ re: 0, im: 0.5 }, { re: 0, im: 3 }],
@@ -362,7 +391,9 @@ math('math-cayley',
   var yS = d3.scaleLinear().domain([yMax, yMin]).range([0, S]);
   var svgH = d3.select('#disk-half-host').append('svg')
     .attr('viewBox', '0 0 ' + S + ' ' + S)
-    .attr('width', S).style('max-width', '100%');
+    .attr('width', S).style('max-width', '100%')
+    .attr('role', 'group')
+    .attr('aria-label', 'Upper half-plane panel: a draggable point tau and the shaded fundamental domain');
 
   svgH.append('line').attr('x1', 0).attr('y1', yS(yMin)).attr('x2', S).attr('y2', yS(yMin))
     .attr('stroke', 'var(--c-axis)').attr('stroke-width', 1);
@@ -381,7 +412,9 @@ math('math-cayley',
   var dS = d3.scaleLinear().domain([-1.3, 1.3]).range([0, S]);
   var svgD = d3.select('#disk-disk-host').append('svg')
     .attr('viewBox', '0 0 ' + S + ' ' + S)
-    .attr('width', S).style('max-width', '100%');
+    .attr('width', S).style('max-width', '100%')
+    .attr('role', 'group')
+    .attr('aria-label', 'Poincare disk panel: the same point after the Cayley transform, w, and the image of the fundamental domain');
 
   svgD.append('circle').attr('cx', dS(0)).attr('cy', dS(0)).attr('r', dS(1) - dS(0))
     .attr('fill', 'none').attr('stroke', 'var(--c-axis)').attr('stroke-width', 1);
@@ -422,6 +455,19 @@ math('math-cayley',
     if (tau.im < 0.05) tau.im = 0.05;
     update();
   }));
+  FigKit.keyMove(hPoint, 'Point tau in the half-plane: arrow keys move it', function (dx, dy) {
+    tau.re = Math.max(xMin, Math.min(xMax, tau.re + 0.05 * dx));
+    tau.im = Math.min(yMax, Math.max(0.05, tau.im + 0.05 * dy));
+    update();
+  });
+  FigKit.keyMove(dPoint, 'Point w in the disk: arrow keys move it', function (dx, dy) {
+    var w = Mod.sl2z.toDisk(tau);
+    w = { re: w.re + 0.02 * dx, im: w.im + 0.02 * dy };
+    if (Mod.complex.abs(w) >= 0.99) return;
+    tau = Mod.sl2z.fromDisk(w);
+    if (tau.im < 0.05) tau.im = 0.05;
+    update();
+  });
   update();
 })();
 </script>
