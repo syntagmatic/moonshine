@@ -40,16 +40,20 @@
          - 0.0205 * tanh(30.4444 * (x - 0.6103));
   }
   // LFP cathode OCV: flat ~3.42 V plateau with small curvature at edges.
+  // Hand-made shape, not a published fit. The two corner terms are written
+  // as (tanh - 1) and (tanh + 1) so each is zero across the plateau and the
+  // flat part sits at `centre` (3.42 V at x = 0.5) instead of 0.04 V below it.
   function ocvLFP(x) {
     x = Math.max(0.001, Math.min(0.999, x));
     var centre = 3.42;
     var plateau = centre
-                + 0.004 * Math.log((1 - x) / x)    // entropic tails
-                - 0.02 * tanh((x - 0.02) / 0.01)   // upper-corner drop
-                + 0.02 * tanh((x - 0.98) / 0.01);
+                + 0.004 * Math.log((1 - x) / x)          // entropic tails
+                - 0.02 * (tanh((x - 0.02) / 0.01) - 1)   // upper-corner drop
+                + 0.02 * (tanh((x - 0.98) / 0.01) + 1);
     return Math.max(2.0, Math.min(3.7, plateau));
   }
   // NMC (solid solution): smoother S-curve from ~4.2 V → ~3.4 V.
+  // Hand-made shape, not a published fit.
   function ocvNMC(x) {
     x = Math.max(0.001, Math.min(0.999, x));
     return 4.25
@@ -388,7 +392,7 @@
   // A cell never uses an electrode's full range. Cell SOC 0..1 maps onto the
   // middle of the graphite range, x = 0.14..0.88, and the cathode takes 1 - x.
   // With the curves above this gives an NMC cell 2.9 V empty, 4.18 V full,
-  // and an LFP cell sitting on its 3.1-3.3 V plateau for almost all of it.
+  // and an LFP cell sitting on its 3.2-3.35 V plateau for almost all of it.
   var X_EMPTY = 0.14, X_FULL = 0.895;
   function ocvSoc(soc, chem) {
     return ocvCell(X_EMPTY + (X_FULL - X_EMPTY) * soc, chem);

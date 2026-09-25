@@ -189,8 +189,8 @@ internal link check.
   the "Phenols" column held ash. It is now the real `wine.data` (fce2cc7).
 
 Needs a human, from batch 4:
-- **Audit every embedded dataset that claims a real source** against that
-  source. PC 05 shows the batch-generated pages invented "real" data.
+- ~~Audit every embedded dataset that claims a real source.~~ Done
+  2026-09-24; see findings/datasets.md.
 - Captions that still say left/right for panels that stack on a phone: dt 01
   Fig 2, dt 04, lithium-ion 05, and some in EA.
 - Mouse-only paths:
