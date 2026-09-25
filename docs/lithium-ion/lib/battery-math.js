@@ -16,6 +16,7 @@
 // Li.bms         SOC estimation: coulomb counting, voltage lookup, 2-state EKF
 // Li.thermal     runaway propagation in a lumped thermal network (Arrhenius)
 // Li.fmt         number/axis formatting helpers
+// Li.theme       dark-scheme colour mapping and phone-width figure sizing
 
 (function (global) {
   'use strict';
@@ -245,7 +246,9 @@
   // Diffusion-limited aggregation in a rectangular box. Seed along the bottom
   // row (anode); random walkers enter from the top. Deposit onto cluster when
   // adjacent to a cluster cell. Returns a grid (Uint8Array) and a timeline.
-  function makeDLA(W, H, seedCount) {
+  // `rand` is an optional uniform [0,1) source (a seeded rng for a
+  // reproducible growth); it defaults to Math.random.
+  function makeDLA(W, H, seedCount, rand) {
     var grid = new Uint8Array(W * H);
     seedCount = seedCount || 3;
     for (var s = 0; s < seedCount; s++) {
@@ -255,8 +258,9 @@
     return {
       W: W, H: H, grid: grid, frontier: (H - 2),
       stickiness: 1.0, bias: 0.0, // bias > 0 pulls walkers down (field)
+      rand: rand || Math.random,
       walk: function (maxSteps) {
-        var x = Math.floor(Math.random() * this.W);
+        var x = Math.floor(this.rand() * this.W);
         var y = 0;
         for (var step = 0; step < maxSteps; step++) {
           // Check neighbours for cluster
@@ -266,7 +270,7 @@
           if (x > 0 && this.grid[y * this.W + (x - 1)]) { this.deposit(x, y); return true; }
           if (x < this.W - 1 && this.grid[y * this.W + (x + 1)]) { this.deposit(x, y); return true; }
           // Random walk step
-          var r = Math.random();
+          var r = this.rand();
           if (r < 0.25 - this.bias / 2) y = Math.max(0, y - 1);
           else if (r < 0.5 + this.bias / 2) y = Math.min(this.H - 1, y + 1);
           else if (r < 0.75) x = (x + 1) % this.W;
@@ -275,7 +279,7 @@
         return false;
       },
       deposit: function (x, y) {
-        if (Math.random() > this.stickiness) return;
+        if (this.rand() > this.stickiness) return;
         this.grid[y * this.W + x] = 1;
         this.frontier = Math.min(this.frontier, y);
       },
@@ -318,7 +322,10 @@
   // of the layer through itself. Arrhenius in T.
   //   k(T) = k_ref · exp( -Ea/R · (1/T - 1/T_ref) )
   // Defaults chosen so that at 25°C, 80% SOC storage: ~20 nm / year.
-  var SEI_K_REF = 2e-20;   // m²/s at T_ref, SOC_ref
+  // k_ref = (20 nm)² / 1 yr. It was 2e-20, which grew 790 nm in the first
+  // year, ran off the 0-50 nm axis of Part 3's Figure 1 and pinned Figure 2's
+  // calendar fade at its 30% clamp.
+  var SEI_K_REF = 1.27e-23;   // m²/s at T_ref, SOC_ref
   var SEI_EA = 50000;      // J/mol  (activation energy ~0.5 eV)
   var SEI_T_REF = 298.15;
   var SEI_SOC_REF = 0.8;
@@ -609,6 +616,89 @@
   }
   function mV(v) { return (v * 1000).toFixed(1) + ' mV'; }
 
+  // ─────────────────────────────────────────── theme ──
+  // Figure code and KaTeX strings are written with the light-theme hex
+  // values. theme.c(hex) returns the dark-theme counterpart when the reader
+  // prefers a dark scheme, so d3 always gets a resolved hex. The same pairs
+  // appear in each page's dark :root block. A scheme change reloads the page,
+  // since every figure bakes its colours in when it is built.
+  var DARK = {
+    // ink
+    '#1a1a2e': '#e4e4ec', '#111': '#e4e4ec', '#111827': '#e4e4ec',
+    '#0f172a': '#e4e4ec', '#1e293b': '#e4e4ec',
+    '#4a4a6a': '#a9abbf', '#334155': '#cbd5e1', '#475569': '#94a3b8',
+    '#64748b': '#9aa5b8',
+    // surfaces and rules
+    '#fff': '#1c1f26', '#ffffff': '#1c1f26', 'white': '#1c1f26',
+    '#fafafa': '#14161b',
+    '#f1f5f9': '#272b34', '#eef2f7': '#272b34', '#eef0f3': '#272b34',
+    '#e2e2e8': '#353945', '#e2e8f0': '#353945',
+    '#cbd5e1': '#4b5263', '#d4d4d8': '#4b5263', '#c0c0c0': '#5b6070',
+    // tints
+    '#dbeafe': '#1e3a5f', '#fee2e2': '#4a1f24', '#fef3c7': '#3d3212',
+    '#fed7aa': '#4a2e14', '#ede9fe': '#312a55',
+    // hues
+    '#2563eb': '#60a5fa', '#1d4ed8': '#93c5fd', '#1e3a8a': '#bfdbfe',
+    '#7c3aed': '#a78bfa', '#059669': '#34d399', '#0f766e': '#2dd4bf',
+    '#0369a1': '#38bdf8', '#0891b2': '#22d3ee',
+    '#d97706': '#f59e0b', '#b45309': '#fbbf24', '#92400e': '#fcd34d',
+    '#ea580c': '#fb923c', '#dc2626': '#f87171',
+    '#78350f': '#e3a969', '#5c2a0a': '#f0c08a', '#d6a36a': '#9a6a3a'
+  };
+  var darkMQ = global.matchMedia ? global.matchMedia('(prefers-color-scheme: dark)') : null;
+  function isDark() { return !!(darkMQ && darkMQ.matches); }
+  // theme.c(hex, darkHex): pass darkHex when the colour's role needs a
+  // different dark counterpart than the shared table gives.
+  function themeColor(hex, darkHex) {
+    if (!isDark()) return hex;
+    if (typeof darkHex === 'string') return darkHex;
+    var k = String(hex).toLowerCase();
+    return DARK.hasOwnProperty(k) ? DARK[k] : hex;
+  }
+  function themeTex(s) {
+    return isDark() ? s.replace(/#[0-9a-fA-F]{6}\b/g, function (h) { return themeColor(h); }) : s;
+  }
+  if (darkMQ && darkMQ.addEventListener) {
+    darkMQ.addEventListener('change', function () { global.location.reload(); });
+  }
+  // Make a drag-cursor figure usable from the keyboard. The svg becomes a
+  // focusable slider: arrows step, Shift+arrow steps 5x, Home/End jump.
+  // opts: label, min, max, step, get() -> value, set(value), text(value).
+  function keyCursor(svgNode, opts) {
+    var el = svgNode.node ? svgNode.node() : svgNode;
+    el.setAttribute('tabindex', '0');
+    el.setAttribute('role', 'slider');
+    el.setAttribute('aria-label', opts.label);
+    el.setAttribute('aria-valuemin', opts.min);
+    el.setAttribute('aria-valuemax', opts.max);
+    function sync() {
+      var v = opts.get();
+      el.setAttribute('aria-valuenow', +v.toFixed(4));
+      if (opts.text) el.setAttribute('aria-valuetext', opts.text(v));
+    }
+    el.addEventListener('keydown', function (e) {
+      var v = opts.get(), s = opts.step * (e.shiftKey ? 5 : 1), nv = null;
+      if (e.key === 'ArrowRight' || e.key === 'ArrowUp') nv = v + s;
+      else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') nv = v - s;
+      else if (e.key === 'Home') nv = opts.min;
+      else if (e.key === 'End') nv = opts.max;
+      if (nv === null) return;
+      e.preventDefault();
+      opts.set(Math.max(opts.min, Math.min(opts.max, nv)));
+      sync();
+    });
+    sync();
+    return sync;
+  }
+  // Width of a figure's drawing coordinates. On a phone the host is about
+  // 340 px wide, so a 680-unit viewBox would shrink 10-unit labels to 5 px.
+  // Below 560 px the figure is drawn in `narrow` units instead.
+  function figW(host, wide, narrow) {
+    var el = typeof host === 'string' ? document.querySelector(host) : host;
+    var w = el ? el.getBoundingClientRect().width : wide;
+    return w && w < 560 ? narrow : wide;
+  }
+
   // ─────────────────────────────────────────── export ──
   global.Li = {
     const: { F: F, R: R, T: T_ROOM, RT_F: RT_F },
@@ -640,6 +730,7 @@
     string: { draw: drawString, usable: usable, usableMC: usableMC },
     bms: { estimate: estimate },
     thermal: { run: thermal },
-    fmt: { sci: sci, sup: sup, mV: mV }
+    fmt: { sci: sci, sup: sup, mV: mV },
+    theme: { dark: isDark, c: themeColor, tex: themeTex, figW: figW, keyCursor: keyCursor }
   };
 })(window);

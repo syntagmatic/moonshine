@@ -111,7 +111,17 @@ svg .axis line, svg .axis path { stroke: var(--border); }
 .quake-card .verdict { font-family: var(--heading-font); font-size: 0.8rem; margin-top: 0.25rem; }
 .verdict-yes { color: #dc2626; font-weight: 700; }
 .verdict-no { color: #16a34a; font-weight: 700; }
+.step-buttons { flex-wrap: wrap; }
+@media (prefers-color-scheme: dark) {
+  .eq-code-stack { border-color: var(--border); }
+  .eq-block { background: #22222e; border-bottom-color: var(--border); }
+  .readout { background: #22222e; }
+  .map-tooltip { background: rgba(44,44,60,0.96); }
+  .verdict-yes { color: #f87171; }
+  .verdict-no { color: #4ade80; }
+}
 </style>
+<link rel="stylesheet" href="../shared/theme.css">
 </head>
 <body>
 <div class="map-tooltip" id="map-tooltip"></div>
@@ -330,13 +340,63 @@ const arrivals = [
 ];
 
 // ============================================================
+// Shared helpers for phone width, dark mode and labels
+// ============================================================
+const DARK = window.matchMedia("(prefers-color-scheme: dark)").matches;
+// Diagram ink: the light-page navy vanishes on a dark page
+const INK = DARK ? "#93c5fd" : "#1e40af";
+const MUTED = DARK ? "#a8a8bc" : "#4a4a6a";
+const WAVE = DARK ? "#60a5fa" : "#2563eb";
+const pageLang6 = () => ((window.getPageLang && window.getPageLang()) === "ja" ? "ja" : "en");
+// On a phone the svgs shrink to under half size. fsFor gives the factor that
+// brings text back near its nominal size; fsText applies it once per element.
+function fsFor(W, el, cap) {
+  const cw = (el && el.clientWidth) || W;
+  return Math.max(1, Math.min(cap || 2, W / cw));
+}
+function fsText(sel, fs) {
+  if (fs <= 1.01) return;
+  sel.selectAll("text").each(function () {
+    if (this.dataset.fs) return;
+    const v = parseFloat(this.getAttribute("font-size"));
+    if (v) this.setAttribute("font-size", v * fs);
+    this.dataset.fs = "1";
+  });
+}
+// Shrink any label wider than the viewBox and pull labels back inside it
+function fitText(svg, W) {
+  svg.selectAll("text").each(function () {
+    const b = this.getBBox();
+    if (b.width > W - 8) {
+      const v = parseFloat(this.getAttribute("font-size")) || 11;
+      this.setAttribute("font-size", v * (W - 8) / b.width);
+    }
+    const b2 = this.getBBox();
+    const x = parseFloat(this.getAttribute("x")) || 0;
+    if (b2.x + b2.width > W - 4) this.setAttribute("x", x - (b2.x + b2.width - (W - 4)));
+    else if (b2.x < 4) this.setAttribute("x", x + (4 - b2.x));
+  });
+}
+function ariaBoth(sel, en, ja) {
+  const f = () => sel.attr("aria-label", pageLang6() === "ja" ? ja : en);
+  f(); window.addEventListener("langchange", f);
+}
+
+// ============================================================
 // CROSS-SECTION DIAGRAM
 // ============================================================
 (function() {
-  const W = 700, H = 360;
+  const host = document.getElementById("cross-section");
+  const narrow = (host.clientWidth || 700) < 500;
+  const W = narrow ? 480 : 700, H = 360;
+  const fs = fsFor(W, host, 1.8);
   const svg = d3.select("#cross-section").append("svg")
     .attr("viewBox", `0 0 ${W} ${H}`)
-    .attr("width", "100%");
+    .attr("width", "100%")
+    .attr("role", "img");
+  ariaBoth(svg,
+    "Cross-section of a subduction zone: ocean above oceanic crust and mantle. The step buttons show the fault rupturing, the seafloor lifting the water column, and waves radiating outward.",
+    "沈み込み帯の断面図。海洋の下に海洋地殻とマントルがある。ボタンで、断層の破壊、海底の隆起による水柱の変位、波の放射を順に示す。");
 
   // Layers
   const waterColor = "#3b82f6", waterLight = "#93c5fd", crustColor = "#78716c";
@@ -357,7 +417,7 @@ const arrivals = [
     svg.append("rect").attr("x", 0).attr("y", crustBottom)
       .attr("width", W).attr("height", H - crustBottom).attr("fill", mantleColor).attr("opacity", 0.4);
     svg.append("text").attr("x", 30).attr("y", crustBottom + 35)
-      .text("Mantle").attr("data-i18n", "svg_mantle").attr("fill", "#78716c").attr("font-size", 11).attr("font-weight", 600);
+      .text("Mantle").attr("data-i18n", "svg_mantle").attr("fill", DARK ? "#d6d3d1" : "#78716c").attr("font-size", 11).attr("font-weight", 600);
 
     // Crust
     const crustY = waterBottom;
@@ -373,7 +433,8 @@ const arrivals = [
         .text("Fault plane").attr("data-i18n", "svg_fault_plane").attr("fill", "#ef4444").attr("font-size", 11).attr("font-weight", 600);
 
       // Plate labels
-      svg.append("text").attr("x", W/2 - 80).attr("y", crustY + 35)
+      svg.append("text").attr("x", narrow ? W/2 - 12 : W/2 - 80).attr("y", crustY + 35)
+        .attr("text-anchor", narrow ? "end" : "start")
         .text("Overriding plate").attr("data-i18n", "svg_overriding_plate").attr("fill", "#fff").attr("font-size", 11).attr("font-weight", 600);
       svg.append("text").attr("x", W/2 + 60).attr("y", crustY + 35)
         .text("Subducting plate").attr("data-i18n", "svg_subducting_plate").attr("fill", "#fff").attr("font-size", 11).attr("font-weight", 600);
@@ -431,11 +492,11 @@ const arrivals = [
           const ax = W/2 - 40 + i * 40;
           svg.append("line").attr("x1", ax).attr("y1", waterTop + 50)
             .attr("x2", ax).attr("y2", waterTop - 5)
-            .attr("stroke", "#1e40af").attr("stroke-width", 2).attr("marker-end", "url(#arrowB)")
+            .attr("stroke", INK).attr("stroke-width", 2).attr("marker-end", "url(#arrowB)")
             .attr("opacity", 0.7);
         }
         svg.append("text").attr("x", W/2).attr("y", waterTop - bulgeH - 12)
-          .text("Water column displaced upward").attr("data-i18n", "svg_water_displaced").attr("fill", "#1e40af").attr("font-size", 12)
+          .text("Water column displaced upward").attr("data-i18n", "svg_water_displaced").attr("fill", INK).attr("font-size", 12)
           .attr("font-weight", 600).attr("text-anchor", "middle");
       }
     } else {
@@ -463,20 +524,20 @@ const arrivals = [
       arrowData.forEach(a => {
         svg.append("line").attr("x1", a.x1).attr("y1", a.y1)
           .attr("x2", a.x2).attr("y2", a.y2)
-          .attr("stroke", "#1e40af").attr("stroke-width", 2.5).attr("marker-end", "url(#arrowB)");
+          .attr("stroke", INK).attr("stroke-width", 2.5).attr("marker-end", "url(#arrowB)");
       });
       svg.append("text").attr("x", W/2).attr("y", waveY - 18)
-        .text("Waves radiate in all directions").attr("data-i18n", "svg_waves_radiate").attr("fill", "#1e40af").attr("font-size", 12)
+        .text("Waves radiate in all directions").attr("data-i18n", "svg_waves_radiate").attr("fill", INK).attr("font-size", 12)
         .attr("font-weight", 600).attr("text-anchor", "middle");
     }
 
     // Sky/labels
     svg.append("text").attr("x", 15).attr("y", waterTop + 40)
-      .text("Ocean").attr("data-i18n", "svg_ocean").attr("fill", "#1e40af").attr("font-size", 11).attr("font-weight", 600);
+      .text("Ocean").attr("data-i18n", "svg_ocean").attr("fill", INK).attr("font-size", 11).attr("font-weight", 600);
     svg.append("text").attr("x", 15).attr("y", waterBottom + 25)
       .text("Oceanic crust").attr("data-i18n", "svg_oceanic_crust").attr("fill", "#fff").attr("font-size", 11).attr("font-weight", 600);
     svg.append("text").attr("x", 15).attr("y", 30)
-      .text("Surface").attr("data-i18n", "svg_surface").attr("fill", "#4a4a6a").attr("font-size", 11);
+      .text("Surface").attr("data-i18n", "svg_surface").attr("fill", MUTED).attr("font-size", 11);
 
     // Surface line
     svg.append("line").attr("x1", 0).attr("y1", waterTop).attr("x2", W).attr("y2", waterTop)
@@ -489,7 +550,7 @@ const arrivals = [
       .attr("orient", "auto").append("path").attr("d", "M0,0 L10,5 L0,10 Z").attr("fill", "#ef4444");
     defs.append("marker").attr("id", "arrowB").attr("viewBox", "0 0 10 10")
       .attr("refX", 9).attr("refY", 5).attr("markerWidth", 6).attr("markerHeight", 6)
-      .attr("orient", "auto").append("path").attr("d", "M0,0 L10,5 L0,10 Z").attr("fill", "#1e40af");
+      .attr("orient", "auto").append("path").attr("d", "M0,0 L10,5 L0,10 Z").attr("fill", INK);
     defs.append("marker").attr("id", "arrowY").attr("viewBox", "0 0 10 10")
       .attr("refX", 9).attr("refY", 5).attr("markerWidth", 6).attr("markerHeight", 6)
       .attr("orient", "auto").append("path").attr("d", "M0,0 L10,5 L0,10 Z").attr("fill", "#fbbf24");
@@ -497,12 +558,13 @@ const arrivals = [
 
   function reapplyI18n() {
     var lang = window.getPageLang ? window.getPageLang() : "en";
-    if (lang !== "ja") return;
     var ja = window.PAGE_JA || {};
-    svg.selectAll("[data-i18n]").each(function() {
+    if (lang === "ja") svg.selectAll("[data-i18n]").each(function() {
       var key = this.getAttribute("data-i18n");
       if (ja[key]) this.textContent = ja[key];
     });
+    fsText(svg, fs);
+    fitText(svg, W);
   }
 
   draw(0, false);
@@ -608,6 +670,7 @@ const arrivals = [
 // ============================================================
 (function() {
   const W = 700, H = 500;
+  const fs = fsFor(W, document.getElementById("propagation-map"), 1.7);
 
   // Projection: Pacific-centered Mercator-like
   // We'll use a custom equirectangular centered on 180°
@@ -634,10 +697,14 @@ const arrivals = [
 
   const svg = d3.select("#propagation-map").append("svg")
     .attr("viewBox", `0 0 ${W} ${H}`)
-    .attr("width", "100%");
+    .attr("width", "100%")
+    .attr("role", "img");
+  ariaBoth(svg,
+    "Animated map of the Pacific: tsunami wavefronts spread from the Tohoku epicenter, with arrival times marked for Japan, Hawaii, California and Chile. Tap the epicenter or a city for details.",
+    "太平洋の地図のアニメーション。東北の震央から津波の波面が広がり、日本、ハワイ、カリフォルニア、チリへの到達時刻が示される。震央や都市をタップすると詳細が表示される。");
 
   // Ocean background
-  svg.append("rect").attr("width", W).attr("height", H).attr("fill", "#e0f2fe");
+  svg.append("rect").attr("width", W).attr("height", H).attr("fill", DARK ? "#18202e" : "#e0f2fe");
 
   // Draw coastlines
   const coastGroup = svg.append("g");
@@ -648,8 +715,8 @@ const arrivals = [
       .y(d => projLat(d[1]));
     const g = coastGroup.append("path")
       .attr("d", line(points) + (close ? " Z" : ""))
-      .attr("fill", close ? "#e8e8e0" : "none")
-      .attr("stroke", "#bbb")
+      .attr("fill", close ? "var(--land)" : "none")
+      .attr("stroke", "var(--land-stroke)")
       .attr("stroke-width", 1.2);
     return g;
   }
@@ -701,8 +768,8 @@ const arrivals = [
     worldGroup.append("path")
       .datum(landFeature)
       .attr("d", worldPath)
-      .attr("fill", "#e8e8e0")
-      .attr("stroke", "#bbb")
+      .attr("fill", "var(--land)")
+      .attr("stroke", "var(--land-stroke)")
       .attr("stroke-width", 0.6);
   });
 
@@ -713,8 +780,8 @@ const arrivals = [
       .data(japanFeatures.features)
       .join("path")
       .attr("d", japanPath)
-      .attr("fill", "#e8e8e0")
-      .attr("stroke", "#bbb")
+      .attr("fill", "var(--land)")
+      .attr("stroke", "var(--land-stroke)")
       .attr("stroke-width", 0.5);
   });
 
@@ -735,9 +802,10 @@ const arrivals = [
   cities.forEach(c => {
     const cx = projLon(c.lon), cy = projLat(c.lat);
     cityGroup.append("circle").attr("cx", cx).attr("cy", cy)
-      .attr("r", 2.5).attr("fill", "#1a1a2e").attr("stroke", "#fff").attr("stroke-width", 0.8)
+      .attr("r", 2.5 * Math.min(fs, 1.5)).attr("fill", "var(--text)").attr("stroke", "var(--fig-bg)").attr("stroke-width", 0.8)
       .style("cursor", "pointer")
-      .on("pointerenter", function(event) {
+      .on("pointerenter click", function(event) {
+        tooltip.style("left", (event.pageX + 12) + "px").style("top", (event.pageY - 20) + "px");
         var cLang = window.getPageLang ? window.getPageLang() : "en";
         var cName = cLang === "ja" && c.ja ? c.ja : c.name;
         tooltip.html(`<strong>${cName}</strong><br>${cityDetails[c.name]}`)
@@ -748,7 +816,7 @@ const arrivals = [
       })
       .on("pointerleave", function() { tooltip.classed("visible", false); });
     cityGroup.append("text").attr("x", cx + c.dx).attr("y", cy + c.dy)
-      .text(c.name).attr("data-i18n", "svg_city_" + c.name.toLowerCase()).attr("fill", "#1a1a2e").attr("font-size", 9).attr("font-weight", 600)
+      .text(c.name).attr("data-i18n", "svg_city_" + c.name.toLowerCase()).attr("fill", "var(--text)").attr("font-size", 9).attr("font-weight", 600)
       .attr("text-anchor", c.dx < 0 ? "end" : "start");
   });
 
@@ -758,9 +826,10 @@ const arrivals = [
   // Epicenter
   const epX = projLon(epicenter.lon), epY = projLat(epicenter.lat);
   svg.append("circle").attr("cx", epX).attr("cy", epY)
-    .attr("r", 5).attr("fill", "#ef4444").attr("stroke", "#fff").attr("stroke-width", 1.5)
+    .attr("r", 5 * Math.min(fs, 1.5)).attr("fill", "#ef4444").attr("stroke", "var(--fig-bg)").attr("stroke-width", 1.5)
     .style("cursor", "pointer")
-    .on("pointerenter", function(event) {
+    .on("pointerenter click", function(event) {
+      tooltip.style("left", Math.min(event.pageX + 12, window.innerWidth - 210) + "px").style("top", (event.pageY - 20) + "px");
       var eLang = window.getPageLang ? window.getPageLang() : "en";
       tooltip.html(eLang === "ja"
         ? "<strong>M9.1 震央</strong><br>北緯38.3度、東経142.4度<br>深さ: 29 km<br>2011年3月11日 14:46 JST"
@@ -773,6 +842,12 @@ const arrivals = [
     .on("pointerleave", function() { tooltip.classed("visible", false); });
   svg.append("text").attr("x", epX + 8).attr("y", epY - 8)
     .text("M9.1 Epicenter").attr("data-i18n", "svg_epicenter").attr("fill", "#ef4444").attr("font-size", 10).attr("font-weight", 700);
+
+  fsText(svg, fs);
+  // taps elsewhere close the tooltip (a tap fires pointerleave at once)
+  document.addEventListener("click", ev => {
+    if (!ev.target.closest("#propagation-map circle")) tooltip.classed("visible", false);
+  });
 
   // Wavefront group
   const waveGroup = svg.append("g");
@@ -841,7 +916,7 @@ const arrivals = [
         .attr("cx", epX).attr("cy", epY)
         .attr("rx", rx).attr("ry", ry)
         .attr("fill", "none")
-        .attr("stroke", "#2563eb")
+        .attr("stroke", WAVE)
         .attr("stroke-width", h === nRings ? 1.8 : 0.8)
         .attr("stroke-opacity", opacity)
         .style("cursor", "pointer")
@@ -866,7 +941,7 @@ const arrivals = [
         waveGroup.append("text")
           .attr("x", lx).attr("y", ly - 4)
           .text(h + "h")
-          .attr("fill", "#2563eb").attr("font-size", 9).attr("opacity", Math.min(1, opacity + 0.3))
+          .attr("fill", WAVE).attr("font-size", 9).attr("opacity", Math.min(1, opacity + 0.3))
           .attr("text-anchor", "middle");
       }
     }
@@ -884,7 +959,7 @@ const arrivals = [
         .attr("cx", epX).attr("cy", epY)
         .attr("rx", rx).attr("ry", ry)
         .attr("fill", "none")
-        .attr("stroke", "#2563eb")
+        .attr("stroke", WAVE)
         .attr("stroke-width", 2)
         .attr("stroke-opacity", 0.7);
     }
@@ -895,7 +970,7 @@ const arrivals = [
         const ax = projLon(a.lon), ay = projLat(a.lat);
         // Marker with tooltip
         labelGroup.append("circle").attr("cx", ax).attr("cy", ay)
-          .attr("r", 4).attr("fill", "#ef4444").attr("stroke", "#fff").attr("stroke-width", 1)
+          .attr("r", 4).attr("fill", "#ef4444").attr("stroke", "var(--fig-bg)").attr("stroke-width", 1)
           .style("cursor", "pointer")
           .on("pointerenter", function(event) {
             const hrs = Math.floor(a.hours);
@@ -918,7 +993,7 @@ const arrivals = [
         labelGroup.append("text")
           .attr("x", ax + dx).attr("y", ay + dy - 4)
           .text(`${arrName} ~${a.hours}h`)
-          .attr("fill", "#1a1a2e").attr("font-size", 10).attr("font-weight", 600)
+          .attr("fill", "var(--text)").attr("font-size", 10).attr("font-weight", 600)
           .attr("text-anchor", a.anchor || "start");
       }
     });
@@ -955,6 +1030,7 @@ const arrivals = [
     // Update time display
     const hrs = Math.floor(t);
     const mins = Math.floor((t - hrs) * 60);
+    fsText(waveGroup, fs); fsText(labelGroup, fs);
     d3.select("#time-display").text(`T + ${hrs}h ${String(mins).padStart(2, '0')}m`);
   }
 
@@ -1053,10 +1129,17 @@ const arrivals = [
 // SHOALING DIAGRAM
 // ============================================================
 (function() {
-  const W = 700, H = 320;
+  const host = document.getElementById("shoaling-diagram");
+  const narrow = (host.clientWidth || 700) < 500;
+  const W = narrow ? 480 : 700, H = 320;
+  const fs = fsFor(W, host, 1.8);
   const svg = d3.select("#shoaling-diagram").append("svg")
     .attr("viewBox", `0 0 ${W} ${H}`)
-    .attr("width", "100%");
+    .attr("width", "100%")
+    .attr("role", "img");
+  ariaBoth(svg,
+    "Side view of a tsunami moving from deep ocean toward the coast. The buttons step from deep ocean to continental shelf to near shore, where the seafloor rises and the wave slows, shortens and grows taller.",
+    "深海から海岸へ進む津波の側面図。ボタンで深海、大陸棚、沿岸の順に切り替えると、海底が浅くなるにつれて波が遅くなり、短くなり、高くなる様子を示す。");
 
   let currentStep = 0;
 
@@ -1089,8 +1172,8 @@ const arrivals = [
 
     // Wave on surface
     const waveConfigs = [
-      { amp: 3, waveLen: W * 0.7, label: "Height: ~1 m\nWavelength: ~200 km", color: "#1e40af" },
-      { amp: 12, waveLen: W * 0.35, label: "Height: ~2-3 m\nWavelength: ~50 km", color: "#1e40af" },
+      { amp: 3, waveLen: W * 0.7, label: "Height: ~1 m\nWavelength: ~200 km", color: INK },
+      { amp: 12, waveLen: W * 0.35, label: "Height: ~2-3 m\nWavelength: ~50 km", color: INK },
       { amp: 40, waveLen: W * 0.1, label: "Height: 10-40 m\nWavelength: ~1 km", color: "#dc2626" }
     ];
     const wc = waveConfigs[step];
@@ -1135,34 +1218,34 @@ const arrivals = [
     // Depth labels
     if (step === 0) {
       svg.append("text").attr("x", W/2).attr("y", 160)
-        .text("Depth: ~4,000 m").attr("fill", "#1e40af").attr("font-size", 12)
+        .text("Depth: ~4,000 m").attr("fill", INK).attr("font-size", 12)
         .attr("text-anchor", "middle").attr("opacity", 0.7);
       svg.append("text").attr("x", W/2).attr("y", 30)
         .text("Deep ocean: wave is undetectable at surface").attr("data-i18n", "svg_deep_ocean")
-        .attr("fill", "#1e40af").attr("font-size", 13).attr("font-weight", 600).attr("text-anchor", "middle");
+        .attr("fill", INK).attr("font-size", 13).attr("font-weight", 600).attr("text-anchor", "middle");
     } else if (step === 1) {
       svg.append("text").attr("x", 100).attr("y", 160)
-        .text("4,000 m").attr("fill", "#1e40af").attr("font-size", 11).attr("text-anchor", "middle").attr("opacity", 0.7);
+        .text("4,000 m").attr("fill", INK).attr("font-size", 11).attr("text-anchor", "middle").attr("opacity", 0.7);
       svg.append("text").attr("x", W - 80).attr("y", 140)
-        .text("200 m").attr("fill", "#1e40af").attr("font-size", 11).attr("text-anchor", "middle").attr("opacity", 0.7);
+        .text("200 m").attr("fill", INK).attr("font-size", 11).attr("text-anchor", "middle").attr("opacity", 0.7);
       svg.append("text").attr("x", W/2).attr("y", 30)
         .text("Continental shelf: wave slows and grows").attr("data-i18n", "svg_continental_shelf")
-        .attr("fill", "#1e40af").attr("font-size", 13).attr("font-weight", 600).attr("text-anchor", "middle");
+        .attr("fill", INK).attr("font-size", 13).attr("font-weight", 600).attr("text-anchor", "middle");
       // Speed annotations
       svg.append("text").attr("x", 60).attr("y", surfaceY + 30)
-        .text("700 km/h").attr("fill", "#4a4a6a").attr("font-size", 10);
+        .text("700 km/h").attr("fill", MUTED).attr("font-size", 10);
       svg.append("text").attr("x", W - 100).attr("y", surfaceY - 10)
-        .text("150 km/h").attr("fill", "#4a4a6a").attr("font-size", 10);
+        .text("150 km/h").attr("fill", MUTED).attr("font-size", 10);
     } else {
       svg.append("text").attr("x", 100).attr("y", 170)
-        .text("4,000 m").attr("fill", "#1e40af").attr("font-size", 11).attr("text-anchor", "middle").attr("opacity", 0.7);
+        .text("4,000 m").attr("fill", INK).attr("font-size", 11).attr("text-anchor", "middle").attr("opacity", 0.7);
       svg.append("text").attr("x", W - 60).attr("y", 110)
-        .text("10 m").attr("fill", "#1e40af").attr("font-size", 11).attr("text-anchor", "middle").attr("opacity", 0.7);
+        .text("10 m").attr("fill", INK).attr("font-size", 11).attr("text-anchor", "middle").attr("opacity", 0.7);
       svg.append("text").attr("x", W/2).attr("y", 30)
         .text("Near shore: catastrophic wave heights").attr("data-i18n", "svg_near_shore")
         .attr("fill", "#dc2626").attr("font-size", 13).attr("font-weight", 700).attr("text-anchor", "middle");
       svg.append("text").attr("x", 60).attr("y", surfaceY + 30)
-        .text("700 km/h").attr("fill", "#4a4a6a").attr("font-size", 10);
+        .text("700 km/h").attr("fill", MUTED).attr("font-size", 10);
       svg.append("text").attr("x", W - 100).attr("y", surfaceY - 50)
         .text("36 km/h").attr("fill", "#dc2626").attr("font-size", 11).attr("font-weight", 600);
 
@@ -1178,25 +1261,26 @@ const arrivals = [
     // Direction arrow
     svg.append("line").attr("x1", 30).attr("y1", surfaceY + 50)
       .attr("x2", 120).attr("y2", surfaceY + 50)
-      .attr("stroke", "#4a4a6a").attr("stroke-width", 1.5).attr("marker-end", "url(#arrowGray)");
+      .attr("stroke", MUTED).attr("stroke-width", 1.5).attr("marker-end", "url(#arrowGray)");
     svg.append("text").attr("x", 75).attr("y", surfaceY + 65)
-      .text("Toward coast").attr("data-i18n", "svg_toward_coast").attr("fill", "#4a4a6a").attr("font-size", 10).attr("text-anchor", "middle");
+      .text("Toward coast").attr("data-i18n", "svg_toward_coast").attr("fill", MUTED).attr("font-size", 10).attr("text-anchor", "middle");
 
     // Defs
     const defs = svg.append("defs");
     defs.append("marker").attr("id", "arrowGray").attr("viewBox", "0 0 10 10")
       .attr("refX", 9).attr("refY", 5).attr("markerWidth", 6).attr("markerHeight", 6)
-      .attr("orient", "auto").append("path").attr("d", "M0,0 L10,5 L0,10 Z").attr("fill", "#4a4a6a");
+      .attr("orient", "auto").append("path").attr("d", "M0,0 L10,5 L0,10 Z").attr("fill", MUTED);
   }
 
   function reapplyI18nShoaling() {
     var lang = window.getPageLang ? window.getPageLang() : "en";
-    if (lang !== "ja") return;
     var ja = window.PAGE_JA || {};
-    svg.selectAll("[data-i18n]").each(function() {
+    if (lang === "ja") svg.selectAll("[data-i18n]").each(function() {
       var key = this.getAttribute("data-i18n");
       if (ja[key]) this.textContent = ja[key];
     });
+    fsText(svg, fs);
+    fitText(svg, W);
   }
 
   draw(0);
@@ -1229,8 +1313,8 @@ const arrivals = [
 (function() {
   const types = [
     {
-      label: "Shallow thrust fault",
-      verdict: "TSUNAMI",
+      label: "Shallow thrust fault", labelJa: "浅い逆断層",
+      verdict: "TSUNAMI", verdictJa: "津波あり",
       verdictClass: "verdict-yes",
       draw: function(svg, W, H) {
         // Two blocks, one pushing up
@@ -1257,7 +1341,7 @@ const arrivals = [
         // Water bulge arrow
         svg.append("line").attr("x1", W*0.25).attr("y1", mid - 40)
           .attr("x2", W*0.25).attr("y2", mid - 58)
-          .attr("stroke", "#1e40af").attr("stroke-width", 1.5).attr("marker-end", "url(#arrowB2)");
+          .attr("stroke", INK).attr("stroke-width", 1.5).attr("marker-end", "url(#arrowB2)");
         // Defs
         const defs = svg.append("defs");
         defs.append("marker").attr("id", "arrowR2").attr("viewBox", "0 0 10 10")
@@ -1265,12 +1349,12 @@ const arrivals = [
           .attr("orient", "auto").append("path").attr("d", "M0,0 L10,5 L0,10 Z").attr("fill", "#ef4444");
         defs.append("marker").attr("id", "arrowB2").attr("viewBox", "0 0 10 10")
           .attr("refX", 9).attr("refY", 5).attr("markerWidth", 5).attr("markerHeight", 5)
-          .attr("orient", "auto").append("path").attr("d", "M0,0 L10,5 L0,10 Z").attr("fill", "#1e40af");
+          .attr("orient", "auto").append("path").attr("d", "M0,0 L10,5 L0,10 Z").attr("fill", INK);
       }
     },
     {
-      label: "Deep earthquake",
-      verdict: "NO TSUNAMI",
+      label: "Deep earthquake", labelJa: "深発地震",
+      verdict: "NO TSUNAMI", verdictJa: "津波なし",
       verdictClass: "verdict-no",
       draw: function(svg, W, H) {
         // Deep rupture, far from seafloor
@@ -1295,8 +1379,8 @@ const arrivals = [
       }
     },
     {
-      label: "Strike-slip fault",
-      verdict: "NO TSUNAMI",
+      label: "Strike-slip fault", labelJa: "横ずれ断層",
+      verdict: "NO TSUNAMI", verdictJa: "津波なし",
       verdictClass: "verdict-no",
       draw: function(svg, W, H) {
         const mid = H * 0.55;
@@ -1339,10 +1423,25 @@ const arrivals = [
     const svgW = 200, svgH = 130;
     const svg = card.append("svg")
       .attr("viewBox", `0 0 ${svgW} ${svgH}`)
-      .attr("width", "100%");
+      .attr("width", "100%")
+      .attr("aria-hidden", "true");
     t.draw(svg, svgW, svgH);
-    card.append("div").attr("class", "label").text(t.label);
-    card.append("div").attr("class", `verdict ${t.verdictClass}`).text(t.verdict);
+    const lab = card.append("div").attr("class", "label");
+    const ver = card.append("div").attr("class", `verdict ${t.verdictClass}`);
+    // small in-drawing words, translated with the card
+    const SVG_JA = { "ocean": "海", "deep": "深部", "no vertical displacement": "鉛直変位なし" };
+    svg.selectAll("text").each(function () { this.dataset.en = this.textContent; });
+    const setLang = () => {
+      const ja = pageLang6() === "ja";
+      lab.text(ja ? t.labelJa : t.label);
+      ver.text(ja ? t.verdictJa : t.verdict);
+      svg.selectAll("text").each(function () {
+        const en = this.dataset.en;
+        this.textContent = ja && SVG_JA[en] ? SVG_JA[en] : en;
+      });
+    };
+    setLang();
+    window.addEventListener("langchange", setLang);
   });
 })();
 </script>
