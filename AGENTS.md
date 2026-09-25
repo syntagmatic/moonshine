@@ -18,7 +18,9 @@ no dependencies, no tests; `package.json` is plugin-marketplace metadata only.
   with intro prose + cards) plus numbered articles (`01-the-loop.html`, ...).
   `docs/index.html` is the homepage; `docs/lib/motion.js` is the shared
   reduced-motion helper (`Motion.reduced()`, opt-in override banner).
-- `plans/` — per-series planning docs (markdown files or dirs with briefs/CLAIMS.md)
+- `plans/` — one `<series>/PROMPT.md` per live series: a prompt that could
+  regenerate the series as it stands, kept in sync with its pages (see
+  `plans/README.md`). Ledgers sit beside them as `LEDGER.md`
 - `temp/` — scratch research
 
 ## Commands

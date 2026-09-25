@@ -148,6 +148,9 @@ Audit `plugins/moonshine/*.md` (1.5k lines) with the writing-for-agents skill:
 Triage `plans/`: archive plans whose series have shipped, and mark the three
 page-less plans as active or shelved.
 
+Done 2026-09-25. `plans/` now holds one PROMPT.md per live series, describing
+the series as it stands after the audit; old plans live in git history.
+
 ## Cost and ordering
 
 Phases 0-1 take one session. Phases 2-4 cost about one subagent per series

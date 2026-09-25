@@ -3,7 +3,7 @@
 // Depends on `tda-math.js` (must be loaded first) for simplicial complexes,
 // boundary operators over Z/2, and persistent homology.
 //
-// Public sections — API SURFACE IS FROZEN. See plans/cohomology/AGENTS.md.
+// Public sections — API SURFACE IS FROZEN.
 // -------------------------------------------------------------------------
 //   COH.tri          Canonical triangulations (torus, sphere, RP^2, Klein, annulus, figure-8)
 //   COH.cochain      Cochain groups as the duals of TDA chain groups
