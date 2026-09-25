@@ -92,9 +92,48 @@ Layout, defaults, motion, accessibility:
   narrower viewBoxes so labels do not collide.
 - Seeded: 01 invariance check samples, 02 Figure 4 orbit sample.
 
+## game-is-the-math
+
+Cut or merged: none. Every figure pair I checked differs in data or chart
+type (01 Figures 3 and 4: bit grid for three heaps vs. n-heap winning-move
+readout; 08 Figures 1 and 2: game tree vs. thermograph of the same switch; 09
+Figures 1 and 2: play vs. random full boards with a no-draw tally).
+
+Fixed because it was wrong:
+- 10: an unclosed `@media (max-width: 640px) {` swallowed the rest of the
+  stylesheet, so the footer styles applied only on phones. Removed.
+
+Layout, defaults, accessibility:
+- Keyboard: every clickable piece (heap rows, beads, Hackenbush edges, game
+  tree nodes, board cells, hex cells, number chips) is now a focusable button
+  through `lib/figure-a11y.js`. 10 Figure 1 had one click handler on the whole
+  board; the segments now carry their own labels ("Horizontal segment, row 2,
+  column 3") and show the hover highlight on focus.
+- Hover-only: 01 Figure 2 cell details showed only on hover; tap now shows
+  them and the text says so.
+- Phone layout: 04 Figure 3 set the theorem as one wide KaTeX `aligned` block
+  that was cut off; it is now text with inline math. 06 Figure 1 day-4 labels
+  collided (they now alternate between two rows) and the day labels were
+  clipped; 06 Figure 4 option chips overflowed their panel; 07 Figure 2 board
+  was a fixed 360px and was cut off; 07 Figure 3 strip table used 18px cells
+  per square, so the length-8 row was about 170px tall; 05 Figure 5 (18 small stalks) was a
+  two-column stack two screens tall and is now four columns; 01 an inline
+  list of eight pairs could not wrap.
+- Sensible defaults: 09 Figure 2 opened on an empty board; it now opens on a
+  seeded full board with the winning chain drawn.
+- Dark mode: text on filled accents (active buttons, set bits) flips to
+  near-black, since the accents get lighter.
+- Motion: this series has no animation loops, only short delayed computer
+  moves; 03 and 08 already skip the delay under reduced motion.
+- 03 Figure 2 opened on a random preset; it now opens on the first one.
+
 ## Randomness left in place
 
 - noether 01 "Apply a random shuffle", 02 "random M" buttons: shuffles.
+- games 01 "Random position", 02 "Random length", 04 "random shared
+  position", 09 "Random fill", 03 "New position": reader-requested shuffles.
+- games 09 and 10 computer opponents break ties with a little noise, so they
+  do not replay the same game every time. That is the point of an opponent.
 
 ## Needs a human
 
@@ -102,5 +141,11 @@ Layout, defaults, motion, accessibility:
   homepage and other series may not match until their tracks land.
 - noether 02, 04, 05 still use colored verdict boxes (green/red bars) inside
   the workshops. They are part of the readout, so I left them.
+- games: several figures still use dashboard-style pieces (04 FAT/WINNING
+  badges, 05 value badge, 10 score cards, colored "your turn" banners). They
+  are game state, not decoration, so I left them, but they are the closest
+  thing to status badges left in these series.
+- games 02 and 05: Hackenbush edges are short on a phone (a 3-edge stalk is
+  about 40px tall), so tapping one edge is fiddly. Keyboard works.
 - noether 06 Figures 1 and 2 both draw the pendulum phase portrait; Figure 2
   adds H(t) and the kick, so I kept both.
