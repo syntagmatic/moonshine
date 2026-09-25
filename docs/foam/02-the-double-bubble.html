@@ -116,13 +116,19 @@
 
 <script src="../lib/motion.js"></script>
 <script>
+// KaTeX \\color{} takes literal hex: swap light concept colors for the dark theme's.
+var TEX_DARK = window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches;
+function texSrc(src) {
+  var map = { '#c2410c': '#fb923c', '#be123c': '#fb7185', '#0e7490': '#2dd4bf', '#0d9488': '#5eead4', '#7c3aed': '#c084fc', '#2563eb': '#60a5fa' };
+  return TEX_DARK ? src.replace(/#[0-9a-fA-F]{6}/g, function (h) { return map[h.toLowerCase()] || h; }) : src;
+}
 window.addEventListener('load', function () {
   if (!window.katex) return;
   document.querySelectorAll('[data-tex]').forEach(function (el) {
-    katex.render(el.getAttribute('data-tex'), el, { throwOnError: false });
+    katex.render(texSrc(el.getAttribute('data-tex')), el, { throwOnError: false });
   });
   document.querySelectorAll('[data-tex-display]').forEach(function (el) {
-    katex.render(el.getAttribute('data-tex-display'), el, { throwOnError: false, displayMode: true });
+    katex.render(texSrc(el.getAttribute('data-tex-display')), el, { throwOnError: false, displayMode: true });
   });
 });
 
@@ -135,10 +141,18 @@ function pointInPoly(p, poly) {
   return inside;
 }
 
+// Crop a static diagram's viewBox to its drawing, so it fills a phone screen;
+// max-width keeps the desktop size at one unit per pixel.
+function fitSvg(svg, pad) {
+  var bb = svg.node().getBBox(), w = bb.width + 2 * pad, h = bb.height + 2 * pad;
+  svg.attr('viewBox', [bb.x - pad, bb.y - pad, w, h].join(' '))
+    .style('max-width', w + 'px').style('margin', '0 auto');
+}
+
 // ---------- Figure 1: isoperimetric (equal area, compare perimeter) ----------
 (function () {
   var host = d3.select('#fig-iso');
-  var row = host.append('div').style('display', 'flex').style('gap', '2rem').style('flex-wrap', 'wrap').style('justify-content', 'center');
+  var row = host.append('div').style('display', 'flex').style('gap', 'clamp(0.75rem, 3vw, 2rem)').style('justify-content', 'center');
   var A = 6000; // common area in px^2
   var shapes = [
     { name: 'Circle', P: 2 * Math.sqrt(Math.PI * A), best: true, draw: function (g, cx, cy) {
@@ -159,11 +173,12 @@ function pointInPoly(p, poly) {
   ];
   var pMin = d3.min(shapes, function (d) { return d.P; });
   shapes.forEach(function (sh) {
-    var card = row.append('div').style('text-align', 'center');
-    var svg = card.append('svg').attr('viewBox', '0 0 150 150').attr('width', 150).attr('height', 150);
+    var card = row.append('div').style('text-align', 'center').style('flex', '1 1 0').style('max-width', '150px');
+    var svg = card.append('svg').attr('viewBox', '0 0 150 150').style('width', '100%').style('height', 'auto')
+      .attr('role', 'img').attr('aria-label', 'A ' + sh.name.toLowerCase() + ' enclosing the common area');
     sh.draw(svg.append('g'), 75, 75);
     card.append('div').style('font-family', 'var(--heading-font)').style('font-weight', '700').style('margin-top', '0.4rem').style('color', sh.best ? 'var(--c-cell)' : 'var(--text)').text(sh.name);
-    card.append('div').style('font-family', 'var(--mono-font)').style('font-size', '0.95rem').style('color', 'var(--text-2)')
+    card.append('div').style('font-family', 'var(--mono-font)').style('font-size', 'clamp(0.75rem, 3.2vw, 0.95rem)').style('color', 'var(--text-2)')
       .html('perimeter ' + (sh.P / pMin).toFixed(3) + '&times;');
   });
 })();
@@ -173,7 +188,8 @@ function pointInPoly(p, poly) {
   var W = 680, H = 360, y0 = 74, CX = W / 2, CY = H / 2, deg = Math.PI / 180;
   var host = d3.select('#fig-db');
   var svg = host.append('svg').attr('viewBox', '0 0 ' + W + ' ' + H).attr('width', '100%').style('display', 'block')
-    .style('background', 'var(--fig-bg)').style('border-radius', '4px');
+    .style('background', 'var(--fig-bg)').style('border-radius', '4px')
+    .attr('role', 'img').attr('aria-label', 'Cross-section of a double bubble for the chosen volume ratio: two spherical caps and the wall between them, the three films meeting at 120 degrees along the seam.');
   var gFill = svg.append('g'), gFilm = svg.append('g'), gMark = svg.append('g');
   var readout = d3.select('#db-readout');
 
@@ -249,7 +265,8 @@ function pointInPoly(p, poly) {
 (function () {
   var W = 680, H = 230, cx = W / 2, cy = H / 2;
   var host = d3.select('#fig-torus');
-  var svg = host.append('svg').attr('viewBox', '0 0 ' + W + ' ' + H).attr('width', '100%').style('display', 'block');
+  var svg = host.append('svg').attr('viewBox', '0 0 ' + W + ' ' + H).attr('width', '100%').style('display', 'block')
+    .attr('role', 'img').attr('aria-label', 'Schematic cross-section of a non-standard competitor: a ball of one gas wrapped in a torus of the other, marked unstable.');
 
   // cross-section: central ball + torus wrapping it (two lobes left/right in section)
   svg.append('ellipse').attr('cx', cx).attr('cy', cy).attr('rx', 120).attr('ry', 78)
@@ -261,6 +278,7 @@ function pointInPoly(p, poly) {
   // an instability arrow
   svg.append('text').attr('x', cx + 150).attr('y', cy - 2).attr('text-anchor', 'start').attr('font-size', 22).style('fill', 'var(--c-angle)').text('✕');
   svg.append('text').attr('x', cx + 150).attr('y', cy + 20).attr('text-anchor', 'start').attr('font-size', 12).style('fill', 'var(--text-2)').text('unstable');
+  fitSvg(svg, 10);
 })();
 </script>
 </body>
