@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Reading the Forest — Decision Trees</title>
+<title>Reading the Forest | Decision Trees</title>
 <script src="../vendor/js/d3.v7.min.js"></script>
 <link href="../vendor/fonts/sans-serif-mono/fonts.css" rel="stylesheet">
 <script src="../lib/motion.js"></script>
@@ -95,26 +95,20 @@ svg text { font-family: var(--heading-font); }
 
 <div class="header">
   <h1>Reading the Forest</h1>
-  <p class="subtitle">Chapter 5 of 6. A single tree is readable. A thousand trees are not. Two tools recover the readability: one global ("what does the model care about?") and one per-prediction, "why did it say that?"</p>
+  <p class="subtitle">Chapter 5 of 6. You can read a single tree by looking at it, but not a thousand. This chapter covers one global tool (which features does the model rely on?) and one per-prediction tool (why did it give this answer?).</p>
 </div>
 
-<p>A single decision tree is interpretable: draw it, point at each split, explain it. That's gone for a thousand boosted trees, where the prediction is a sum of tiny contributions and no one tree carries the explanation.</p>
-
-<p>Two techniques recover interpretability: a global view (what features the ensemble relies on) and a per-prediction view (how each feature contributed to a specific call).</p>
+<p>A single decision tree can be drawn and each split explained. A thousand boosted trees can't: the prediction is a sum of tiny contributions and no one tree carries the explanation.</p>
 
 <h2>What a split tells you</h2>
 
-<p>Before a split there's uncertainty about the label; after, knowing which side of the threshold a row fell on, usually less. The reduction is <em>information gain</em>. High-gain splits partition data into purer groups.</p>
-
-<p>Summing information gain across nodes where a feature was used, weighted by rows passing through, is the standard <em>mean decrease in impurity</em> metric.</p>
-
-<p>It has a famous failure mode.</p>
+<p>Before a split there is some uncertainty about the label. After it, knowing which side of the threshold a row fell on, there is usually less. The reduction is <em>information gain</em>. Summing it over the nodes where a feature is used, weighted by the rows passing through, gives the standard <em>mean decrease in impurity</em> importance, which has a well-known failure mode.</p>
 
 <h2>The ID-column trap</h2>
 
-<p>A unique identifier (user ID, microsecond timestamp) splits every row into its own leaf. Every leaf is perfectly pure, gain is maximal, and the resulting tree is useless on any new row with an unseen ID — the feature has the highest possible importance and zero signal.</p>
+<p>A unique identifier (user ID, microsecond timestamp) splits every row into its own leaf. Every leaf is pure and the gain is as large as it can be, yet the split is useless on any new row with an unseen ID. The feature gets the highest possible importance while carrying no signal.</p>
 
-<p>C4.5's fix: normalize gain by how much the split fragments the data. A balanced binary split has 1 bit of split entropy; a thousand-way split has ~10 bits. The <em>gain ratio</em> collapses the ID column's score to near-zero while leaving informative features alone.</p>
+<p>C4.5 fixes this by normalizing gain by how much the split fragments the data. A balanced binary split has 1 bit of split entropy; a thousand-way split has about 10 bits. The resulting <em>gain ratio</em> drops the ID column's score to near zero and leaves informative features alone.</p>
 
 <div class="figure">
   <div id="fig-gain" class="panel">
@@ -134,29 +128,24 @@ svg text { font-family: var(--heading-font); }
           <div id="fg-scorecard"></div>
         </div>
       </div>
-      <div style="font-size: 0.72rem; color: var(--text-2);">At small N the ID column looks plausible. As N grows, its raw <span class="t-info">gain</span> stays high while its <span class="t-ratio">gain ratio</span> collapses, the cardinality-penalty at work.</div>
     </div>
   </div>
-  <p class="figure-caption"><span class="figure-label">Figure 1.</span> The ID-column trap. Four features in the same dataset: a weakly informative <strong>age</strong>, an informative 4-level <strong>job</strong>, a weakly informative 12-level <strong>city</strong>, and a 100%-unique <strong>user_id</strong> that carries no real signal. Under raw <span class="t-info">information gain</span>, user_id always wins — it produces perfectly pure leaves. Under <span class="t-ratio">gain ratio</span>, user_id collapses because its split entropy (log of its cardinality) is huge. Slide N and watch the effect intensify on bigger datasets.</p>
+  <p class="figure-caption"><span class="figure-label">Figure 1.</span> Four features in one dataset: a weakly informative <strong>age</strong>, an informative 4-level <strong>job</strong>, a weakly informative 12-level <strong>city</strong>, and a unique <strong>user_id</strong> with no real signal. Under raw <span class="t-info">information gain</span>, user_id always wins because it produces pure leaves. Under <span class="t-ratio">gain ratio</span> it collapses, because its split entropy (the log of its cardinality) is large. At small N the ID column looks plausible; raise N and the gap widens.</p>
 </div>
 
-<p>Modern libraries defend against this with binning or target encoding. The takeaway: if feature importance is dominated by something that looks like a timestamp or ID, check for leakage.</p>
+<p>Modern libraries defend against this with binning or target encoding. In practice, if feature importance is dominated by something that looks like a timestamp or an ID, check for leakage.</p>
 
 <h2>Per-prediction attribution</h2>
 
-<p>Global importance shows what the model cares about on average. Per-prediction attribution answers why a specific prediction came out where it did: this house's predicted price was $70k above average — which features pushed it up, and which down?</p>
+<p>Global importance shows what the model relies on overall. Per-prediction attribution asks about one prediction: this house's predicted price was $70k above average, so which features pushed it up and which pushed it down?</p>
 
-<p>Shapley (1953) gives the answer from cooperative game theory: to fairly credit each team member for a team's output, simulate every ordering in which members could have joined the team. Each member's <em>marginal contribution</em> is the change when they joined; their credit is the average across orderings.</p>
+<p>Shapley (1953) answered the analogous question in cooperative game theory. To credit each member of a team fairly for the team's output, consider every order in which the members could have joined. A member's <em>marginal contribution</em> is the change in output when they joined, and their credit is its average over all orders.</p>
 
-<p>For ML: features are team members, output is the prediction, baseline is the average prediction with no features known. Each feature's <em>Shapley value</em> is its average marginal contribution as features are revealed.</p>
-
-<p>The Shapley value is the unique scheme satisfying a few fairness axioms. The catch: 2<sup>p</sup> model evaluations per prediction. For 20 features, a million; for 50, intractable.</p>
+<p>In ML the features are the members, the output is the prediction, and the baseline is the prediction with no features known. A feature's <em>Shapley value</em> is its average marginal contribution as features are revealed. It is the unique scheme that satisfies a few fairness axioms, but it takes 2<sup>p</sup> model evaluations per prediction: about a million for 20 features, and out of reach for 50.</p>
 
 <h2>TreeSHAP</h2>
 
-<p>Lundberg (2017): for tree models, Shapley values can be computed exactly in polynomial time. When a feature is "absent" from a tree, you take both children of nodes that test it, weighted by training rows down each branch — turning exponential subset averaging into a structured walk over the tree.</p>
-
-<p>TreeSHAP runs in O(T · L · D²) time. On a typical forest, that's milliseconds per prediction. Values are exact and sum to the prediction minus baseline.</p>
+<p>Lundberg (2017) showed that for tree models, Shapley values can be computed exactly in polynomial time. When a feature is "absent", the algorithm follows both children of every node that tests it, weighted by the training rows down each branch, which turns the exponential average over subsets into a walk over the tree. TreeSHAP runs in O(T · L · D²) time, milliseconds per prediction on a typical forest, and its values sum exactly to the prediction minus the baseline.</p>
 
 <div class="figure">
   <div id="fig-shap" class="panel">
@@ -187,26 +176,20 @@ svg text { font-family: var(--heading-font); }
       </div>
       <div class="stat-box">
         <div class="label">Attribution</div>
-        <div class="row"><span class="k">baseline</span><span class="v" id="fs-base">—</span></div>
-        <div class="row"><span class="k">prediction</span><span class="v" id="fs-pred">—</span></div>
-        <div class="row"><span class="k">Σ contributions</span><span class="v" id="fs-sum">—</span></div>
+        <div class="row"><span class="k">baseline</span><span class="v" id="fs-base">&nbsp;</span></div>
+        <div class="row"><span class="k">prediction</span><span class="v" id="fs-pred">&nbsp;</span></div>
+        <div class="row"><span class="k">Σ contributions</span><span class="v" id="fs-sum">&nbsp;</span></div>
       </div>
     </div>
   </div>
-  <p class="figure-caption"><span class="figure-label">Figure 2.</span> A single prediction decomposed. Start at the <span style="color: var(--c-base); font-weight: 600;">baseline</span> — the model's average prediction — and walk to the <span style="color: var(--c-pred); font-weight: 600;">actual prediction</span> one feature at a time. <span class="t-up">Green bars push price up</span>; <span class="t-down">red bars push price down</span>. Drag the feature sliders and watch the bars resize in real time. The total contributions always sum to exactly (prediction − baseline), which is the axiomatic guarantee Shapley provides and TreeSHAP delivers efficiently.</p>
+  <p class="figure-caption"><span class="figure-label">Figure 2.</span> One prediction, decomposed. Start at the <span style="color: var(--c-base); font-weight: 600;">baseline</span>, the price of a reference house (1800 sqft, 30 years old, 3 beds, zip score 50), and walk to the <span style="color: var(--c-pred); font-weight: 600;">actual prediction</span> one feature at a time. <span class="t-up">Green bars push the price up</span> and <span class="t-down">red bars push it down</span>. The model here is a small pricing formula with one sqft × zip interaction, and the Shapley values are computed exactly by enumerating every subset of features, so they always sum to prediction minus baseline.</p>
 </div>
 
 <h2>What SHAP doesn't tell you</h2>
 
-<p>SHAP describes what the model is doing, not what the world is doing. If the model learned the wrong pattern, SHAP faithfully explains the wrong thing. A large SHAP value means the model depends on the feature, not that changing the feature would change the outcome. For the causal question, see the next chapter.</p>
+<p>SHAP explains the model, and if the model learned the wrong pattern, SHAP explains the wrong pattern faithfully. A large SHAP value means the model depends on the feature. It does not mean that changing the feature in the world would change the outcome.</p>
 
-<p>Shapley handles feature interactions: if two features only matter together, SHAP credits both. This is one reason TreeSHAP has been adopted in regulated industries.</p>
-
-<h2>Two views</h2>
-
-<p>Information gain shows which features the tree learned from. SHAP shows which features explained a given prediction. The first audits model reliance; the second justifies a specific decision to a user, a regulator, or yourself.</p>
-
-<p>SHAP describes how the model uses each feature. It does not say what would happen if a feature were changed in the world. The next chapter builds trees for that question.</p>
+<p>Shapley values do handle interactions: if two features only matter together, SHAP credits both. That is one reason TreeSHAP has been adopted in regulated industries. Information gain audits what the model relies on overall, and SHAP justifies one decision to a user, a regulator, or yourself. The causal question, what would happen if a feature changed, needs a different kind of tree, which is the subject of the last chapter.</p>
 
 <div class="nav-footer">
   <a href="04-boosting.html">← Chapter 4: Boosting</a>
