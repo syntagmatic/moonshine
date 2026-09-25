@@ -63,7 +63,7 @@
       <div><div class="panel-title">the tiling it defines</div><div id="fig-tiles"></div></div>
     </div>
     <div class="readout" id="f1-readout"></div>
-    <p class="figure-caption"><span class="figure-label">Figure 1.</span> Hover either panel.
+    <p class="figure-caption"><span class="figure-label">Figure 1.</span> Hover or tap either panel.
     A crossing on the left and its tile on the right sit in roughly the same place, because the
     tiling is the grid scaled up by about 5/2. The two lines through the crossing light up, and
     so do their ribbons: every tile made from a crossing on that line. Each ribbon runs across
@@ -146,7 +146,7 @@
     <div class="readout" id="f3-readout"></div>
     <p class="figure-caption"><span class="figure-label">Figure 3.</span> Every vertex whose
     full ring of tiles lies in the patch, classified by the angles of the tiles around it. Each
-    button is drawn from an actual vertex of that type. Hover a button to pick out that
+    button is drawn from an actual vertex of that type. Hover or tap a button to pick out that
     neighborhood in both panels. In internal space each type fills a polygonal piece of its
     pentagon, and no two types overlap. The pieces carve the windows into exact regions.</p>
   </div>
@@ -226,8 +226,8 @@ function sliceInvert(pt, S) {
 (function () {
   var S = 330, RG = 3.1, K = 2.5;             // grid radius shown, grid-to-tiling scale
   var tiles = QC.pentagrid(G0, RG + 1.6);
-  var cg = Page.canvas(document.getElementById('fig-grid'), S, S);
-  var ct = Page.canvas(document.getElementById('fig-tiles'), S, S);
+  var cg = Page.canvas(document.getElementById('fig-grid'), S, S, 'The pentagrid: five families of parallel lines. The selected crossing and the two lines through it are highlighted.');
+  var ct = Page.canvas(document.getElementById('fig-tiles'), S, S, 'The Penrose rhomb tiling built from the pentagrid, with the tile of the selected crossing and the two ribbons through it highlighted.');
   var sc = (S / 2 - 6) / RG;
   function mg(p) { return [S / 2 + p[0] * sc, S / 2 - p[1] * sc]; }
   function mt(p) { return [S / 2 + p[0] / K * sc, S / 2 - p[1] / K * sc]; }
@@ -286,14 +286,29 @@ function sliceInvert(pt, S) {
   }
 
   var draw = Page.throttle(render);
-  cg.el.addEventListener('pointermove', function (ev) {
+  function pickGrid(ev) {
     var p = Page.pointer(cg, ev), x = [(p[0] - S / 2) / sc, -(p[1] - S / 2) / sc], best = null, bd = 0.35;
     tiles.forEach(function (t) { var d = Math.hypot(t.cross[0] - x[0], t.cross[1] - x[1]); if (d < bd) { bd = d; best = t; } });
     if (best && best !== hover) { hover = best; draw(); }
-  });
-  ct.el.addEventListener('pointermove', function (ev) {
+  }
+  function pickTiles(ev) {
     var p = Page.pointer(ct, ev), x = [(p[0] - S / 2) / sc * K, -(p[1] - S / 2) / sc * K];
     for (var i = 0; i < tiles.length; i++) if (inRhomb(x, tiles[i].pts)) { if (tiles[i] !== hover) { hover = tiles[i]; draw(); } return; }
+  }
+  cg.el.addEventListener('pointermove', pickGrid); cg.el.addEventListener('pointerdown', pickGrid);
+  ct.el.addEventListener('pointermove', pickTiles); ct.el.addEventListener('pointerdown', pickTiles);
+  // keyboard: step through the visible crossings, nearest the center first
+  var order = tiles.filter(function (t) { return Math.hypot(t.cross[0], t.cross[1]) < RG; })
+    .sort(function (a, b) { return Math.hypot(a.cross[0], a.cross[1]) - Math.hypot(b.cross[0], b.cross[1]); });
+  [cg.el, ct.el].forEach(function (el) {
+    el.tabIndex = 0;
+    el.addEventListener('keydown', function (ev) {
+      var step = { ArrowRight: 1, ArrowUp: 1, ArrowLeft: -1, ArrowDown: -1 }[ev.key];
+      if (!step) return;
+      ev.preventDefault();
+      var i = order.indexOf(hover);
+      hover = order[(i + step + order.length) % order.length]; draw();
+    });
   });
   render();
 })();
@@ -304,9 +319,11 @@ function sliceInvert(pt, S) {
   var base = QC.pentagrid(QC.gammaFor(G0, 0, 0), R);
   var baseKeys = new Set(base.map(function (t) { return t.key; }));
   var state = { u: 0, v: 0 };
-  var svg = d3.select('#fig-internal').append('svg').attr('viewBox', '0 0 ' + S + ' ' + S);
+  var svg = d3.select('#fig-internal').append('svg').attr('viewBox', '0 0 ' + S + ' ' + S)
+    .attr('class', 'drag-surface').attr('role', 'group').attr('tabindex', 0)
+    .attr('aria-label', 'Internal images of the vertices in four pentagon windows, one per index, with a handle marking the shifts. Drag the handle, or use the arrow keys, to move all four windows.');
   var gW = svg.append('g'), gP = svg.append('g'), gH = svg.append('g');
-  var ct = Page.canvas(document.getElementById('fig-flip'), S, S);
+  var ct = Page.canvas(document.getElementById('fig-flip'), S, S, 'The rhomb tiling for the current shifts; tiles not present at the start are drawn in red.');
   var tsc = (S / 2 - 6) / SHOW;
   function mt(p) { return [S / 2 + p[0] * tsc, S / 2 - p[1] * tsc]; }
   var idxColor = null;
@@ -377,6 +394,14 @@ function sliceInvert(pt, S) {
     var du = Math.max(-0.6, Math.min(0.6, q[0] - g[0])), dv = Math.max(-0.6, Math.min(0.6, q[1] - g[1]));
     state.u = du; state.v = dv; draw();
   }));
+  svg.on('keydown', function (ev) {
+    var d = { ArrowRight: [1, 0], ArrowLeft: [-1, 0], ArrowUp: [0, 1], ArrowDown: [0, -1] }[ev.key];
+    if (!d) return;
+    ev.preventDefault();
+    state.u = Math.max(-0.6, Math.min(0.6, state.u + 0.03 * d[0]));
+    state.v = Math.max(-0.6, Math.min(0.6, state.v + 0.03 * d[1]));
+    draw();
+  });
   document.getElementById('f2-reset').addEventListener('click', function () { state.u = 0; state.v = 0; draw(); });
   render();
 })();
@@ -418,8 +443,8 @@ function sliceInvert(pt, S) {
   tlist.forEach(function (t, i) { t.color = TYPE_COLORS[i % TYPE_COLORS.length]; });
   var active = tlist.filter(function (t) { return t.key === '72-72-72-72-72'; })[0] || tlist[0];
 
-  var ci = Page.canvas(document.getElementById('fig-types-int'), S, S);
-  var cp = Page.canvas(document.getElementById('fig-types-phys'), S, S);
+  var ci = Page.canvas(document.getElementById('fig-types-int'), S, S, 'The four pentagon windows in internal space, each vertex image colored by its neighborhood type; the selected type is highlighted.');
+  var cp = Page.canvas(document.getElementById('fig-types-phys'), S, S, 'The tiling in physical space with every vertex of the selected neighborhood type marked.');
   var tsc = (S / 2 - 6) / SHOW;
   function mt(p) { return [S / 2 + p[0] * tsc, S / 2 - p[1] * tsc]; }
 
@@ -429,7 +454,8 @@ function sliceInvert(pt, S) {
     var b = document.createElement('button');
     b.className = 'btn'; b.type = 'button'; b.style.padding = '2px'; b.style.borderColor = t.color;
     b.title = t.count + ' vertices';
-    var gc = document.createElement('canvas'); var dpr = 2;
+    b.setAttribute('aria-label', 'Vertex type with tile angles ' + t.key.replace(/-/g, ', ') + ' degrees, ' + t.count + ' vertices');
+    var gc = document.createElement('canvas'); var dpr = 2; gc.setAttribute('aria-hidden', 'true');
     gc.width = 44 * dpr; gc.height = 44 * dpr; gc.style.width = '44px'; gc.style.height = '44px'; gc.style.display = 'block';
     var g = gc.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0);
     var C = tileColors();
