@@ -1,7 +1,7 @@
-// Exceptional Atlas: dark theme for figure code (generated table, see
-// plans/audit/findings/figures-atlas.md). d3 attributes, canvas fills and
-// KaTeX \\color{} need literal colors, so EA.c(hex) returns the dark-theme
-// value of a light-theme literal when the reader's system is dark (read once).
+// Exceptional Atlas: dark theme for figure code (generated table). d3
+// attributes, canvas fills and KaTeX \\color{} need literal colors, so
+// EA.c(hex) returns the dark-theme value of a light-theme literal when the
+// reader's system is dark (read once).
 (function (root) {
   'use strict';
   var dark = !!(root.matchMedia && root.matchMedia('(prefers-color-scheme: dark)').matches);
