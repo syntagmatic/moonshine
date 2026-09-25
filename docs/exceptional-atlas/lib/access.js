@@ -7,7 +7,11 @@
 //   - makes clickable non-control elements focusable buttons that answer
 //     Enter and Space;
 //   - makes hover-only elements focusable (focus acts as hover) and sticky
-//     on tap, so their readout survives the pointerleave a tap ends with.
+//     on tap, so their readout survives the pointerleave a tap ends with;
+//   - gives each figure surface one tab stop (roving tabindex), with arrow
+//     keys, Home and End moving between its parts, so a figure with 240
+//     roots doesn't cost 240 presses of Tab. A page can opt any container
+//     of native buttons into the same behaviour with data-rove.
 (function (root) {
   'use strict';
   var CLICK = { click: 1, mousedown: 1, pointerdown: 1 };
@@ -49,7 +53,7 @@
     if (!click && !hover) return;
     el.__eaWired = true;
     var surface = el.tagName === 'svg' || el.tagName === 'CANVAS';
-    if (!el.hasAttribute('tabindex')) el.setAttribute('tabindex', '0');
+    if (!el.hasAttribute('tabindex')) { el.setAttribute('tabindex', '0'); if (!surface) el.__eaTab = true; }
     if (click && !surface && !el.getAttribute('role')) el.setAttribute('role', 'button');
     if (!surface && !el.getAttribute('aria-label')) { var n = nameOf(el); if (n) el.setAttribute('aria-label', n); }
     add.call(el, 'keydown', function (e) {
@@ -95,8 +99,38 @@
     });
   }
 
+  var NEXT = { ArrowRight: 1, ArrowDown: 1 }, PREV = { ArrowLeft: 1, ArrowUp: 1 };
+  function isPart(el) { return el.__eaTab; }
+  function isButton(el) { return el.tagName === 'BUTTON'; }
+  function rove(surface, test) {
+    var items = Array.prototype.filter.call(surface.querySelectorAll('*'), function (el) {
+      return test(el) && el.isConnected;
+    });
+    if (items.length < 2) return;
+    var active = items.indexOf(surface.__eaActive) >= 0 ? surface.__eaActive : items[0];
+    items.forEach(function (el) { el.setAttribute('tabindex', el === active ? '0' : '-1'); });
+    surface.__eaItems = items;
+    if (surface.__eaRove) return;
+    surface.__eaRove = true;
+    add.call(surface, 'focusin', function (e) {
+      if (!test(e.target)) return;
+      (surface.__eaItems || []).forEach(function (el) { el.setAttribute('tabindex', el === e.target ? '0' : '-1'); });
+      surface.__eaActive = e.target;
+    });
+    add.call(surface, 'keydown', function (e) {
+      var list = surface.__eaItems || [], i = list.indexOf(e.target);
+      if (i < 0) return;
+      var j = NEXT[e.key] ? Math.min(i + 1, list.length - 1) : PREV[e.key] ? Math.max(i - 1, 0)
+        : e.key === 'Home' ? 0 : e.key === 'End' ? list.length - 1 : -1;
+      if (j < 0) return;
+      e.preventDefault();
+      list[j].focus();
+    });
+  }
   function scan(fig) {
     fig.querySelectorAll('*').forEach(wire);
+    fig.querySelectorAll('svg').forEach(function (s) { if (!s.parentElement.closest('svg')) rove(s, isPart); });
+    fig.querySelectorAll('[data-rove]').forEach(function (c) { rove(c, isButton); });
     label(fig);
   }
   function start() {
