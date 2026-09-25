@@ -35,6 +35,18 @@
     return global.matchMedia && global.matchMedia('(prefers-reduced-motion: reduce)').matches;
   }
 
+  // Banner colors follow the OS color scheme, like the pages' own dark themes.
+  function palette() {
+    var dark = !!(global.matchMedia && global.matchMedia('(prefers-color-scheme: dark)').matches);
+    return dark ? {
+      motion: { border: '#78350f', bg: '#2a2110', text: '#fcd34d', btnBorder: '#b45309', btnBg: '#1c1917' },
+      notice: { border: '#334155', bg: '#1e2330', text: '#94a3b8', btnBorder: '#475569', btnBg: '#0f172a', btnText: '#cbd5e1' }
+    } : {
+      motion: { border: '#fde68a', bg: '#fef3c7', text: '#713f12', btnBorder: '#b45309', btnBg: '#fff' },
+      notice: { border: '#e2e8f0', bg: '#f8fafc', text: '#64748b', btnBorder: '#cbd5e1', btnBg: '#fff', btnText: '#475569' }
+    };
+  }
+
   var Motion = {
     reduced: function () { return system() && !override(); },
     overridden: override,
@@ -64,6 +76,7 @@
       global.location && global.location.reload();
     },
     mountBanner: function () {
+      var c = palette().motion;
       if (!system() || override()) return;
       var doc = global.document;
       if (!doc) return;
@@ -76,11 +89,11 @@
       b.style.cssText = [
         'margin: 0 0 1rem',
         'padding: 0.7rem 1rem',
-        'border: 1px solid #fde68a',
-        'background: #fef3c7',
+        'border: 1px solid ' + c.border,
+        'background: ' + c.bg,
         "font-family: 'Source Sans 3', system-ui, sans-serif",
         'font-size: 0.9rem',
-        'color: #713f12',
+        'color: ' + c.text,
         'border-radius: 6px',
         'display: flex',
         'align-items: center',
@@ -99,9 +112,9 @@
         'font-weight: 600',
         'padding: 0.4rem 0.9rem',
         'border-radius: 5px',
-        'border: 1px solid #b45309',
-        'background: #fff',
-        'color: #713f12',
+        'border: 1px solid ' + c.btnBorder,
+        'background: ' + c.btnBg,
+        'color: ' + c.text,
         'cursor: pointer'
       ].join(';');
       btn.addEventListener('click', function () { Motion.enable(); });
@@ -115,6 +128,7 @@
       if (el && el.parentNode) el.parentNode.removeChild(el);
     },
     mountNotice: function () {
+      var c = palette().notice;
       if (noticeDismissed()) return;
       var doc = global.document;
       if (!doc) return;
@@ -127,11 +141,11 @@
       b.style.cssText = [
         'margin: 0 0 1rem',
         'padding: 0.55rem 0.9rem',
-        'border: 1px solid #e2e8f0',
-        'background: #f8fafc',
+        'border: 1px solid ' + c.border,
+        'background: ' + c.bg,
         "font-family: 'Source Sans 3', system-ui, sans-serif",
         'font-size: 0.82rem',
-        'color: #64748b',
+        'color: ' + c.text,
         'border-radius: 6px',
         'display: flex',
         'align-items: center',
@@ -150,9 +164,9 @@
         'font-weight: 600',
         'padding: 0.25rem 0.7rem',
         'border-radius: 5px',
-        'border: 1px solid #cbd5e1',
-        'background: #fff',
-        'color: #475569',
+        'border: 1px solid ' + c.btnBorder,
+        'background: ' + c.btnBg,
+        'color: ' + c.btnText,
         'cursor: pointer',
         'flex-shrink: 0'
       ].join(';');
