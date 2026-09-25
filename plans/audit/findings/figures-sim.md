@@ -24,14 +24,66 @@ render-check.
   5. Figures opened empty until clicked (emergence 06 Fig 2, 07 histogram, 09
      Fig 3, 13 Figs 2 and 5, and lattice 02 Figs 1 and 2, 06 Figs 1 to 3). They
      now pre-run or run once when scrolled into view.
-- Dark mode: neither series has a dark theme. Under a dark OS setting the
-  pages render fully light, including their form controls, so no light figure
-  sits on a dark page. Adding dark themes would be a site-wide decision (needs
-  a human). Canvas palettes are hardcoded hex throughout, so it would be real
-  work.
+- Dark mode: added in a second round (see "Dark theme" below). The per-article
+  notes further down were written before it and describe the pages as
+  light-only; that is superseded.
 - Status pills: the lattice 06 "Above Tc" pill is gone (details below). The
   same pattern was removed or flattened in lattice 03 (the stabiliser badge)
   and emergence 09 ("TRAPPED").
+
+## Dark theme (both series)
+
+- Pattern. Each series has a `lib/theme.css` and a `lib/theme.js`, linked at
+  the end of every page's `<head>` (after the page's own `<style>` and after
+  KaTeX).
+  - `theme.css` holds a `@media (prefers-color-scheme: dark)` block. It sets
+    `color-scheme: dark`, the seven base tokens (`--text`, `--text-2`,
+    `--accent`, `--accent-light`, `--bg`, `--fig-bg`, `--border`) and the
+    concept tokens that every page in the series shares. It also darkens the
+    inline-styled site notice and motion banner from `../lib/motion.js`.
+  - Concept tokens that vary between pages (most lattice ones: `--c-a2`,
+    `--c-cell` and `--c-grid` differ across pages) get a small page-level
+    dark `:root` block. So do one-line rules with hardcoded hex
+    (`/* dark twins */`).
+  - `theme.js` reads `matchMedia('(prefers-color-scheme: dark)')` once. It
+    exposes `Theme.dark`, `Theme.c(hex)`, `Theme.pick(light, dark)` and
+    `Theme.tex`. `Theme.c` maps each light hex to a paired dark hex: neutrals
+    invert, saturated colours keep their hue and get lighter, and pale tints
+    become dark tints. Light mode returns the hex unchanged.
+  - Every quoted hex literal in the inline scripts that has a pair is wrapped
+    in `Theme.c(...)`. That covers canvas fills, d3 attributes and d3
+    scale/interpolator stops, and all of them stay resolved hex.
+  - `katex.render` and `renderToString` are wrapped so `\color{#hex}` goes
+    through the same map.
+  - No toggle.
+- Hand-fixed canvases whose pixel colours are numeric:
+  - Lattice 05 vorticity/speed map: the zero colour is now dark, the ends are
+    lifted, and the obstacle is light grey. The CSS legend gradient matches.
+  - Lattice 04 momentum panels: a dark-centred piecewise interpolator
+    replaces RdBu.
+  - Lattice 06: spin-down cells are lifted to #4a6cd2 so they read against
+    the dark page. The legend swatch matches.
+  - Emergence 01: the ant grid's paper and ink swap. The caption no longer
+    says "black cells" (it now names only the blue highway cells and "the
+    other painted cells"). Empty Lenia cells are now dark.
+  - Emergence 03: unfilled space-time rows.
+  - Emergence 06: the Drossel-Schwabl empty cells and their legend swatch.
+- Kept as data in both themes:
+  - Lattice 04 tensor heat map (YlOrRd). Its value text keeps fixed ink.
+  - Emergence 04 opinion grids (black and white opinions). The Fig 3 bars
+    use a paired dark/light pair, so "black wins" stays the darker bar.
+  - The sandpile and Ising palettes, and emergence 08's already-dark canvases.
+- Named colours (`white`) slipped past the hex scan in two places: the
+  emergence index header background and the emergence 12 Fig 3 legend
+  backdrop. Both are fixed.
+- Checked: one dark contact sheet per page at 390px (header plus every
+  figure), viewed once. Render-check passes on all 22 pages. In the dark
+  scheme, clicking each figure's first button changed the display with no
+  errors; the few "no change" cases were Pause buttons or already-active
+  toggles. The pass-1 interaction drivers were rerun and are clean.
+- Captions that said left/right, whose panels stack on a phone, now name the
+  panel instead: emergence 01 Figs 2 and 4, 02 Fig 2, 03 Fig 1, 08 Figs 2
+  and 4, 09 Figs 1 and 3, 11 Fig 3 and 13 Fig 1.
 
 ## lattice-simulation
 
