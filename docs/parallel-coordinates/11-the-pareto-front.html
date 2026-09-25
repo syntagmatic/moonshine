@@ -183,6 +183,14 @@ svg .tick-label {
   min-width: 2.5em;
 }
 
+.wt-status {
+  font-family: var(--heading-font);
+  font-size: 0.85rem;
+  color: var(--text);
+  margin: 0.5rem 0 0;
+  min-height: 2.6em;
+}
+
 .counter {
   font-family: var(--heading-font);
   font-size: 0.95rem;
@@ -295,8 +303,9 @@ svg .tick-label {
 <div class="figure" id="fig-weights">
   <svg id="svg-weights"></svg>
   <div id="weight-sliders"></div>
-  <p class="click-hint">Drag the weight sliders, or click a polyline to find weights that favor it. The weighted-sum optimum is in blue.</p>
-  <p class="figure-caption"><span class="figure-label">Figure 5.</span> The car designs from Figure 2 with adjustable weights.</p>
+  <p class="wt-status" id="weights-status"></p>
+  <p class="click-hint">Drag the weight sliders, or click a red polyline to search for weights that make it the winner. The weighted-sum optimum is in blue. Dashed red lines are Pareto-optimal designs that sit in a dent of the front.</p>
+  <p class="figure-caption"><span class="figure-label">Figure 5.</span> The car designs from Figure 2 with adjustable weights. <span id="weights-count"></span></p>
 </div>
 
 <p>With <em>k</em> objectives a scatterplot matrix needs <span id="math-binom"></span> panels, and radar charts become unreadable beyond a handful of solutions. In parallel coordinates each new objective adds one axis.</p>
@@ -721,8 +730,82 @@ function randNorm(rng, mu, sigma) {
 })();
 
 // ─── Figure 5: Weight slider ───
+
+// Best weights for design p: maximize the margin t such that
+// w·(p − q) ≥ t for every other design q, with w on the simplex.
+// A positive margin means some weights make p the unique winner; a negative
+// one means every weight vector prefers another design, so p sits in a
+// non-convex dent of the front. Solved exactly with a small simplex method,
+// substituting w_k = 1 − Σ w_i and t = t' − 1 so the origin is feasible.
+function maxMarginWeights(data, p) {
+  const m = data[0].length - 1;
+  const rows = [], rhs = [];
+  data.forEach((q, qi) => {
+    if (qi === p) return;
+    const d = data[p].map((v, i) => v - q[i]);
+    const r = [];
+    for (let i = 0; i < m; i++) r.push(-(d[i] - d[m]));
+    r.push(1);
+    rows.push(r); rhs.push(d[m] + 1);
+  });
+  rows.push([...Array(m).fill(1), 0]); rhs.push(1);
+  const nv = m + 1, nr = rows.length, nc = nv + nr;
+  const T = rows.map((r, i) => {
+    const row = new Array(nc + 1).fill(0);
+    r.forEach((v, j) => { row[j] = v; });
+    row[nv + i] = 1; row[nc] = rhs[i];
+    return row;
+  });
+  const obj = new Array(nc + 1).fill(0);
+  obj[m] = -1;
+  const basis = rows.map((_, i) => nv + i);
+  for (let it = 0; it < 1000; it++) {
+    let c = -1;
+    for (let j = 0; j < nc; j++) if (obj[j] < -1e-12) { c = j; break; } // Bland's rule
+    if (c < 0) break;
+    let r = -1, best = Infinity;
+    for (let i = 0; i < nr; i++) {
+      if (T[i][c] <= 1e-12) continue;
+      const ratio = T[i][nc] / T[i][c];
+      if (ratio < best - 1e-12 || (Math.abs(ratio - best) <= 1e-12 && basis[i] < basis[r])) { best = ratio; r = i; }
+    }
+    if (r < 0) break;
+    const pv = T[r][c];
+    for (let j = 0; j <= nc; j++) T[r][j] /= pv;
+    for (let i = 0; i < nr; i++) {
+      if (i === r || T[i][c] === 0) continue;
+      const f = T[i][c];
+      for (let j = 0; j <= nc; j++) T[i][j] -= f * T[r][j];
+    }
+    const f = obj[c];
+    for (let j = 0; j <= nc; j++) obj[j] -= f * T[r][j];
+    basis[r] = c;
+  }
+  const x = new Array(nv).fill(0);
+  basis.forEach((b, i) => { if (b < nv) x[b] = T[i][nc]; });
+  const w = x.slice(0, m).map(v => Math.max(0, v));
+  w.push(Math.max(0, 1 - w.reduce((a, b) => a + b, 0)));
+  const s = w.reduce((a, b) => a + b, 0) || 1;
+  return { w: w.map(v => v / s), margin: x[m] - 1 };
+}
+
+// Chebyshev scalarization: pick the design whose worst weighted shortfall
+// from the ideal point (1 on every normalized axis) is smallest. A tiny
+// augmentation term breaks ties toward non-dominated designs.
+function chebyshevPick(data, w) {
+  let bestIdx = 0, bestScore = Infinity;
+  data.forEach((q, qi) => {
+    let worst = 0, total = 0;
+    q.forEach((v, j) => { worst = Math.max(worst, w[j] * (1 - v)); total += 1 - v; });
+    const score = worst + 1e-6 * total;
+    if (score < bestScore) { bestScore = score; bestIdx = qi; }
+  });
+  return bestIdx;
+}
+
 (function() {
-  const rng = mulberry32(200);
+  // Same generator and seed as Figure 2, so these are the same 100 designs.
+  const rng = mulberry32(123);
   const N = 100;
   const objNames = ['Fuel Eff.', 'Accel.', 'Safety', 'Price', 'Cargo'];
   const fields = ['fuel','accel','safety','price','cargo'];
@@ -730,6 +813,7 @@ function randNorm(rng, mu, sigma) {
   const rawData = [];
 
   for (let i = 0; i < N; i++) {
+    rng();
     const fuel = Math.max(10, randNorm(rng, 30, 8));
     const accel = Math.max(3, randNorm(rng, 8 + (fuel - 30) * 0.15, 2));
     const safety = Math.max(1, Math.min(5, randNorm(rng, 4, 0.8)));
@@ -752,6 +836,15 @@ function randNorm(rng, mu, sigma) {
   });
 
   const isPareto = paretoFront(normData);
+  // Best achievable weighted-sum margin for every Pareto-optimal design.
+  const TOL = 1e-6;
+  const best = normData.map((_, i) => isPareto[i] ? maxMarginWeights(normData, i) : null);
+  const inDent = best.map(b => !!b && b.margin < -TOL);
+  const dentCount = inDent.filter(Boolean).length;
+  const paretoCount = isPareto.filter(Boolean).length;
+  document.getElementById('weights-count').textContent =
+    `${dentCount} of the ${paretoCount} Pareto-optimal designs are dashed: no weight vector selects them.`;
+
   const K = 5;
   const W = 690, H = 300;
   const svg = d3.select('#svg-weights').attr('width', W).attr('height', H);
@@ -767,12 +860,15 @@ function randNorm(rng, mu, sigma) {
 
   const lineGen = d3.line().x((d,i) => axisX[i]).y(d => yScale(d));
 
-  const order = d3.range(N).sort((a,b) => isPareto[a] - isPareto[b]);
+  // Draw dented designs last so their dashed lines and hit areas sit on top.
+  const rank = i => (isPareto[i] ? 1 : 0) + (inDent[i] ? 1 : 0);
+  const order = d3.range(N).sort((a,b) => rank(a) - rank(b));
   const paths = g.selectAll('.wt-line').data(order).join('path')
     .attr('class','wt-line')
     .attr('d', i => lineGen(normData[i]))
     .attr('fill','none')
     .attr('stroke', i => isPareto[i] ? paretoColor : domColor)
+    .attr('stroke-dasharray', i => inDent[i] ? '5 3' : null)
     .attr('stroke-width', i => isPareto[i] ? 1.8 : 0.8)
     .attr('opacity', i => isPareto[i] ? 0.5 : 0.1);
 
@@ -785,12 +881,18 @@ function randNorm(rng, mu, sigma) {
     .attr('stroke-width', 8)
     .attr('cursor','pointer');
 
-  const bestLine = g.append('path').attr('fill','none').attr('stroke', C.polyline).attr('stroke-width', 4).attr('opacity', 1);
+  // The clicked design, drawn on top when weights cannot make it the winner
+  const pickedLine = g.append('path').attr('class','wt-picked').attr('fill','none')
+    .attr('stroke', paretoColor).attr('stroke-width', 3).attr('stroke-dasharray','6 3')
+    .attr('opacity', 0).attr('pointer-events','none');
+  const bestLine = g.append('path').attr('class','wt-best').attr('fill','none').attr('stroke', C.polyline).attr('stroke-width', 4).attr('opacity', 1).attr('pointer-events','none');
 
   // Build sliders
   const sliderDiv = document.getElementById('weight-sliders');
+  const statusEl = document.getElementById('weights-status');
   const weights = [0.2, 0.2, 0.2, 0.2, 0.2];
   const sliderEls = [];
+  let picked = null;
 
   objNames.forEach((name, i) => {
     const row = document.createElement('div');
@@ -810,9 +912,31 @@ function randNorm(rng, mu, sigma) {
 
     input.addEventListener('input', () => {
       weights[i] = +input.value;
+      picked = null;
       updateWeights();
     });
   });
+
+  function describe(bestIdx) {
+    if (picked === null) return 'The blue design has the highest weighted sum for these weights.';
+    if (!isPareto[picked]) {
+      return 'This design is dominated: another design is at least as good on every objective, so no weights can favor it.';
+    }
+    const b = best[picked];
+    if (b.margin > TOL && bestIdx === picked) {
+      return `These weights make the clicked design the winner, ahead of every other design by ${b.margin.toFixed(3)} in weighted score.`;
+    }
+    if (b.margin >= -TOL) {
+      return 'The best weights for this design only tie it with another one, so the weighted sum can land on either.';
+    }
+    const chebWeights = normData[picked].map(v => 1 / (1 - v + 1e-4));
+    const cs = chebWeights.reduce((a, c) => a + c, 0);
+    const chebIdx = chebyshevPick(normData, chebWeights.map(c => c / cs));
+    const chebText = chebIdx === picked
+      ? ' A Chebyshev scalarization, which minimizes the largest weighted shortfall from the best value on each axis, does select it.'
+      : '';
+    return `No weight vector selects the dashed design. The sliders now hold the weights most favorable to it, and it still trails the blue design by ${(-b.margin).toFixed(3)}: it sits in a non-convex dent of the front.${chebText}`;
+  }
 
   function updateWeights() {
     const sum = weights.reduce((a,b) => a+b, 0) || 1;
@@ -830,21 +954,30 @@ function randNorm(rng, mu, sigma) {
 
     paths.attr('opacity', i => i === bestIdx ? 0 : (isPareto[i] ? 0.35 : 0.07))
          .attr('stroke-width', i => isPareto[i] ? 1.5 : 0.8);
+    const showPicked = picked !== null && picked !== bestIdx;
+    pickedLine.attr('d', picked !== null ? lineGen(normData[picked]) : null)
+      .attr('stroke', picked !== null && isPareto[picked] ? paretoColor : domColor)
+      .attr('opacity', showPicked ? 1 : 0).raise();
     bestLine.attr('d', lineGen(normData[bestIdx])).raise();
+    statusEl.textContent = describe(bestIdx);
+    statusEl.dataset.state = picked === null ? 'free'
+      : !isPareto[picked] ? 'dominated'
+      : best[picked].margin > TOL ? 'selected'
+      : best[picked].margin >= -TOL ? 'tie' : 'dent';
+    statusEl.dataset.winner = bestIdx;
   }
 
-  // Click a polyline to compute weights that make it optimal
+  // Click a polyline: set the sliders to the weights that favor it most
+  // (the max-margin weights above). For a design in a dent they are still
+  // not enough, and the figure says so.
   hitPaths.on('click', (event, clickedIdx) => {
-    const vals = normData[clickedIdx];
-    // Weight proportional to how good this solution is on each objective.
-    // Exponentiate to sharpen the distribution toward the solution's strengths.
-    const raw = vals.map(v => Math.max(v, 0.01) ** 2);
-    const rawSum = raw.reduce((a, b) => a + b, 0) || 1;
-    raw.forEach((r, i) => {
-      const w = Math.round((r / rawSum) * 100);
-      weights[i] = w;
-      sliderEls[i].input.value = w;
-    });
+    picked = clickedIdx;
+    if (isPareto[clickedIdx]) {
+      best[clickedIdx].w.forEach((v, i) => {
+        weights[i] = v * 100;
+        sliderEls[i].input.value = Math.round(v * 100);
+      });
+    }
     updateWeights();
   });
 

@@ -452,8 +452,13 @@ them, fire sizes stretch across every scale the grid can hold.
 <h3>Fire sizes follow a power law</h3>
 
 <p>
-Record the size of every fire. On log-log axes the histogram becomes a straight
-line with slope roughly <span id="soc-alpha"></span>. This is a different power law
+Record the size of every fire, group the sizes into bins that each span the same
+factor, and divide each bin's count by how many sizes it covers. On log-log axes the
+points fall close to a straight line of slope <span id="soc-tau-sym"></span>. The fit
+below measures it live from the fires recorded so far: <span id="soc-alpha">not
+enough fires yet</span>. On this 100 by 100 grid the critical preset settles between
+about 1.1 and 1.3. Runs on far larger grids give estimates that drift with grid size, so read the
+number as this grid's, not a universal constant. This is a different power law
 from the earlier one, which counted static clusters at a single hand-tuned density.
 Here each fire starts from whatever density the system had reached on its way to and
 from the threshold.
@@ -463,8 +468,10 @@ from the threshold.
   <svg id="soc-svg-hist"></svg>
   <p class="figure-caption">
     <span class="figure-label">Figure 7.</span>
-    Fire-size distribution on log-log axes. The dashed red line is a linear
-    fit to the binned log-log points.
+    Fire-size distribution on log-log axes. Bins are logarithmic, and each count is
+    divided by the number of integer sizes in its bin, so the slope is the exponent
+    of the size density. The dashed red line is a least-squares fit to bins holding
+    at least three fires.
   </p>
 </div>
 
@@ -498,7 +505,7 @@ window.addEventListener('DOMContentLoaded', () => {
     katex.render("p", document.getElementById('soc-cap-p'));
     katex.render("f", document.getElementById('soc-cap-f'));
     katex.render("f \\ll p", document.getElementById('soc-sep'));
-    katex.render("\\alpha \\approx 2", document.getElementById('soc-alpha'));
+    katex.render("-\\tau", document.getElementById('soc-tau-sym'));
     ['sir-T-inline', 'sir-T-inline2', 'sir-T-inline3', 'sir-T-cap'].forEach(function (id) {
       katex.render("T", document.getElementById(id));
     });
@@ -1667,9 +1674,20 @@ const state = { density: 0.59 };
   var histMargin = { top: 20, right: 20, bottom: 40, left: 50 };
   var lastHistory = [];
 
+  var histPending = false;
+  var tauEl = document.getElementById('soc-alpha');
+  // Coalesce redraws: many fires can land in one animation frame.
   function histDispatch(h) {
     lastHistory = h;
-    updateHist(h);
+    if (histPending) return;
+    histPending = true;
+    requestAnimationFrame(function () { histPending = false; updateHist(lastHistory); });
+  }
+  function showTau(tau) {
+    if (tau == null) { tauEl.textContent = 'not enough fires yet'; return; }
+    var expr = "\\tau \\approx " + tau.toFixed(2);
+    if (typeof katex !== 'undefined') katex.render(expr, tauEl, { throwOnError: false });
+    else tauEl.textContent = '\u03c4 \u2248 ' + tau.toFixed(2);
   }
 
   function updateHist(history) {
@@ -1680,6 +1698,7 @@ const state = { density: 0.59 };
       .attr('height', height + histMargin.top + histMargin.bottom);
     histSvg.selectAll('*').remove();
     if (history.length < 5) {
+      showTau(null);
       histSvg.append('text')
         .attr('x', (width + histMargin.left + histMargin.right) / 2)
         .attr('y', (height + histMargin.top + histMargin.bottom) / 2)
@@ -1694,20 +1713,26 @@ const state = { density: 0.59 };
 
     var maxVal = d3.max(history);
     var numBins = 15;
+    var logMax = Math.log10(maxVal + 1);
+    // Logarithmic bins [lo, hi). Sizes are integers, so a bin's width is the
+    // number of integers it contains; dividing by it turns counts into a
+    // density whose log-log slope is -tau.
     var bins = Array.from({ length: numBins }, function (_, i) {
-      var lo = Math.pow(10, i * Math.log10(maxVal) / numBins);
-      var hi = Math.pow(10, (i + 1) * Math.log10(maxVal) / numBins);
-      return { x: Math.sqrt(lo * hi), y: history.filter(function (d) { return d >= lo && d < hi; }).length };
-    }).filter(function (d) { return d.y > 0; });
+      var lo = Math.pow(10, i * logMax / numBins);
+      var hi = Math.pow(10, (i + 1) * logMax / numBins);
+      var w = Math.ceil(hi) - Math.ceil(lo);
+      var n = history.filter(function (d) { return d >= lo && d < hi; }).length;
+      return { x: Math.sqrt(lo * hi), n: n, y: w > 0 ? n / w : 0 };
+    }).filter(function (d) { return d.n > 0; });
 
-    var maxBinCount = d3.max(bins, function (d) { return d.y; }) || 1;
-    var x = d3.scaleLog().domain([1, maxVal]).range([0, width]);
-    var y = d3.scaleLog().domain([1, Math.max(10, maxBinCount * 1.5)]).range([height, 0]);
+    var yExt = d3.extent(bins, function (d) { return d.y; });
+    var x = d3.scaleLog().domain([1, Math.max(10, maxVal)]).range([0, width]);
+    var y = d3.scaleLog().domain([yExt[0] / 2, yExt[1] * 2]).range([height, 0]);
 
     g.append('g')
       .attr('transform', 'translate(0,' + height + ')')
       .call(d3.axisBottom(x).ticks(5, '~s'));
-    g.append('g').call(d3.axisLeft(y).ticks(5, '~s'));
+    g.append('g').call(d3.axisLeft(y).ticks(5, '~g'));
 
     g.append('text')
       .attr('x', width / 2).attr('y', height + 34)
@@ -1719,7 +1744,7 @@ const state = { density: 0.59 };
       .attr('x', -height / 2).attr('y', -36)
       .attr('text-anchor', 'middle').attr('font-size', '0.8rem')
       .attr('fill', 'var(--text-2)')
-      .text('Count');
+      .text('Fires per unit size');
 
     g.selectAll('circle').data(bins).enter().append('circle')
       .attr('cx', function (d) { return x(d.x); })
@@ -1727,8 +1752,9 @@ const state = { density: 0.59 };
       .attr('r', 4)
       .attr('fill', 'var(--accent)');
 
-    if (bins.length > 3) {
-      var logData = bins.map(function (d) { return { x: Math.log10(d.x), y: Math.log10(d.y) }; });
+    var fitBins = bins.filter(function (d) { return d.n >= 3; });
+    if (fitBins.length > 3) {
+      var logData = fitBins.map(function (d) { return { x: Math.log10(d.x), y: Math.log10(d.y) }; });
       var nL = logData.length;
       var sumX = d3.sum(logData, function (d) { return d.x; });
       var sumY = d3.sum(logData, function (d) { return d.y; });
@@ -1736,7 +1762,7 @@ const state = { density: 0.59 };
       var sumXX = d3.sum(logData, function (d) { return d.x * d.x; });
       var slope = (nL * sumXY - sumX * sumY) / (nL * sumXX - sumX * sumX);
       var intercept = (sumY - slope * sumX) / nL;
-      var x1 = bins[0].x, x2 = bins[bins.length - 1].x;
+      var x1 = fitBins[0].x, x2 = fitBins[fitBins.length - 1].x;
       var y1 = Math.pow(10, slope * Math.log10(x1) + intercept);
       var y2 = Math.pow(10, slope * Math.log10(x2) + intercept);
       g.append('line')
@@ -1750,6 +1776,9 @@ const state = { density: 0.59 };
         .attr('text-anchor', 'end').attr('font-size', '0.75rem')
         .attr('fill', 'var(--c-danger)')
         .text('slope \u2248 ' + slope.toFixed(2));
+      showTau(-slope);
+    } else {
+      showTau(null);
     }
   }
 
