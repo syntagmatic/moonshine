@@ -85,6 +85,23 @@ svg text { font-family: var(--heading-font); }
 
 @media (prefers-reduced-motion: reduce) { html:not([data-motion="full"]) * { transition-duration: 0s !important; animation-duration: 0s !important; } }
 @media (max-width: 680px) { h1 { font-size: 1.75rem; } .article { padding: 1.5rem 1rem 4rem; } }
+
+/* Dark mode: same hues, lighter shades */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --text: #e6e6ee; --text-2: #a3a3b8;
+    --accent: #60a5fa; --accent-light: #1e3a5f;
+    --bg: #14141c; --fig-bg: #1c1c28; --border: #34344a;
+    --c-info: #34d399; --c-ratio: #a78bfa; --c-warn: #fb923c; --c-base: #94a3b8; --c-pred: #60a5fa; --c-up: #34d399; --c-down: #f87171;
+  }
+  html { color-scheme: dark; }
+  a:hover { color: #93c5fd; }
+  code { background: #262636; }
+  .btn.active, button[aria-pressed="true"] { color: #14141c; }
+  /* motion.js notice uses inline light styles; override here (lib is out of scope) */
+  #generated-notice { background: var(--fig-bg) !important; border-color: var(--border) !important; color: var(--text-2) !important; }
+  #generated-notice button { background: var(--bg) !important; border-color: var(--border) !important; color: var(--text) !important; }
+}
 </style>
 </head>
 <body>
@@ -275,16 +292,19 @@ function gainContinuous(rows, featKey, labelKey) {
     { key: 'id', label: 'user_id (N)', kind: 'categorical' }
   ];
 
-  var W = 440, H = 300, padL = 22, padR = 16, padT = 14, padB = 28;
+  // Width follows the container (clamped) so labels keep their size on a phone.
+  var W = 440, H = 300, padL = 22, padR = 16, padT = 14, padB = 36;
   var svg = d3.select('#fg-viz').append('svg')
-    .attr('viewBox', '0 0 ' + W + ' ' + H)
-    .attr('width', '100%').style('max-width', W + 'px');
+    .attr('width', '100%').style('max-width', '440px')
+    .attr('role', 'img');
 
   function X(x) { return padL + x * (W - padL - padR); }
   var rowH = 58;
 
   function render() {
     var rows = makeDataset(state.N);
+    W = Math.max(300, Math.min(440, Math.round(document.getElementById('fg-viz').getBoundingClientRect().width) || 440));
+    svg.attr('viewBox', '0 0 ' + W + ' ' + H);
     svg.selectAll('*').remove();
 
     svg.append('line').attr('x1', padL).attr('x2', W - padR).attr('y1', H - padB).attr('y2', H - padB).attr('stroke', 'var(--border)');
@@ -293,11 +313,19 @@ function gainContinuous(rows, featKey, labelKey) {
       svg.append('text').attr('x', X(t)).attr('y', H - padB + 16).attr('text-anchor', 'middle')
         .attr('font-size', 10).attr('fill', 'var(--text-2)').text(t.toFixed(2));
     });
-    svg.append('text').attr('x', (padL + W - padR) / 2).attr('y', H - 6)
+    svg.append('text').attr('x', (padL + W - padR) / 2).attr('y', H - 4)
       .attr('text-anchor', 'middle').attr('font-size', 11).attr('fill', 'var(--text-2)').text('normalised score');
 
     var row0 = padT + 20;
     var scorecard = '';
+    var desc = [];
+    // Label inside the bar when it fits, otherwise just past its end.
+    function barLabel(v, y, txt) {
+      var end = X(v), inside = end - padL > 8 + txt.length * 5;
+      svg.append('text').attr('x', inside ? padL + 4 : end + 4).attr('y', y)
+        .attr('font-size', 9).attr('font-weight', 600)
+        .attr('fill', inside ? 'var(--fig-bg)' : 'var(--text-2)').text(txt);
+    }
     features.forEach(function (f, idx) {
       var result = f.kind === 'continuous' ? gainContinuous(rows, f.key, 'label') : gainMultiway(rows, f.key, 'label');
       var gain = Math.max(0, result.gain);
@@ -308,14 +336,13 @@ function gainContinuous(rows, featKey, labelKey) {
       svg.append('rect').attr('x', padL).attr('y', row0 + idx * rowH - 2)
         .attr('width', Math.max(0, X(Math.min(1, gain)) - padL)).attr('height', 10)
         .attr('fill', 'var(--c-info)').attr('opacity', 0.85);
-      svg.append('text').attr('x', padL + 4).attr('y', row0 + idx * rowH + 6)
-        .attr('font-size', 9).attr('fill', 'white').attr('font-weight', 600).text('gain ' + gain.toFixed(3));
+      barLabel(Math.min(1, gain), row0 + idx * rowH + 6, 'gain ' + gain.toFixed(3));
       // Gain ratio bar
       svg.append('rect').attr('x', padL).attr('y', row0 + idx * rowH + 14)
         .attr('width', Math.max(0, X(Math.min(1, gainRatio)) - padL)).attr('height', 10)
         .attr('fill', 'var(--c-ratio)').attr('opacity', 0.85);
-      svg.append('text').attr('x', padL + 4).attr('y', row0 + idx * rowH + 22)
-        .attr('font-size', 9).attr('fill', 'white').attr('font-weight', 600).text('gain ratio ' + gainRatio.toFixed(3));
+      barLabel(Math.min(1, gainRatio), row0 + idx * rowH + 22, 'gain ratio ' + gainRatio.toFixed(3));
+      desc.push(f.label + ': gain ' + gain.toFixed(3) + ', gain ratio ' + gainRatio.toFixed(3));
 
       scorecard += '<div style="display: flex; justify-content: space-between; padding: 0.15rem 0; font-family: var(--heading-font);">' +
         '<span>' + f.label + '</span>' +
@@ -323,6 +350,7 @@ function gainContinuous(rows, featKey, labelKey) {
         '</div>';
     });
     document.getElementById('fg-scorecard').innerHTML = scorecard;
+    svg.attr('aria-label', 'Bar chart of normalised split scores with ' + state.N + ' rows. ' + desc.join('; ') + '.');
   }
 
   d3.select('#fg-n').on('input', function () {
@@ -332,6 +360,7 @@ function gainContinuous(rows, featKey, labelKey) {
   });
 
   render();
+  var rt; new ResizeObserver(function () { clearTimeout(rt); rt = setTimeout(render, 80); }).observe(document.getElementById('fg-viz'));
 })();
 
 // ────────────────────────────────────────── Fig 2: SHAP waterfall ──
@@ -375,12 +404,15 @@ function gainContinuous(rows, featKey, labelKey) {
   }
 
   var state = { x: { sqft: 2400, age: 20, beds: 3, zip: 50 } };
+  // Width follows the container (clamped) so labels keep their size on a phone.
   var W = 620, H = 280, padL = 95, padR = 20, padT = 20, padB = 40;
   var svg = d3.select('#fs-viz').append('svg')
-    .attr('viewBox', '0 0 ' + W + ' ' + H)
-    .attr('width', '100%').style('max-width', W + 'px');
+    .attr('width', '100%').style('max-width', '620px')
+    .attr('role', 'img');
 
   function render() {
+    W = Math.max(330, Math.min(620, Math.round(document.getElementById('fs-viz').getBoundingClientRect().width) || 620));
+    svg.attr('viewBox', '0 0 ' + W + ' ' + H);
     svg.selectAll('*').remove();
     var vals = shapley(state.x);
     var pred = model(state.x);
@@ -398,10 +430,11 @@ function gainContinuous(rows, featKey, labelKey) {
     var rowH = (H - padT - padB) / (FEATS.length + 2);
     svg.append('text').attr('x', padL - 6).attr('y', padT + rowH / 2 + 4).attr('text-anchor', 'end')
       .attr('font-size', 11).attr('fill', 'var(--text-2)').attr('font-weight', 600).text('baseline');
-    svg.append('circle').attr('cx', X(base)).attr('cy', padT + rowH / 2).attr('r', 5).attr('fill', 'var(--c-base)').attr('stroke', 'white').attr('stroke-width', 1.5);
+    svg.append('circle').attr('cx', X(base)).attr('cy', padT + rowH / 2).attr('r', 5).attr('fill', 'var(--c-base)').attr('stroke', 'var(--fig-bg)').attr('stroke-width', 1.5);
     svg.append('text').attr('x', X(base)).attr('y', padT + rowH / 2 - 9).attr('text-anchor', 'middle').attr('font-size', 10).attr('fill', 'var(--c-base)').attr('font-weight', 700).text('$' + (base / 1000).toFixed(0) + 'k');
 
     var runningX = base;
+    var desc = [];
     FEATS.forEach(function (f, i) {
       var contrib = vals[f];
       var nextX = runningX + contrib;
@@ -416,17 +449,24 @@ function gainContinuous(rows, featKey, labelKey) {
       var tipX = X(nextX);
       var dir = contrib >= 0 ? 1 : -1;
       svg.append('path').attr('d', 'M' + tipX + ',' + (y - 8) + 'L' + (tipX + dir * 6) + ',' + y + 'L' + tipX + ',' + (y + 8) + 'Z').attr('fill', color);
-      var labelX = (X(runningX) + X(nextX)) / 2;
-      svg.append('text').attr('x', labelX).attr('y', y + 4).attr('text-anchor', 'middle')
-        .attr('font-size', 10).attr('font-weight', 700).attr('fill', 'white')
-        .text((contrib >= 0 ? '+' : '') + '$' + (contrib / 1000).toFixed(1) + 'k');
+      // Value inside the bar when it fits, otherwise beside the arrow tip.
+      var lbl = (contrib >= 0 ? '+' : '') + '$' + (contrib / 1000).toFixed(1) + 'k';
+      var barW = Math.abs(X(nextX) - X(runningX)), fits = barW > lbl.length * 6 + 6;
+      var lx = fits ? (X(runningX) + X(nextX)) / 2 : tipX + dir * 9;
+      var anchor = fits ? 'middle' : (dir > 0 ? 'start' : 'end');
+      if (!fits && (lx + (dir > 0 ? lbl.length * 6 : 0) > W - 2)) { lx = X(Math.min(runningX, nextX)) - 4; anchor = 'end'; }
+      if (!fits && anchor === 'end' && lx - lbl.length * 6 < padL) { lx = X(Math.max(runningX, nextX)) + 9; anchor = 'start'; }
+      svg.append('text').attr('x', lx).attr('y', y + 4).attr('text-anchor', anchor)
+        .attr('font-size', 10).attr('font-weight', 700).attr('fill', fits ? 'var(--fig-bg)' : color)
+        .text(lbl);
+      desc.push(FEAT_LABELS[f] + ' ' + lbl);
       runningX = nextX;
     });
 
     var pY = padT + (FEATS.length + 1) * rowH + rowH / 2;
     svg.append('text').attr('x', padL - 6).attr('y', pY + 4).attr('text-anchor', 'end').attr('font-size', 11).attr('fill', 'var(--c-pred)').attr('font-weight', 700).text('prediction');
     svg.append('line').attr('x1', X(pred)).attr('x2', X(pred)).attr('y1', pY - rowH).attr('y2', pY).attr('stroke', 'var(--border)').attr('stroke-dasharray', '2 2');
-    svg.append('circle').attr('cx', X(pred)).attr('cy', pY).attr('r', 5).attr('fill', 'var(--c-pred)').attr('stroke', 'white').attr('stroke-width', 1.5);
+    svg.append('circle').attr('cx', X(pred)).attr('cy', pY).attr('r', 5).attr('fill', 'var(--c-pred)').attr('stroke', 'var(--fig-bg)').attr('stroke-width', 1.5);
     svg.append('text').attr('x', X(pred)).attr('y', pY - 9).attr('text-anchor', 'middle').attr('font-size', 11).attr('fill', 'var(--c-pred)').attr('font-weight', 700).text('$' + (pred / 1000).toFixed(0) + 'k');
 
     svg.append('line').attr('x1', padL).attr('x2', W - padR).attr('y1', H - padB).attr('y2', H - padB).attr('stroke', 'var(--border)');
@@ -440,6 +480,8 @@ function gainContinuous(rows, featKey, labelKey) {
     document.getElementById('fs-pred').textContent = '$' + (pred / 1000).toFixed(0) + 'k';
     var tot = FEATS.reduce(function (s, f) { return s + vals[f]; }, 0);
     document.getElementById('fs-sum').textContent = (tot >= 0 ? '+' : '') + '$' + (tot / 1000).toFixed(1) + 'k';
+    svg.attr('aria-label', 'Waterfall of Shapley contributions from the baseline $' + (base / 1000).toFixed(0) + 'k to the prediction $' +
+      (pred / 1000).toFixed(0) + 'k: ' + desc.join(', ') + '.');
   }
 
   ['sqft', 'age', 'beds', 'zip'].forEach(function (f) {
@@ -450,6 +492,7 @@ function gainContinuous(rows, featKey, labelKey) {
     });
   });
   render();
+  var rt; new ResizeObserver(function () { clearTimeout(rt); rt = setTimeout(render, 80); }).observe(document.getElementById('fs-viz'));
 })();
 
 if (window.Motion) window.Motion.mountBanner();
