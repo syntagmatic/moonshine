@@ -65,7 +65,14 @@ svg .axis line, svg .axis path { stroke: var(--border); }
   line-height: 1.4; max-width: 240px;
   opacity: 0; transition: opacity 0.15s;
 }
+.presets { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0 0 0.6rem; font-family: var(--heading-font); font-size: 0.8rem; }
+.presets button { font: inherit; padding: 0.25rem 0.7rem; border: 1px solid var(--border); border-radius: 4px; background: var(--bg); color: var(--text); cursor: pointer; }
+.presets button:hover, .presets button:focus-visible { border-color: var(--accent); color: var(--accent); }
+@media (prefers-color-scheme: dark) {
+  .tooltip { background: rgba(44,44,60,0.96); border: 1px solid var(--border); color: var(--text); }
+}
 </style>
+<link rel="stylesheet" href="../shared/theme.css">
 </head>
 <body>
 <div class="article">
@@ -89,9 +96,14 @@ svg .axis line, svg .axis path { stroke: var(--border); }
 <p data-i18n="p5">Click anywhere outside a brush to clear it.</p>
 
 <div class="figure">
+  <div class="presets" role="group" aria-label="Brush presets">
+    <button type="button" id="preset-2011" data-i18n="btn_march2011">Select March 2011</button>
+    <button type="button" id="preset-bonin" data-i18n="btn_bonin">Select the Izu-Bonin arc</button>
+    <button type="button" id="preset-clear" data-i18n="btn_clear">Clear</button>
+  </div>
   <div id="viz"></div>
   <div class="status-bar" id="status" data-i18n="status_loading">Loading data...</div>
-  <div class="figure-caption" data-i18n="fig_caption">Data: USGS Earthquake Catalog, M4.5+, 2000–2025. Depth color scale runs from 0 km (shallow, red) to 600+ km (deep, blue).</div>
+  <div class="figure-caption" data-i18n="fig_caption">Data: USGS Earthquake Catalog, M4.5+, 2000–2025. Depth color scale runs from 0 km (shallow, red) to 600+ km (deep, blue). Tap or hover a dot for its magnitude, depth and date; the buttons set the two brushes the text below asks for.</div>
   <div class="tooltip" id="tooltip"></div>
 </div>
 
@@ -129,8 +141,14 @@ svg .axis line, svg .axis path { stroke: var(--border); }
 
   const width = 700;
   const mapHeight = 500;
-  const timelineHeight = 140;
-  const margin = { top: 10, right: 20, bottom: 30, left: 50 };
+  // The svg scales to fit its column. On a phone that shrinks it to about
+  // 0.45x, so text sizes are multiplied by fs to stay near their nominal
+  // on-screen size, and the timeline gets taller so it can still be brushed.
+  const cw = document.getElementById("viz").clientWidth || width;
+  const fs = Math.min(2.4, Math.max(1, width / cw));
+  const narrow = fs > 1.4;
+  const timelineHeight = narrow ? 240 : 140;
+  const margin = { top: 10, right: 20, bottom: 30 * Math.min(fs, 1.8), left: 50 * Math.min(fs, 1.8) };
   const gap = 40;
 
   const totalHeight = mapHeight + gap + timelineHeight;
@@ -139,7 +157,19 @@ svg .axis line, svg .axis path { stroke: var(--border); }
   const svg = container.append("svg")
     .attr("viewBox", `0 0 ${width} ${totalHeight}`)
     .attr("width", "100%")
+    .attr("role", "img")
     .style("display", "block");
+  const ARIA = {
+    en: "Map of Japan with every M4.5+ earthquake from 2000 to 2025 colored by depth, above a monthly histogram of the same events. Drag on either view to filter the other.",
+    ja: "2000年から2025年のM4.5以上の全地震を深さで色分けした日本地図と、その月別ヒストグラム。どちらかをドラッグするともう一方が絞り込まれる。"
+  };
+  const lang = () => ((window.getPageLang && window.getPageLang()) === "ja" ? "ja" : "en");
+  const setAria = () => {
+    svg.attr("aria-label", ARIA[lang()]);
+    d3.select(".presets").attr("aria-label", lang() === "ja" ? "ブラシのプリセット" : "Brush presets");
+  };
+  setAria();
+  const dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
 
   // Load data
   const raw = await d3.csv("../shared/data/earthquakes.csv", d => {
@@ -182,7 +212,8 @@ svg .axis line, svg .axis path { stroke: var(--border); }
   const depthMax = 650;
   const depthColor = d3.scaleSequential()
     .domain([0, depthMax])
-    .interpolator(t => d3.interpolateRdYlBu(t));
+    // on a dark page the deepest navy disappears, so stop short of it
+    .interpolator(t => d3.interpolateRdYlBu(dark ? t * 0.86 : t));
 
   // Time scale for timeline
   const timeExtent = d3.extent(data, d => d.time);
@@ -219,8 +250,8 @@ svg .axis line, svg .axis path { stroke: var(--border); }
     worldLandGroup.append("path")
       .datum(landFeature)
       .attr("d", geoPath)
-      .attr("fill", "#e8e8e0")
-      .attr("stroke", "#bbb")
+      .style("fill", "var(--land)")
+      .style("stroke", "var(--land-stroke)")
       .attr("stroke-width", 0.6);
   });
 
@@ -230,8 +261,8 @@ svg .axis line, svg .axis path { stroke: var(--border); }
     .data(prefectures.features)
     .join("path")
       .attr("d", geoPath)
-      .attr("fill", "#e8e8e0")
-      .attr("stroke", "#bbb")
+      .style("fill", "var(--land)")
+      .style("stroke", "var(--land-stroke)")
       .attr("stroke-width", 0.5);
 
   // Internal prefecture borders
@@ -239,7 +270,8 @@ svg .axis line, svg .axis path { stroke: var(--border); }
     .datum(prefBorders)
     .attr("d", geoPath)
     .attr("fill", "none")
-    .attr("stroke", "#ddd")
+    .style("stroke", "var(--land-stroke)")
+    .attr("stroke-opacity", 0.5)
     .attr("stroke-width", 0.5);
 
   // City labels
@@ -251,10 +283,10 @@ svg .axis line, svg .axis path { stroke: var(--border); }
   ];
   cities.forEach(c => {
     const [cx, cy] = projection([c.lon, c.lat]);
-    mapGroup.append("circle").attr("cx", cx).attr("cy", cy).attr("r", 2)
+    mapGroup.append("circle").attr("cx", cx).attr("cy", cy).attr("r", 2 * Math.min(fs, 1.6))
       .attr("fill", "var(--text)").attr("pointer-events", "none");
-    mapGroup.append("text").attr("x", cx + 5).attr("y", cy + 3)
-      .style("font-size", "9px").style("fill", "var(--text)")
+    mapGroup.append("text").attr("x", cx + 5 * fs).attr("y", cy + 3 * fs)
+      .style("font-size", 9 * fs + "px").style("fill", "var(--text)")
       .style("font-weight", "600").attr("pointer-events", "none")
       .text(c.name)
       .attr("data-i18n", "svg_city_" + c.name.toLowerCase());
@@ -271,7 +303,7 @@ svg .axis line, svg .axis path { stroke: var(--border); }
     mapGroup.append("text")
       .attr("x", tx).attr("y", ty)
       .attr("transform", `rotate(${t.rotate}, ${tx}, ${ty})`)
-      .style("font-size", "9px").style("fill", "var(--accent)")
+      .style("font-size", 9 * fs + "px").style("fill", "var(--accent)")
       .style("font-style", "italic").style("opacity", 0.7)
       .attr("pointer-events", "none")
       .text(t.name)
@@ -299,9 +331,11 @@ svg .axis line, svg .axis path { stroke: var(--border); }
     .attr("fill", "none").attr("stroke", "var(--border)").attr("stroke-width", 1);
 
   // --- DEPTH LEGEND ---
-  const legendW = 14, legendH = 180;
-  const legendX = width - margin.right - legendW - 6;
-  const legendY = mapHeight / 2 - legendH / 2;
+  const legendW = 14 * Math.min(fs, 1.6), legendH = 180;
+  // On a phone the labels grow, so the legend moves to the top-left corner
+  // (the mainland, where there are few dots) instead of the Pacific side.
+  const legendX = narrow ? 14 : width - legendW - 26;
+  const legendY = narrow ? 20 + 14 * fs : mapHeight / 2 - legendH / 2;
 
   const defs = svg.append("defs");
   const grad = defs.append("linearGradient")
@@ -330,12 +364,13 @@ svg .axis line, svg .axis path { stroke: var(--border); }
     .attr("transform", `translate(${legendW}, 0)`)
     .call(legendAxis)
     .call(g => g.select(".domain").remove())
-    .call(g => g.selectAll("text").attr("class", "legend-label"));
+    .call(g => g.selectAll("text").attr("class", "legend-label").style("font-size", 11 * fs + "px"));
 
   legend.append("text")
-    .attr("x", legendW / 2).attr("y", -8)
-    .attr("text-anchor", "middle")
+    .attr("x", narrow ? 0 : legendW / 2).attr("y", -8)
+    .attr("text-anchor", narrow ? "start" : "middle")
     .attr("class", "legend-label")
+    .style("font-size", 11 * fs + "px")
     .attr("font-weight", 600)
     .text("Depth")
     .attr("data-i18n", "svg_depth");
@@ -360,27 +395,29 @@ svg .axis line, svg .axis path { stroke: var(--border); }
   tlGroup.append("g")
     .attr("class", "axis")
     .attr("transform", `translate(0,${mapHeight + gap + timelineHeight - margin.bottom})`)
-    .call(d3.axisBottom(xTime).ticks(d3.timeYear.every(5)).tickSizeOuter(0));
+    .call(d3.axisBottom(xTime).ticks(d3.timeYear.every(5)).tickSizeOuter(0))
+    .call(g => g.selectAll("text").style("font-size", 11 * fs + "px"));
 
   tlGroup.append("g")
     .attr("class", "axis")
     .attr("transform", `translate(${margin.left},0)`)
-    .call(d3.axisLeft(yHist).ticks(4).tickSizeOuter(0));
+    .call(d3.axisLeft(yHist).ticks(narrow ? 3 : 4).tickFormat(narrow ? d3.format("~s") : null).tickSizeOuter(0))
+    .call(g => g.selectAll("text").style("font-size", 11 * fs + "px"));
 
   // Labels
   tlGroup.append("text")
     .attr("x", (margin.left + width - margin.right) / 2)
     .attr("y", mapHeight + gap + timelineHeight - 2)
     .attr("text-anchor", "middle")
-    .attr("font-size", 12)
+    .attr("font-size", 12 * fs)
     .attr("fill", "var(--text-2)")
     .text("Year")
     .attr("data-i18n", "svg_year");
 
   tlGroup.append("text")
-    .attr("transform", `translate(${14},${mapHeight + gap + timelineHeight / 2}) rotate(-90)`)
+    .attr("transform", `translate(${12 * fs},${mapHeight + gap + (timelineHeight - margin.bottom) / 2}) rotate(-90)`)
     .attr("text-anchor", "middle")
-    .attr("font-size", 12)
+    .attr("font-size", 12 * fs)
     .attr("fill", "var(--text-2)")
     .text("Quakes / month")
     .attr("data-i18n", "svg_quakes_month");
@@ -394,8 +431,8 @@ svg .axis line, svg .axis path { stroke: var(--border); }
     .attr("stroke", "#dc2626").attr("stroke-width", 1).attr("stroke-dasharray", "3,2")
     .attr("pointer-events", "none");
   tlGroup.append("text")
-    .attr("x", tohokuX + 4).attr("y", mapHeight + gap + 18)
-    .style("font-size", "9px").style("fill", "#dc2626")
+    .attr("x", tohokuX + 4).attr("y", mapHeight + gap + 8 + 10 * fs)
+    .style("font-size", 9 * fs + "px").style("fill", "#dc2626")
     .attr("pointer-events", "none")
     .text("2011 Tohoku")
     .attr("data-i18n", "svg_2011_tohoku");
@@ -411,10 +448,13 @@ svg .axis line, svg .axis path { stroke: var(--border); }
   // --- TOOLTIP ---
   const tooltip = d3.select("#tooltip");
 
-  svg.on("mousemove", function(event) {
-    const [mx, my] = d3.pointer(event);
+  // Nearest dot within tolPx screen pixels of the pointer. Used for mouse
+  // hover and for taps (a tap is a zero-size brush, so it arrives as a click).
+  function showNearest(event, tolPx) {
+    const [mx, my] = d3.pointer(event, svg.node());
     // Only on map area
     if (my > mapHeight) { tooltip.style("opacity", 0); return; }
+    const unitsPerPx = width / svg.node().getBoundingClientRect().width;
     // Find nearest dot
     let best = null, bestDist = 100;
     for (const d of data) {
@@ -422,7 +462,7 @@ svg .axis line, svg .axis path { stroke: var(--border); }
       const dist = Math.sqrt(dx * dx + dy * dy);
       if (dist < bestDist) { bestDist = dist; best = d; }
     }
-    if (best && bestDist < 8) {
+    if (best && bestDist < tolPx * unitsPerPx) {
       const figEl = container.node().closest(".figure");
       const figRect = figEl.getBoundingClientRect();
       const svgEl = svg.node();
@@ -434,7 +474,7 @@ svg .axis line, svg .axis path { stroke: var(--border); }
         ? "<strong>M" + best.mag.toFixed(1) + "</strong>　深さ " + best.depth.toFixed(0) + " km"
         : "<strong>M" + best.mag.toFixed(1) + "</strong> at " + best.depth.toFixed(0) + " km depth";
       tooltip
-        .style("left", (screenPt.x - figRect.left + 12) + "px")
+        .style("left", Math.max(4, Math.min(screenPt.x - figRect.left + 12, figRect.width - 250)) + "px")
         .style("top", (screenPt.y - figRect.top - 10) + "px")
         .style("opacity", 1)
         .html(depthStr + "<br>" +
@@ -443,7 +483,9 @@ svg .axis line, svg .axis path { stroke: var(--border); }
     } else {
       tooltip.style("opacity", 0);
     }
-  });
+  }
+  svg.on("mousemove", event => showNearest(event, 8));
+  svg.on("click", event => showNearest(event, 16));
   svg.on("mouseleave", () => tooltip.style("opacity", 0));
 
   // --- BRUSHES ---
@@ -473,7 +515,7 @@ svg .axis line, svg .axis path { stroke: var(--border); }
       mapDots.each(function(d) {
         const sel = d.time >= t0 && d.time <= t1;
         d3.select(this)
-          .attr("fill", sel ? depthColor(Math.min(d.depth, depthMax)) : "#e0e0e0")
+          .attr("fill", sel ? depthColor(Math.min(d.depth, depthMax)) : "var(--ghost)")
           .attr("opacity", sel ? 0.7 : 0.12);
       });
       const count = data.filter(d => d.time >= t0 && d.time <= t1).length;
@@ -494,7 +536,7 @@ svg .axis line, svg .axis path { stroke: var(--border); }
         mapDots.each(function(d) {
           const sel = inBox(d);
           d3.select(this)
-            .attr("fill", sel ? depthColor(Math.min(d.depth, depthMax)) : "#e0e0e0")
+            .attr("fill", sel ? depthColor(Math.min(d.depth, depthMax)) : "var(--ghost)")
             .attr("opacity", sel ? 0.7 : 0.12);
         });
       }
@@ -507,7 +549,7 @@ svg .axis line, svg .axis path { stroke: var(--border); }
       bars.each(function(b) {
         const selCount = selectedMap.get(+b.x0) || 0;
         d3.select(this)
-          .attr("fill", selCount > 0 ? "var(--accent)" : "#d0d0d0")
+          .attr("fill", selCount > 0 ? "var(--accent)" : "var(--ghost)")
           .attr("opacity", selCount > 0 ? 0.7 : 0.2);
       });
 
@@ -546,12 +588,33 @@ svg .axis line, svg .axis path { stroke: var(--border); }
       updateVisuals();
     });
 
-  svg.append("g")
+  const tlBrushG = svg.append("g")
     .attr("class", "brush-timeline")
     .call(tlBrush);
+  const mapBrushG = svg.select(".brush-map");
+
+  // Buttons for the two brushes the prose asks the reader to make, so the
+  // figure works from a keyboard and on small touch screens.
+  d3.select("#preset-2011").on("click", () => {
+    tlBrushG.call(tlBrush.move, [xTime(new Date("2011-03-01")), xTime(new Date("2011-04-01"))]);
+  });
+  d3.select("#preset-bonin").on("click", () => {
+    const [x0, y0] = projection([137, 33.5]);
+    const [x1, y1] = projection([143, 25.5]);
+    mapBrushG.call(mapBrush.move, [[Math.max(0, x0), Math.max(0, y0)], [Math.min(width, x1), Math.min(mapHeight, y1)]]);
+  });
+  d3.select("#preset-clear").on("click", () => {
+    tlBrushG.call(tlBrush.move, null);
+    mapBrushG.call(mapBrush.move, null);
+    tooltip.style("opacity", 0);
+  });
+
+  if (window.translatePageLabels) window.translatePageLabels(svg.node());
+  setAria();
 
   // Re-apply dynamic text when language changes
   window.addEventListener("langchange", function() {
+    setAria();
     updateVisuals();
   });
 
@@ -581,7 +644,10 @@ window.PAGE_JA = {
   li_map: "<strong>地図をドラッグ</strong>して地理的範囲を選択。タイムラインにはその地域の地震だけがハイライトされる。",
   p5: "ブラシの外側をクリックするとクリアされる。",
   status_loading: "データを読み込み中…",
-  fig_caption: "データ：USGS地震カタログ、M4.5以上、2000年〜2025年。深さの色スケールは0 km（浅発・赤）から600 km以上（深発・青）まで。",
+  fig_caption: "データ：USGS地震カタログ、M4.5以上、2000年〜2025年。深さの色スケールは0 km（浅発・赤）から600 km以上（深発・青）まで。点をタップまたはホバーするとマグニチュード、深さ、日付が表示される。ボタンは本文で試すよう促している2つのブラシを設定する。",
+  btn_march2011: "2011年3月を選択",
+  btn_bonin: "伊豆・小笠原弧を選択",
+  btn_clear: "解除",
   h2_clusters: "クラスタリングが教えてくれること",
   insight_1: "タイムラインをブラシして2011年3月だけを選択してみてほしい。この1か月だけでカタログの1,980件、東北地方太平洋沖地震の本震と余震が、東北沖の帯状の領域に密集して現れる。この帯は日本海溝に沿っており、太平洋プレートがオホーツクプレートの下に沈み込む場所だ。",
   p6: "日本は4つのプレートが交わる場所に位置している：太平洋プレート、フィリピン海プレート、ユーラシアプレート、そしてオホーツク（北米）プレート。それぞれの境界は異なるタイプの地震活動を生み出す：",

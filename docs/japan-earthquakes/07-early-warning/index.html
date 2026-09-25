@@ -98,7 +98,16 @@ svg .axis line, svg .axis path { stroke: var(--border); }
 .slider-container input[type=range] { width: 200px; }
 .slider-container .slider-value { font-weight: 600; color: var(--text); min-width: 3em; }
 .slider-container .slider-result { color: var(--text-2); }
+@media (max-width: 520px) { .slider-container input[type=range] { width: auto; flex: 1; min-width: 0; } }
+@media (prefers-color-scheme: dark) {
+  .status-idle { background: #262634; }
+  .status-detecting { background: #1e3a5f; color: #bfdbfe; }
+  .status-warning { background: #3a2f12; color: #fcd34d; }
+  .status-alert { background: #4a1d1d; color: #fecaca; }
+  .tooltip { background: rgba(44,44,60,0.96); border: 1px solid var(--border); }
+}
 </style>
+<link rel="stylesheet" href="../shared/theme.css">
 </head>
 <body>
 <div class="tooltip" id="tooltip"></div>
@@ -124,7 +133,7 @@ svg .axis line, svg .axis path { stroke: var(--border); }
     <button id="btn-play" class="active">Play</button>
     <button id="btn-pause">Pause</button>
     <button id="btn-reset">Reset</button>
-    <label>Speed:
+    <label><span data-i18n="ctrl_speed">Speed:</span>
       <select id="sel-speed">
         <option value="0.5">0.5x</option>
         <option value="1" selected>1x</option>
@@ -133,11 +142,11 @@ svg .axis line, svg .axis path { stroke: var(--border); }
         <option value="10">10x</option>
       </select>
     </label>
-    <label>Scenario:
+    <label><span data-i18n="ctrl_scenario">Scenario:</span>
       <select id="sel-scenario">
-        <option value="tohoku" selected>2011 Tohoku M9.1</option>
-        <option value="nankai">Nankai Trough (hypothetical)</option>
-        <option value="noto">2024 Noto M7.5</option>
+        <option value="tohoku" selected data-i18n="opt_tohoku">2011 Tohoku M9.1</option>
+        <option value="nankai" data-i18n="opt_nankai">Nankai Trough (hypothetical)</option>
+        <option value="noto" data-i18n="opt_noto">2024 Noto M7.5</option>
       </select>
     </label>
   </div>
@@ -242,6 +251,17 @@ const STATIONS = [
 
 // ─── MAP VISUALIZATION ──────────────────────────────────────────────────
 const mapW = 700, mapH = 560;
+const DARK = window.matchMedia("(prefers-color-scheme: dark)").matches;
+const lang7 = () => ((window.getPageLang && window.getPageLang()) === "ja" ? "ja" : "en");
+function aria7(sel, en, ja) {
+  const f = () => sel.attr("aria-label", lang7() === "ja" ? ja : en);
+  f(); window.addEventListener("langchange", f);
+}
+// On a phone each svg shrinks to under half size; FS brings text back near its
+// nominal size. The timeline and action chart also switch to a taller layout.
+const colW7 = document.getElementById("map-container").clientWidth || mapW;
+const NARROW = colW7 < 500;
+const mapFs = Math.max(1, Math.min(2, mapW / colW7));
 const projection = d3.geoMercator()
   .center([138.5, 37.5])
   .scale(2200)
@@ -253,7 +273,11 @@ const mapSvg = d3.select("#map-container")
   .append("svg")
   .attr("viewBox", `0 0 ${mapW} ${mapH}`)
   .attr("width", "100%")
+  .attr("role", "img")
   .style("display", "block");
+aria7(mapSvg,
+  "Animated map of Japan: blue P-wave and red S-wave circles spread from the epicenter, seismometer stations light up as the P-wave reaches them, and cities show the seconds left before the S-wave arrives. Tap a station or city for its distance and arrival times.",
+  "日本の地図のアニメーション。震央から青いP波と赤いS波の円が広がり、P波が届いた地震計が点灯し、各都市にS波到達までの残り秒数が表示される。地震計や都市をタップすると距離と到達時刻が表示される。");
 
 // Japan base map (drawn first, data layers on top)
 const japanBaseGroup = mapSvg.append("g").attr("class", "japan-base");
@@ -272,9 +296,9 @@ const stationDots = mapSvg.selectAll(".station")
   .attr("class", "station")
   .attr("cx", d => projection([d.lon, d.lat])[0])
   .attr("cy", d => projection([d.lon, d.lat])[1])
-  .attr("r", 4)
+  .attr("r", 4 * Math.min(mapFs, 1.5))
   .attr("fill", "#22c55e")
-  .attr("stroke", "#fff")
+  .attr("stroke", "var(--fig-bg)")
   .attr("stroke-width", 1.5)
   .attr("opacity", 0.7);
 
@@ -285,21 +309,21 @@ const cityGroups = mapSvg.selectAll(".city")
   .attr("class", "city")
   .attr("transform", d => `translate(${projection([d.lon, d.lat])})`);
 
-cityGroups.append("circle").attr("r", 4).attr("fill", "#1a1a2e").attr("stroke", "#fff").attr("stroke-width", 1.5);
+cityGroups.append("circle").attr("r", 4 * Math.min(mapFs, 1.5)).attr("fill", "var(--text)").attr("stroke", "var(--fig-bg)").attr("stroke-width", 1.5);
 cityGroups.append("text")
   .attr("class", "city-name")
-  .attr("x", d => (d.name === "Sendai" || d.name === "Sapporo") ? -8 : 8)
-  .attr("y", d => d.name === "Osaka" ? 16 : -8)
+  .attr("x", d => ((d.name === "Sendai" || d.name === "Sapporo") ? -8 : 8) * mapFs)
+  .attr("y", d => (d.name === "Osaka" ? 16 : -8) * mapFs)
   .attr("text-anchor", d => (d.name === "Sendai" || d.name === "Sapporo") ? "end" : "start")
-  .attr("font-size", 12).attr("font-weight", 600).attr("fill", "#1a1a2e")
+  .attr("font-size", 12 * mapFs).attr("font-weight", 600).attr("fill", "var(--text)")
   .text(d => d.name);
 
 // Warning time labels for cities
 const cityWarningLabels = cityGroups.append("text")
-  .attr("x", d => (d.name === "Sendai" || d.name === "Sapporo") ? -8 : 8)
-  .attr("y", d => d.name === "Osaka" ? 29 : 5)
+  .attr("x", d => ((d.name === "Sendai" || d.name === "Sapporo") ? -8 : 8) * mapFs)
+  .attr("y", d => (d.name === "Osaka" ? 29 : 5) * mapFs)
   .attr("text-anchor", d => (d.name === "Sendai" || d.name === "Sapporo") ? "end" : "start")
-  .attr("font-size", 10).attr("fill", "#ef4444").attr("font-weight", 600)
+  .attr("font-size", 10 * mapFs).attr("fill", DARK ? "#f87171" : "#ef4444").attr("font-weight", 600)
   .text("");
 
 // Epicenter marker
@@ -311,19 +335,26 @@ epicenterMarker.append("circle").attr("r",12).attr("fill","none").attr("stroke",
 // Warning issued flash
 const warningFlash = mapSvg.append("text")
   .attr("x", mapW / 2).attr("y", 30)
-  .attr("text-anchor", "middle").attr("font-size", 16).attr("font-weight", 700)
-  .attr("fill", "#991b1b").attr("opacity", 0).attr("data-i18n", "svg_warning_issued").text("⚠ WARNING ISSUED");
+  .attr("y", 20 + 10 * mapFs)
+  .attr("text-anchor", "middle").attr("font-size", 16 * mapFs).attr("font-weight", 700)
+  .attr("fill", DARK ? "#f87171" : "#991b1b").attr("opacity", 0).attr("data-i18n", "svg_warning_issued").text("⚠ WARNING ISSUED");
 
 // ─── TIMELINE VISUALIZATION ─────────────────────────────────────────────
-const tlW = 700, tlH = 140;
-const tlMargin = { top: 20, right: 30, bottom: 30, left: 30 };
+// Phone: labels move into their own rows above the line (see drawTimeline)
+const tlW = NARROW ? 460 : 700, tlH = NARROW ? 250 : 140;
+const tlFs = NARROW ? Math.max(1, tlW / colW7) : 1;
+const tlMargin = { top: 20, right: NARROW ? 14 : 30, bottom: NARROW ? 20 + 18 * tlFs : 30, left: NARROW ? 14 : 30 };
 const tlInner = { w: tlW - tlMargin.left - tlMargin.right, h: tlH - tlMargin.top - tlMargin.bottom };
 
 const tlSvg = d3.select("#timeline-container")
   .append("svg")
   .attr("viewBox", `0 0 ${tlW} ${tlH}`)
   .attr("width", "100%")
+  .attr("role", "img")
   .style("display", "block");
+aria7(tlSvg,
+  "Timeline of the early warning sequence in seconds after the rupture: first P-wave detection, three stations detecting, the warning issued, and the S-wave reaching Sendai and Tokyo. A cursor follows the simulation.",
+  "破壊からの秒数で示した緊急地震速報のタイムライン。最初のP波検出、3地点での検出、警報発令、S波の仙台と東京への到達。カーソルがシミュレーションに合わせて動く。");
 
 const tlG = tlSvg.append("g").attr("transform", `translate(${tlMargin.left},${tlMargin.top})`);
 
@@ -362,38 +393,43 @@ function drawTimeline(events) {
 
   // Axis
   tlG.append("g").attr("class", "axis").attr("transform", `translate(0,${tlInner.h})`)
-    .call(d3.axisBottom(tlScale).ticks(8).tickFormat(d => `${d}s`).tickSizeOuter(0));
+    .call(d3.axisBottom(tlScale).ticks(NARROW ? 5 : 8).tickFormat(d => `${d}s`).tickSizeOuter(0))
+    .call(g => g.selectAll("text").style("font-size", 11 * tlFs + "px"));
 
   // axis label
   const tlLang = window.getPageLang ? window.getPageLang() : "en";
-  tlG.append("text").attr("x", tlInner.w / 2).attr("y", tlInner.h + 28)
-    .attr("text-anchor", "middle").attr("font-size", 10).attr("fill", "#4a4a6a")
+  tlG.append("text").attr("x", tlInner.w / 2).attr("y", tlInner.h + 28 * (NARROW ? tlFs * 1.1 : 1))
+    .attr("text-anchor", "middle").attr("font-size", 10 * tlFs).attr("fill", "var(--text-2)")
     .text(tlLang === "ja" ? "地震発生後の時間（秒）" : "Time after earthquake (seconds)");
 
-  // Main line
-  tlG.append("line").attr("x1", 0).attr("y1", tlInner.h / 2)
-    .attr("x2", tlInner.w).attr("y2", tlInner.h / 2)
-    .attr("stroke", "#c8c8d4").attr("stroke-width", 2);
+  // Main line (on a phone it sits low, with one label row per event above it)
+  const lineY = NARROW ? tlInner.h - 14 : tlInner.h / 2;
+  const rowY = i => NARROW ? i * 17 * tlFs : (i % 2 === 0 ? -1 : tlInner.h + 1);
+  tlG.append("line").attr("x1", 0).attr("y1", lineY)
+    .attr("x2", tlInner.w).attr("y2", lineY)
+    .attr("stroke", DARK ? "#55556a" : "#c8c8d4").attr("stroke-width", 2);
 
   // Events
   const evG = tlG.selectAll(".tl-event").data(events).join("g").attr("class", "tl-event");
   evG.append("circle")
-    .attr("cx", d => tlScale(d.t)).attr("cy", tlInner.h / 2)
-    .attr("r", 5).attr("fill", d => d.color);
+    .attr("cx", d => tlScale(d.t)).attr("cy", lineY)
+    .attr("r", 5 * Math.min(tlFs, 1.4)).attr("fill", d => d.color);
   evG.append("line")
     .attr("x1", d => tlScale(d.t)).attr("x2", d => tlScale(d.t))
-    .attr("y1", (d, i) => i % 2 === 0 ? tlInner.h / 2 - 8 : tlInner.h / 2 + 8)
-    .attr("y2", (d, i) => i % 2 === 0 ? 2 : tlInner.h - 4)
+    .attr("y1", (d, i) => NARROW ? lineY - 8 : (i % 2 === 0 ? tlInner.h / 2 - 8 : tlInner.h / 2 + 8))
+    .attr("y2", (d, i) => NARROW ? rowY(i) + 4 : (i % 2 === 0 ? 2 : tlInner.h - 4))
     .attr("stroke", d => d.color).attr("stroke-width", 1).attr("stroke-dasharray", "2,2");
   evG.append("text")
-    .attr("x", d => tlScale(d.t)).attr("y", (d, i) => i % 2 === 0 ? -1 : tlInner.h + 1)
+    .attr("x", d => tlScale(d.t) + (NARROW ? (tlScale(d.t) < tlInner.w / 2 ? 4 : -4) : 0))
+    .attr("y", (d, i) => rowY(i))
     .attr("text-anchor", (d, i) => {
       const x = tlScale(d.t);
+      if (NARROW) return x < tlInner.w / 2 ? "start" : "end";
       if (x < 60) return "start";
       if (x > tlInner.w - 60) return "end";
       return "middle";
     })
-    .attr("font-size", 9.5).attr("fill", "#1a1a2e").attr("font-weight", 500)
+    .attr("font-size", 9.5 * tlFs).attr("fill", "var(--text)").attr("font-weight", 500)
     .text(d => {
       const evLabel = tlLang === "ja" && d.ja ? d.ja : d.label;
       return `${evLabel} (${d.t.toFixed(0)}s)`;
@@ -403,7 +439,7 @@ function drawTimeline(events) {
   tlG.append("line").attr("class", "tl-cursor")
     .attr("x1", 0).attr("x2", 0)
     .attr("y1", 0).attr("y2", tlInner.h)
-    .attr("stroke", "#2563eb").attr("stroke-width", 1.5).attr("opacity", 0.8);
+    .attr("stroke", DARK ? "#60a5fa" : "#2563eb").attr("stroke-width", 1.5).attr("opacity", 0.8);
 }
 
 // ─── ACTIONS CHART ──────────────────────────────────────────────────────
@@ -415,23 +451,34 @@ const actions = [
   { time: 60, label: "Factory emergency shutdown procedures", ja: "工場の緊急停止手順" }
 ];
 
-const acW = 700, acH = 200;
-const acMargin = { top: 10, right: 40, bottom: 30, left: 230 };
+// Phone: each label sits on its own line above its bar
+const acW = NARROW ? 460 : 700;
+const acFs = NARROW ? Math.max(1, acW / colW7) : 1;
+const acH = NARROW ? 5 * 36 * acFs + 40 * acFs : 200;
+const acMargin = { top: NARROW ? 6 : 10, right: 40, bottom: 30 * acFs, left: NARROW ? 6 : 230 };
 const acInner = { w: acW - acMargin.left - acMargin.right, h: acH - acMargin.top - acMargin.bottom };
 
 const acSvg = d3.select("#actions-container")
   .append("svg").attr("class","action-chart")
   .attr("viewBox", `0 0 ${acW} ${acH}`)
   .attr("width", "100%")
+  .attr("role", "img")
   .style("display", "block");
+aria7(acSvg,
+  "Bar chart of the minimum warning time each protective action needs: 5 s to drop, cover and hold on, 10 s to move away from windows, 15 s to stop elevators, 30 s to slow bullet trains, 60 s for factory shutdowns.",
+  "防護行動ごとに必要な最低限の警報時間の棒グラフ。伏せて身を守るのに5秒、窓から離れるのに10秒、エレベーター停止に15秒、新幹線の減速に30秒、工場の緊急停止に60秒。");
 
 const acG = acSvg.append("g").attr("transform", `translate(${acMargin.left},${acMargin.top})`);
 
 const acX = d3.scaleLinear().domain([0, 70]).range([0, acInner.w]);
-const acY = d3.scaleBand().domain(actions.map(d => d.label)).range([0, acInner.h]).padding(0.3);
+const acY = d3.scaleBand().domain(actions.map(d => d.label)).range([0, acInner.h]).padding(NARROW ? 0 : 0.3);
+// bar geometry: on a phone the top part of each band holds the label
+const barY = d => NARROW ? acY(d.label) + acY.bandwidth() * 0.5 : acY(d.label);
+const barH = NARROW ? acY.bandwidth() * 0.4 : acY.bandwidth();
 
 acG.append("g").attr("class", "axis").attr("transform", `translate(0,${acInner.h})`)
-  .call(d3.axisBottom(acX).ticks(5).tickFormat(d => `${d}s`).tickSizeOuter(0));
+  .call(d3.axisBottom(acX).ticks(5).tickFormat(d => `${d}s`).tickSizeOuter(0))
+  .call(g => g.selectAll("text").style("font-size", 11 * acFs + "px"));
 
 acG.selectAll(".bar-group").data(actions).join("g").attr("class","bar-group").each(function(d) {
   const g = d3.select(this);
@@ -442,17 +489,19 @@ acG.selectAll(".bar-group").data(actions).join("g").attr("class","bar-group").ea
   lg.append("stop").attr("offset","100%").attr("stop-color","#60a5fa");
 
   g.append("rect")
-    .attr("x", 0).attr("y", acY(d.label))
-    .attr("width", acX(d.time)).attr("height", acY.bandwidth())
+    .attr("x", 0).attr("y", barY(d))
+    .attr("width", acX(d.time)).attr("height", barH)
     .attr("fill", `url(#${grad})`).attr("rx", 3);
   const acLang = window.getPageLang ? window.getPageLang() : "en";
   g.append("text").attr("class","bar-label")
-    .attr("x", -8).attr("y", acY(d.label) + acY.bandwidth() / 2)
-    .attr("text-anchor", "end").attr("dominant-baseline", "central")
+    .attr("x", NARROW ? 0 : -8).attr("y", NARROW ? acY(d.label) + acY.bandwidth() * 0.28 : acY(d.label) + acY.bandwidth() / 2)
+    .attr("text-anchor", NARROW ? "start" : "end").attr("dominant-baseline", "central")
+    .style("font-size", NARROW ? 12.8 * acFs + "px" : null)
     .text(acLang === "ja" && d.ja ? d.ja : d.label);
   g.append("text").attr("class","bar-time")
-    .attr("x", acX(d.time) + 5).attr("y", acY(d.label) + acY.bandwidth() / 2)
+    .attr("x", acX(d.time) + 5).attr("y", barY(d) + barH / 2)
     .attr("dominant-baseline", "central")
+    .style("font-size", NARROW ? 12 * acFs + "px" : null)
     .text(`${d.time}s`);
 });
 
@@ -692,8 +741,8 @@ d3.json("../shared/japan.topojson").then(topoData => {
     .join("path")
       .attr("class", "prefecture")
       .attr("d", geoPath)
-      .attr("fill", "#e8e8e0")
-      .attr("stroke", "#bbb")
+      .style("fill", "var(--land)")
+      .style("stroke", "var(--land-stroke)")
       .attr("stroke-width", 0.5);
 
   // Internal borders
@@ -701,7 +750,8 @@ d3.json("../shared/japan.topojson").then(topoData => {
     .datum(japanMesh)
     .attr("d", geoPath)
     .attr("fill", "none")
-    .attr("stroke", "#ddd")
+    .style("stroke", "var(--land-stroke)")
+    .attr("stroke-opacity", 0.5)
     .attr("stroke-width", 0.5);
 
   const initEvents = buildTimelineEvents(getScenario());
@@ -727,7 +777,14 @@ function showTip(event, html) {
   if (y < 4) y = event.clientY + 18;
   tooltip.style("left", x + "px").style("top", y + "px");
 }
-function hideTip() { tooltip.classed("visible", false); }
+function hideTip(event) {
+  // a tap fires pointerleave straight away; keep a tapped tooltip open
+  if (event && event.pointerType === "touch") return;
+  tooltip.classed("visible", false);
+}
+document.addEventListener("click", ev => {
+  if (!ev.target.closest(".station, .city, .bar-group")) tooltip.classed("visible", false);
+});
 
 // Station tooltips
 stationDots
@@ -786,32 +843,32 @@ acG.selectAll(".bar-group")
 (function() {
   const a5 = actions[0]; // 5s - drop, cover
   const x1 = acMargin.left + acX(a5.time);
-  const y1 = acMargin.top + acY(a5.label) + acY.bandwidth() / 2;
-  const xEnd = acMargin.left + acX(35);
-  const yEnd = acMargin.top + 8;
+  const y1 = acMargin.top + barY(a5) + barH / 2;
+  const xEnd = NARROW ? x1 + 34 * acFs : acMargin.left + acX(35);
+  const yEnd = NARROW ? y1 - 1 : acMargin.top + 8;
   const ag = acSvg.append("g").attr("class", "annotation");
-  ag.append("line")
+  if (!NARROW) ag.append("line")
     .attr("x1", x1).attr("y1", y1)
     .attr("x2", xEnd).attr("y2", yEnd)
     .attr("stroke", "#4a4a6a").attr("stroke-width", 1).attr("stroke-dasharray", "3,2");
-  ag.append("circle").attr("cx", x1).attr("cy", y1).attr("r", 3).attr("fill", "none").attr("stroke", "#4a4a6a").attr("stroke-width", 1);
+  if (!NARROW) ag.append("circle").attr("cx", x1).attr("cy", y1).attr("r", 3).attr("fill", "none").attr("stroke", "#4a4a6a").attr("stroke-width", 1);
   ag.append("text").attr("x", xEnd + 4).attr("y", yEnd + 1)
-    .attr("font-size", 10).attr("fill", "#4a4a6a").attr("dominant-baseline", "central")
+    .attr("font-size", 10 * acFs).attr("fill", "var(--text-2)").attr("dominant-baseline", "central")
     .attr("data-i18n", "svg_5s_saves").text("Just 5s saves lives");
 
   // Annotate the 30s bullet train stop — automated infrastructure response
   const a30 = actions[3]; // 30s
   const x30 = acMargin.left + acX(a30.time);
-  const y30 = acMargin.top + acY(a30.label) + acY.bandwidth() / 2;
-  const xEnd30 = acMargin.left + acX(55);
-  const yEnd30 = acMargin.top + acInner.h - 4;
-  ag.append("line")
+  const y30 = acMargin.top + barY(a30) + barH / 2;
+  const xEnd30 = NARROW ? x30 + 34 * acFs : acMargin.left + acX(55);
+  const yEnd30 = NARROW ? y30 - 1 : acMargin.top + acInner.h - 4;
+  if (!NARROW) ag.append("line")
     .attr("x1", x30).attr("y1", y30)
     .attr("x2", xEnd30).attr("y2", yEnd30)
     .attr("stroke", "#4a4a6a").attr("stroke-width", 1).attr("stroke-dasharray", "3,2");
-  ag.append("circle").attr("cx", x30).attr("cy", y30).attr("r", 3).attr("fill", "none").attr("stroke", "#4a4a6a").attr("stroke-width", 1);
+  if (!NARROW) ag.append("circle").attr("cx", x30).attr("cy", y30).attr("r", 3).attr("fill", "none").attr("stroke", "#4a4a6a").attr("stroke-width", 1);
   ag.append("text").attr("x", xEnd30 + 4).attr("y", yEnd30 + 1)
-    .attr("font-size", 10).attr("fill", "#4a4a6a").attr("dominant-baseline", "central")
+    .attr("font-size", 10 * acFs).attr("fill", "var(--text-2)").attr("dominant-baseline", "central")
     .attr("data-i18n", "svg_automated").text("Automated: no human needed");
 })();
 
@@ -898,6 +955,11 @@ window.PAGE_JA = {
   "p16": "日本の緊急地震速報は、幾多の経験、大規模な公共投資、そして防災を重視する文化から生まれた。他国も同様のシステムを構築している（メキシコのSASMEX、米国西海岸のShakeAlert、中国や台湾のシステム）が、日本のシステムは依然として最速かつ最も包括的だ。",
   "label_distance": "震央からの距離:",
   "status_idle": "地震はまだ発生していません",
+  "ctrl_speed": "速度：",
+  "ctrl_scenario": "シナリオ：",
+  "opt_tohoku": "2011年 東北 M9.1",
+  "opt_nankai": "南海トラフ（想定）",
+  "opt_noto": "2024年 能登 M7.5",
   "svg_warning_issued": "⚠ 警報発令",
   "svg_5s_saves": "わずか5秒が命を救う",
   "svg_automated": "自動化：人間の判断は不要",

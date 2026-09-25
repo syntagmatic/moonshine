@@ -29,6 +29,32 @@
     --c-pathway:      #10b981;  /* emerald - pathways, functional context, structure */
     --dna-at: #ef4444;
     --dna-cg: #10b981;
+    --thumb-bg: #f8fafc;
+    --thumb-edge: #f1f5f9;
+    --thumb-grid: #e2e8f0;
+  }
+
+  :root { color-scheme: light dark; }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --text: #e4e4ec;
+      --text-2: #a9a9c2;
+      --accent: #60a5fa;
+      --accent-light: #1e3354;
+      --bg: #15151d;
+      --fig-bg: #1d1d28;
+      --border: #34344a;
+      --c-gene: #60a5fa;
+      --c-sample: #22d3ee;
+      --c-expression: #a78bfa;
+      --c-significance: #f87171;
+      --c-pathway: #34d399;
+      --dna-at: #f87171;
+      --dna-cg: #34d399;
+      --thumb-bg: #1a1a24;
+      --thumb-edge: #2a2a38;
+      --thumb-grid: #3a4152;
+    }
   }
 
   .t-gene { color: var(--c-gene); font-weight: 600; }
@@ -91,7 +117,7 @@
   p { margin: 0 0 1rem; }
   a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
 
-  .header-viz { margin: 1.5rem 0 2rem; border-radius: 6px; overflow: hidden; background: white; border: 1px solid var(--border); }
+  .header-viz { margin: 1.5rem 0 2rem; border-radius: 6px; overflow: hidden; background: var(--fig-bg); border: 1px solid var(--border); }
 
   .category-section { margin-top: 3rem; }
   .category-heading {
@@ -122,8 +148,8 @@
 
   .card-thumb {
     width: 80px; height: 80px; flex-shrink: 0; border-radius: 4px;
-    background: #f8fafc; display: flex; align-items: center; justify-content: center;
-    overflow: hidden; border: 1px solid #f1f5f9;
+    background: var(--thumb-bg); display: flex; align-items: center; justify-content: center;
+    overflow: hidden; border: 1px solid var(--thumb-edge);
   }
   .card-thumb svg { display: block; width: 100%; height: 100%; }
 
@@ -276,384 +302,62 @@ categories.forEach(cat => {
   });
 });
 
-// --- Header Viz: Animated expression matrix silhouette ---
+// --- Header Viz: Animated expression matrix silhouette (decorative) ---
 (function() {
   const host = document.getElementById("header-viz");
+  host.setAttribute("aria-hidden", "true");
   const width = 740, height = 100;
   const svg = d3.select("#header-viz").append("svg")
     .attr("viewBox", `0 0 ${width} ${height}`)
-    .attr("width", "100%").style("display", "block");
-    
+    .attr("width", "100%").style("display", "block")
+    .attr("aria-hidden", "true").attr("focusable", "false");
+
+  // mulberry32, so the silhouette is the same on every load
+  let seed = 20240917;
+  const rand = () => {
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+
   const cols = 60, rows = 6;
   const cw = width / cols, ch = height / rows;
-  
+
   const cells = [];
-  for(let r=0; r<rows; r++) {
-    for(let c=0; c<cols; c++) {
-      cells.push({r, c, base: Math.random()});
-    }
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) cells.push({r, c, base: rand()});
   }
-  
-  const g = svg.append("g");
-  const rects = g.selectAll("rect").data(cells).enter().append("rect")
+
+  const rects = svg.append("g").selectAll("rect").data(cells).enter().append("rect")
     .attr("x", d => d.c * cw)
     .attr("y", d => d.r * ch)
     .attr("width", cw - 0.5)
     .attr("height", ch - 0.5)
-    .attr("fill", "#2563eb")
+    .attr("fill", "var(--accent)")
     .attr("fill-opacity", d => 0.05 + d.base * 0.4);
 
-  let visible = true;
-  function observeVisible(element, callback) {
-    if (window.Motion && typeof Motion.onVisible === "function") return Motion.onVisible(element, callback);
-    if (!("IntersectionObserver" in window)) { callback(true); return () => {}; }
-    const observer = new IntersectionObserver(entries => callback(!!(entries[0] && entries[0].isIntersecting)), { threshold: 0.01 });
-    observer.observe(element);
-    callback(true);
-    return () => observer.disconnect();
-  }
-  observeVisible(host, v => { visible = v; });
-    
-  function animate() {
-    if (!visible || (window.Motion && typeof Motion.reduced === "function" && Motion.reduced())) {
-      requestAnimationFrame(animate);
-      return;
-    }
+  const reduced = () => window.Motion && typeof Motion.reduced === "function" && Motion.reduced();
+  let visible = false, raf = 0;
+  function frame() {
+    raf = 0;
+    if (!visible || reduced()) return;
     const t = Date.now() / 1000;
     rects.attr("fill-opacity", d => {
       const noise = Math.sin(d.c * 0.2 + t) * Math.cos(d.r * 0.5 + t * 0.5);
       return Math.max(0.05, Math.min(0.6, 0.1 + d.base * 0.3 + noise * 0.2));
     });
-    requestAnimationFrame(animate);
+    raf = requestAnimationFrame(frame);
   }
-  animate();
+  function start() { if (!raf && visible && !reduced()) raf = requestAnimationFrame(frame); }
+
+  if (window.Motion && typeof Motion.onVisible === "function") {
+    Motion.onVisible(host, v => { visible = v; start(); });
+  } else if ("IntersectionObserver" in window) {
+    new IntersectionObserver(e => { visible = !!(e[0] && e[0].isIntersecting); start(); }, { threshold: 0.01 }).observe(host);
+  } else { visible = true; start(); }
+  if (window.Motion && typeof Motion.onChange === "function") Motion.onChange(start);
 })();
-
-// --- Thumbnails (Small silhouettes) ---
-function createThumb(id, drawFn) {
-  // Superseded by the deterministic SVG glyph pass below.
-}
-
-// Semantic palette
-const C_GENE = '#2563eb';
-const C_SAMPLE = '#0891b2';
-const C_EXPR = '#8b5cf6';
-const C_SIG = '#ef4444';
-const C_PATH = '#10b981';
-const C_MUTED = '#cbd5e1';
-
-// 1. Heatmap & dendrogram
-createThumb('heatmap', (ctx, s) => {
-  // dendrogram above
-  ctx.strokeStyle = C_PATH; ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(15, 15); ctx.lineTo(15, 8); ctx.lineTo(35, 8); ctx.lineTo(35, 15);
-  ctx.moveTo(25, 8); ctx.lineTo(25, 4); ctx.lineTo(55, 4); ctx.lineTo(55, 8);
-  ctx.moveTo(45, 8); ctx.lineTo(45, 15); ctx.moveTo(55, 8); ctx.lineTo(65, 8); ctx.lineTo(65, 15);
-  ctx.stroke();
-  // grid
-  for(let r=0; r<5; r++) for(let c=0; c<6; c++) {
-    const v = Math.sin(r*1.3 + c*0.7) * 0.5 + 0.5;
-    ctx.fillStyle = C_EXPR; ctx.globalAlpha = 0.2 + v * 0.7;
-    ctx.fillRect(13 + c*9, 20 + r*10, 8, 9);
-  }
-  ctx.globalAlpha = 1;
-});
-
-// 2. MA plot
-createThumb('ma', (ctx, s) => {
-  ctx.strokeStyle = C_MUTED; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(10, 40); ctx.lineTo(70, 40); ctx.stroke();
-  for(let i=0; i<45; i++) {
-    const x = 10 + Math.random() * 60;
-    const dev = (Math.random()-0.5) * 30 * (1 - (x-10)/80);
-    const y = 40 + dev;
-    const hit = Math.abs(dev) > 12;
-    ctx.fillStyle = hit ? C_SIG : C_GENE;
-    ctx.globalAlpha = hit ? 0.9 : 0.5;
-    ctx.beginPath(); ctx.arc(x, y, hit ? 2 : 1.3, 0, Math.PI*2); ctx.fill();
-  }
-  ctx.globalAlpha = 1;
-});
-
-// 3. Volcano plot
-createThumb('volcano', (ctx, s) => {
-  ctx.strokeStyle = C_MUTED; ctx.lineWidth = 1;
-  ctx.setLineDash([2,2]);
-  ctx.beginPath(); ctx.moveTo(10, 30); ctx.lineTo(70, 30); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(28, 10); ctx.lineTo(28, 70); ctx.moveTo(52, 10); ctx.lineTo(52, 70); ctx.stroke();
-  ctx.setLineDash([]);
-  for(let i=0; i<55; i++) {
-    const x = 40 + (Math.random()-0.5) * 60;
-    const y = 70 - Math.pow(Math.abs(x-40), 1.2) - Math.random() * 18;
-    const hit = Math.abs(x-40) > 12 && y < 30;
-    ctx.fillStyle = hit ? C_SIG : C_GENE;
-    ctx.globalAlpha = hit ? 0.95 : 0.45;
-    ctx.beginPath(); ctx.arc(x, y, hit ? 2 : 1.3, 0, Math.PI*2); ctx.fill();
-  }
-  ctx.globalAlpha = 1;
-});
-
-// 4. Dimensionality reduction (PCA scatter with axes)
-createThumb('dimred', (ctx, s) => {
-  // axes
-  ctx.strokeStyle = C_MUTED; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(40, 10); ctx.lineTo(40, 70); ctx.moveTo(10, 40); ctx.lineTo(70, 40); ctx.stroke();
-  // three clusters of samples
-  const clusters = [[22, 25, C_SAMPLE], [55, 28, C_EXPR], [32, 58, C_PATH]];
-  clusters.forEach(([cx, cy, color]) => {
-    ctx.fillStyle = color;
-    for(let i=0; i<10; i++) {
-      ctx.beginPath();
-      ctx.arc(cx + (Math.random()-0.5)*12, cy + (Math.random()-0.5)*12, 1.6, 0, Math.PI*2);
-      ctx.fill();
-    }
-  });
-});
-
-// 5. Genome browser
-createThumb('browser', (ctx, s) => {
-  ctx.fillStyle = C_MUTED;
-  ctx.fillRect(8, 20, 64, 2);
-  ctx.fillRect(8, 38, 64, 2);
-  ctx.fillRect(8, 56, 64, 2);
-  // gene boxes on gene track
-  ctx.fillStyle = C_GENE;
-  ctx.fillRect(14, 16, 14, 10);
-  ctx.fillRect(34, 16, 6, 10);
-  ctx.fillRect(48, 16, 18, 10);
-  // expression pileup
-  ctx.fillStyle = C_EXPR; ctx.globalAlpha = 0.8;
-  for(let i=0; i<30; i++) {
-    const x = 10 + i*2, h = Math.max(1, Math.sin(i*0.5)*6 + Math.random()*4);
-    ctx.fillRect(x, 38-h, 1.5, h);
-  }
-  ctx.globalAlpha = 1;
-  // peak on pathway track
-  ctx.fillStyle = C_PATH;
-  ctx.fillRect(36, 52, 14, 8);
-});
-
-// 6. Circos plot
-createThumb('circos', (ctx, s) => {
-  ctx.strokeStyle = C_GENE; ctx.lineWidth = 4;
-  ctx.beginPath(); ctx.arc(40, 40, 28, 0, Math.PI*2); ctx.stroke();
-  // tick segments
-  ctx.strokeStyle = C_SAMPLE; ctx.lineWidth = 3;
-  [0, 1.2, 2.4, 3.6, 4.8].forEach(a => {
-    ctx.beginPath(); ctx.arc(40, 40, 28, a, a+0.4); ctx.stroke();
-  });
-  // chords inside
-  ctx.strokeStyle = C_PATH; ctx.lineWidth = 1.2; ctx.globalAlpha = 0.7;
-  [[0.3, 2.8], [1.5, 4.2], [2.2, 5.5]].forEach(([a, b]) => {
-    const x1 = 40 + Math.cos(a)*26, y1 = 40 + Math.sin(a)*26;
-    const x2 = 40 + Math.cos(b)*26, y2 = 40 + Math.sin(b)*26;
-    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.quadraticCurveTo(40, 40, x2, y2); ctx.stroke();
-  });
-  ctx.globalAlpha = 1;
-});
-
-// 7. Survival curves (Kaplan-Meier, two groups)
-createThumb('survival', (ctx, s) => {
-  ctx.strokeStyle = C_MUTED; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(10, 70); ctx.lineTo(70, 70); ctx.moveTo(10, 10); ctx.lineTo(10, 70); ctx.stroke();
-  // group A (better outcome) - pathway green
-  ctx.strokeStyle = C_PATH; ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.moveTo(10, 15); ctx.lineTo(22, 15); ctx.lineTo(22, 22); ctx.lineTo(38, 22); ctx.lineTo(38, 30); ctx.lineTo(55, 30); ctx.lineTo(55, 36); ctx.lineTo(70, 36); ctx.stroke();
-  // group B (worse outcome) - significance red
-  ctx.strokeStyle = C_SIG; ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.moveTo(10, 18); ctx.lineTo(18, 18); ctx.lineTo(18, 32); ctx.lineTo(32, 32); ctx.lineTo(32, 48); ctx.lineTo(48, 48); ctx.lineTo(48, 62); ctx.lineTo(70, 62); ctx.stroke();
-});
-
-// 8. Dot plot
-createThumb('dotplot', (ctx, s) => {
-  // faint grid lines
-  ctx.strokeStyle = C_MUTED; ctx.lineWidth = 0.5;
-  for(let i=0; i<5; i++) {
-    ctx.beginPath(); ctx.moveTo(14 + i*13, 14); ctx.lineTo(14 + i*13, 66); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(14, 14 + i*13); ctx.lineTo(66, 14 + i*13); ctx.stroke();
-  }
-  for(let r=0; r<4; r++) for(let c=0; c<4; c++) {
-    const frac = (Math.sin(r*1.7 + c*0.9) * 0.5 + 0.5);
-    const rad = 1.5 + frac * 4.5;
-    const intensity = Math.cos(r*0.8 + c*1.1) * 0.5 + 0.5;
-    ctx.fillStyle = C_EXPR;
-    ctx.globalAlpha = 0.3 + intensity * 0.7;
-    ctx.beginPath(); ctx.arc(20 + c*13, 20 + r*13, rad, 0, Math.PI*2); ctx.fill();
-  }
-  ctx.globalAlpha = 1;
-});
-
-// 9. Lollipop mutation plot
-createThumb('lollipop', (ctx, s) => {
-  // gene body (protein) with domains
-  ctx.fillStyle = C_MUTED; ctx.fillRect(8, 52, 64, 8);
-  ctx.fillStyle = C_GENE; ctx.fillRect(18, 50, 14, 12);
-  ctx.fillStyle = C_PATH; ctx.fillRect(42, 50, 18, 12);
-  // mutations: stems + heads
-  const muts = [{x: 24, h: 20, big: false}, {x: 48, h: 10, big: true}, {x: 52, h: 28, big: true}, {x: 58, h: 16, big: false}];
-  muts.forEach(m => {
-    ctx.strokeStyle = C_MUTED; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(m.x, 52); ctx.lineTo(m.x, 52 - m.h); ctx.stroke();
-    ctx.fillStyle = C_SIG;
-    ctx.beginPath(); ctx.arc(m.x, 52 - m.h, m.big ? 3 : 2, 0, Math.PI*2); ctx.fill();
-  });
-});
-
-// 10. Five views of a broken pathway — composite thumb of 5 stacked modalities
-createThumb('fiveviews', (ctx, s) => {
-  const pad = 6, rowH = 12, gap = 2;
-  const rowY = i => pad + i * (rowH + gap);
-
-  // Row 1 — Manhattan scatter with one peak
-  for(let i=0; i<28; i++) {
-    const x = 8 + i * 2.2;
-    const peak = Math.abs(i - 18) < 3 ? 9 : Math.random() * 4;
-    ctx.fillStyle = peak > 5 ? C_SIG : (i % 12 < 6 ? C_GENE : C_SAMPLE);
-    ctx.beginPath(); ctx.arc(x, rowY(0) + rowH - peak, 1, 0, Math.PI*2); ctx.fill();
-  }
-
-  // Row 2 — Oncoprint: 2 genes × many samples grid
-  for(let g=0; g<2; g++) {
-    for(let c=0; c<16; c++) {
-      ctx.fillStyle = '#f1f5f9';
-      ctx.fillRect(8 + c*4, rowY(1) + g*5.5, 3.5, 4.5);
-      const roll = Math.sin(g*1.7 + c*1.3) * 0.5 + 0.5;
-      if(roll > 0.65) { ctx.fillStyle = g === 0 ? C_SIG : C_EXPR; ctx.fillRect(8 + c*4, rowY(1) + g*5.5, 3.5, 4.5); }
-    }
-  }
-
-  // Row 3 — Methylation strip with CpG dots
-  ctx.fillStyle = '#f1f5f9'; ctx.fillRect(8, rowY(2) + 4, 64, 4);
-  for(let i=0; i<14; i++) {
-    const v = Math.max(0, Math.sin(i*0.55 - 1) * 0.6 + 0.4);
-    ctx.fillStyle = C_SIG; ctx.globalAlpha = 0.15 + v * 0.75;
-    ctx.fillRect(10 + i*4.5, rowY(2) + 2, 3.8, 8);
-  }
-  ctx.globalAlpha = 1;
-
-  // Row 4 — Pathway: 4 nodes in a row, connected
-  const pn = [{x: 14}, {x: 30}, {x: 50}, {x: 66}];
-  ctx.strokeStyle = '#cbd5e1'; ctx.lineWidth = 1;
-  for(let i=0; i<pn.length-1; i++) {
-    ctx.beginPath(); ctx.moveTo(pn[i].x, rowY(3) + rowH/2); ctx.lineTo(pn[i+1].x, rowY(3) + rowH/2); ctx.stroke();
-  }
-  const pcols = [C_GENE, C_GENE, C_GENE, C_PATH];
-  pn.forEach((p, i) => { ctx.fillStyle = pcols[i]; ctx.beginPath(); ctx.arc(p.x, rowY(3) + rowH/2, 3, 0, Math.PI*2); ctx.fill(); });
-
-  // Row 5 — PPI: hub + satellites
-  const cx = 40, cy = rowY(4) + rowH/2;
-  const sats = [];
-  for(let i=0; i<6; i++) {
-    const a = (i / 6) * Math.PI * 2;
-    sats.push({x: cx + Math.cos(a)*8, y: cy + Math.sin(a)*4});
-  }
-  ctx.strokeStyle = '#cbd5e1'; ctx.lineWidth = 0.8;
-  sats.forEach(p => { ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(p.x, p.y); ctx.stroke(); });
-  ctx.fillStyle = C_SAMPLE;
-  sats.forEach(p => { ctx.beginPath(); ctx.arc(p.x, p.y, 1.6, 0, Math.PI*2); ctx.fill(); });
-  ctx.fillStyle = C_SIG;
-  ctx.beginPath(); ctx.arc(cx, cy, 2.6, 0, Math.PI*2); ctx.fill();
-});
-
-// 11. ChIP-seq peaks
-createThumb('chip', (ctx, s) => {
-  // baseline
-  ctx.strokeStyle = C_MUTED; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(8, 62); ctx.lineTo(72, 62); ctx.stroke();
-  // pileup signal
-  ctx.fillStyle = C_EXPR; ctx.globalAlpha = 0.75;
-  ctx.beginPath(); ctx.moveTo(8, 62);
-  for(let i=0; i<64; i++) {
-    const y = 62 - Math.exp(-Math.pow(i-32, 2)/90) * 38 - Math.random()*3;
-    ctx.lineTo(8+i, y);
-  }
-  ctx.lineTo(72, 62); ctx.closePath(); ctx.fill();
-  ctx.globalAlpha = 1;
-  // called peak box
-  ctx.strokeStyle = C_PATH; ctx.lineWidth = 1.5;
-  ctx.strokeRect(24, 18, 20, 44);
-  // gene track below
-  ctx.fillStyle = C_GENE; ctx.fillRect(22, 68, 16, 6);
-});
-
-// 12. Multi-omics heatmap (layered tracks)
-createThumb('multiomics', (ctx, s) => {
-  const layers = [C_GENE, C_EXPR, C_PATH, C_SIG];
-  layers.forEach((color, li) => {
-    for(let c=0; c<12; c++) {
-      const v = Math.sin(li*1.3 + c*0.7) * 0.5 + 0.5;
-      ctx.fillStyle = color; ctx.globalAlpha = 0.25 + v * 0.7;
-      ctx.fillRect(10 + c*5, 14 + li*13, 4.3, 11);
-    }
-  });
-  ctx.globalAlpha = 1;
-  // sample strip left
-  ctx.fillStyle = C_SAMPLE;
-  for(let li=0; li<4; li++) ctx.fillRect(5, 14 + li*13, 3, 11);
-});
-
-// 13. Waterfall plot
-createThumb('waterfall', (ctx, s) => {
-  // midline
-  ctx.strokeStyle = C_MUTED; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(8, 40); ctx.lineTo(72, 40); ctx.stroke();
-  for(let i=0; i<18; i++) {
-    const h = 28 - i*3.2;
-    ctx.fillStyle = h >= 0 ? C_PATH : C_SIG;
-    if(h >= 0) ctx.fillRect(10 + i*3.4, 40 - h, 2.8, h);
-    else ctx.fillRect(10 + i*3.4, 40, 2.8, -h);
-  }
-});
-
-// 14. Forest plot
-createThumb('forest', (ctx, s) => {
-  // null line
-  ctx.strokeStyle = C_MUTED; ctx.lineWidth = 1; ctx.setLineDash([2,2]);
-  ctx.beginPath(); ctx.moveTo(40, 10); ctx.lineTo(40, 72); ctx.stroke();
-  ctx.setLineDash([]);
-  const rows = [
-    {y: 18, c: 34, w: 10},
-    {y: 30, c: 46, w: 8},
-    {y: 42, c: 50, w: 14},
-    {y: 54, c: 38, w: 6},
-    {y: 66, c: 44, w: 12}
-  ];
-  rows.forEach(r => {
-    ctx.strokeStyle = C_SAMPLE; ctx.lineWidth = 1.2;
-    ctx.beginPath(); ctx.moveTo(r.c - r.w, r.y); ctx.lineTo(r.c + r.w, r.y); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(r.c - r.w, r.y-2); ctx.lineTo(r.c - r.w, r.y+2); ctx.moveTo(r.c + r.w, r.y-2); ctx.lineTo(r.c + r.w, r.y+2); ctx.stroke();
-    ctx.fillStyle = Math.abs(r.c - 40) > 5 ? C_SIG : C_SAMPLE;
-    ctx.fillRect(r.c - 2.5, r.y - 2.5, 5, 5);
-  });
-});
-
-// 15. Gene portrait
-createThumb('portrait', (ctx, s) => {
-  // gene body
-  ctx.fillStyle = C_MUTED; ctx.fillRect(8, 36, 64, 8);
-  // exons
-  ctx.fillStyle = C_GENE;
-  ctx.fillRect(12, 32, 8, 16);
-  ctx.fillRect(26, 32, 12, 16);
-  ctx.fillRect(44, 32, 6, 16);
-  ctx.fillRect(56, 32, 12, 16);
-  // domain annotation band (above)
-  ctx.fillStyle = C_PATH; ctx.globalAlpha = 0.7;
-  ctx.fillRect(22, 18, 22, 6);
-  ctx.fillRect(50, 18, 16, 6);
-  ctx.globalAlpha = 1;
-  // expression track below
-  for(let i=0; i<20; i++) {
-    const h = 2 + Math.abs(Math.sin(i*0.6)) * 10;
-    ctx.fillStyle = C_EXPR; ctx.globalAlpha = 0.75;
-    ctx.fillRect(10 + i*3, 68 - h, 2.2, h);
-  }
-  ctx.globalAlpha = 1;
-  // significance marker
-  ctx.fillStyle = C_SIG;
-  ctx.beginPath(); ctx.arc(34, 14, 2.5, 0, Math.PI*2); ctx.fill();
-});
 
 // --- Article-inspired SVG glyphs ---
 (function drawArticleGlyphs() {
@@ -666,8 +370,8 @@ createThumb('portrait', (ctx, s) => {
     up: '#ef4444',
     down: '#2563eb',
     muted: '#94a3b8',
-    grid: '#e2e8f0',
-    pale: '#f8fafc',
+    grid: 'var(--thumb-grid)',
+    pale: 'var(--thumb-bg)',
     text2: 'var(--text-2)',
     trans: '#d1495b',
     inv: '#8e44ad',
@@ -677,7 +381,7 @@ createThumb('portrait', (ctx, s) => {
     cnLoss: '#1f6feb',
     meth: '#5b21b6',
     missense: '#16a34a',
-    trunc: '#111827',
+    trunc: 'var(--text)',
     contact: '#9b4a34',
     structural: '#6f5b8b',
     cr: '#0f766e',
@@ -729,7 +433,7 @@ createThumb('portrait', (ctx, s) => {
   function heatCell(parent, x, y, w, h, value) {
     const fill = value >= 0 ? C.up : C.down;
     const opacity = 0.18 + Math.min(1, Math.abs(value) / 2.2) * 0.74;
-    rect(parent, x, y, w, h, { fill, opacity, stroke: '#fff', 'stroke-width': 0.6 });
+    rect(parent, x, y, w, h, { fill, opacity, stroke: C.pale, 'stroke-width': 0.6 });
   }
   function polar(cx, cy, r, a) { return [cx + Math.cos(a) * r, cy + Math.sin(a) * r]; }
   function arc(parent, cx, cy, r, a0, a1, attrs) {
@@ -870,7 +574,7 @@ createThumb('portrait', (ctx, s) => {
         fill: 'none', stroke: d[2], 'stroke-width': d[3], opacity: 0.45, 'stroke-linecap': 'round'
       });
     });
-    circle(svg, cx, cy, 4, { fill: '#fff', stroke: C.grid, 'stroke-width': 1 });
+    circle(svg, cx, cy, 4, { fill: C.pale, stroke: C.grid, 'stroke-width': 1 });
   });
 
   thumb('survival', svg => {
@@ -919,7 +623,7 @@ createThumb('portrait', (ctx, s) => {
     ].forEach(d => {
       const px = x(d[0]), py = 54 - d[1];
       line(svg, px, 54, px, py, { stroke: C.muted, 'stroke-width': 1 });
-      circle(svg, px, py, d[3], { fill: d[2], stroke: '#fff', 'stroke-width': 1 });
+      circle(svg, px, py, d[3], { fill: d[2], stroke: C.pale, 'stroke-width': 1 });
     });
     label(svg, 42, 67, 'TP53 DNA-binding domain', { fill: C.text2, 'font-size': 5.2 });
   });
@@ -933,7 +637,7 @@ createThumb('portrait', (ctx, s) => {
     }
     line(svg, 8, rowY(0) + 3, 72, rowY(0) + 3, { stroke: C.sig, 'stroke-width': 0.8, 'stroke-dasharray': '2,2', opacity: 0.6 });
     for (let r = 0; r < 2; r++) for (let c = 0; c < 13; c++) {
-      rect(svg, 9 + c * 4.7, rowY(1) + r * 5, 4, 4.3, { fill: '#fff', stroke: C.grid, 'stroke-width': 0.4 });
+      rect(svg, 9 + c * 4.7, rowY(1) + r * 5, 4, 4.3, { fill: C.pale, stroke: C.grid, 'stroke-width': 0.4 });
       if ((r === 0 && c < 6) || (r === 1 && [6,7,8].includes(c))) rect(svg, 9 + c * 4.7, rowY(1) + r * 5, 4, 4.3, { fill: r ? C.expr : C.sig, opacity: 0.86 });
     }
     line(svg, 10, rowY(2) + 6, 70, rowY(2) + 6, { stroke: C.grid, 'stroke-width': 4 });
@@ -943,7 +647,7 @@ createThumb('portrait', (ctx, s) => {
     line(svg, 17, rowY(3)+7, 26, rowY(3)+7, { stroke: C.path, 'stroke-width': 1.2 });
     line(svg, 32, rowY(3)+7, 42, rowY(3)+7, { stroke: C.path, 'stroke-width': 1.2 });
     line(svg, 48, rowY(3)+7, 60, rowY(3)+7, { stroke: C.sig, 'stroke-width': 1.2, 'stroke-dasharray': '2,2' });
-    nodes.forEach(n => circle(svg, n[0], n[1], 3.4, { fill: n[3], stroke: '#fff', 'stroke-width': 0.8 }));
+    nodes.forEach(n => circle(svg, n[0], n[1], 3.4, { fill: n[3], stroke: C.pale, 'stroke-width': 0.8 }));
     const cx = 40, cy = rowY(4)+7;
     for (let i = 0; i < 7; i++) {
       const a = i / 7 * Math.PI * 2;
@@ -951,7 +655,7 @@ createThumb('portrait', (ctx, s) => {
       line(svg, cx, cy, px, py, { stroke: C.grid, 'stroke-width': 0.8 });
       circle(svg, px, py, 2, { fill: i % 2 ? C.sample : C.path, opacity: 0.8 });
     }
-    circle(svg, cx, cy, 3.4, { fill: C.sig, stroke: '#fff', 'stroke-width': 0.8 });
+    circle(svg, cx, cy, 3.4, { fill: C.sig, stroke: C.pale, 'stroke-width': 0.8 });
   });
 
   thumb('chip', svg => {
@@ -978,14 +682,14 @@ createThumb('portrait', (ctx, s) => {
       heatCell(svg, x0 + c * cw, y0 + r * ch, cw - 0.4, ch - 0.4, Math.sin(r * 1.5 + c * 0.65) * 2);
     }
     for (let c = 0; c < 12; c++) {
-      rect(svg, x0 + c * cw, y0 + 2 * ch, cw - 0.4, ch - 0.4, { fill: C.meth, opacity: 0.12 + (c % 5) * 0.14, stroke: '#fff', 'stroke-width': 0.5 });
+      rect(svg, x0 + c * cw, y0 + 2 * ch, cw - 0.4, ch - 0.4, { fill: C.meth, opacity: 0.12 + (c % 5) * 0.14, stroke: C.pale, 'stroke-width': 0.5 });
     }
     for (let c = 0; c < 12; c++) {
       const x = x0 + c * cw, y = y0 + 3 * ch;
-      rect(svg, x, y, cw - 0.4, ch - 0.4, { fill: c < 3 ? C.cnLoss : c >= 8 ? C.cnGain : '#f5f5f7', stroke: '#fff', 'stroke-width': 0.5, opacity: 0.9 });
+      rect(svg, x, y, cw - 0.4, ch - 0.4, { fill: c < 3 ? C.cnLoss : c >= 8 ? C.cnGain : C.grid, stroke: C.pale, 'stroke-width': 0.5, opacity: 0.9 });
       if ([0,1,2,7,9].includes(c)) rect(svg, x + 0.8, y + 0.8, cw - 2, ch - 1.8, { fill: c === 2 ? C.trunc : C.missense });
     }
-    for (let c = 0; c < 12; c++) rect(svg, x0 + c * cw, y0 + 4 * ch, cw - 0.4, ch - 0.4, { fill: c < 3 ? C.cnLoss : c >= 8 ? C.cnGain : '#fff', stroke: '#fff', 'stroke-width': 0.5, opacity: 0.85 });
+    for (let c = 0; c < 12; c++) rect(svg, x0 + c * cw, y0 + 4 * ch, cw - 0.4, ch - 0.4, { fill: c < 3 ? C.cnLoss : c >= 8 ? C.cnGain : C.grid, stroke: C.pale, 'stroke-width': 0.5, opacity: 0.85 });
     [15, 8, 20, 13, 10].forEach((w, i) => rect(svg, 67, y0 + i * ch + 1, w / 2.2, 3.4, { fill: C.muted, opacity: 0.72 }));
     line(svg, 6, y0 - 1, 6, y0 + 5 * ch, { stroke: C.text2, 'stroke-width': 1 });
     rect(svg, x0, y0, 12 * cw, 5 * ch, { fill: 'none', stroke: C.grid, 'stroke-width': 0.7 });
@@ -1024,7 +728,7 @@ createThumb('portrait', (ctx, s) => {
 
   thumb('portrait', svg => {
     const panels = [[7,8],[42,8],[7,31],[42,31],[7,54],[42,54]];
-    panels.forEach(p => rect(svg, p[0], p[1], 31, 18, { fill: '#fff', stroke: C.grid, 'stroke-width': 0.7, rx: 2 }));
+    panels.forEach(p => rect(svg, p[0], p[1], 31, 18, { fill: C.pale, stroke: C.grid, 'stroke-width': 0.7, rx: 2 }));
     line(svg, 11, 21, 34, 21, { stroke: C.muted, 'stroke-width': 2 });
     [17, 24, 29].forEach((x, i) => { line(svg, x, 21, x, 13 + i, { stroke: C.muted, 'stroke-width': 0.8 }); circle(svg, x, 13 + i, 2.4, { fill: i === 1 ? C.contact : C.structural }); });
     path(svg, 'M47 23 C51 12, 57 12, 61 23 C65 34, 69 34, 73 23', { fill: 'none', stroke: C.expr, 'stroke-width': 1.5 });

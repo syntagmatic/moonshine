@@ -92,7 +92,14 @@ svg .axis line, svg .axis path { stroke: var(--border); }
 .mini-map .land { fill: #e8e8e0; stroke: #bbb; stroke-width: 0.5px; }
 .mini-map .quake-loc { stroke: #fff; stroke-width: 0.5px; cursor: pointer; }
 .data-note { color: var(--text-2); font-size: 0.9rem; margin-top: 3rem; }
+.quake:focus, .md-dot:focus, .quake-loc:focus { outline: none; stroke-width: 3; }
+.mini-map .land { fill: var(--land); stroke: var(--land-stroke); }
+.mini-map .quake-loc { stroke-opacity: 1; }
+@media (prefers-color-scheme: dark) {
+  .tooltip { background: #2a2a38; }
+}
 </style>
+<link rel="stylesheet" href="../shared/theme.css">
 </head>
 <body>
 <div class="article">
@@ -110,10 +117,10 @@ svg .axis line, svg .axis path { stroke: var(--border); }
 
 <div class="figure">
   <div id="timeline"></div>
-  <div class="figure-caption" data-i18n="caption_timeline">Each circle is one significant earthquake in Japan. Vertical position: magnitude. Circle area: estimated deaths (square-root scale). Blue: tsunami. Orange: no tsunami. Hover for details.</div>
+  <div class="figure-caption" data-i18n="caption_timeline">Each circle is one significant earthquake in Japan. Vertical position: magnitude. Circle area: estimated deaths (square-root scale). Blue: tsunami. Orange: no tsunami. Hover, tap or tab to a circle for details.</div>
 </div>
 
-<div class="tooltip" id="tooltip"></div>
+<div class="tooltip" id="tooltip" role="status"></div>
 
 <p data-i18n="p5">The pre-modern events near the top of the chart were genuinely large. The 1707 Hoei earthquake (M8.6) ruptured most of the Nankai Trough, and 49 days later Mount Fuji began its most recent eruption. The 869 Jogan earthquake (M8.6) sent a tsunami several kilometers inland across the Sendai plain. Magnitudes for events like these are back-calculated from damage descriptions and tsunami deposits, and they carry large uncertainties. An M8.4 in the seventh century is a best guess, and pre-modern death tolls come from texts that may exaggerate, omit, or fold in the famine and fires that followed.</p>
 
@@ -125,7 +132,7 @@ svg .axis line, svg .axis path { stroke: var(--border); }
 
 <div class="figure">
   <div id="mag-deaths"></div>
-  <div class="figure-caption" data-i18n="caption_mag_deaths">Each circle is one significant earthquake in Japan. Horizontal axis: magnitude. Vertical axis: estimated deaths (log scale). Hover for details.</div>
+  <div class="figure-caption" data-i18n="caption_mag_deaths">Each circle is one significant earthquake in Japan. Horizontal axis: magnitude. Vertical axis: estimated deaths (log scale). Hover or tap a circle for details.</div>
 </div>
 
 <h2 data-i18n="h2_where">Where They Struck</h2>
@@ -134,7 +141,7 @@ svg .axis line, svg .axis path { stroke: var(--border); }
 
 <div class="figure">
   <div id="map"></div>
-  <div class="figure-caption" data-i18n="caption_map">Approximate locations of the 39 earthquakes. Circle size: deaths (square-root scale). Blue: tsunami. Orange: no tsunami. Hover for details.</div>
+  <div class="figure-caption" data-i18n="caption_map">Approximate locations of the 39 earthquakes. Circle size: deaths (square-root scale). Blue: tsunami. Orange: no tsunami. Hover or tap a circle for details.</div>
 </div>
 
 <h2 data-i18n="h2_jogan">The Jogan Precedent</h2>
@@ -238,17 +245,60 @@ function quakeTooltipHTML(d) {
 
 const container = document.getElementById("timeline");
 const tooltipEl = document.getElementById("tooltip");
+const pageLang = () => ((window.getPageLang && window.getPageLang()) === "ja" ? "ja" : "en");
+
+// On a phone the charts are drawn in a narrower viewBox and every svg text is
+// multiplied by fs, so labels land near their nominal size on screen.
+const colW = container.clientWidth || 690;
+const narrow = colW < 500;
+function scaleText(sel, fs) {
+  if (fs <= 1.01) return;
+  sel.selectAll("text").each(function () {
+    if (this.closest(".no-fs")) return; // already inside a scaled group
+    const px = parseFloat(getComputedStyle(this).fontSize) || 11;
+    this.style.fontSize = (px * fs) + "px";
+  });
+}
+// Tooltip shared by all three figures: hover, tap (click) and keyboard focus
+function placeTip(x, y) {
+  let left = x + 14;
+  if (left + 280 > window.innerWidth + window.scrollX) left = Math.max(window.scrollX + 4, x - 290);
+  tooltipEl.style.left = left + "px";
+  tooltipEl.style.top = (y - 14) + "px";
+}
+function showTip(event, d) {
+  tooltipEl.innerHTML = quakeTooltipHTML(d);
+  tooltipEl.style.opacity = 1;
+  if (event && event.type !== "focus" && event.pageX != null) placeTip(event.pageX, event.pageY);
+  else if (event && event.target && event.target.getBoundingClientRect) {
+    const b = event.target.getBoundingClientRect();
+    placeTip(b.right + window.scrollX, b.top + window.scrollY);
+  }
+}
+document.addEventListener("click", ev => {
+  if (!ev.target.closest(".quake, .md-dot, .quake-loc")) tooltipEl.style.opacity = 0;
+});
+function setAria(sel, en, ja) {
+  const f = () => sel.attr("aria-label", pageLang() === "ja" ? ja : en);
+  f(); window.addEventListener("langchange", f);
+}
 
 const margin = { top: 30, right: 30, bottom: 50, left: 55 };
-const width = 690;
-const height = 420;
+const width = narrow ? 520 : 690;
+const tlFs = Math.max(1, width / colW);
+const legendH = narrow ? 82 * tlFs : 0;
+const height = 420 + legendH;
 const innerW = width - margin.left - margin.right;
-const innerH = height - margin.top - margin.bottom;
+const innerH = height - legendH - margin.top - margin.bottom;
 
 const svg = d3.select(container)
   .append("svg")
   .attr("viewBox", `0 0 ${width} ${height}`)
-  .attr("width", "100%");
+  .attr("width", "100%")
+  .attr("role", "group");
+setAria(svg,
+  "Timeline of 39 significant earthquakes in Japan from 684 to 2024: year across, magnitude up, circle area proportional to deaths, blue if the quake caused a tsunami. Each circle can be focused or tapped for details.",
+  "684年から2024年までの日本の顕著な地震39件の年表。横軸は年、縦軸はマグニチュード、円の面積は死者数、青は津波を伴った地震。各円はフォーカスまたはタップで詳細を表示できる。");
 
 const g = svg.append("g")
   .attr("transform", `translate(${margin.left},${margin.top})`);
@@ -294,7 +344,7 @@ g.append("text")
 // Axis labels
 svg.append("text")
   .attr("x", margin.left + innerW / 2)
-  .attr("y", height - 6)
+  .attr("y", height - legendH - 6)
   .attr("text-anchor", "middle")
   .attr("class", "legend")
   .attr("data-i18n", "svg_axis_year")
@@ -310,8 +360,12 @@ svg.append("text")
   .text("Magnitude");
 
 // Legend
-const legend = svg.append("g")
-  .attr("transform", `translate(${margin.left + 8}, ${margin.top + 4})`);
+// On a phone the legend moves below the chart, laid out in one row, so it
+// doesn't sit on the early events in the upper left
+const legend = svg.append("g").attr("class", "no-fs")
+  .attr("transform", narrow
+    ? `translate(${margin.left}, ${height - legendH + 14 * tlFs}) scale(${tlFs})`
+    : `translate(${margin.left + 8}, ${margin.top + 4})`);
 
 [{ label: "Tsunami", c: "#2563eb", i18n: "svg_legend_tsunami" }, { label: "No tsunami", c: "#e67e22", i18n: "svg_legend_no_tsunami" }].forEach((d, i) => {
   const row = legend.append("g").attr("transform", `translate(0, ${i * 18})`);
@@ -319,7 +373,7 @@ const legend = svg.append("g")
   row.append("text").attr("x", 15).attr("y", 4).attr("class", "legend").attr("data-i18n", d.i18n).text(d.label);
 });
 
-legend.append("g").attr("transform", "translate(0, 44)")
+legend.append("g").attr("transform", narrow ? "translate(120, 4)" : "translate(0, 44)")
   .call(g2 => {
     g2.append("text").attr("class", "legend").attr("y", -4).attr("data-i18n", "svg_legend_circle_size").text("Circle size = deaths");
     [100, 5000, 50000].forEach((d, i) => {
@@ -344,6 +398,9 @@ const dots = g.selectAll("circle.quake")
   .attr("opacity", 0.6)
   .attr("stroke", d => color(d))
   .attr("stroke-width", 1)
+  .attr("tabindex", 0)
+  .attr("role", "button")
+  .attr("aria-label", d => `${Math.floor(d.year)} ${d.name}, M${d.mag}, ${d.deaths.toLocaleString()} deaths${d.tsunami ? ", tsunami" : ""}`)
   .style("cursor", "pointer");
 
 // Labels with leader lines for key events
@@ -378,36 +435,49 @@ labelData.forEach(lbl => {
 });
 
 // Tooltip interactions
-dots.on("mouseenter", function (event, d) {
+dots.on("mouseenter focus click", function (event, d) {
   d3.select(this).attr("opacity", 0.9).attr("stroke-width", 2);
-  tooltipEl.innerHTML = quakeTooltipHTML(d);
-  tooltipEl.style.opacity = 1;
+  showTip(event, d);
 })
-.on("mousemove", function (event) {
-  const articleRect = document.querySelector(".article").getBoundingClientRect();
-  let left = event.pageX + 14;
-  let top = event.pageY - 14;
-  // Keep tooltip within viewport
-  if (left + 280 > window.innerWidth) left = event.pageX - 290;
-  tooltipEl.style.left = left + "px";
-  tooltipEl.style.top = top + "px";
-})
-.on("mouseleave", function () {
+.on("mousemove", function (event) { placeTip(event.pageX, event.pageY); })
+.on("mouseleave blur", function () {
   d3.select(this).attr("opacity", 0.6).attr("stroke-width", 1);
   tooltipEl.style.opacity = 0;
 });
+scaleText(svg, tlFs);
+
+// Keep the event labels inside the plot once they are sized (and again after
+// a language switch changes their length)
+function fitLabels(root, minX, maxX) {
+  root.selectAll(".quake-label").each(function () {
+    const el = d3.select(this);
+    if (el.attr("data-x0") == null) el.attr("data-x0", el.attr("x"));
+    el.attr("x", el.attr("data-x0"));
+    const b = this.getBBox();
+    if (b.x + b.width > maxX) el.attr("x", +el.attr("data-x0") - (b.x + b.width - maxX));
+    else if (b.x < minX) el.attr("x", +el.attr("data-x0") + (minX - b.x));
+  });
+}
+const fitTimeline = () => fitLabels(g, 2, innerW + margin.right - 2);
+fitTimeline();
+window.addEventListener("langchange", () => setTimeout(fitTimeline, 0));
 
 // ── Magnitude vs. Deaths scatter ──
 {
   const mdCont = document.getElementById("mag-deaths");
   const mdMargin = { top: 25, right: 25, bottom: 50, left: 70 };
-  const mdW = 690, mdH = 380;
+  const mdW = narrow ? 520 : 690, mdH = 380;
+  const mdFs = Math.max(1, mdW / colW);
   const mdInW = mdW - mdMargin.left - mdMargin.right;
   const mdInH = mdH - mdMargin.top - mdMargin.bottom;
 
   const mdSvg = d3.select(mdCont).append("svg")
     .attr("viewBox", `0 0 ${mdW} ${mdH}`)
-    .attr("width", "100%");
+    .attr("width", "100%")
+    .attr("role", "img");
+  setAria(mdSvg,
+    "Scatter plot of magnitude against estimated deaths (log scale) for the significant earthquakes with at least 10 deaths. The points form a loose cloud with no clear trend.",
+    "死者10人以上の顕著な地震について、マグニチュードと推定死者数（対数スケール）の散布図。点ははっきりした傾向のない緩い雲状に散らばる。");
 
   const mdG = mdSvg.append("g")
     .attr("transform", `translate(${mdMargin.left},${mdMargin.top})`);
@@ -439,25 +509,19 @@ dots.on("mouseenter", function (event, d) {
     .attr("class", "md-dot")
     .attr("cx", d => mdX(d.mag))
     .attr("cy", d => mdY(d.deaths))
-    .attr("r", 5)
+    .attr("r", 5 * Math.min(mdFs, 1.5))
     .attr("fill", d => mdColor(d))
     .attr("opacity", 0.65)
     .attr("stroke", d => mdColor(d))
     .attr("stroke-width", 1)
     .style("cursor", "pointer")
-    .on("mouseenter", function(event, d) {
-      d3.select(this).attr("opacity", 1).attr("r", 7);
-      tooltipEl.innerHTML = quakeTooltipHTML(d);
-      tooltipEl.style.opacity = 1;
+    .on("mouseenter click", function(event, d) {
+      d3.select(this).attr("opacity", 1).attr("r", 7 * Math.min(mdFs, 1.5));
+      showTip(event, d);
     })
-    .on("mousemove", function(event) {
-      let left = event.pageX + 14, top = event.pageY - 14;
-      if (left + 280 > window.innerWidth) left = event.pageX - 290;
-      tooltipEl.style.left = left + "px";
-      tooltipEl.style.top = top + "px";
-    })
+    .on("mousemove", function(event) { placeTip(event.pageX, event.pageY); })
     .on("mouseleave", function() {
-      d3.select(this).attr("opacity", 0.65).attr("r", 5);
+      d3.select(this).attr("opacity", 0.65).attr("r", 5 * Math.min(mdFs, 1.5));
       tooltipEl.style.opacity = 0;
     });
 
@@ -484,6 +548,10 @@ dots.on("mouseenter", function (event, d) {
       .style("font-size", "10px").style("fill", "var(--text)")
       .text(`${q.name} (M${q.mag})`);
   });
+  scaleText(mdSvg, mdFs);
+  const fitMd = () => fitLabels(mdG, -mdMargin.left + 4, mdInW + mdMargin.right - 2);
+  fitMd();
+  window.addEventListener("langchange", () => setTimeout(fitMd, 0));
 }
 
 // ── Map ──
@@ -495,7 +563,12 @@ dots.on("mouseenter", function (event, d) {
   const mapSvg = d3.select(mapCont).append("svg")
     .attr("viewBox", `0 0 ${mapW} ${mapH}`)
     .attr("width", "100%")
-    .attr("class", "mini-map");
+    .attr("class", "mini-map")
+    .attr("role", "img");
+  const mapFs = Math.max(1, Math.min(2.2, mapW / colW));
+  setAria(mapSvg,
+    "Map of Japan with the approximate locations of the 39 earthquakes, circle size by deaths, blue for tsunami. They cluster along the Pacific coast.",
+    "39の地震のおおよその位置を示した日本地図。円の大きさは死者数、青は津波。太平洋岸に集中している。");
 
   const projection = d3.geoMercator()
     .center([137, 37])
@@ -513,8 +586,8 @@ dots.on("mouseenter", function (event, d) {
     worldLandGroup.append("path")
       .datum(landFeature)
       .attr("d", path)
-      .attr("fill", "#e8e8e0")
-      .attr("stroke", "#bbb")
+      .style("fill", "var(--land)")
+      .style("stroke", "var(--land-stroke)")
       .attr("stroke-width", 0.6);
   });
 
@@ -542,17 +615,11 @@ dots.on("mouseenter", function (event, d) {
       .attr("fill-opacity", 0.55)
       .attr("stroke", d => mapColor(d))
       .attr("stroke-width", 0.8)
-      .on("mouseenter", function(event, d) {
+      .on("mouseenter click", function(event, d) {
         d3.select(this).attr("fill-opacity", 0.85).attr("stroke-width", 2);
-        tooltipEl.innerHTML = quakeTooltipHTML(d);
-        tooltipEl.style.opacity = 1;
+        showTip(event, d);
       })
-      .on("mousemove", function(event) {
-        let left = event.pageX + 14, top = event.pageY - 14;
-        if (left + 280 > window.innerWidth) left = event.pageX - 290;
-        tooltipEl.style.left = left + "px";
-        tooltipEl.style.top = top + "px";
-      })
+      .on("mousemove", function(event) { placeTip(event.pageX, event.pageY); })
       .on("mouseleave", function() {
         d3.select(this).attr("fill-opacity", 0.55).attr("stroke-width", 0.8);
         tooltipEl.style.opacity = 0;
@@ -568,20 +635,22 @@ dots.on("mouseenter", function (event, d) {
     ];
     cities.forEach(c => {
       const [cx, cy] = projection([c.lon, c.lat]);
-      mapSvg.append("circle").attr("cx", cx).attr("cy", cy).attr("r", 2.5)
+      mapSvg.append("circle").attr("cx", cx).attr("cy", cy).attr("r", 2.5 * Math.min(mapFs, 1.6))
         .attr("fill", "var(--text)");
-      mapSvg.append("text").attr("x", cx + 5).attr("y", cy + 3)
-        .style("font-size", "10px").style("fill", "var(--text-2)")
+      mapSvg.append("text").attr("x", cx + 5 * mapFs).attr("y", cy + 3 * mapFs)
+        .style("font-size", 10 * mapFs + "px").style("fill", "var(--text-2)")
         .attr("data-i18n", "svg_city_" + c.name.toLowerCase())
         .text(c.name);
     });
 
     // Legend
-    const mapLeg = mapSvg.append("g").attr("transform", `translate(15, ${mapH - 60})`);
+    const mapLeg = mapSvg.append("g").attr("class", "no-fs").attr("transform", `translate(15, ${mapH - 20 - 40 * mapFs}) scale(${mapFs})`);
     [{ label: "Tsunami", c: "#2563eb", i18n: "svg_legend_tsunami" }, { label: "No tsunami", c: "#e67e22", i18n: "svg_legend_no_tsunami" }].forEach((d, i) => {
       mapLeg.append("circle").attr("r", 4).attr("cx", 4).attr("cy", i * 16).attr("fill", d.c).attr("opacity", 0.7);
       mapLeg.append("text").attr("x", 14).attr("y", i * 16 + 4).attr("class", "legend").attr("data-i18n", d.i18n).text(d.label);
     });
+    // drawn after a fetch, so the page-load translation pass missed these
+    if (window.translatePageLabels) window.translatePageLabels(mapSvg.node());
   });
 }
 
@@ -642,15 +711,15 @@ window.PAGE_JA = {
   p2: "この記事はNOAAの顕著地震データベースに基づいている。米国環境情報センター（NCEI）が管理するもので、このシリーズの他の記事で使っているUSGSカタログとは性格が異なる。紀元前2150年まで遡り、地震が収録されるのは何らかの痕跡を残した場合だけだ。死者を出した、およそ100万ドル以上の被害を出した、マグニチュード7.5以上または震度階級Xに達した、あるいは津波を起こした。つまり記録されているのは人々が気づき書き残したことであり、起きたことのすべてではない。",
   h2_forty: "39の顕著な地震",
   p4: "下のタイムラインは、684年から2024年までの日本の顕著な地震39件を示す。高さはマグニチュード、円の面積は死者数、色は津波を伴ったかどうかを表す。",
-  caption_timeline: "各円は日本の顕著な地震1件を表す。縦位置：マグニチュード。円の面積：推定死者数（平方根スケール）。青：津波あり。橙：津波なし。ホバーで詳細表示。",
+  caption_timeline: "各円は日本の顕著な地震1件を表す。縦位置：マグニチュード。円の面積：推定死者数（平方根スケール）。青：津波あり。橙：津波なし。ホバー、タップ、またはTabキーで円を選ぶと詳細を表示。",
   p5: "図の上の方にある近代以前の地震は、本当に大きなものだった。1707年の宝永地震（M8.6）は南海トラフの大部分を破壊し、その49日後に富士山が最後の噴火を始めた。869年の貞観地震（M8.6）は、仙台平野の数キロ内陸まで津波を送り込んだ。こうした地震のマグニチュードは被害の記述や津波堆積物から逆算したもので、大きな不確かさを伴う。7世紀の「M8.4」は最良の推定にすぎず、近代以前の死者数も、誇張や脱落があったり、後に続いた飢饉や火災を含んでいたりする文献に基づいている。",
   p6: "円の大きさは高さとは別の物語を語る。1923年の関東大震災はM7.9で、図の中で最大ではないが、約105,000人という死者数は他を圧倒する。その多くは揺れの後に続いた火災によるものだった。1896年の明治三陸地震は揺れがあまりに弱く、沿岸の町はほとんど反応しなかった。図では表面波マグニチュード約7.2で示しているが、最大38 mの津波が約22,000人の命を奪った。このような津波地震は断層がゆっくりずれるため、引き起こす津波の大きさの割に強い揺れをほとんど出さない。",
   h2_mag_cost: "マグニチュードと人的被害",
   p7: "マグニチュードで死者数が予測できるなら、下の図には明確な右上がりの傾向が見えるはずだ。実際には緩やかなばらつきしかない。この39件でのマグニチュードと死者数の順位相関はわずか<span id=\"md-corr\">0.31</span>だ。M7の地震が数万人の命を奪う一方、M8の地震で数十人ということもある。場所、深さ、建物の質、時刻、津波が続くかどうかが、地震のエネルギーと同じくらい重要になる。",
-  caption_mag_deaths: "各円は日本の顕著な地震1件。横軸：マグニチュード。縦軸：推定死者数（対数スケール）。ホバーで詳細表示。",
+  caption_mag_deaths: "各円は日本の顕著な地震1件。横軸：マグニチュード。縦軸：推定死者数（対数スケール）。ホバーまたはタップで詳細表示。",
   h2_where: "どこで起きたか",
   p8: "日本の顕著な地震は、海洋プレートが列島の下に沈み込む太平洋沿岸に集中している。三陸海岸（本州北東部）と南海トラフ（西南日本の太平洋沿岸）は、何世紀にもわたって繰り返し現れる。1891年の濃尾地震や1995年の兵庫県南部地震のような内陸の大災害は、都市の下の浅い地殻内断層も同じくらい致命的になりうることを示している。",
-  caption_map: "39の地震のおおよその位置。円の大きさ：死者数（平方根スケール）。青：津波あり。橙：津波なし。ホバーで詳細表示。",
+  caption_map: "39の地震のおおよその位置。円の大きさ：死者数（平方根スケール）。青：津波あり。橙：津波なし。ホバーまたはタップで詳細表示。",
   h2_jogan: "貞観地震という先例",
   p12: "869年の貞観地震は記録の中で最も重要な項目の一つだが、2011年までその重要性を理解していた人は少なかった。歴史文献は、三陸沖の巨大地震と、それに続いて仙台平野を浸水させ約千人を溺死させた津波を記している（記録上の数字で、実際の犠牲者はおそらくもっと多い）。",
   p13: "近代地震学の大部分の期間、貞観地震は脚注にすぎなかった。そして2011年3月11日、東北地方太平洋沖地震が同じ沈み込み帯の似た場所で、同程度のマグニチュードと、さらに大きな津波を伴って発生した。貞観の津波堆積物（内陸数キロで見つかった砂の層）を研究していた地質学者たちは、同様の地震が起きてもおかしくないと警告していた。2011年以前の福島沿岸の地震ハザードモデルは、この歴史上の先例を十分に考慮していなかった。",
