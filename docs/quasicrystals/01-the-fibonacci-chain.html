@@ -131,12 +131,12 @@
       <button class="btn" data-k="3" type="button">3 tiles</button>
       <button class="btn" data-k="4" type="button">4 tiles</button>
     </div>
-    <div id="fig-window"></div>
+    <div id="fig-window" class="svg-scroll"></div>
     <div class="readout" id="f2-readout"></div>
     <p class="figure-caption"><span class="figure-label">Figure 2.</span> Top: the start of the
     chain in <span class="t-phys">physical space</span>. Bottom: every point's conjugate
     <span data-tex="x^\star"></span> in <span class="t-int">internal space</span>, colored by the
-    word of tiles that follows it. Hover a point in either row to find its partner. The colors
+    word of tiles that follows it. Hover or tap a point in either row to find its partner. The colors
     never mix. Each look-ahead word owns one interval of the window, and with a look-ahead of
     <span data-tex="k"></span> tiles there are exactly <span data-tex="k+1"></span> intervals.</p>
   </div>
@@ -170,7 +170,7 @@
       <label>offset &gamma; <input type="range" id="f3-g" min="-1" max="1" step="0.001" value="0.12"><span class="val" id="f3-g-v"></span></label>
       <button class="btn" id="f3-zero" type="button">&gamma; = 0</button>
     </div>
-    <div id="fig-phason"></div>
+    <div id="fig-phason" class="svg-scroll"></div>
     <div class="readout" id="f3-readout"></div>
     <p class="figure-caption"><span class="figure-label">Figure 3.</span> Bottom: the
     <span class="t-int">window</span> sliding along internal space past the conjugates of all
@@ -224,7 +224,8 @@ var PHI = QC.PHI;
   var ly = (H - CH) / 2;
   function mx(x) { return 10 + (x - X0) * sc; }
   function my(y) { return ly - y * sc; }
-  var svg = d3.select('#fig-strip').append('svg').attr('viewBox', '0 0 ' + W + ' ' + H);
+  var svg = d3.select('#fig-strip').append('svg').attr('viewBox', '0 0 ' + W + ' ' + H)
+    .attr('role', 'img').attr('aria-label', 'The square lattice with a strip along a line of the chosen slope; lattice points inside the strip project onto the line, and the bottom row unrolls the resulting tiles, colored by length.');
   var defs = svg.append('defs');
   defs.append('clipPath').attr('id', 'f1clip').append('rect')
     .attr('x', 10).attr('y', my(Y1)).attr('width', W - 20).attr('height', (Y1 - Y0) * sc);
@@ -331,7 +332,9 @@ var PHI = QC.PHI;
 // ---------------------------------------------------------------- Figure 2
 (function () {
   var W = 680, H = 250;
-  var svg = d3.select('#fig-window').append('svg').attr('viewBox', '0 0 ' + W + ' ' + H);
+  var svg = d3.select('#fig-window').append('svg').attr('viewBox', '0 0 ' + W + ' ' + H)
+    .attr('role', 'group').attr('tabindex', 0)
+    .attr('aria-label', 'The first tiles of the Fibonacci chain above, and below them the conjugate of every chain point inside the window, colored by the word of tiles that follows it. Arrow keys step through the points.');
   var chain = QC.fibonacciChain(1600, 0).filter(function (p) { return p.x >= -1e-9; });
   var word = QC.chainWord(chain);
   var state = { n: 160, k: 1, hover: -1 };
@@ -388,8 +391,8 @@ var PHI = QC.PHI;
       .attr('r', function (i) { return i === state.hover ? 5 : 3; })
       .attr('fill', function (i) { return i < n ? colorOf[wordAt(i, k)] : 'var(--c-lattice)'; })
       .style('cursor', 'pointer')
-      .on('pointerenter', function (ev, i) { state.hover = i; render(); })
-      .on('pointerleave', function () { state.hover = -1; render(); });
+      .on('pointerenter pointerdown', function (ev, i) { state.hover = i; render(); })
+      .on('pointerleave', function (ev) { if (ev.pointerType === 'mouse') { state.hover = -1; render(); } });
 
     gInt.selectAll('*').remove();
     gInt.append('line').attr('x1', ix(-1 / PHI)).attr('x2', ix(1)).attr('y1', iy).attr('y2', iy)
@@ -428,7 +431,7 @@ var PHI = QC.PHI;
     // hover target on the internal line: nearest tick
     gInt.append('rect').attr('x', 20).attr('y', iy - 30).attr('width', W - 40).attr('height', 50)
       .attr('fill', 'transparent')
-      .on('pointermove', function (ev) {
+      .on('pointermove pointerdown', function (ev) {
         var px = d3.pointer(ev, svg.node())[0], best = -1, bd = 8;
         for (var i = 0; i < Math.min(n, TOPN + 1); i++) {
           var d = Math.abs(ix(chain[i].xs) - px);
@@ -436,7 +439,7 @@ var PHI = QC.PHI;
         }
         if (best !== state.hover) { state.hover = best; render(); }
       })
-      .on('pointerleave', function () { state.hover = -1; render(); });
+      .on('pointerleave', function (ev) { if (ev.pointerType === 'mouse') { state.hover = -1; render(); } });
 
     var fracL = 0;
     for (var m = 0; m < n; m++) if (word[m] === 'L') fracL++;
@@ -448,6 +451,14 @@ var PHI = QC.PHI;
   }
 
   var draw = Page.throttle(render);
+  svg.on('keydown', function (ev) {
+    var last = Math.min(state.n - 1, TOPN), step = { ArrowRight: 1, ArrowUp: 1, ArrowLeft: -1, ArrowDown: -1 }[ev.key];
+    if (ev.key === 'Escape') { state.hover = -1; draw(); return; }
+    if (!step) return;
+    ev.preventDefault();
+    state.hover = state.hover < 0 ? 0 : Math.max(0, Math.min(last, state.hover + step));
+    draw();
+  });
   nIn.addEventListener('input', function () { state.n = +nIn.value; draw(); });
   document.querySelectorAll('[data-k]').forEach(function (bt) {
     bt.addEventListener('click', function () {
@@ -462,7 +473,8 @@ var PHI = QC.PHI;
 // ---------------------------------------------------------------- Figure 3
 (function () {
   var W = 680, H = 300, XR = 60;
-  var svg = d3.select('#fig-phason').append('svg').attr('viewBox', '0 0 ' + W + ' ' + H);
+  var svg = d3.select('#fig-phason').append('svg').attr('viewBox', '0 0 ' + W + ' ' + H)
+    .attr('role', 'img').attr('aria-label', 'Two chains, at offset zero and at the current offset, above the internal line where the window slides; points that crossed the window edge are marked in red.');
   var gIn = document.getElementById('f3-g');
   var state = { g: 0.12 };
   // every lattice point with |x| <= XR and conjugate in a range around the window

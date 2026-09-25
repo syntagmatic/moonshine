@@ -200,6 +200,16 @@
 
     var dragging = false, lx = 0, ly = 0;
     canvas.style.touchAction = 'none'; canvas.style.cursor = 'grab';
+    // keyboard: arrow keys turn the solid
+    canvas.tabIndex = 0;
+    canvas.setAttribute('role', 'img');
+    if (opts.label) canvas.setAttribute('aria-label', opts.label + ' Drag or use the arrow keys to rotate.');
+    canvas.addEventListener('keydown', function (e) {
+      var d = { ArrowLeft: [0, -1], ArrowRight: [0, 1], ArrowUp: [-1, 0], ArrowDown: [1, 0] }[e.key];
+      if (!d) return;
+      e.preventDefault();
+      state.ax += d[0] * 0.15; state.ay += d[1] * 0.15; draw();
+    });
     canvas.addEventListener('pointerdown', function (e) { dragging = true; lx = e.clientX; ly = e.clientY; canvas.style.cursor = 'grabbing'; canvas.setPointerCapture(e.pointerId); });
     canvas.addEventListener('pointermove', function (e) {
       if (!dragging) return;

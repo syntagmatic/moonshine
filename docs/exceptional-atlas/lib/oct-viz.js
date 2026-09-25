@@ -13,28 +13,28 @@
   var OCT = global.OCT;
 
   var colors = {
-    real:       '#2563eb', // blue
-    complex:    '#059669', // green
-    quat:       '#7c3aed', // purple
-    oct:        '#dc2626', // red
+    real:       EA.c('#2563eb'), // blue
+    complex:    EA.c('#059669'), // green
+    quat:       EA.c('#7c3aed'), // purple
+    oct:        EA.c('#dc2626'), // red
     
-    highlight:  '#f59e0b', // amber
-    axis:       '#64748b', // slate
-    text:       '#1a1a2e',
-    textSec:    '#4a4a6a',
-    bg:         '#fafafa',
-    figBg:      '#ffffff',
-    border:     '#e2e2e8',
+    highlight:  EA.c('#f59e0b'), // amber
+    axis:       EA.c('#64748b'), // slate
+    text:       EA.c('#1a1a2e'),
+    textSec:    EA.c('#4a4a6a'),
+    bg:         EA.c('#fafafa'),
+    figBg:      EA.c('#ffffff'),
+    border:     EA.c('#e2e2e8'),
     
     // Fano Plane specific (one color per imaginary unit e1..e7)
     e: [
-      '#ef4444', // e1
-      '#f97316', // e2
-      '#eab308', // e3
-      '#22c55e', // e4
-      '#06b6d4', // e5
-      '#3b82f6', // e6
-      '#a855f7'  // e7
+      EA.c('#ef4444'), // e1
+      EA.c('#f97316'), // e2
+      EA.c('#eab308'), // e3
+      EA.c('#22c55e'), // e4
+      EA.c('#06b6d4'), // e5
+      EA.c('#3b82f6'), // e6
+      EA.c('#a855f7')  // e7
     ]
   };
 

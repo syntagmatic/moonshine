@@ -10,6 +10,7 @@
 <link href="../vendor/fonts/sans-serif-mono/fonts.css" rel="stylesheet">
 <script src="lib/modular-math.js"></script>
 <script src="../lib/motion.js"></script>
+<script src="lib/figkit.js"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -85,6 +86,7 @@ svg text { font-family: var(--heading-font); }
 @media (prefers-reduced-motion: reduce) {html:not([data-motion="full"]) * { transition-duration: 0s !important; animation-duration: 0s !important; } }
 @media (max-width: 600px) { h1 { font-size: 1.75rem; } .article { padding: 1.5rem 1rem 4rem; } }
 </style>
+<link rel="stylesheet" href="lib/theme.css">
 </head>
 <body>
 <div class="article">
@@ -314,16 +316,19 @@ math('math-sigma-prime',
 // Eisenstein sum. The user drags τ to reshape the lattice, and selects the
 // weight k and summation range via controls.
 (function () {
-  var W = 680, H = 440;
+  // Drawn at the host's width so labels keep their size on a phone.
   var host = document.getElementById('lattice-svg-host');
+  var W = FigKit.width(host, 680), H = W < 500 ? 380 : 440;
   var svg = d3.select(host).append('svg')
     .attr('viewBox', '0 0 ' + W + ' ' + H)
-    .attr('width', '100%').style('max-width', W + 'px');
+    .attr('width', '100%').style('max-width', W + 'px')
+    .attr('role', 'group')
+    .attr('aria-label', 'The lattice Z + tau Z in the complex plane, each point shaded by its contribution to the Eisenstein sum, with a draggable handle for tau');
 
   // Centre of the SVG canvas (origin of the complex plane)
   var cx = W / 2, cy = H / 2;
   // Pixels per unit in the complex plane
-  var scale = 60;
+  var scale = W < 500 ? 48 : 60;
 
   // Initial τ and controls state
   var tau = { re: 0.15, im: 1.0 };
@@ -331,7 +336,10 @@ math('math-sigma-prime',
   var currentRange = 5;
 
   // Colour scale: normalised contribution magnitude → blue intensity
-  var colourScale = d3.scaleSequential(d3.interpolateBlues).domain([0, 1]);
+  // Resolved hex stops; on a dark page the ramp runs from dim to bright instead of from white.
+  var colourScale = FigKit.dark()
+    ? d3.scaleSequential(d3.interpolateRgb('#1e3a5f', '#93c5fd')).domain([0, 1])
+    : d3.scaleSequential(d3.interpolateBlues).domain([0, 1]);
 
   // Groups for layering
   var gridGroup = svg.append('g');
@@ -465,8 +473,8 @@ math('math-sigma-prime',
     // Move τ handle
     var tauScreen = toScreen(tau.re, tau.im);
     tauHandle.attr('cx', tauScreen.x).attr('cy', tauScreen.y);
-    tauLabel.attr('x', tauScreen.x + 12).attr('y', tauScreen.y - 10)
-      .text('\u03C4 = ' + tau.re.toFixed(2) + ' + ' + tau.im.toFixed(2) + 'i');
+    FigKit.fit(tauLabel.text('\u03C4 = ' + tau.re.toFixed(2) + ' + ' + tau.im.toFixed(2) + 'i'),
+      tauScreen.x, tauScreen.y, W, 12);
 
     // Basis vectors from origin
     var oneScreen = toScreen(1, 0);
@@ -482,9 +490,9 @@ math('math-sigma-prime',
     var statusEl = document.getElementById('lattice-status');
     statusEl.textContent =
       'E' + String(k).split('').map(function (c) { return String.fromCharCode(0x2080 + +c); }).join('') + '(\u03C4): lattice sum / 2\u03B6(' + k + ') \u2248 ' + fmtC(partialEk) +
-      '   |   q-expansion \u2248 ' + ekVal.re.toFixed(4) +
+      ' · q-expansion \u2248 ' + ekVal.re.toFixed(4) +
       (ekVal.im >= 0 ? ' + ' : ' \u2212 ') + Math.abs(ekVal.im).toFixed(4) + 'i' +
-      '   |   |q| = ' + Math.exp(-2 * Math.PI * tau.im).toFixed(6);
+      ' · |q| = ' + Math.exp(-2 * Math.PI * tau.im).toFixed(6);
   }
 
   // Drag τ
@@ -495,6 +503,11 @@ math('math-sigma-prime',
     tau.im = Math.max(0.15, Math.min(3.5, im));
     update();
   }));
+  FigKit.keyMove(tauHandle, 'Handle tau: arrow keys move it', function (dx, dy) {
+    tau.re = Math.max(-3, Math.min(3, tau.re + 0.05 * dx));
+    tau.im = Math.max(0.15, Math.min(3.5, tau.im + 0.05 * dy));
+    update();
+  });
 
   // Click to place τ
   svg.on('click', function (event) {

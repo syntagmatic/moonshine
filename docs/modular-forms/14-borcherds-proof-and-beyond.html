@@ -10,6 +10,7 @@
 <link href="../vendor/fonts/sans-serif-mono/fonts.css" rel="stylesheet">
 <script src="lib/moonshine-math.js"></script>
 <script src="../lib/motion.js"></script>
+<script src="lib/figkit.js"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
@@ -59,12 +60,14 @@ svg text { font-family: var(--heading-font); }
 .term-value { color: var(--text-2); text-align: right; min-width: 6rem; }
 .status-line { font-family: var(--mono-font); font-size: 0.8rem; color: var(--text-2); margin-top: 0.6rem; line-height: 1.45; }
 .knz-grid { border-collapse: collapse; font-family: var(--mono-font); font-size: 0.72rem; margin: 0 auto; }
-.knz-grid th { font-weight: 600; color: var(--text-2); padding: 0.25rem 0.4rem; text-align: right; }
+.knz-grid th { font-weight: 600; color: var(--text-2); padding: 0.25rem 0.4rem; text-align: right; white-space: nowrap; }
 .knz-grid td { padding: 0.25rem 0.4rem; text-align: right; border: 1px solid var(--border); cursor: pointer; white-space: nowrap; }
-.knz-grid td.zero { color: #94a3b8; }
+.knz-grid td.zero { color: #64748b; }
 .knz-grid td.nonzero { color: var(--text); font-weight: 600; }
 .knz-grid td.bad { background: #fee2e2; }
 .knz-grid td.sel { outline: 2px solid var(--c-proof); }
+#knz-display { overflow-x: auto; }
+.knz-grid td:focus-visible { outline: 2px solid var(--accent); }
 #knz-display { overflow-x: auto; }
 .slider-row { font-family: var(--heading-font); font-size: 0.85rem; display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.75rem; }
 .slider-row input[type=range] { flex: 1; max-width: 300px; }
@@ -83,6 +86,8 @@ svg text { font-family: var(--heading-font); }
 @media (prefers-reduced-motion: reduce) {html:not([data-motion="full"]) * { transition-duration: 0s !important; animation-duration: 0s !important; } }
 @media (max-width: 600px) { h1 { font-size: 1.75rem; } }
 </style>
+<link rel="stylesheet" href="lib/theme.css">
+<style>@media (prefers-color-scheme: dark) { :root { --accent: #c4b5fd; --accent-light: #33294f; } }</style>
 </head>
 <body>
 <div class="article">
@@ -312,10 +317,21 @@ math('math-twisted',
     { label: 'twists', sub: 'all g in 𝕄', color: '#b45309', detail: 'Twisted denominator identities replace dimensions by traces of Monster elements. These identities give replication formulas for every McKay-Thompson series.' },
     { label: 'finite check', sub: 'seeds 1,2,3,5', color: '#15131f', detail: 'Replication collapses an infinite conjecture to finitely many initial coefficients. Once those seeds match the Conway-Norton Hauptmoduls, the whole trace function is forced.' }
   ];
-  var W = 670, H = 210;
+  // Wide screens: one zig-zag row of six stages. Narrow: two rows of three,
+  // read as a snake (the second row runs right to left), drawn at 1:1.
+  var hostW = FigKit.width(diagram, 670), narrow = hostW < 560;
+  var W = narrow ? hostW : 670, H = narrow ? 230 : 210;
+  var cellW = (W - 12) / 3, bw = narrow ? cellW - 16 : 86;
+  function pos(idx) {
+    if (!narrow) return { x: 36 + idx * 104, y: idx % 2 === 0 ? 46 : 88 };
+    var row = idx < 3 ? 0 : 1, col = row === 0 ? idx : 5 - idx;
+    return { x: 6 + col * cellW + 8, y: 12 + row * 100 };
+  }
   var svg = d3.select(diagram).append('svg')
     .attr('viewBox', '0 0 ' + W + ' ' + H)
-    .attr('width', '100%').style('max-width', W + 'px');
+    .attr('width', '100%').style('max-width', W + 'px')
+    .attr('role', 'group')
+    .attr('aria-label', 'Proof pipeline in six stages, from the moonshine module to the finite check; each stage can be selected for its explanation');
   svg.append('defs').append('marker')
     .attr('id', 'pipeline-arrow').attr('markerWidth', 8).attr('markerHeight', 8)
     .attr('refX', 7).attr('refY', 4).attr('orient', 'auto')
@@ -330,14 +346,16 @@ math('math-twisted',
   });
 
   stages.forEach(function (stage, idx) {
-    var x = 36 + idx * 104;
-    var y = idx % 2 === 0 ? 46 : 88;
+    var p0 = pos(idx), x = p0.x, y = p0.y;
     if (idx < stages.length - 1) {
-      var nx = 36 + (idx + 1) * 104;
-      var ny = (idx + 1) % 2 === 0 ? 46 : 88;
+      var p1 = pos(idx + 1), seg;
+      if (!narrow) seg = [x + 78, y + 28, p1.x - 8, p1.y + 28];
+      else if (p1.y > y) seg = [x + bw / 2, y + 58, p1.x + bw / 2, p1.y - 4];
+      else if (p1.x > x) seg = [x + bw + 2, y + 28, p1.x - 4, p1.y + 28];
+      else seg = [x - 2, y + 28, p1.x + bw + 4, p1.y + 28];
       svg.append('line')
-        .attr('x1', x + 78).attr('y1', y + 28)
-        .attr('x2', nx - 8).attr('y2', ny + 28)
+        .attr('x1', seg[0]).attr('y1', seg[1])
+        .attr('x2', seg[2]).attr('y2', seg[3])
         .attr('stroke', '#b45309').attr('stroke-width', 1.8)
         .attr('marker-end', 'url(#pipeline-arrow)');
     }
@@ -348,26 +366,31 @@ math('math-twisted',
       .on('click', function () { selectStage(idx); });
     g.append('rect')
       .attr('x', x).attr('y', y)
-      .attr('width', 86).attr('height', 56)
+      .attr('width', bw).attr('height', 56)
       .attr('rx', 5).attr('fill', '#fff')
       .attr('stroke', stage.color).attr('stroke-width', 2);
     g.append('text')
-      .attr('x', x + 43).attr('y', y + 24)
+      .attr('x', x + bw / 2).attr('y', y + 24)
       .attr('text-anchor', 'middle').attr('font-size', 14)
       .attr('font-weight', 700).attr('fill', stage.color)
       .text(stage.label);
     g.append('text')
-      .attr('x', x + 43).attr('y', y + 42)
-      .attr('text-anchor', 'middle').attr('font-size', 9.5)
+      .attr('x', x + bw / 2).attr('y', y + 42)
+      .attr('text-anchor', 'middle').attr('font-size', narrow ? 9 : 9.5)
       .attr('fill', '#4a4266')
       .text(stage.sub);
   });
 
-  svg.append('text')
-    .attr('x', W / 2).attr('y', H - 14)
-    .attr('text-anchor', 'middle').attr('font-size', 11)
-    .attr('fill', '#4a4266')
-    .text('module → string cohomology → Lie algebra → denominator identity → traces → finite verification');
+  var summary = narrow
+    ? ['module → string cohomology → Lie algebra →', 'denominator identity → traces → finite verification']
+    : ['module → string cohomology → Lie algebra → denominator identity → traces → finite verification'];
+  summary.forEach(function (line, i) {
+    svg.append('text')
+      .attr('x', W / 2).attr('y', H - 14 - (summary.length - 1 - i) * 15)
+      .attr('text-anchor', 'middle').attr('font-size', 11)
+      .attr('fill', '#4a4266')
+      .text(line);
+  });
 
   function selectStage(idx) {
     d3.selectAll('#pipeline-controls button').classed('active', function () {
@@ -388,10 +411,12 @@ math('math-twisted',
 // ── Interactive root diagram (Figure 1) ──
 (function () {
   var container = document.getElementById('root-diagram');
-  var W = 700, H = 340;
+  var W = FigKit.width(container, 700), H = W < 500 ? 320 : 340;
   var svg = d3.select(container).append('svg')
     .attr('viewBox', '0 0 ' + W + ' ' + H)
-    .attr('width', '100%').style('max-width', W + 'px');
+    .attr('width', '100%').style('max-width', W + 'px')
+    .attr('role', 'img')
+    .attr('aria-label', 'Root diagram: the six real roots of A2, or a schematic generalised Kac-Moody root system with imaginary roots on and inside the light cone');
 
   var cx = W / 2, cy = H / 2;
   var scale = 55;
@@ -615,10 +640,14 @@ function fmtBig(v) {
           .attr('class', (cell.lhs === 0n ? 'zero' : 'nonzero') + (cell.lhs === cell.rhs ? '' : ' bad'))
           .text(cell.lhs === 0n ? '0' : fmtBig(cell.lhs))
           .datum(cell)
+          .attr('tabindex', 0)
           .on('click', function (ev, d) {
             table.selectAll('td').classed('sel', false);
             d3.select(this).classed('sel', true);
             show(d);
+          })
+          .on('keydown', function (ev) {
+            if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); this.click(); }
           });
       }
     }
@@ -646,10 +675,12 @@ function fmtBig(v) {
   var readout = document.getElementById('cascade-readout');
   var slider = document.getElementById('cascade-n');
   var label = document.getElementById('cascade-n-label');
-  var W = 670, H = 190, maxN = 20;
+  var W = FigKit.width(container, 670), H = 190, maxN = 20;
   var svg = d3.select(container).append('svg').attr('viewBox', '0 0 ' + W + ' ' + H)
-    .attr('width', '100%').style('max-width', W + 'px');
-  var x = d3.scaleLinear().domain([0, maxN + 1]).range([30, W - 20]);
+    .attr('width', '100%').style('max-width', W + 'px')
+    .attr('role', 'img')
+    .attr('aria-label', 'Replication cascade: arcs from the coefficients c(k) of J that the replication formula uses to the coefficient c(2n) it produces');
+  var x = d3.scaleLinear().domain([0, maxN + 1]).range([W < 500 ? 8 : 30, W - (W < 500 ? 8 : 20)]);
   var yMid = H - 45;
   svg.append('line').attr('x1', x(0.5)).attr('x2', x(maxN + 0.5)).attr('y1', yMid).attr('y2', yMid).attr('stroke', '#e4e1ec');
   for (var k = 1; k <= maxN; k++) {

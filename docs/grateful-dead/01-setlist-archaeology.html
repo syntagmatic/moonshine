@@ -7,6 +7,7 @@
 <script src="../vendor/js/d3.v7.min.js"></script>
 <link href="../vendor/fonts/sans-serif-mono/fonts.css" rel="stylesheet">
 <script src="../lib/motion.js"></script>
+<script src="lib/theme.js"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -221,6 +222,7 @@ svg text {
   }
 }
 </style>
+<link rel="stylesheet" href="lib/theme.css">
 </head>
 <body>
 
@@ -272,7 +274,7 @@ svg text {
       </div>
     </div>
     <div id="small-multiples" style="margin-top:0.75rem;"></div>
-    <div class="figure-caption"><span class="figure-label">Figure 2.</span> One sparkline per title for all 60, each spanning 1966 to 1995 with its own vertical scale. Colors match Figure 1. Hover a cell for the first, peak and last years.</div>
+    <div class="figure-caption"><span class="figure-label">Figure 2.</span> One sparkline per title for all 60, each spanning 1966 to 1995 with its own vertical scale. Colors match Figure 1. Hover, tap or focus a cell for the first, peak and last years.</div>
   </div>
 
   <p>Sorted by first appearance, the grid reads as a sequence of cohorts: the 1966 to 1968 originals such as Me and My Uncle, I Know You Rider and The Other One; the 1969 and 1970 songs; the large 1971 wave; and a short tail from 1974 on. Sorted by peak year, 16 of the 60 peak in 1972, the busiest year in the data. Dark Star peaks in 1969 and Good Lovin' in 1970. Only seven titles peak after 1979: Space, Wharf Rat and Althea in 1980, Little Red Rooster and Don't Ease Me In in 1981, Throwing Stones in 1983 and the catch-all Jam in 1993.</p>
@@ -367,16 +369,25 @@ function showTip(event, html) {
   tip.style("left", (event.pageX + 14) + "px").style("top", (event.pageY - 10) + "px");
 }
 function hideTip() { tip.classed("visible", false); }
+// A tap or click outside a chart hides a tooltip opened by tapping.
+document.addEventListener("click", e => { if (!e.target.closest("svg, .sm-cell")) hideTip(); });
+// Tooltip for a focused element, placed at its top edge (keyboard access).
+const tipAt = (el, html) => { const b = el.getBoundingClientRect(); showTip({ pageX: b.left + scrollX, pageY: b.top + scrollY }, html); };
 
 // === FIGURE 1: STREAMGRAPH ===
 (function() {
   const container = d3.select("#streamgraph");
-  const margin = { top: 30, right: 20, bottom: 30, left: 20 };
-  const width = 860, height = 400;
+  // Drawn at the container's width, so the legend and axis keep their size on a phone.
+  const width = Math.max(340, Math.min(860, container.node().clientWidth || 860));
+  const narrow = width < 560;
+  const margin = { top: narrow ? 46 : 30, right: 20, bottom: 30, left: 20 };
+  const height = narrow ? 340 : 400;
   const innerW = width - margin.left - margin.right;
   const innerH = height - margin.top - margin.bottom;
 
-  const svg = container.append("svg").attr("viewBox", `0 0 ${width} ${height}`).attr("width", "100%");
+  const svg = container.append("svg").attr("viewBox", `0 0 ${width} ${height}`).attr("width", "100%")
+    .attr("role", "group")
+    .attr("aria-label", "Streamgraph of setlist entries per year, 1966 to 1995, for the 60 most-played titles, colored by the era each title debuted. Each layer is a button that isolates its title.");
   const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
 
   const x = d3.scaleLinear().domain([1966, 1995]).range([0, innerW]);
@@ -400,13 +411,18 @@ function hideTip() { tip.classed("visible", false); }
     .attr("opacity", 0.85).style("cursor", "pointer")
     .on("mouseover", function(event, d) {
       if (focused && focused !== d.key) return;
-      d3.select(this).attr("opacity", 1).attr("stroke", "#1a1a2e").attr("stroke-width", 0.5);
+      d3.select(this).attr("opacity", 1).attr("stroke", GD.c("#1a1a2e")).attr("stroke-width", 0.5);
       tipFor(event, d);
     })
     .on("mousemove", function(event, d) { if (!focused || focused === d.key) tipFor(event, d); })
     .on("mouseout", function(event, d) {
       d3.select(this).attr("opacity", focused ? (focused === d.key ? 1 : 0.08) : 0.85).attr("stroke", "none");
       hideTip();
+    })
+    .attr("tabindex", 0).attr("role", "button")
+    .attr("aria-label", d => `${d.key}: ${songMeta[d.key].total} entries, first played ${songMeta[d.key].firstYear}`)
+    .on("keydown", function(event) {
+      if (event.key === "Enter" || event.key === " ") { event.preventDefault(); this.dispatchEvent(new MouseEvent("click", { bubbles: true })); }
     })
     .on("click", function(event, d) {
       if (focused === d.key) resetStream();
@@ -427,20 +443,20 @@ function hideTip() { tip.classed("visible", false); }
   d3.select("#stream-reset").on("click", resetStream);
 
   g.append("g").attr("transform", `translate(0,${innerH})`)
-    .call(d3.axisBottom(x).ticks(15).tickFormat(d3.format("d")))
+    .call(d3.axisBottom(x).ticks(narrow ? 6 : 15).tickFormat(d3.format("d")))
     .call(a => a.select(".domain").remove())
-    .call(a => a.selectAll(".tick line").attr("stroke", "#ccc"))
-    .call(a => a.selectAll(".tick text").attr("fill", "#666").style("font-size", "11px"));
+    .call(a => a.selectAll(".tick line").attr("stroke", GD.c("#ccc")))
+    .call(a => a.selectAll(".tick text").attr("fill", GD.c("#666")).style("font-size", "11px"));
 
   // Legend: only eras in which at least one of the 60 debuted
   const used = ERAS.filter(e => songs.some(s => songMeta[s].era === e));
   const legend = svg.append("g").attr("transform", `translate(${margin.left + 4}, 8)`);
   used.forEach((era, i) => {
     const n = songs.filter(s => songMeta[s].era === era).length;
-    const lg = legend.append("g").attr("transform", `translate(${i * 190}, 0)`);
+    const lg = legend.append("g").attr("transform", narrow ? `translate(${(i % 2) * 160}, ${Math.floor(i / 2) * 16})` : `translate(${i * 190}, 0)`);
     lg.append("rect").attr("width", 10).attr("height", 10).attr("rx", 2).attr("fill", era.color);
     lg.append("text").attr("x", 14).attr("y", 9).text(`Debuted ${era.range[0]}-${String(era.range[1]).slice(2)} (${n})`)
-      .style("font-size", "11px").attr("fill", "#666");
+      .style("font-size", "11px").attr("fill", GD.c("#666"));
   });
 })();
 
@@ -462,15 +478,18 @@ function hideTip() { tip.classed("visible", false); }
     const grid = container.append("div").attr("class", "sm-grid");
     sorted.forEach(song => {
       const m = songMeta[song];
+      const html = `<span class="song-name">${song}</span><br>${m.total} entries<br>First ${m.firstYear}, last ${m.lastYear}<br>Peak ${m.peakCount} in ${m.peakYear}`;
       const cell = grid.append("div").attr("class", "sm-cell")
-        .on("mouseover mousemove", evt => showTip(evt,
-          `<span class="song-name">${song}</span><br>${m.total} entries<br>First ${m.firstYear}, last ${m.lastYear}<br>Peak ${m.peakCount} in ${m.peakYear}`))
-        .on("mouseout", hideTip);
+        .attr("tabindex", 0)
+        .attr("aria-label", `${song}: ${m.total} entries, first ${m.firstYear}, last ${m.lastYear}, peak ${m.peakCount} in ${m.peakYear}`)
+        .on("mouseover mousemove click", evt => showTip(evt, html))
+        .on("focus", evt => tipAt(evt.currentTarget, html))
+        .on("mouseout blur", hideTip);
       cell.append("div").attr("class", "sm-label").text(song).attr("title", song);
       const note = sortKey === "peak" ? `peak ${m.peakYear}` : sortKey === "first" ? `from ${m.firstYear}` : `${m.total}`;
       cell.append("div").attr("class", "sm-total").text(note);
       const svg = cell.append("svg").attr("width", "100%").attr("viewBox", `0 0 ${cellW} ${sparkH}`)
-        .attr("preserveAspectRatio", "none");
+        .attr("preserveAspectRatio", "none").attr("aria-hidden", "true");
       const yS = d3.scaleLinear().domain([0, d3.max(m.counts)]).range([sparkH, 1]);
       const color = songColor[song];
       svg.append("path").datum(m.counts)

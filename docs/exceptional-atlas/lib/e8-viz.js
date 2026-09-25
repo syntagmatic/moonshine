@@ -23,40 +23,40 @@
 
   var colors = {
     // Root families
-    integerFamily:     '#2563eb', // blue   — integer (D_8) roots
-    halfIntegerFamily: '#6366f1', // indigo — half-integer roots
-    allRoots:          '#1e40af', // darker blue when mixing families
+    integerFamily:     EA.c('#2563eb'), // blue   — integer (D_8) roots
+    halfIntegerFamily: EA.c('#6366f1'), // indigo — half-integer roots
+    allRoots:          EA.c('#1e40af'), // darker blue when mixing families
 
     // Highlights and selection
-    highlight:         '#f59e0b', // amber — hover / selection
-    selectedPrimary:   '#dc2626', // red   — the "currently picked" root
-    selectedSecondary: '#7c3aed', // purple — the "other" picked root in workbenches
+    highlight:         EA.c('#f59e0b'), // amber — hover / selection
+    selectedPrimary:   EA.c('#dc2626'), // red   — the "currently picked" root
+    selectedSecondary: EA.c('#7c3aed'), // purple — the "other" picked root in workbenches
 
     // Structure
-    edge:              '#94a3b8', // slate — polytope edges
-    edgeFaint:         '#cbd5e1', // lighter slate — faint background edges
-    axis:              '#64748b', // slate — axes, gridlines
-    lattice:           '#0f172a', // near-black — lattice points in dense scenes
+    edge:              EA.c('#94a3b8'), // slate — polytope edges
+    edgeFaint:         EA.c('#cbd5e1'), // lighter slate — faint background edges
+    axis:              EA.c('#64748b'), // slate — axes, gridlines
+    lattice:           EA.c('#0f172a'), // near-black — lattice points in dense scenes
 
     // Subsystems (seven colors for deletion-of-node highlights)
     subsystem: [
-      '#ef4444', // red
-      '#f97316', // orange
-      '#eab308', // yellow
-      '#22c55e', // green
-      '#06b6d4', // cyan
-      '#3b82f6', // blue
-      '#a855f7'  // purple
+      EA.c('#ef4444'), // red
+      EA.c('#f97316'), // orange
+      EA.c('#eab308'), // yellow
+      EA.c('#22c55e'), // green
+      EA.c('#06b6d4'), // cyan
+      EA.c('#3b82f6'), // blue
+      EA.c('#a855f7')  // purple
     ],
 
     // Background shades
-    bg:                '#fafafa',
-    figBg:             '#ffffff',
-    border:            '#e2e2e8',
+    bg:                EA.c('#fafafa'),
+    figBg:             EA.c('#ffffff'),
+    border:            EA.c('#e2e2e8'),
 
     // Text
-    text:              '#1a1a2e',
-    textSecondary:     '#4a4a6a'
+    text:              EA.c('#1a1a2e'),
+    textSecondary:     EA.c('#4a4a6a')
   };
 
   // ───────────────────────────────────────────── figure scaffolding ─────

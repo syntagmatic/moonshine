@@ -164,6 +164,14 @@ svg text { font-family: var(--heading-font); }
   .control-group input[type="range"] { width: 80px; }
 }
 </style>
+<link rel="stylesheet" href="lib/theme.css">
+<script src="lib/theme.js"></script>
+<style>
+/* dark twins */
+@media (prefers-color-scheme: dark) {
+  a:hover { color: #7aa2f7; }
+}
+</style>
 </head>
 <body>
 <div class="article">
@@ -210,7 +218,7 @@ and annihilate, and curved borders keep retreating.
 </p>
 
 <div class="figure" id="fig-rule">
-  <canvas id="canvas-rule"></canvas>
+  <canvas id="canvas-rule" role="img" aria-label="128 by 128 grid of black and white cells under majority dynamics"></canvas>
   <div class="stat-row">
     <div class="stat"><span class="stat-label" id="stat-rule-unit">Sweep:</span><span class="stat-val" id="stat-rule-step">0</span></div>
     <div class="stat"><span class="stat-label">Black:</span><span class="stat-val" id="stat-rule-black">50%</span></div>
@@ -261,7 +269,7 @@ metals and domain growth in a quenched magnet.
 
 <div class="figure" id="fig-coarsening">
   <div style="display:flex; gap:1.25rem; flex-wrap:wrap; align-items:flex-start;">
-    <canvas id="canvas-coarsening" style="width:200px; height:200px; flex:0 0 auto;"></canvas>
+    <canvas id="canvas-coarsening" role="img" aria-label="200 by 200 grid coarsening into black and white domains" style="width:200px; height:200px; flex:0 0 auto;"></canvas>
     <div id="chart-coarsening" style="flex:1 1 260px; min-width:240px;"></div>
   </div>
   <div class="stat-row">
@@ -346,7 +354,7 @@ several camps, each unanimous and deaf to the others.
 </p>
 
 <div class="figure" id="fig-deffuant">
-  <canvas id="canvas-deffuant" style="width:100%; height:260px;"></canvas>
+  <canvas id="canvas-deffuant" role="img" aria-label="Opinion traces of 300 people over time, merging into clusters" style="width:100%; height:260px;"></canvas>
   <div class="stat-row">
     <div class="stat"><span class="stat-label">Meetings per person:</span><span class="stat-val" id="stat-def-t">0</span></div>
     <div class="stat"><span class="stat-label">Clusters (&ge; 5% of people):</span><span class="stat-val" id="stat-def-clusters">--</span></div>
@@ -420,7 +428,7 @@ those pairs pull toward disagreement.
   "use strict";
 
   var REDUCED = Motion.reduced();
-  var INK = "#1a1a2e", PAPER = "#f0f0f5", ACCENT = "#2563eb", MUTED = "#4a4a6a", GRID = "#e2e2e8";
+  var INK = Theme.c("#1a1a2e"), PAPER = Theme.c("#f0f0f5"), ACCENT = Theme.c("#2563eb"), MUTED = Theme.c("#4a4a6a"), GRID = Theme.c("#e2e2e8");
 
   function whenVisible(el, fn) {
     var done = false;
@@ -428,6 +436,13 @@ those pairs pull toward disagreement.
       if (!done && entries.some(function (e) { return e.isIntersecting; })) { done = true; io.disconnect(); fn(); }
     }, { rootMargin: "100px" });
     io.observe(el);
+  }
+
+  // Pause a running animation when its figure scrolls off screen.
+  function whenHidden(el, fn) {
+    new IntersectionObserver(function (entries) {
+      if (!entries.some(function (e) { return e.isIntersecting; })) fn();
+    }, { threshold: 0 }).observe(el);
   }
 
   function drawGrid(ctx, grid, n) {
@@ -544,6 +559,7 @@ those pairs pull toward disagreement.
     function init() { pause(); randomFill(grid, 0.5); prev.fill(2); step = 0; status = "coarsening"; render(); }
 
     playBtn.addEventListener("click", function () { playing ? pause() : play(); });
+    whenHidden(fig, pause);
     document.getElementById("rule-step").addEventListener("click", function () { pause(); if (!stopped()) advance(); render(); });
     document.getElementById("rule-reset").addEventListener("click", init);
     document.getElementById("rule-async").addEventListener("click", function () {
@@ -586,7 +602,8 @@ those pairs pull toward disagreement.
       d3.select(chartDiv).selectAll("svg").remove();
       var W = Math.max(240, chartDiv.clientWidth), H = 200, m = { top: 10, right: 12, bottom: 36, left: 44 };
       var iw = W - m.left - m.right, ih = H - m.top - m.bottom;
-      var svg = d3.select(chartDiv).append("svg").attr("width", W).attr("height", H);
+      var svg = d3.select(chartDiv).append("svg").attr("width", W).attr("height", H)
+        .attr("role", "img").attr("aria-label", "Log-log plot of measured domain width L against sweeps t, with a dashed reference line of slope 1/2");
       var g = svg.append("g").attr("transform", "translate(" + m.left + "," + m.top + ")");
       var x = d3.scaleLog().domain([1, TMAX]).range([0, iw]);
       var y = d3.scaleLog().domain([1, 128]).range([ih, 0]);
@@ -633,6 +650,7 @@ those pairs pull toward disagreement.
     function pause() { playing = false; playBtn.textContent = "Play"; playBtn.classList.remove("active"); if (raf) cancelAnimationFrame(raf); raf = null; }
     function init() { pause(); randomFill(grid, 0.5); t = 0; pts = []; nextRec = 1; render(); }
     playBtn.addEventListener("click", function () { playing ? pause() : play(); });
+    whenHidden(fig, pause);
     document.getElementById("coarsen-reset").addEventListener("click", init);
     new ResizeObserver(function () { chart(); }).observe(fig);
     init();
@@ -658,16 +676,19 @@ those pairs pull toward disagreement.
 
     function chart() {
       d3.select(chartDiv).selectAll("svg").remove();
-      var W = Math.max(260, fig.clientWidth - 48), H = 220, m = { top: 26, right: 10, bottom: 36, left: 44 };
+      var W = Math.max(260, fig.clientWidth - 48), twoRows = W < 440, H = twoRows ? 234 : 220, m = { top: twoRows ? 40 : 26, right: 10, bottom: 36, left: 44 };
       var iw = W - m.left - m.right, ih = H - m.top - m.bottom;
-      var svg = d3.select(chartDiv).append("svg").attr("width", W).attr("height", H);
+      var svg = d3.select(chartDiv).append("svg").attr("width", W).attr("height", H)
+        .attr("role", "img").attr("aria-label", "Stacked bars of run outcomes (black wins, white wins, frozen stripes, still moving) for starting black fractions 50% to 56%");
       var g = svg.append("g").attr("transform", "translate(" + m.left + "," + m.top + ")");
       var x = d3.scaleBand().domain(biases).range([0, iw]).padding(0.25);
       var y = d3.scaleLinear().domain([0, 1]).range([ih, 0]);
       g.append("g").attr("transform", "translate(0," + ih + ")").call(d3.axisBottom(x).tickFormat(function (d) { return d + "%"; }));
       g.append("g").call(d3.axisLeft(y).ticks(4, "%"));
       g.append("text").attr("x", iw / 2).attr("y", ih + 30).attr("text-anchor", "middle").attr("font-size", 11).attr("fill", MUTED).text("initial black fraction");
-      var keys = [["black", INK], ["white", "#c9c9d6"], ["stripes", ACCENT], ["open", "#9ca3af"]];
+      // Opinion colours keep their order in both themes: black wins is the darker bar.
+      var OP_B = Theme.pick("#1a1a2e", "#4a4c68"), OP_W = Theme.pick("#c9c9d6", "#d8d8e2");
+      var keys = [["black", OP_B], ["white", OP_W], ["stripes", ACCENT], ["open", Theme.c("#9ca3af")]];
       biases.forEach(function (b) {
         var r = results[b], tot = r.black + r.white + r.stripes + r.open;
         if (!tot) return;
@@ -678,13 +699,15 @@ those pairs pull toward disagreement.
           acc += v;
         });
       });
-      var lg = g.append("g").attr("transform", "translate(0,-20)");
-      var labels = [["black wins", INK], ["white wins", "#c9c9d6"], ["frozen stripes", ACCENT], ["still moving", "#9ca3af"]];
-      var off = 0;
+      var lg = g.append("g").attr("transform", "translate(0," + (twoRows ? -34 : -20) + ")");
+      var labels = [["black wins", OP_B], ["white wins", OP_W], ["frozen stripes", ACCENT], ["still moving", Theme.c("#9ca3af")]];
+      var off = 0, row = 0;
       labels.forEach(function (l) {
-        lg.append("rect").attr("x", off).attr("y", 0).attr("width", 10).attr("height", 10).attr("fill", l[1]);
-        lg.append("text").attr("x", off + 14).attr("y", 9).attr("font-size", 10).attr("fill", MUTED).text(l[0]);
-        off += 14 + l[0].length * 5.6 + 12;
+        var w = 14 + l[0].length * 5.6 + 12;
+        if (off > 0 && off + w - 12 > iw) { off = 0; row++; }
+        lg.append("rect").attr("x", off).attr("y", row * 14).attr("width", 10).attr("height", 10).attr("fill", l[1]);
+        lg.append("text").attr("x", off + 14).attr("y", row * 14 + 9).attr("font-size", 10).attr("fill", MUTED).text(l[0]);
+        off += w;
       });
     }
     function stats() {
@@ -839,6 +862,7 @@ those pairs pull toward disagreement.
     function pause() { playing = false; playBtn.textContent = "Play"; playBtn.classList.remove("active"); if (raf) cancelAnimationFrame(raf); raf = null; }
     function start() { if (REDUCED) { advance(TMAX); draw(); stats(); } else play(); }
     playBtn.addEventListener("click", function () { playing ? pause() : play(); });
+    whenHidden(fig, pause);
     document.getElementById("def-reset").addEventListener("click", init);
     document.getElementById("def-eps").addEventListener("input", function () {
       eps = +this.value; document.getElementById("def-eps-val").textContent = eps.toFixed(2);
@@ -868,7 +892,8 @@ those pairs pull toward disagreement.
       d3.select(chartDiv).selectAll("svg").remove();
       var W = Math.max(260, fig.clientWidth - 48), H = 230, m = { top: 10, right: 12, bottom: 36, left: 40 };
       var iw = W - m.left - m.right, ih = H - m.top - m.bottom;
-      var svg = d3.select(chartDiv).append("svg").attr("width", W).attr("height", H);
+      var svg = d3.select(chartDiv).append("svg").attr("width", W).attr("height", H)
+        .attr("role", "img").attr("aria-label", "Final number of opinion clusters against tolerance epsilon: filled dots for clusters of at least 5% of people, open dots for all clusters, dashed curve 1/(2 epsilon)");
       var g = svg.append("g").attr("transform", "translate(" + m.left + "," + m.top + ")");
       var x = d3.scaleLinear().domain([0.04, 0.51]).range([0, iw]);
       var yMax = Math.max(11, d3.max(data, function (d) { return d.all; }) || 0);

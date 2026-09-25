@@ -10,6 +10,7 @@
 <link href="../vendor/fonts/sans-serif-mono/fonts.css" rel="stylesheet">
 <script src="lib/modular-math.js"></script>
 <script src="../lib/motion.js"></script>
+<script src="lib/figkit.js"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -94,6 +95,7 @@ svg text { font-family: var(--heading-font); }
 @media (prefers-reduced-motion: reduce) {html:not([data-motion="full"]) * { transition-duration: 0s !important; animation-duration: 0s !important; } }
 @media (max-width: 600px) { h1 { font-size: 1.75rem; } .article { padding: 1.5rem 1rem 4rem; } }
 </style>
+<link rel="stylesheet" href="lib/theme.css">
 </head>
 <body>
 <div class="article">
@@ -110,7 +112,7 @@ svg text { font-family: var(--heading-font); }
 <div class="figure" id="fig-heatmap">
   <div id="heatmap-host"></div>
   <div id="heatmap-status" class="status-bar"></div>
-  <p class="figure-caption">log |&Delta;(&tau;)| on the fundamental domain (outlined in white) and its neighbours. Hover to inspect values.</p>
+  <p class="figure-caption">log |&Delta;(&tau;)| on the fundamental domain (outlined in white) and its neighbours. Move the pointer, tap, or use the arrow keys to read the value at a point.</p>
 </div>
 
 <h2>The discriminant &Delta;</h2>
@@ -243,15 +245,17 @@ function modPos(a, m) { return ((a % m) + m) % m; }
   }
 
   // Bar chart
-  var W = 680, H = 200;
-  var margin = { top: 15, right: 15, bottom: 25, left: 70 };
+  var W = FigKit.width(document.getElementById('tau-chart-host'), 680), H = 200;
+  var margin = { top: 15, right: 10, bottom: 25, left: 66 };
   var iW = W - margin.left - margin.right;
   var iH = H - margin.top - margin.bottom;
 
   var host = document.getElementById('tau-chart-host');
   var svg = d3.select(host).append('svg')
     .attr('viewBox', '0 0 ' + W + ' ' + H)
-    .attr('width', '100%').style('max-width', W + 'px');
+    .attr('width', '100%').style('max-width', W + 'px')
+    .attr('role', 'img')
+    .attr('aria-label', 'Bar chart of Ramanujan tau(n) for n from 1 to 20, positive values blue and negative red; the values are listed in the table below');
 
   var g = svg.append('g').attr('transform', 'translate(' + margin.left + ',' + margin.top + ')');
 
@@ -363,9 +367,10 @@ function modPos(a, m) { return ((a % m) + m) % m; }
 
 // ────────────────────────────────────────── Figure 3: |Δ| heatmap ──
 (function () {
-  var W = 680, H = 380;
   var xMin = -1.5, xMax = 1.5, yMin = 0.15, yMax = 3.0;
   var nx = 140, ny = 100;
+  // The overlay's viewBox has the canvas's aspect ratio, so the outline sits on the pixels.
+  var W = 680, H = Math.round(W * ny / nx);
   var dx = (xMax - xMin) / nx, dy = (yMax - yMin) / ny;
 
   var host = document.getElementById('heatmap-host');
@@ -375,6 +380,10 @@ function modPos(a, m) { return ((a % m) + m) % m; }
   canvas.style.maxWidth = W + 'px';
   canvas.style.imageRendering = 'pixelated';
   canvas.style.borderRadius = '3px';
+  canvas.style.display = 'block';
+  canvas.setAttribute('role', 'img');
+  canvas.setAttribute('tabindex', '0');
+  canvas.setAttribute('aria-label', 'Heatmap of log |Delta(tau)| on the fundamental domain and its neighbours. Tap or click to read the value at a point; arrow keys move the probe.');
 
   var ctx = canvas.getContext('2d');
   var img = ctx.createImageData(nx, ny);
@@ -440,7 +449,8 @@ function modPos(a, m) { return ((a % m) + m) % m; }
     .attr('viewBox', '0 0 ' + W + ' ' + H)
     .attr('width', '100%').style('max-width', W + 'px')
     .style('position', 'absolute').style('top', '0').style('left', '0')
-    .style('pointer-events', 'none');
+    .style('pointer-events', 'none')
+    .attr('aria-hidden', 'true');
 
   var xS = d3.scaleLinear().domain([xMin, xMax]).range([0, W]);
   var yS = d3.scaleLinear().domain([yMax, yMin]).range([0, H]);
@@ -451,33 +461,44 @@ function modPos(a, m) { return ((a % m) + m) % m; }
     return xS(Math.max(xMin, Math.min(xMax, p.re))) + ',' + yS(Math.max(yMin, Math.min(yMax, p.im)));
   }).join('L') + 'Z';
   svgOverlay.append('path').attr('d', fdD)
-    .attr('fill', 'none').attr('stroke', 'white').attr('stroke-width', 1.5)
+    .attr('fill', 'none').attr('stroke', 'rgb(255,255,255)').attr('stroke-width', 1.5)
     .attr('stroke-dasharray', '6,3').attr('opacity', 0.7);
+  var probeMark = svgOverlay.append('circle').attr('r', 5)
+    .attr('fill', 'none').attr('stroke', 'rgb(255,255,255)').attr('stroke-width', 2);
 
   // Hover interaction
   canvas.style.cursor = 'crosshair';
   canvas.style.pointerEvents = 'auto';
   var statusDiv = document.getElementById('heatmap-status');
 
-  canvas.addEventListener('mousemove', function (e) {
+  // The readout follows the pointer, a tap, or the arrow keys, and starts at tau = i.
+  var probe = { re: 0, im: 1 };
+  function show() {
+    var dVal = Mod.delta.eval(probe, 20);
+    var absD = Mod.complex.abs(dVal);
+    probeMark.attr('cx', xS(probe.re)).attr('cy', yS(probe.im));
+    statusDiv.textContent = '\u03c4 = ' + probe.re.toFixed(3) + ' + ' + probe.im.toFixed(3) +
+      'i · |\u0394(\u03c4)| = ' + absD.toExponential(3) +
+      ' · log\u2081\u2080|\u0394| = ' + (absD > 0 ? Math.log10(absD).toFixed(2) : '\u2212\u221e');
+  }
+  function at(e) {
     var rect = canvas.getBoundingClientRect();
     var px = (e.clientX - rect.left) / rect.width;
     var py = (e.clientY - rect.top) / rect.height;
-    var x = xMin + px * (xMax - xMin);
-    var y = yMax - py * (yMax - yMin);
-    if (y < yMin) y = yMin;
-    var tau = { re: x, im: y };
-    var dVal = Mod.delta.eval(tau, 20);
-    var absD = Mod.complex.abs(dVal);
-    statusDiv.textContent = '\u03c4 = ' + x.toFixed(3) + ' + ' + y.toFixed(3) +
-      'i    |\u0394(\u03c4)| = ' + absD.toExponential(3) +
-      '    log\u2081\u2080|\u0394| = ' + (absD > 0 ? Math.log10(absD).toFixed(2) : '\u2212\u221e');
+    probe = { re: xMin + px * (xMax - xMin), im: Math.max(yMin, yMax - py * (yMax - yMin)) };
+    show();
+  }
+  canvas.addEventListener('pointermove', at);
+  canvas.addEventListener('click', at);
+  canvas.addEventListener('keydown', function (e) {
+    var m = e.shiftKey ? 0.25 : 0.05;
+    var d = { ArrowLeft: [-m, 0], ArrowRight: [m, 0], ArrowUp: [0, m], ArrowDown: [0, -m] }[e.key];
+    if (!d) return;
+    e.preventDefault();
+    probe = { re: Math.max(xMin, Math.min(xMax, probe.re + d[0])), im: Math.max(yMin, Math.min(yMax, probe.im + d[1])) };
+    show();
   });
-
-  canvas.addEventListener('mouseleave', function () {
-    statusDiv.textContent = 'Hover over the heatmap to inspect values.';
-  });
-  statusDiv.textContent = 'Hover over the heatmap to inspect values.';
+  show();
 })();
 </script>
 

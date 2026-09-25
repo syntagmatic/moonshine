@@ -8,22 +8,34 @@
     return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || '#888';
   }
 
+  // KaTeX \\color{} takes literal hex, so swap the light concept colors for
+  // their dark-theme values (mirrors the dark block in style.css).
+  var DARK = root.matchMedia && root.matchMedia('(prefers-color-scheme: dark)').matches;
+  var DARK_HEX = { '#c2410c': '#fb923c', '#4338ca': '#a5b4fc', '#b7791f': '#fbbf24',
+    '#0f766e': '#2dd4bf', '#be123c': '#fb7185', '#64748b': '#94a3b8' };
+  function tex(src) {
+    return DARK ? src.replace(/#[0-9a-fA-F]{6}/g, function (h) { return DARK_HEX[h.toLowerCase()] || h; }) : src;
+  }
+
   // Render [data-tex] and [data-tex-display] once KaTeX has loaded.
   function renderTex() {
     if (!root.katex) return;
     document.querySelectorAll('[data-tex]').forEach(function (el) {
-      katex.render(el.getAttribute('data-tex'), el, { throwOnError: false });
+      katex.render(tex(el.getAttribute('data-tex')), el, { throwOnError: false });
     });
     document.querySelectorAll('[data-tex-display]').forEach(function (el) {
-      katex.render(el.getAttribute('data-tex-display'), el, { throwOnError: false, displayMode: true });
+      katex.render(tex(el.getAttribute('data-tex-display')), el, { throwOnError: false, displayMode: true });
     });
   }
   root.addEventListener('load', renderTex);
 
   // A canvas sized W x H in CSS pixels at device resolution. Returns ctx with
   // the transform already scaled, so drawing code uses CSS pixel units.
-  function canvas(host, W, H) {
+  // label: aria-label text (role="img"), or null for a decorative canvas.
+  function canvas(host, W, H, label) {
     var c = document.createElement('canvas');
+    if (label) { c.setAttribute('role', 'img'); c.setAttribute('aria-label', label); }
+    else if (label === null) c.setAttribute('aria-hidden', 'true');
     var dpr = Math.min(root.devicePixelRatio || 1, 2);
     c.width = Math.round(W * dpr); c.height = Math.round(H * dpr);
     c.style.aspectRatio = W + ' / ' + H;
@@ -52,5 +64,5 @@
 
   function fmt(x, n) { return (Math.round(x * Math.pow(10, n)) / Math.pow(10, n)).toFixed(n); }
 
-  root.Page = { color: color, renderTex: renderTex, canvas: canvas, pointer: pointer, throttle: throttle, fmt: fmt };
+  root.Page = { color: color, tex: tex, renderTex: renderTex, canvas: canvas, pointer: pointer, throttle: throttle, fmt: fmt };
 })(window);
