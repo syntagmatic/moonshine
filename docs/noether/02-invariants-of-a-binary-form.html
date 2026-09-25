@@ -10,7 +10,9 @@
 <link href="../vendor/fonts/sans-serif-mono/fonts.css" rel="stylesheet">
 <script src="lib/noether-math.js"></script>
 <script src="lib/noether-viz.js"></script>
+<script src="lib/theme.js"></script>
 <script src="../lib/motion.js"></script>
+<script src="lib/figure-a11y.js"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -154,7 +156,33 @@ svg text { font-family: var(--heading-font); }
   .article { padding: 1.5rem 1rem 4rem; }
   .two-col { grid-template-columns: 1fr; }
 }
+
+/* Wide equations scroll inside their own box on a phone instead of pushing the page sideways. */
+.katex-display { overflow-x: auto; overflow-y: hidden; padding: 0.15em 0; }
+@media (max-width: 640px) { .article table { display: block; max-width: 100%; overflow-x: auto; } }
+
+/* dark-mode: generated from the light colors above by the same mapping as lib/theme.js */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --c-pos: #d77878;
+    --c-neg: #7c9be1;
+    --c-zero: #27292e;
+    --c-invariant: #3cddab;
+    --c-broken: #d77878;
+    --c-symm: #ac8be4;
+  }
+  a:hover { color: #6b87d7; }
+  .btn.active { color: #16161d; }
+  .coef-box { background: #1d262e; }
+  .matrix-panel { background: #1d262e; }
+  .check-row { background: #183e2c; }
+  .check-row.bad { background: #3a1515; }
+  .historical { background: linear-gradient(to right, #5a4e1c 0%, #5d571c 100%); border: 1px solid #ebd384; }
+  .historical h3 { color: #cf7a49; }
+  .historical .gordan-quote { color: #d37b45; }
+}
 </style>
+<link rel="stylesheet" href="lib/theme.css">
 </head>
 <body>
 <div class="article">
@@ -186,7 +214,7 @@ svg text { font-family: var(--heading-font); }
     <label>c <input type="range" id="q-c" min="-3" max="3" step="0.1" value="-1"><span class="value" id="q-c-val">-1.0</span></label>
   </div>
   <p class="status-bar" id="fig-quad-status">f(x, y) = x&sup2; &minus; y&sup2;. &Delta;&#x2082; = 4. Indefinite form: the zero set is two crossing lines.</p>
-  <p class="figure-caption"><span class="figure-label">Figure 1.</span> A binary quadratic form visualized on the plane. Red is positive, blue is negative, white is zero. The status bar reports the discriminant and which of the three cases you are in as you drag the coefficient sliders.</p>
+  <p class="figure-caption"><span class="figure-label">Figure 1.</span> A binary quadratic form visualized on the plane. Red is positive, blue is negative, and the neutral band between them is zero. The status bar reports the discriminant and which of the three cases you are in as you drag the coefficient sliders.</p>
 </div>
 
 <h2>Transforming a form</h2>
@@ -295,7 +323,7 @@ svg text { font-family: var(--heading-font); }
     <button class="btn" id="btn-cubic-preset-c">x&sup2;y &minus; y&sup3;</button>
     <button class="btn" id="btn-cubic-randM">random M</button>
   </div>
-  <p class="figure-caption"><span class="figure-label">Figure 3.</span> The same workshop for binary cubics. With weight 6, a modest 2&times;3 matrix (det = 6) multiplies <span class="katex-inline" data-tex="\Delta_3"></span> by <span class="katex-inline" data-tex="6^6 = 46{,}656"></span>.</p>
+  <p class="figure-caption"><span class="figure-label">Figure 3.</span> The same workshop for binary cubics. With weight 6, the default matrix <span class="katex-inline" data-tex="\operatorname{diag}(2, 3)"></span> (det = 6) multiplies <span class="katex-inline" data-tex="\Delta_3"></span> by <span class="katex-inline" data-tex="6^6 = 46{,}656"></span>.</p>
 </div>
 
 <h2>The orbit of a form</h2>
@@ -402,7 +430,7 @@ d3.selectAll('.katex-inline').each(function () {
         .attr('y', cy - gridHalfH + j * cellH)
         .attr('width', cellW + 0.5)
         .attr('height', cellH + 0.5)
-        .attr('fill', '#ffffff');
+        .attr('fill', Theme.c('#ffffff'));
       cells[i * gridN + j] = r;
     }
   }
@@ -417,16 +445,16 @@ d3.selectAll('.katex-inline').each(function () {
     .attr('y1', cy - gridHalfH).attr('y2', cy + gridHalfH)
     .attr('stroke', 'var(--c-axis)').attr('stroke-width', 1);
 
+  // Diverging scale: near-zero values are the panel color, positive values
+  // run to red and negative to blue. Endpoints are resolved hex for the
+  // current color scheme.
+  var zeroColor = Theme.c('#f8fafc');
+  var posScale = d3.interpolateRgb(Theme.c('#dcdcdc'), Theme.c('#dc5858'));
+  var negScale = d3.interpolateRgb(Theme.c('#dcdcdc'), Theme.c('#5858dc'));
   function colorForValue(v, scale) {
-    if (Math.abs(v) < 0.02 * scale) return '#f8fafc';
+    if (Math.abs(v) < 0.02 * scale) return zeroColor;
     var t = Math.max(-1, Math.min(1, v / scale));
-    if (t > 0) {
-      // red gradient
-      var intensity = Math.round(220 * (1 - t * 0.6));
-      return 'rgb(220,' + intensity + ',' + intensity + ')';
-    }
-    var intensity2 = Math.round(220 * (1 + t * 0.6));
-    return 'rgb(' + intensity2 + ',' + intensity2 + ',220)';
+    return t > 0 ? posScale(t) : negScale(-t);
   }
 
   function update() {
@@ -681,10 +709,11 @@ d3.selectAll('.katex-inline').each(function () {
   var n = 300;
   var orbit = [];
   var f0 = NOETHER.forms.quadratic(1, 0, -1);
+  var rand = NOETHER.viz.rng(1868);
   while (orbit.length < n) {
-    var alpha = (Math.random() * 2 - 1) * 2;
-    var beta  = (Math.random() * 2 - 1) * 2;
-    var gamma = (Math.random() * 2 - 1) * 2;
+    var alpha = (rand() * 2 - 1) * 2;
+    var beta  = (rand() * 2 - 1) * 2;
+    var gamma = (rand() * 2 - 1) * 2;
     if (Math.abs(alpha) < 0.3) continue;
     var delta = (1 + beta * gamma) / alpha;
     if (!isFinite(delta) || Math.abs(delta) > 6) continue;
@@ -739,7 +768,7 @@ d3.selectAll('.katex-inline').each(function () {
       return 'rgb(255,' + g0 + ',' + g0 + ')';
     })
     .attr('fill-opacity', 0.75)
-    .attr('stroke', '#ffffff').attr('stroke-width', 0.5);
+    .attr('stroke', Theme.c('#ffffff')).attr('stroke-width', 0.5);
 
   // Overlay the level curve Δ = 4, i.e., b² = 4 + 4 a c → we can't draw it in
   // the (a, c) plane directly since b is a third dimension, but we can shade

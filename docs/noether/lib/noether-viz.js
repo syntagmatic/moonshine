@@ -48,6 +48,10 @@
     charge:    '#ec4899'  // pink
   };
 
+  // Palette entries go through lib/theme.js (loaded later, so resolved at draw
+  // time) to get their dark-mode hex when the reader's system is dark.
+  function themed(c) { return global.Theme ? global.Theme.c(c) : c; }
+
   // ───────────────────────────────────────────── KaTeX helper ─────
   // Convenience wrapper so each explainer doesn't redefine the same function.
   // Usage: `NOETHER.viz.math('fig-1-label', '\\mathbb{R}^n', false);`
@@ -85,8 +89,8 @@
   function drawAxes(g, cx, cy, halfW, halfH, options) {
     options = options || {};
     var tickSpacing = options.tickSpacing || 40;
-    var color = options.color || colors.axis;
-    var gridColor = options.gridColor || colors.grid;
+    var color = themed(options.color || colors.axis);
+    var gridColor = themed(options.gridColor || colors.grid);
 
     // Gridlines
     var grid = g.append('g').attr('class', 'grid');
@@ -121,23 +125,84 @@
   function drawLabeledPoint(g, cx, cy, text, options) {
     options = options || {};
     var r = options.r || 5;
-    var fill = options.fill || colors.selected;
+    var fill = themed(options.fill || colors.selected);
     var labelDy = options.labelDy != null ? options.labelDy : 18;
     var pt = g.append('g');
     pt.append('circle')
       .attr('cx', cx).attr('cy', cy).attr('r', r)
       .attr('fill', fill)
-      .attr('stroke', '#ffffff').attr('stroke-width', 1.5);
+      .attr('stroke', themed('#ffffff')).attr('stroke-width', 1.5);
     if (text) {
       pt.append('text')
         .attr('x', cx).attr('y', cy + labelDy)
         .attr('text-anchor', 'middle')
         .attr('font-family', 'Source Sans 3, sans-serif')
         .attr('font-size', 12)
-        .attr('fill', colors.text)
+        .attr('fill', themed(colors.text))
         .text(text);
     }
     return pt;
+  }
+
+  // ───────────────────────────────────────────── animation loop ─────
+  // Drop-in replacement for d3.timer(cb) that respects the reader:
+  //  - it only runs while `el` (or its enclosing .figure) is on screen, and
+  //    `elapsed` only advances while it runs;
+  //  - under reduced motion it draws no frames: it fast-forwards the callback
+  //    through `reducedMs` of simulated time (or until the callback stops the
+  //    timer) and leaves the final state on screen.
+  // The callback receives the elapsed milliseconds, like d3.timer.
+  function timer(el, cb, opts) {
+    var node = el && el.node ? el.node() : el;
+    var fig = node && node.closest ? (node.closest('.figure') || node) : node;
+    var stopped = false, elapsed = 0, handle = null, visible = true, last = null, unwatch = null;
+    var api = {
+      stop: function () {
+        stopped = true;
+        if (handle) cancelAnimationFrame(handle);
+        handle = null;
+        if (unwatch) { unwatch(); unwatch = null; }
+      }
+    };
+    if (global.Motion && global.Motion.reduced()) {
+      var maxMs = (opts && opts.reducedMs) || 6000;
+      // Deferred so the caller has stored the returned handle before the
+      // callback tries to stop it.
+      Promise.resolve().then(function () {
+        while (!stopped && elapsed <= maxMs) { cb(elapsed); elapsed += 1000 / 60; }
+        api.stop();
+      });
+      return api;
+    }
+    function frame(ts) {
+      handle = null;
+      if (stopped) return;
+      if (last !== null) elapsed += Math.min(ts - last, 100);
+      last = ts;
+      cb(elapsed);
+      if (!stopped && visible) handle = requestAnimationFrame(frame);
+    }
+    function wake(v) {
+      visible = v;
+      if (v && !stopped && !handle) { last = null; handle = requestAnimationFrame(frame); }
+    }
+    if (global.Motion && fig) unwatch = global.Motion.onVisible(fig, wake);
+    else wake(true);
+    return api;
+  }
+
+  // ───────────────────────────────────────────── seeded PRNG ─────
+  // mulberry32: a small deterministic generator, so figures that sample
+  // "random" data draw the same picture on every load.
+  function rng(seed) {
+    var a = seed >>> 0;
+    return function () {
+      a = (a + 0x6D2B79F5) >>> 0;
+      var t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
   }
 
   // ───────────────────────────────────────────── public API ─────
@@ -147,7 +212,9 @@
     math: renderMath,
     makeSVG: makeSVG,
     drawAxes: drawAxes,
-    drawLabeledPoint: drawLabeledPoint
+    drawLabeledPoint: drawLabeledPoint,
+    timer: timer,
+    rng: rng
   };
 
 })(typeof window !== 'undefined' ? window : globalThis);
