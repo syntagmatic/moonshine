@@ -159,3 +159,60 @@ Needs a human, from batch 3 (details in the findings files):
 - Dead navigator JS in EA 06.
 - Open structural suggestions: merge PC 08 into 05; possibly cut deeper in
   game-is-the-math 07, 09 and 10.
+
+## Batch 4: figure and pedagogy pass (2026-09-24)
+
+The pass ran as six tracks under `FIGURE-BRIEF.md`; their records are
+`findings/figures-<track>.md`. All 163 pages pass the render check and the
+internal link check.
+
+- Every series now has a dark theme that follows `prefers-color-scheme`, with
+  no toggle. Each series keeps its own `lib/theme.css` / `theme.js` (japan and
+  lithium-ion use `shared/`), and colors drawn from JS are resolved hex. The
+  homepage and the `motion.js` banners follow the same scheme.
+- Figures fit a 390px screen. Before, 680-720-unit viewBoxes put text at 5-7px
+  on a phone, and wide equations made most pages scroll sideways.
+- Every figure surface has a role and a label, and clickable parts can be
+  reached from the keyboard. Dense EA figures use a roving tabindex.
+- Animations respect `Motion.reduced()` and pause off screen. Physics figures
+  no longer open empty.
+- About 25 redundant figures were cut or merged (mostly in noether,
+  parallel-coordinates, EA and bioinformatics).
+- Real bugs fixed:
+  - noether 03's brachistochrone ran uphill.
+  - lithium-ion's SEI rate constant was about 1600x too large.
+  - The fundamental-domain outline in mf 07 didn't line up with its heatmap.
+  - An uppercase CSS rule mangled the maths in coh 04.
+  - Unclosed CSS blocks disabled whole stylesheets in EA 08 and games 10.
+  - lattice 06's Fig 3 caption said "undershoot" where the points overshoot.
+- PC 05's wine data was fabricated: only 3 of its 179 rows matched UCI, and
+  the "Phenols" column held ash. It is now the real `wine.data` (fce2cc7).
+
+Needs a human, from batch 4:
+- **Audit every embedded dataset that claims a real source** against that
+  source. PC 05 shows the batch-generated pages invented "real" data.
+- Captions that still say left/right for panels that stack on a phone: dt 01
+  Fig 2, dt 04, lithium-ion 05, and some in EA.
+- Mouse-only paths:
+  - emergence 01 cell editing and lattice 05 obstacles.
+  - The EA 04 diagram builder.
+  - Building a loop on the coh 04 sphere and dragging in coh 06.
+  - PC 12's Shift+drag rotation (touch can't reach it).
+  - Small touch targets: PC 10 joint limits, Hackenbush edges.
+- Figure-content issues:
+  - The emergence 08 Fig 3 caption says the discharge grows "downward from a
+    point"; in the model it hugs the grounded edges.
+  - The japan 07 caption mentions a dashed line the timeline never draws.
+  - The japan 06 strike-slip arrows point the wrong way, and its "deep"
+    label is clipped.
+  - The Fig 5 "Regime" label in emergence 13.
+- Readouts that lean toward KPI cards: dt stat panels, coh 01/05 Betti
+  readouts, EA 03/05/09, noether workshop verdict bars, and games score cards.
+- Structural suggestions:
+  - EA 09 has 14 figures and could take a deeper cut.
+  - Possible merges: EA 02 Figs 2-3, EA 05 Figs 3-4, and the irrep bar in
+    both mf 12 and 13.
+  - PC 05 and 08 overlap: the outlier-drag and process-monitor figures are
+    the same interaction on different data.
+- The per-series `theme.css` files map colors by exact hex value, so a new
+  color added to a figure stays light in dark mode.
