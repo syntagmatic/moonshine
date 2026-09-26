@@ -43,7 +43,7 @@ The well-mixed Lotka-Volterra cycle is a knife-edge; space keeps the local boom 
 Turing's reaction-diffusion sets its own wavelength, while positional gradients can scale with the tissue. The reader explores a Gray-Scott parameter map built from real runs, then grows the tissue and adds noise to watch the two mechanisms come apart.
 
 ### 13. Excitable Media
-One pair of equations gives the spiral waves of a chemical dish and of a failing heart. The reader launches waves in a BZ dish and in cardiac tissue, then breaks a wavefront into a spiral with a timed S1-S2 stimulus and tries to clear it. Show the model's equations, and pace the tissue no faster than it recovers.
+One pair of equations models the traveling and spiral waves of the Belousov-Zhabotinsky reaction and of heart muscle. The reader launches waves in a BZ dish and in cardiac tissue, then breaks a wavefront into a spiral with a timed S1-S2 stimulus and tries to clear it. Show the model's equations, and pace the tissue no faster than it recovers.
 
 ### 14. The Kuramoto Model
 Oscillators with scattered frequencies lock together once coupling passes a critical value. The reader raises coupling and watches the measured order parameter track theory, then changes the frequency distribution.
