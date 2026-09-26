@@ -52,6 +52,11 @@ Subtitles give an overview with some motivation, in two or three plain
 sentences: what question the article answers, why it matters at this point
 in the series, and what the reader will see. Not a list of formulas or
 topics; `docs/modular-forms/` (9da904d) is the reference.
+Intros and outros get the same treatment (0608573): the intro picks up
+where the previous part left off and says what question this one answers
+and why, briefly, before the first figure; a page that ends on a technical
+aside gets a short closing paragraph that hands off to the next part. No
+recaps or grand summaries, and only facts already on the page.
 
 ## Rules for the sweep
 
