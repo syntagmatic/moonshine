@@ -84,8 +84,8 @@ Order: fact-checked series first, since word-only edits are safest there.
 | Series | Ledger | Swept |
 |---|---|---|
 | emergence | yes | 957da31 (patterns 1-6; pattern 7 done only in 02) |
-| modular-forms | yes | |
-| algorithms-ml | yes | |
+| modular-forms | yes | 1b3a110 |
+| algorithms-ml | yes | 44f6da9 |
 | japan-earthquakes | yes (bilingual: list every changed English paragraph for a translator) | |
 | noether | | |
 | parallel-coordinates | | |
@@ -101,3 +101,16 @@ Order: fact-checked series first, since word-only edits are safest there.
 | quasicrystals | | |
 | foam | | |
 | sph | (Ian's series; ask before touching) | |
+
+## Notes for fact-checks (found during the sweep, not fixed)
+
+- modular-forms 10: "Fourier coefficients of a cusp form ... are point
+  counts" (a_p = p + 1 - #E(F_p) determines the count; it isn't the count).
+- modular-forms 11: "c(0) = 744 is a convention" (744 is forced once j is
+  normalised by 1728; the choice is j versus J).
+- modular-forms 08 subtitle: "Hecke eigenforms have multiplicative
+  coefficients" lacks the a(1) = 1 normalisation the body has.
+- modular-forms 07: "tau(n) grows roughly as n^(11/2)" follows an upper
+  bound, so it says more than the bound shows.
+- modular-forms 03: "Finite area is what makes spaces of modular forms
+  finite-dimensional" is a strong causal claim; check the ledger covers it.
