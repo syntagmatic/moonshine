@@ -31,6 +31,17 @@ the register and the size of the change.
    striking", "It turns out", one-line paragraphs built for effect.
 6. **Cute or breathless words.** "strangers", "creeps", "parks", "chops",
    "a toss-up", "magic", "beautiful", "stunning", "simply", "just".
+7. **Explanation the reader doesn't need yet, or at all.** Definitions,
+   formulas and asides placed before the reader has seen anything to attach
+   them to. Flocking opened with the polarization formula and a 1/√N
+   estimate before the first figure; now φ is defined in one plain sentence
+   where its readout first appears, the 1/√N level sits beside the dashed
+   line it explains, and the formula is gone. Ask of each technical passage:
+   does the next figure or paragraph need it? If later, move it there. If
+   never, cut it. If it's true and interesting but off the argument, cut it
+   anyway. Intros should get to the first figure quickly. This is about
+   order and relevance, not dumbing down: technical detail the argument
+   actually uses stays, at the point it's used.
 
 ## What to leave alone
 
@@ -41,9 +52,14 @@ Subtitles become plain descriptions.
 
 ## Rules for the sweep
 
-- Change wording only. No number, claim, citation, figure code, control, id
-  or live-value span changes. Check this by diffing the numbers in removed
-  and added lines per page.
+- For patterns 1 to 6, change wording only. For pattern 7, moving or cutting
+  passages is fine, but no number or claim that stays may change, and no
+  figure code, control or citation changes. Check by diffing the numbers in
+  removed and added lines per page; every difference should be a deliberate
+  cut.
+- A live-value span (`<span class="live" id=...>`) is written by the page's
+  script. If you move one, keep its id and keep it unique; if you cut one,
+  remove the line of script that writes it too.
 - Rewording can quietly strengthen or weaken a claim ("can be mapped onto"
   becoming "maps exactly onto"). Watch for that, and on a fact-checked series
   check any touched claim against its `LEDGER.md`.
@@ -67,7 +83,7 @@ Order: fact-checked series first, since word-only edits are safest there.
 
 | Series | Ledger | Swept |
 |---|---|---|
-| emergence | yes | 957da31 |
+| emergence | yes | 957da31 (patterns 1-6; pattern 7 done only in 02) |
 | modular-forms | yes | |
 | algorithms-ml | yes | |
 | japan-earthquakes | yes (bilingual: list every changed English paragraph for a translator) | |
