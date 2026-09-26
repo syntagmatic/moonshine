@@ -500,7 +500,8 @@
     var count = 1;
     for (var x = 0; x < p; x++) {
       var rhs = ((x * x % p * x + A * x + B) % p + p) % p;
-      count += 1 + legendreSymbol(rhs, p);
+      // over F_2 every r has exactly one square root (y = r)
+      count += (p === 2) ? 1 : 1 + legendreSymbol(rhs, p);
     }
     return count;
   }
@@ -510,7 +511,7 @@
   function curveDiscriminant(A, B) { return -16 * (4 * A * A * A + 27 * B * B); }
   function curveJ(A, B) {
     var d = 4 * A * A * A + 27 * B * B;
-    return (d === 0) ? Infinity : -1728 * 64 * A * A * A / d;
+    return (d === 0) ? Infinity : 6912 * A * A * A / d; // 1728 * 4A^3 / (4A^3 + 27B^2)
   }
 
   var elliptic = {
