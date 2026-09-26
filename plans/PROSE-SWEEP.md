@@ -48,7 +48,10 @@ the register and the size of the change.
 Plain declarative sentences, figure instructions ("Drag alignment to zero
 and..."), careful hedges, captions that describe the figure. It is a light
 touch, roughly 5 to 20 edits a page, and the page should not get longer.
-Subtitles become plain descriptions.
+Subtitles give an overview with some motivation, in two or three plain
+sentences: what question the article answers, why it matters at this point
+in the series, and what the reader will see. Not a list of formulas or
+topics; `docs/modular-forms/` (9da904d) is the reference.
 
 ## Rules for the sweep
 
