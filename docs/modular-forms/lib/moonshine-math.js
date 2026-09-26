@@ -1,4 +1,4 @@
-// moonshine-math.js — Numerical and geometric helpers for the Monstrous
+// moonshine-math.js - Numerical and geometric helpers for the Monstrous
 // Moonshine act of the Modular Forms series. Attaches a single `Moon`
 // object to the global scope.
 // No modules, no build step. Works alongside `../../exceptional-atlas/lib/lie-math.js`
@@ -66,11 +66,8 @@
   // Normalised modular j-invariant with q-expansion
   //   j(τ) = q⁻¹ + 744 + Σ c(n) q^n
   // where q = exp(2π i τ). Coefficients are integer and all ≥ 0 for n ≥ 0.
-  // These values are the standard tabulated head of the q-series, as they
-  // appear in Conway–Norton (1979) and the ATLAS of Finite Groups. We store
-  // only the values we can verify against the Monster-module decompositions
-  // below (via MCKAY_THOMPSON) — going further would require trusting a
-  // secondary source for the multiplicities and we prefer exactness.
+  // Values from OEIS A000521 (checked against an exact E4^3/Delta expansion).
+  // Only c(-1)..c(3) have stored Monster decompositions below.
 
   var J_COEFFICIENTS = [
     { n: -1, c: 1n },
@@ -94,7 +91,7 @@
     return null;
   }
 
-  // Hardy–Ramanujan asymptotic for the j-function Fourier coefficients:
+  // Petersson (1932) / Rademacher (1938) asymptotic for the j coefficients:
   //   c(n) ~ e^(4π√n) / (√2 · n^(3/4))
   // Useful for "how fast do these grow?" figures.
   function jAsymptotic(n) {
@@ -116,7 +113,7 @@
   // factorises as 2^46 · 3^20 · 5^9 · 7^6 · 11^2 · 13^3 · 17 · 19 · 23 · 29
   // · 31 · 41 · 47 · 59 · 71. The 15 primes dividing |𝕄| are exactly the
   // primes p for which the supersingular j-invariants in characteristic p
-  // lie in F_p (Ogg, 1975) — the "Jack Daniel's problem".
+  // lie in F_p (Ogg, 1975) - the "Jack Daniel's problem".
 
   var MONSTER_PRIMES = [
     { p: 2,  exp: 46 },
@@ -147,7 +144,7 @@
   }
 
   // The Monster has 194 conjugacy classes and therefore 194 complex
-  // irreducible representations. We store only the first five dimensions —
+  // irreducible representations. We store only the first five dimensions -
   // the ones that appear in the verified McKay–Thompson head decompositions
   // below. (The rest exist and are tabulated in the ATLAS, but we don't
   // ship multiplicities past c(3), so listing them would be unverifiable
@@ -180,7 +177,7 @@
   var leech = {
     dimension: 24,
     minimumNorm: 4,          // squared length; "no roots" means no norm-2 vectors
-    kissingNumber: 196560,   // exact; optimal in dimension 24 (CKMRV 2017)
+    kissingNumber: 196560,   // exact; optimal in dimension 24 (Levenshtein 1979; Odlyzko-Sloane 1979)
     // Orders of the Conway groups (Co_0 = Aut Λ_24; Co_1 = Co_0 / {±1})
     co0Order: 8315553613086720000n,
     co1Order: 4157776806543360000n
@@ -188,15 +185,14 @@
 
   // ─────────────────────────────────────────── McKay–Thompson heads ──
   //
-  // The decompositions John McKay and John Thompson found in 1978 for the
-  // first few j-coefficients into Monster irrep dimensions. Read them as
+  // Monster decompositions of the first coefficients of J = j - 744 (McKay
+  // 1978 noticed c(1) = 1 + 196883; the next ones are in Thompson 1979 and
+  // Conway-Norton 1979). Read them as
   //   c(n) = Σ multiplicity_k · dim(ρ_k)
   // with multiplicities stored in `mults` indexed by the 1-based `i` of the
   // corresponding Monster irrep in `monster.irreps`. Irreps omitted from
   // the object have multiplicity 0 at that grade.
-  //
-  // These five terms are the "numerical miracle" that convinced Conway and
-  // Norton to make the moonshine conjecture.
+
 
   var MCKAY_THOMPSON = [
     { n: -1, total: 1n,
@@ -279,7 +275,7 @@
 
   // Canonical fundamental domain as an SVG path fragment for a given
   // viewport. Callers supply a coordinate mapping (τ.re, τ.im) ↦ (x, y)
-  // — usually a linear map. Returns an array of {re, im} nodes forming
+  // - usually a linear map. Returns an array of {re, im} nodes forming
   // the left wall, the arc, and the right wall.
   function fundamentalDomainOutline(topIm, arcSteps) {
     var nodes = [];
