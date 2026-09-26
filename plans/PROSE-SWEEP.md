@@ -91,11 +91,11 @@ Order: fact-checked series first, since word-only edits are safest there.
 
 | Series | Ledger | Swept |
 |---|---|---|
-| emergence | yes | 957da31 (patterns 1-6; pattern 7 done only in 02) |
+| emergence | yes | 957da31, 15757f2 (pattern 7 done only in 02; 10, 11 and 14 still open with equations before Figure 1) |
 | modular-forms | yes | 1b3a110 |
-| algorithms-ml | yes | 44f6da9 |
-| japan-earthquakes | yes (bilingual: list every changed English paragraph for a translator) | |
-| noether | | |
+| algorithms-ml | yes | 44f6da9, 94e1ad3 |
+| japan-earthquakes | yes | 2961c2c (Japanese pending: plans/japan-earthquakes/TRANSLATE.md) |
+| noether | | 2949828 |
 | parallel-coordinates | | |
 | mathematical-diagrams | | |
 | game-is-the-math | | |
@@ -122,3 +122,12 @@ Order: fact-checked series first, since word-only edits are safest there.
   bound, so it says more than the bound shows.
 - modular-forms 03: "Finite area is what makes spaces of modular forms
   finite-dimensional" is a strong causal claim; check the ledger covers it.
+- noether 04: "Symmetry of L vs symmetry of the equations of motion" section says a transformation changing L by a total derivative is "a symmetry of the equations of motion ... and it still gives a Noether conservation law", which reads as if EOM symmetry suffices; Fig 1 scaling is an EOM symmetry with no conservation law.
+- japan-earthquakes 06: p12 says thrust or normal faults make tsunamis; the fault-types caption says only shallow thrust faults do. (Has ledger; check against it.)
+- noether 06: the driven oscillator's Hamiltonian is said to track a "loss", but driving can also add energy.
+- noether 07: Pauli 1926 hydrogen derivation called "first" (debatable); check the 1710/1799 dates.
+- noether 09: check "spring 1915" and "only six independent" equations.
+- noether 13: quadric cone z^2 = xy said to open "along the z-axis"; axis is the line x = y, z = 0. "Two preimages over a generic point" holds over C, not R; generic change of variables needs an infinite field; page states neither.
+- noether 12 / index: Buchberger presented as the answer to Gordan's objection, but they concern different problems (page wording softened in the sweep; index card still says "the constructive answer").
+- noether 11: Fig 1 caption "at most d(12) = 6" is a loose bound; "Dedekind used ACC implicitly" needs a source.
+- japan-earthquakes 03: "about ten dots a week" conflicts with "about one a day" for 2001-2010.
