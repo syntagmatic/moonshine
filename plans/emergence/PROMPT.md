@@ -22,7 +22,7 @@ Copy your local majority and domains grow roughly as the square root of time, un
 When couplings conflict, the energy landscape fills with valleys that trap a quench or a hurried anneal. The reader runs anneals of different speeds and explores an exact enumeration of every valley in a small patch.
 
 ### 6. Percolation
-Forest fires and epidemics share a threshold below which clusters stay finite. The reader lights forests at different densities, runs an SIR epidemic that maps onto bond percolation, and lets trees regrow.
+Forest fires and epidemics share a threshold below which clusters stay finite. The reader lights forests at different densities, runs an SIR epidemic that maps onto bond percolation, and lets trees regrow (a regrowing Drossel-Schwabl forest settles near density 0.4, well below the site threshold, so it does not self-tune to p_c).
 
 ### 7. Sandpile
 Drop grains one at a time and the pile tunes itself to a critical state with avalanches of every size. The reader fits the avalanche exponent, sees the sandpile group's identity element, and tests the claim that the pile makes 1/f noise.
@@ -31,7 +31,7 @@ Drop grains one at a time and the pile tunes itself to a critical state with ava
 Diffusion-limited aggregation, dielectric breakdown and river networks are growth driven by a field that concentrates at the tips. The reader grows a cluster with a live fractal-dimension fit and compares branching statistics across cluster, discharge and a simulated river basin.
 
 ### 9. Self-Avoiding Walks
-A walk that cannot cross itself spreads faster than diffusion, with an exponent that models polymers. The reader fits end-to-end distance against length for both kinds of walk and watches a growing walk trap itself.
+A walk that cannot cross itself spreads faster than diffusion, with an exponent that models polymers. The reader fits end-to-end distance against length for true self-avoiding walks (sampled uniformly, e.g. by the pivot algorithm) and for random walks, and watches a growing walk trap itself (about 71 steps on average), which is why growing walks cannot stand in for SAWs.
 
 ### 10. Stigmergy
 Slime mold, ant trails, lawn footpaths and termite pellets share one loop: write into a shared field, let it fade and spread, steer toward the strongest. Signature figures are a particle model of Physarum building networks and the double-bridge experiment run as live batches of colonies.
@@ -43,7 +43,7 @@ The well-mixed Lotka-Volterra cycle is a knife-edge; space keeps the local boom 
 Turing's reaction-diffusion sets its own wavelength, while positional gradients can scale with the tissue. The reader explores a Gray-Scott parameter map built from real runs, then grows the tissue and adds noise to watch the two mechanisms come apart.
 
 ### 13. Excitable Media
-One pair of equations gives the spiral waves of a chemical dish and of a failing heart. The reader launches waves in a BZ dish and in cardiac tissue, then breaks a wavefront into a spiral and tries to clear it.
+One pair of equations gives the spiral waves of a chemical dish and of a failing heart. The reader launches waves in a BZ dish and in cardiac tissue, then breaks a wavefront into a spiral with a timed S1-S2 stimulus and tries to clear it. Show the model's equations, and pace the tissue no faster than it recovers.
 
 ### 14. The Kuramoto Model
 Oscillators with scattered frequencies lock together once coupling passes a critical value. The reader raises coupling and watches the measured order parameter track theory, then changes the frequency distribution.
