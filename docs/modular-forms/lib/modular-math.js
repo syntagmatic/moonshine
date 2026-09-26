@@ -1,4 +1,4 @@
-// modular-math.js — Eisenstein series, modular forms, SL₂(ℤ) geometry,
+// modular-math.js - Eisenstein series, modular forms, SL₂(ℤ) geometry,
 // Hecke operators, and dimension formulas for the Modular Forms series.
 //
 // Attaches a single `Mod` object to the global scope (no modules, no build
@@ -203,9 +203,11 @@
 
   function sigmaK(n, k) {
     if (n < 1) return 0;
-    var s = 0, d = divisors(n);
-    for (var i = 0; i < d.length; i++) s += Math.pow(d[i], k);
-    return s;
+    // Summed in BigInt so the result is the correctly rounded Number even
+    // when sigma_k(n) passes 2^53 (sigma_11 does from n = 29).
+    var s = 0n, d = divisors(n), K = BigInt(k);
+    for (var i = 0; i < d.length; i++) s += BigInt(d[i]) ** K;
+    return Number(s);
   }
 
   function gcd(a, b) { a = Math.abs(a); b = Math.abs(b); while (b) { var t = b; b = a % b; a = t; } return a; }
@@ -306,19 +308,17 @@
 
   // ─────────────────────────────────────────── discriminant Δ ──
 
-  // Δ = (E_4³ − E_6²) / 1728.  Coefficients are τ(n).
+  // Δ = q ∏ (1 − q^n)^24 = (E_4³ − E_6²) / 1728.  Coefficients are τ(n).
+  // Built from the product in BigInt: E_4³ passes 2^53 from n = 19, so the
+  // Eisenstein route in doubles is exact only by rounding luck.
   function computeDelta(N) {
     N = N || MAX_Q;
-    var e4 = E4.slice(0, N + 1);
-    var e4_3 = qMul(qMul(e4, e4, N), e4, N);
-    var e6 = E6.slice(0, N + 1);
-    var e6_2 = qMul(e6, e6, N);
-    var d = new Array(N + 1);
-    for (var n = 0; n <= N; n++) {
-      d[n] = Math.round(((n < e4_3.length ? e4_3[n] : 0) -
-                          (n < e6_2.length ? e6_2[n] : 0)) / 1728);
-    }
-    return d;
+    var P = [1n];
+    for (var i = 1; i < N; i++) P.push(0n);
+    for (var m = 1; m < N; m++)
+      for (var r = 0; r < 24; r++)
+        for (var n = N - 1; n >= m; n--) P[n] -= P[n - m];
+    return [0].concat(P.map(Number));
   }
 
   var DELTA = computeDelta();
@@ -344,13 +344,34 @@
   // ─────────────────────────────────────────── j-function ──
 
   // j(τ) = E_4³ / Δ = q⁻¹ + 744 + 196 884 q + ⋯
+  // Exact BigInt division (Δ/q has leading coefficient 1), then converted to
+  // Number: c(n) for n >= 11 exceeds 2^53, so it is the nearest double.
   function computeJ(N) {
     N = N || MAX_Q;
-    var e4 = E4.slice(0, N + 2);
-    var e4_3 = qMul(qMul(e4, e4, N + 1), e4, N + 1);
-    // Divide E_4³ by (Δ shifted left one place): Δ/q = [1, −24, 252, …]
-    var dShifted = DELTA.slice(1, N + 2);
-    return qDiv(e4_3, dShifted, N + 1);
+    var e4 = [1n];
+    for (var n = 1; n <= N + 1; n++) {
+      var s3 = 0n, d = divisors(n);
+      for (var i = 0; i < d.length; i++) s3 += BigInt(d[i]) ** 3n;
+      e4.push(240n * s3);
+    }
+    function mulB(a, b) {
+      var r = [];
+      for (var n = 0; n <= N + 1; n++) {
+        var t = 0n;
+        for (var k = 0; k <= n; k++) t += a[k] * b[n - k];
+        r.push(t);
+      }
+      return r;
+    }
+    var e4_3 = mulB(mulB(e4, e4), e4);
+    var dShifted = DELTA.slice(1, N + 3).map(function (x) { return BigInt(x); });
+    var r = [];
+    for (var n = 0; n <= N; n++) {
+      var t = e4_3[n];
+      for (var k = 0; k < n; k++) t -= r[k] * (dShifted[n - k] || 0n);
+      r.push(t);
+    }
+    return r.map(Number);
   }
 
   var J = computeJ();
