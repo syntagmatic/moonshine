@@ -94,7 +94,7 @@ Order: fact-checked series first, since word-only edits are safest there.
 | emergence | yes | 957da31, 15757f2 (pattern 7 done only in 02; 10, 11 and 14 still open with equations before Figure 1) |
 | modular-forms | yes | 1b3a110 |
 | algorithms-ml | yes | 44f6da9, 94e1ad3 |
-| japan-earthquakes | yes | 2961c2c (Japanese pending: plans/japan-earthquakes/TRANSLATE.md) |
+| japan-earthquakes | yes | 2961c2c (Japanese updated to match) |
 | noether | | 2949828 |
 | parallel-coordinates | | |
 | mathematical-diagrams | | |
