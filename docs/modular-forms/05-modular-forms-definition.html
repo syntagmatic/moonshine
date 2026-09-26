@@ -118,7 +118,7 @@ svg text { font-family: var(--heading-font); }
     <button class="btn" data-k="12">12</button>
   </div>
   <div id="heatmap-status" class="status-bar"></div>
-  <p class="figure-caption">log|E<sub>k</sub>(&tau;)| for the selected weight; brighter is larger. The side panel checks the S-law at the marked point, where f(&minus;1/&tau;) should equal &tau;<sup>k</sup>f(&tau;).</p>
+  <p class="figure-caption">log|E<sub>k</sub>(&tau;)| for the selected weight; brighter is larger. The side panel checks the S-law at the marked point, where f(&minus;1/&tau;) should equal &tau;<sup>k</sup>f(&tau;). The colour scale is fitted to each weight.</p>
 </div>
 
 <p>Near the top of the domain every E<sub>k</sub> tends to 1, because the higher q-terms decay like e<sup>&minus;2&pi;n Im &tau;</sup>. The structure is at the bottom. E<sub>4</sub> vanishes at &rho; = e<sup>2&pi;i/3</sup>, E<sub>6</sub> vanishes at i, E<sub>10</sub> vanishes at both, and the zero of E<sub>12</sub> sits on the arc |&tau;| = 1 between them. The valence formula below explains where these zeros are forced to be.</p>
@@ -167,7 +167,7 @@ svg text { font-family: var(--heading-font); }
 
 <h2>Checking the transformation law</h2>
 
-<p>The checker below evaluates E<sub>k</sub> from its q-expansion at &tau; and at &gamma;&tau;, then compares the two sides. The q-series is summed until the tail is below double precision, so the relative difference left over is rounding error.</p>
+<p>The checker below evaluates E<sub>k</sub> from its q-expansion at &tau; and at &gamma;&tau;, then compares the two sides. The q-series is summed until the next term is below double precision, and the difference is measured against the size of the terms being added, so it stays meaningful at a zero of E<sub>k</sub>, where both sides vanish. What is left over is rounding error: about 10<sup>&minus;15</sup> for most points, growing toward 10<sup>&minus;10</sup> when &tau; or &gamma;&tau; sits close to the real axis and the series needs many large terms that cancel.</p>
 
 <div class="figure" id="fig-checker">
   <div id="checker-svg-host"></div>
@@ -183,7 +183,7 @@ svg text { font-family: var(--heading-font); }
     <button class="btn" data-ck="10">10</button>
   </div>
   <div id="checker-status" class="status-bar"></div>
-  <p class="figure-caption">Drag the blue point &tau; (or click to place it), then choose &gamma; and k.</p>
+  <p class="figure-caption">Drag the blue point &tau; (or click to place it, or focus it and use the arrow keys), then choose &gamma; and k. The red point is &gamma;&tau;. The last line divides the difference of the two sides by |c&tau;+d|<sup>k</sup> times the sum of the absolute values of the q-series terms.</p>
 </div>
 
 <h2>The ring of modular forms</h2>
@@ -343,21 +343,26 @@ var BERN = (function () {
 function eisConstExact(k) { return fDiv(frac(BigInt(-2 * k)), BERN[k]); }
 function eisConst(k) { var c = eisConstExact(k); return Number(c.n) / Number(c.d); }
 
-// E_k(τ) summed from its q-expansion until the tail is below double precision.
-function evalEk(k, tau) {
+// E_k(τ) summed from its q-expansion until the next term is below double precision.
+// evalEkScale also returns the sum of the absolute values of the terms, the scale
+// against which rounding error is measured (|E_k| itself vanishes at the zeros).
+function evalEkScale(k, tau) {
   var q = C.q(tau);
   var aq = C.abs(q);
   var ck = eisConst(k);
   var result = { re: 1, im: 0 };
+  var scale = 1;
   var qn = { re: 1, im: 0 };
   for (var n = 1; n <= 4000; n++) {
     qn = C.mul(qn, q);
     var term = ck * Mod.eisenstein.sigma(n, k - 1);
     result = C.add(result, C.scale(qn, term));
+    scale += Math.abs(term) * Math.pow(aq, n);
     if (n > 5 && Math.abs(term) * Math.pow(aq, n) < 1e-17 * Math.max(1, C.abs(result))) break;
   }
-  return result;
+  return { v: result, scale: scale };
 }
+function evalEk(k, tau) { return evalEkScale(k, tau).v; }
 
 function cPow(z, k) {
   var r = C.abs(z);
@@ -471,13 +476,13 @@ function fmtComplex(z) {
     var tau = sampleTau;
     marker.attr('cx', xS(tau.re)).attr('cy', yS(tau.im));
 
-    var fTau = evalEk(currentK, tau);
+    var fTauS = evalEkScale(currentK, tau), fTau = fTauS.v;
     var sTau = Mod.sl2z.mobius(Mod.sl2z.S, tau);
     var fSTau = evalEk(currentK, sTau);
     var tauK = cPow({ re: tau.re, im: tau.im }, currentK);
     var tauK_fTau = C.mul(tauK, fTau);
 
-    var diff = C.abs(C.sub(fSTau, tauK_fTau)) / Math.max(1e-300, C.abs(tauK_fTau));
+    var diff = C.abs(C.sub(fSTau, tauK_fTau)) / (C.abs(tauK) * fTauS.scale);
 
     panel.innerHTML =
       '<div style="font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2);">' +
@@ -486,7 +491,7 @@ function fmtComplex(z) {
       '<p style="margin-bottom: 0.3rem;">k = ' + currentK + '</p>' +
       '<p style="margin-bottom: 0.3rem; border-top: 1px solid var(--border); padding-top: 0.4rem;">f(S\u03c4) =<br>' + fmtComplex(fSTau) + '</p>' +
       '<p style="margin-bottom: 0.3rem;">\u03c4<sup>' + currentK + '</sup>f(\u03c4) =<br>' + fmtComplex(tauK_fTau) + '</p>' +
-      '<p style="color: var(--c-metric); font-weight: 600;">relative diff = ' + diff.toExponential(2) + '</p>' +
+      '<p style="color: var(--c-metric); font-weight: 600;">difference / term size = ' + diff.toExponential(2) + '</p>' +
       '</div>';
 
     document.getElementById('heatmap-status').textContent =
@@ -588,19 +593,20 @@ function fmtComplex(z) {
 
     // Compute both sides of the transformation law
     var fGammaTau = evalEk(checkerK, gTau);
-    var fTau = evalEk(checkerK, tau);
+    var fTauS = evalEkScale(checkerK, tau), fTau = fTauS.v;
     var c = mat[1][0], d = mat[1][1];
     var ctd = C.add(C.scale({ re: tau.re, im: tau.im }, c), { re: d, im: 0 });
     var ctdK = cPow(ctd, checkerK);
     var rhs = C.mul(ctdK, fTau);
 
-    var diff = C.abs(C.sub(fGammaTau, rhs)) / Math.max(1e-300, C.abs(rhs));
+    // Measured against the size of the terms, not |rhs|, which is 0 at a zero of E_k.
+    var diff = C.abs(C.sub(fGammaTau, rhs)) / (C.abs(ctdK) * fTauS.scale);
 
     readoutDiv.html(
       '<div style="font-weight:600; color:var(--text); margin-bottom:4px;">\u03b3 = ' + gammaLabel[gammaKey] + ', k = ' + checkerK + '</div>' +
       '<div>f(\u03b3\u03c4) = ' + fmtComplex(fGammaTau) + '</div>' +
       '<div>(c\u03c4+d)<sup>' + checkerK + '</sup>f(\u03c4) = ' + fmtComplex(rhs) + '</div>' +
-      '<div style="color:var(--c-metric); font-weight:600; margin-top:3px;">relative difference = ' + diff.toExponential(2) + '</div>'
+      '<div style="color:var(--c-metric); font-weight:600; margin-top:3px;">difference / term size = ' + diff.toExponential(2) + '</div>'
     );
 
     document.getElementById('checker-status').textContent =
@@ -750,8 +756,8 @@ function fmtComplex(z) {
     var y = d3.scaleLinear().domain([0, dimM(KMAX) + 0.3]).range([innerH, 0]);
     g.append('g').attr('transform', 'translate(0,' + innerH + ')')
       .call(d3.axisBottom(x).tickValues(weights.filter(function (k) { return k % (W < 500 ? 8 : 4) === 0; })).tickSizeOuter(0))
-      .selectAll('text').attr('font-size', 10);
-    g.append('g').call(d3.axisLeft(y).ticks(dimM(KMAX)).tickFormat(d3.format('d'))).selectAll('text').attr('font-size', 10);
+      .selectAll('text').attr('font-size', 11);
+    g.append('g').call(d3.axisLeft(y).ticks(dimM(KMAX)).tickFormat(d3.format('d'))).selectAll('text').attr('font-size', 11);
     g.append('text').attr('x', innerW / 2).attr('y', innerH + 30).attr('text-anchor', 'middle')
       .attr('font-size', 11).attr('fill', 'var(--text-2)').text('weight k');
     var bw = x.bandwidth() / 2;
