@@ -9,13 +9,13 @@ The through-line is a shared skeleton. Data goes in, a model transforms it, a pr
 **Act I: Learning by Gradient**
 
 ### 1. How Gradient Descent Finds Minima
-Finding the bottom of a bowl you cannot see, by following the local slope. The reader drops walkers on a 2D loss surface with several minima, then compares learning rates side by side on one curve, races plain SGD, momentum and Adam down an elongated valley, and finally watches mini-batch descent on a real regression loss zigzag at batch size 1 and run nearly straight at 64.
+How gradient descent uses the local slope to reach a minimum. The reader drops walkers on a 2D loss surface with several minima, then compares learning rates side by side on one curve, races plain SGD, momentum and Adam down an elongated valley, and finally watches mini-batch descent on a real regression loss zigzag at batch size 1 and run nearly straight at 64.
 
 ### 2. Backpropagation
-A network learns by passing blame backward through its connections. The reader steps a small network's forward pass with input sliders, then watches gradient pulses run backward with each weight's gradient labeled, then trains it on XOR while a loss curve, the weights and the decision boundary evolve together. It closes with a measured figure of per-layer gradient size in a deep network, sigmoid against ReLU, with depth and weight scale as controls, showing why deep sigmoid nets stall.
+How a network computes the gradient of its loss with respect to every weight. The reader steps a small network's forward pass with input sliders, then watches gradient pulses run backward with each weight's gradient labeled, then trains it on XOR while a loss curve, the weights and the decision boundary evolve together. It closes with a measured figure of per-layer gradient size in a deep network, sigmoid against ReLU, with depth and weight scale as controls, showing why deep sigmoid nets stall.
 
 ### 3. The Attention Mechanism
-How a transformer lets each word decide which other words matter. It starts from hard versus soft dictionary lookup, then introduces queries, keys and values, scaling and softmax. The signature piece is a real two-head attention layer trained in the page on a toy grammar where one head should learn to find the word each word attaches to and the other the previous word; the reader scrubs through training snapshots, inspects the learned heatmaps, sees held-out accuracy, and retrains from a new seed. A closing section says plainly what the toy leaves out.
+How an attention layer weights the other words of a sentence when it computes each word's output. It starts from hard versus soft dictionary lookup, then introduces queries, keys and values, scaling and softmax. The signature piece is a real two-head attention layer trained in the page on a toy grammar where one head should learn to find the word each word attaches to and the other the previous word; the reader scrubs through training snapshots, inspects the learned heatmaps, sees held-out accuracy, and retrains from a new seed. A closing section says plainly what the toy leaves out.
 
 **Act II: Structure and Uncertainty**
 
