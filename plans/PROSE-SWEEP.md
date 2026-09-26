@@ -48,10 +48,10 @@ the register and the size of the change.
 Plain declarative sentences, figure instructions ("Drag alignment to zero
 and..."), careful hedges, captions that describe the figure. It is a light
 touch, roughly 5 to 20 edits a page, and the page should not get longer.
-Subtitles give an overview with some motivation, in two or three plain
-sentences: what question the article answers, why it matters at this point
-in the series, and what the reader will see. Not a list of formulas or
-topics; `docs/modular-forms/` (9da904d) is the reference.
+Subtitles give a short overview with some motivation: one or two plain
+sentences, about 20 to 30 words, saying why the article matters and its
+main idea. Not a list of formulas or topics; detail belongs in the intro.
+`docs/modular-forms/` (969450f) is the reference.
 Intros and outros get the same treatment (0608573): the intro picks up
 where the previous part left off and says what question this one answers
 and why, briefly, before the first figure; a page that ends on a technical
