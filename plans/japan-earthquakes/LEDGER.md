@@ -626,3 +626,25 @@ The JA strings carry the same wrong values as the English where the English is w
 (1896 Ms 7.6 in 05 `p6`; 06 caption and tooltip values; idx `shindo_intro` palette
 sentence), so fix both together. 02 transect captions (`captionJa`) match the English
 numbers.
+
+## Leads from FACT-CHECK.md (2026-09-27)
+
+Settled after the fixes above; docs/ changed where marked (English and Japanese).
+
+- [ ] "about ten dots a week" (03 `p3`) vs "about one M4.5+ event a day" for 2001-2010
+  (03 `insight_aftershock`) : Computed (CSV, earthquakes only, the figure's default
+  min mag 4.5). 2001-2010: 3,703 events / 3,652 days = 1.01/day = 7.1/week (median
+  week 5). The earlier "10/week" was the 2000-2025 mean without 2011, which still
+  carries other aftershock sequences. Fixed: `p3` now says "about one new dot a day",
+  which agrees with `insight_aftershock`.
+- [ ] Fault-types caption "Only shallow thrust faults produce the vertical seafloor
+  displacement that generates major tsunamis" (06 `caption_fault_types`) vs `p12`
+  "thrust (or normal)" : WRONG as worded. Shallow normal faults also lift or drop the
+  seafloor; the 1933 Showa Sanriku tsunami (28.7 m at Ryori, ~3,000 dead) came from an
+  outer-rise normal fault (Kanamori 1971; see 05 tooltip entry). `p12` holds. Fixed:
+  the caption now names the three panels as earthquakes (shallow thrust, deep,
+  strike-slip), says the thrust raises a tsunami and the other two barely move the
+  seafloor, and notes that a shallow normal fault, not drawn, can also do it (1933).
+- Non-claim, Japan Trench map label hidden by dots: 01 map label moved from 145.5E to
+  146.0E (east of the outer-rise events) and given a halo; 02 boundary labels were
+  drawn before the dots and so sat under them, now raised above the dots with a halo.
