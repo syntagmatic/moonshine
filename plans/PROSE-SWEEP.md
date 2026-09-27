@@ -100,13 +100,13 @@ Order: fact-checked series first, since word-only edits are safest there.
 | mathematical-diagrams | | d99ff8f (subtitles, intros, outros included) |
 | exceptional-atlas | | ad4ba82 (subtitles, intros, outros included) |
 | bioinformatics | | 0c1ba77 (subtitles, intros, outros included) |
-| cohomology | | |
-| decision-trees | | |
-| lattice-simulation | | |
-| lithium-ion | | |
-| grateful-dead | | |
-| quasicrystals | | |
-| foam | | |
+| cohomology | | 4d7ec3b (subtitles, intros, outros included) |
+| decision-trees | | a84f4bd (subtitles, intros, outros included) |
+| lattice-simulation | | 2d3fc86 (subtitles, intros, outros included) |
+| lithium-ion | | 169a679 (subtitles, intros, outros included) |
+| grateful-dead | | 64880ab (subtitles, intros, outros included) |
+| quasicrystals | | 09e65cd (subtitles, intros, outros included) |
+| foam | | 68f753f (subtitles, intros, outros included) |
 | sph | (Ian's series; ask before touching) | |
 
 ## Fact-check leads

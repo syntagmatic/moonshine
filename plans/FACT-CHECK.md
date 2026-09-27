@@ -164,9 +164,52 @@ series has got and which suspect claims are still waiting for a look.
 - 06: prose hard-codes "74 of the 80 patients" beside an in-browser
   computation; confirm it's seeded.
 
+### cohomology
+
+- 04: the df_z preset says "arrows point upward, vanishing at the equator";
+  the tangential gradient of z is largest at the equator and zero at the
+  poles.
+- 06: the Rips H1 class on the annulus is said to fill "near the hole's
+  diameter"; for a circle of radius r it dies near sqrt(3) r.
+
+### decision-trees
+
+- 05 and index references: TreeSHAP is credited to Lundberg (2017); the 2017
+  paper is KernelSHAP, exact TreeSHAP is Lundberg, Erion & Lee (2018/2020).
+- 02: "Oblique trees (1994)" dates the idea to OC1; CART (1984) already had
+  linear-combination splits.
+
+### lattice-simulation
+
+- 06: "moderate disorder leaves the exponents unchanged" is too strong for
+  2D Ising, where disorder is marginal (Harris, alpha = 0) and gives log
+  corrections.
+- 05: vortex-shedding onset appears as Re about 47 (text), above about 50
+  (caption) and below 40 steady; "below Ma about 0.3 ... invisible"
+  overstates.
+
+### grateful-dead
+
+- 02: Shoreline Amphitheatre "opened in 1987"; the venue opened in 1986.
+- 01 vs 03: 01 says the Arena years settled the two-set format, 03 says two
+  sets were the norm by 1972 and settled after the 1975 hiatus.
+
+### quasicrystals
+
+- 02: Penrose "in 1974 ... published a small set of tiles", then describes
+  the rhombs; the 1974 set was pentagons, the rhombs came later.
+
+### foam
+
+- 02: the cube matching a unit sphere's volume has about 24 percent more
+  surface (6/(36 pi)^(1/3) = 1.241), not 23.
+- 02: check "twenty minutes on a 1995 PC" for Hass-Schlafly.
+- The PROMPT describes seven articles; three exist.
+
 ### lithium-ion
 
-- 03: the activation energy is uncited.
+- 03: the activation energy is uncited. At 50 kJ/mol, 25 to 45 C multiplies
+  k by about 3.55; the page says "about 4" and "roughly quadruples".
 
 ## Other open issues
 
