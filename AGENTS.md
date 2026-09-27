@@ -12,7 +12,9 @@ no dependencies; `package.json` is plugin-marketplace metadata only.
     editorial tone, anti-slop rules, design principles, pedagogy
   - `ARTICLE.md` — HTML scaffold, CSS foundation, layout patterns, series structure
   - `VISUALS.md` — D3 patterns, interaction, live KaTeX formulas, data, accessibility
-  - `commands/shine.md` — the `/shine` command definition
+  - `CRITIQUE.md` — a cold review of a finished article: scorecard, findings,
+    PUBLISH / REVISE / RETHINK verdict
+  - `commands/shine.md`, `commands/critique.md` — the `/shine` and `/critique` commands
 - `docs/` — the published gallery (one directory per series, e.g. `autoresearch/`,
   `emergence/`, `modular-forms/`). Each series has its own `index.html` (an article
   with intro prose + cards) plus numbered articles (`01-the-loop.html`, ...).

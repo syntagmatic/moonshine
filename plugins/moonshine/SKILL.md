@@ -11,6 +11,7 @@ Moonshine turns a technical idea into an explorable article: prose that carries 
 **Reference files:**
 - `ARTICLE.md`: the HTML scaffold (with dark mode, phone layout, and the shared helpers built in), layout patterns, series structure. Read it before writing the first page.
 - `VISUALS.md`: D3 patterns for interaction, motion, charts, data, and accessibility. Read the section for each figure type as you build it.
+- `CRITIQUE.md`: a cold review of a finished article, with a scorecard and a verdict. Run it after Verify, or when asked to review an article.
 
 ## Articles, Not Dashboards
 
@@ -58,7 +59,7 @@ If the user gives full context up front, move faster.
 
 Look at what already exists in the output directory first. A new series should not re-explain a topic an existing one covers; link to it instead.
 
-Write a short outline, not code. For each section give its role in the progression, and for each figure a prose spec: what it shows, what the reader does, what they should learn, and **the claim it computes**. A figure whose claim you can't name is decoration; cut it. Each figure in a piece should differ from the others in chart type or data, not reuse one base view with new controls.
+Write a short outline, not code. For each section give its role in the progression, and for each figure a prose spec: what it shows, what the reader does, what they should learn, and **the claim it computes**. A figure whose claim you can't name is decoration; cut it. Each figure in a piece should differ from the others in chart type or data, not reuse one base view with new controls. Start from prose and static figures, and add interaction only where it lets the reader test a claim.
 
 ```
 3. Following the slope: the gradient points downhill
@@ -84,14 +85,14 @@ The article is done when every item below holds. Check each one; don't infer it 
 
 1. **Ledger complete**: every checkable claim in the prose and captions has an entry, and every entry was checked this session.
 2. **Captions match figures**: for each figure, each visual claim in its caption and the surrounding prose (what rises, what crosses, which color is which, left/right) is true of the rendered figure at its default state.
-3. **Every control exercised**: click, drag, and key through every control in a real browser, including the extremes of each slider. No console errors, no NaN on screen, no empty figure on load.
+3. **Every control exercised**: click, drag, and key through every control in a real browser, including the extremes of each slider. No console errors, no NaN on screen, no empty figure on load, and each figure's default state shows the effect the prose describes before the reader touches anything.
 4. **Phone width**: at 390px wide there is no sideways page scroll, SVG text is at least 11px, and multi-panel figures stack. Captions say "above/below" rather than "left/right" when panels stack.
 5. **Dark mode**: with the OS in dark mode, every figure's text, lines, and fills are legible.
 6. **Keyboard**: every interactive element is reachable with Tab and operable with keys; anything shown on hover also shows on focus and tap.
 7. **Reduced motion**: with reduced motion on, animations show their final or a static state; loops run only while on screen.
 8. **Anti-slop pass**: the Editorial and Anti-Slop sections below, applied line by line.
 
-Then deliver: tell the user what the article covers and anything in the ledger you could not verify.
+Then run a critique (`CRITIQUE.md`) as a cold second reader, and fix what it finds. Then deliver: tell the user what the article covers and anything in the ledger you could not verify.
 
 ### Output
 
@@ -99,14 +100,17 @@ Create projects in `~/.agent/moonshine/project-name/` unless the user or the rep
 
 ## Editorial
 
-Write like a knowledgeable colleague at a whiteboard: clear, humble, direct.
+Write like a knowledgeable colleague at a whiteboard: clear, humble, direct. Remove the performance and keep the explanation.
 
 - State what things do and let the reader judge importance. Prefer "can", "tries to", "helps" over universal claims.
 - Use commas, colons, periods, or parentheses where an em dash would go. Visible text has no em dashes.
 - Short, direct sentences. If a paragraph builds toward a dramatic reveal, flatten it.
-- End a section when its point is made. No closing summary, "Takeaways" list, or restatement of the article.
+- Headings describe the section or ask its question; they don't tease.
+- End a section when its point is made. No closing summary, "Takeaways" list, restatement of the article, or maxim that turns the point into a slogan.
 - Captions say what to notice in the figure, not what the prose already said.
 - Prose over numbered lists, unless the content really is a sequence.
+
+Prose can follow every rule here and still be dead: correct, clear, and unsurprising. Add pressure, not ornament: a concrete detail a stranger wouldn't guess, a real countercase, the boundary where the model breaks.
 
 ## Anti-Slop
 

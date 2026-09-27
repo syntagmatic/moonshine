@@ -121,3 +121,14 @@ Not claims, but found during checks and not yet fixed.
 - grateful-dead 02: 124 venues were geocoded from the 2023 Census
   Gazetteer; places it lacks are plotted at the containing or nearest place
   (listed in a code comment). One US show has no city and stays off the map.
+- algorithms-ml 05 (from the first `/critique` trial run, 2026-09-27; its
+  six recomputed claims all held):
+  - Figs 2-4 are empty or flat at load. Pre-run a seeded flip sequence.
+  - Figs 3-4 use unseeded `Math.random`.
+  - Figs 2-4 are all the same Beta-curve chart; Fig 2 could show
+    prior x likelihood = posterior instead.
+  - Fig 1's "blue column" and "amber strip" read as red dashes.
+  - Colors collide across figures (red, amber, and the cyan/blue for
+    "posterior").
+  - Fig 3's legend is struck through by the curves.
+  - The ledger's post-fix state lives in AUDIT.md, not LEDGER.md.
