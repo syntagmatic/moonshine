@@ -192,10 +192,10 @@
   function palette() {
     return currentTheme() === 'dark' ? {
       motion: { border: '#78350f', bg: '#2a2110', text: '#fcd34d', btnBorder: '#b45309', btnBg: '#1c1917' },
-      notice: { border: '#334155', bg: '#1e2330', text: '#94a3b8', btnBorder: '#475569', btnBg: '#0f172a', btnText: '#cbd5e1' }
+      notice: { border: '#7f1d1d', accent: '#f87171', bg: '#2a1215', text: '#fecaca', btnBorder: '#b91c1c', btnBg: '#1c0a0c', btnText: '#fecaca' }
     } : {
       motion: { border: '#fde68a', bg: '#fef3c7', text: '#713f12', btnBorder: '#b45309', btnBg: '#fff' },
-      notice: { border: '#e2e8f0', bg: '#f8fafc', text: '#64748b', btnBorder: '#cbd5e1', btnBg: '#fff', btnText: '#475569' }
+      notice: { border: '#fca5a5', accent: '#dc2626', bg: '#fef2f2', text: '#7f1d1d', btnBorder: '#dc2626', btnBg: '#fff', btnText: '#991b1b' }
     };
   }
   function bannerButton(doc, text, c, onClick) {
@@ -334,14 +334,16 @@
       var b = doc.createElement('div');
       b.id = 'generated-notice';
       b.setAttribute('role', 'note');
-      // Deliberately understated: a quiet disclaimer, not an alarm box.
+      // Prominent on purpose: readers should see it before trusting a claim.
       b.style.cssText = [
-        'margin: 0 0 1rem',
-        'padding: 0.55rem 0.9rem',
+        'margin: 0 0 1.25rem',
+        'padding: 0.8rem 1rem',
         'border: 1px solid ' + c.border,
+        'border-left: 5px solid ' + c.accent,
         'background: ' + c.bg,
         "font-family: 'Source Sans 3', system-ui, sans-serif",
-        'font-size: 0.82rem',
+        'font-size: 0.98rem',
+        'line-height: 1.4',
         'color: ' + c.text,
         'border-radius: 6px',
         'display: flex',
@@ -350,16 +352,16 @@
         'gap: 0.75rem'
       ].join(';');
       var msg = doc.createElement('span');
-      msg.innerHTML = 'This content is machine-generated and may contain errors.';
+      msg.innerHTML = '<strong>This content is machine-generated and may contain errors.</strong> Check claims against the cited sources before relying on them.';
       var btn = doc.createElement('button');
       btn.type = 'button';
       btn.setAttribute('aria-label', 'Dismiss notice');
       btn.textContent = 'Dismiss';
       btn.style.cssText = [
         "font-family: 'Source Sans 3', system-ui, sans-serif",
-        'font-size: 0.78rem',
+        'font-size: 0.85rem',
         'font-weight: 600',
-        'padding: 0.25rem 0.7rem',
+        'padding: 0.35rem 0.8rem',
         'border-radius: 5px',
         'border: 1px solid ' + c.btnBorder,
         'background: ' + c.btnBg,
