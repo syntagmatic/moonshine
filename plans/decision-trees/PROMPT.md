@@ -2,7 +2,7 @@
 
 I want six chapters on one of the oldest and most useful models in machine learning, for technically literate readers who know basic probability and ML vocabulary. A single tree is a flowchart of yes-or-no questions and is easy to read. Practical tree models combine hundreds or thousands of them, which predicts better and is much harder to read. The series builds both, with figures where the reader drags thresholds and adds trees by hand.
 
-Two moves recur throughout and hold it together. The first is the split: at each node, pick the question that separates the data best, which means trees care about rankings and ignore distances. The second is the ensemble: one tree is jumpy and many are stable, whether averaged (bagging, random forests) or added so each corrects the last (boosting). The last two chapters recover what the ensemble costs in readability and then turn the same machinery toward a causal question: where does an intervention change the outcome.
+Two moves recur throughout and hold it together. The first is the split: at each node, pick the question that separates the data best, which means trees care about rankings and ignore distances. The second is the ensemble: one tree is unstable and many are stable, whether averaged (bagging, random forests) or added so each corrects the last (boosting). The last two chapters recover what the ensemble costs in readability and then turn the same machinery toward a causal question: where does an intervention change the outcome.
 
 ## Articles
 
