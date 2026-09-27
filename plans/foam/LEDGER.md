@@ -96,3 +96,11 @@ E8 / 8D / spherical-cubes claims remain.
 - 3D rendering locked to hand-rolled canvas (`lib/foam3d.js`). Build that helper while
   scaffolding article 03 (first heavy 3D cell); articles 06 (24-cell) and 05
   (coordination shells) reuse it.
+
+## Claims: leads from FACT-CHECK.md (2026-09-27)
+
+| page | claim | verdict | source or derivation | fix |
+|---|---|---|---|---|
+| 02 | A cube holding a unit sphere's volume "has about 23 percent more surface" | wrong, fixed | Derived: side (4π/3)^(1/3) = 1.612, area 6(4π/3)^(2/3) = 15.59, over 4π = 12.57 gives 6/(36π)^(1/3) = 1.2407, so 24%. The same calculation gives 1.490 for the regular tetrahedron, so "nearly 50 percent" holds | "about 24 percent more surface"; PROMPT.md quotes 24% |
+| 02 | Hass, Hutchings and Schlafly (1995) reduced the equal-volume case to a computer search "that took twenty minutes on a 1995 PC" | fine | UC Davis Mathematics newsletter 1995, "Joel Hass solves the 2000-year old Double Bubble Problem": "reduced the double-bubble problem to 200,260 calculations, which the computer could run in about 20 minutes". Hass's own page adds the later code "takes about 10 seconds to run on a fast 1999 PC". The ERA-AMS announcement (Hass, Hutchings, Schlafly 1995) lists the three authors | none |
+| PROMPT | plans/foam/PROMPT.md described seven articles; three exist | fixed | series as published: 01 honeycomb, 02 double bubble, 03 Kelvin's bubble | PROMPT rewritten to describe the three articles and the index strip, with the traps that apply to them |
