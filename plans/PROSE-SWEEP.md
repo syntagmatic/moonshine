@@ -98,7 +98,6 @@ Order: fact-checked series first, since word-only edits are safest there.
 | noether | | 2949828 |
 | parallel-coordinates | | 861dd69 (subtitles, intros, outros included) |
 | mathematical-diagrams | | d99ff8f (subtitles, intros, outros included) |
-| game-is-the-math | | |
 | exceptional-atlas | | |
 | bioinformatics | | |
 | cohomology | | |

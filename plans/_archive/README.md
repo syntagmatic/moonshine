@@ -29,7 +29,6 @@ planned; the audit cut most of them down, so the counts below are what shipped.
 | `algorithms-ml.md` | 12 | 6 |
 | `cohomology/` | 6 | 6 |
 | `decision-trees/` (research only) | 12-15 | 6 |
-| `game-is-the-math/` | 15 | 10 |
 | `japan-earthquakes.md` | 20 | 7 |
 | `mathematical-diagrams/` | 7 | 10 |
 | `modular-forms/` | 20 | 14 |

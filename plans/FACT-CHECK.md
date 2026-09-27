@@ -26,7 +26,6 @@ series has got and which suspect claims are still waiting for a look.
 | noether | | |
 | parallel-coordinates | | |
 | mathematical-diagrams | | |
-| game-is-the-math | | |
 | exceptional-atlas | | |
 | bioinformatics | | |
 | cohomology | | its `LEDGER.md` is a build tracker, not a claims ledger |
