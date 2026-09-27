@@ -46,7 +46,7 @@ Unique factorisation fails in ℤ[√−5], and Dedekind rescues it by factoring
 Rings where every ascending chain of ideals stabilises. The reader builds chains in ℤ and in k[x] by adding elements, fills a staircase of monomial ideals in k[x, y] that must stop, and sees a ring in infinitely many variables where the chain never does.
 
 ### 12. Hilbert's Basis Theorem
-If R is Noetherian so is R[x], the result Gordan called theology. The constructive answer is Buchberger's algorithm, which the reader steps through on a small ideal as S-polynomials join the basis until it closes.
+If R is Noetherian so is R[x], the result Gordan called theology. Then Buchberger's algorithm, a later constructive tool for polynomial ideals whose termination rests on the same chain condition; it is not an answer to Gordan's objection, which was about invariants. The reader steps through it on a small ideal as S-polynomials join the basis until it closes.
 
 ### 13. Noether Normalization
 Every affine variety is a finite cover of affine space, and the dimension of that space is the variety's dimension. The reader slides a fiber along an elliptic curve and watches two preimages merge at the branch points.
