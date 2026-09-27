@@ -17,7 +17,8 @@ no dependencies, no tests; `package.json` is plugin-marketplace metadata only.
   `emergence/`, `modular-forms/`). Each series has its own `index.html` (an article
   with intro prose + cards) plus numbered articles (`01-the-loop.html`, ...).
   `docs/index.html` is the homepage; `docs/lib/motion.js` is the shared
-  reduced-motion helper (`Motion.reduced()`, opt-in override banner).
+  site chrome: the motion and light/dark toggles (top right), the
+  reduced-motion callout, and the machine-generated notice.
 - `plans/` — one `<series>/PROMPT.md` per live series: a prompt that could
   regenerate the series as it stands, kept in sync with its pages (see
   `plans/README.md`). Ledgers sit beside them as `LEDGER.md`
@@ -84,6 +85,17 @@ sandbox and keeps them working offline.
   the pages, so it isn't published.
 - Repo pages use `docs/lib/motion.js` (`Motion.reduced()`, `Motion.onVisible`)
   where the plugin scaffold has its own `reducedMotion()` / `loop()` helpers.
+- Dark mode: every page needs `@media (prefers-color-scheme: dark)` CSS, and JS
+  that bakes in colors reads `matchMedia('(prefers-color-scheme: dark)')`. The
+  toggle in `motion.js` forces both to the reader's saved choice
+  (`localStorage['moonshine-theme']`) and reloads, so don't hand-roll a separate
+  `[data-theme]` theme. Load `motion.js` in `<head>`, before any `<style>` or
+  `<link>`, so the forced theme applies before first paint.
+- Motion is on by default for everyone, even when the OS asks for reduced
+  motion, because many figures only work animated; readers turn it off with the
+  toggle (`localStorage['moonshine-motion'] = 'reduced'`). `motion.js` forces
+  `prefers-reduced-motion` in CSS and matchMedia to match, the same way as the
+  theme, so page code keeps using `Motion.reduced()` and the usual media query.
 - Respect reduced motion: animations should check `Motion.reduced()` and only run
   when in view (IntersectionObserver).
 - Editorial: no em dashes, no KPI cards / metric grids / status badges / colored
