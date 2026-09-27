@@ -1509,3 +1509,12 @@ Commit 8db81b9. Verification: render-check PASS; pwidx.mjs (Chromium 1200/390 x 
 Not fixed by this worker: 04's subtitle said "people who already agree with you"; fixed afterwards in 32a9e3c ("whose opinions are already close to yours"). docs/index.html count is 14 and its description matches; no change needed there.
 
 PROMPT change: none
+
+## Leads from FACT-CHECK.md (2026-09-27)
+
+Non-claim issues from the queue's page-defect list.
+
+| page | claim | verdict | source or derivation | fix |
+|---|---|---|---|---|
+| 05, 06, 14 | Figures used unseeded Math.random, so no two loads matched | wrong, fixed | Headless Chromium with Math.random wrapped to count calls: 0 calls on each page after scrolling every figure into view and clicking every button; no page errors. | Added a mulberry32 PRNG per page and one fixed-seed stream per figure IIFE (05: 3, 06: 5, 14: 5); in 14 the shared samplers take the stream as an argument, and d3.shuffle became d3.shuffler(rand). Reshuffle and "new random" buttons keep drawing from their figure's stream, so each press still gives a new draw while the load state is reproducible. |
+| 03 | Fig 2 (stability map) could only be moved by mouse click | wrong, fixed | Headless Chromium: focus the chart, ArrowRight then Shift+ArrowUp moved Figure 1 to N = 46, a = 1.05; focus-visible outline renders. | SVG is focusable (tabindex 0, role application, aria-label lists the keys); arrows step density by 1 car and a by 0.05 m/s² (Shift: five steps), clamped to the slider ranges; visible focus ring; caption mentions the keys. |

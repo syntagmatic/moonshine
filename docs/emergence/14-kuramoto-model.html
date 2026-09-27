@@ -504,28 +504,40 @@ to stay below the threshold. The bridge reopened in 2002 fitted with dampers.
 const TWO_PI = 2 * Math.PI;
 const reducedMotion = Motion.reduced();
 
-function lorentzianSample(center, gamma) {
-  return center + gamma * Math.tan(Math.PI * (Math.random() - 0.5));
+// Seeded PRNG (mulberry32) so each figure starts the same way on every load;
+// buttons that ask for new randomness keep drawing from the same stream.
+function mulberry32(seed) {
+  var s = seed >>> 0;
+  return function () {
+    s = (s + 0x6D2B79F5) >>> 0;
+    var t = s;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function lorentzianSample(center, gamma, rnd) {
+  return center + gamma * Math.tan(Math.PI * (rnd() - 0.5));
 }
 
-function gaussianSample(mean, std) {
+function gaussianSample(mean, std, rnd) {
   let u = 0, v = 0;
-  while (u === 0) u = Math.random();
-  while (v === 0) v = Math.random();
+  while (u === 0) u = rnd();
+  while (v === 0) v = rnd();
   return mean + std * Math.sqrt(-2.0 * Math.log(u)) * Math.cos(TWO_PI * v);
 }
 
-function sampleFrequencies(N, dist) {
+function sampleFrequencies(N, dist, rnd) {
   const freqs = new Float64Array(N);
   for (let i = 0; i < N; i++) {
     if (dist === 'lorentzian') {
-      freqs[i] = lorentzianSample(0, 0.5);
+      freqs[i] = lorentzianSample(0, 0.5, rnd);
     } else if (dist === 'gaussian') {
-      freqs[i] = gaussianSample(0, 0.5);
+      freqs[i] = gaussianSample(0, 0.5, rnd);
     } else if (dist === 'uniform') {
-      freqs[i] = (Math.random() - 0.5) * 3;
+      freqs[i] = (rnd() - 0.5) * 3;
     } else if (dist === 'bimodal') {
-      freqs[i] = (Math.random() < 0.5 ? -1 : 1) + gaussianSample(0, 0.25);
+      freqs[i] = (rnd() < 0.5 ? -1 : 1) + gaussianSample(0, 0.25, rnd);
     }
   }
   return freqs;
@@ -569,6 +581,7 @@ function freqToColor(freq, minF, maxF) {
 //  Section 1: Circle of Oscillators
 // ──────────────────────────────────────────────────────────────
 (function() {
+  var rand = mulberry32(1020);
   const N = 50;
   const canvas = document.getElementById('canvas-circle');
   const ctx = canvas.getContext('2d');
@@ -578,14 +591,14 @@ function freqToColor(freq, minF, maxF) {
   const btnReset = document.getElementById('btn-reset-circle');
 
   let phases = new Float64Array(N);
-  let freqs = sampleFrequencies(N, 'lorentzian');
+  let freqs = sampleFrequencies(N, 'lorentzian', rand);
   const [minF, maxF] = robustRange(freqs);
   const colors = Array.from(freqs).map(f => freqToColor(f, minF, maxF));
   let K = 0;
   let dpr = window.devicePixelRatio || 1;
 
   function resetPhases() {
-    for (let i = 0; i < N; i++) phases[i] = Math.random() * TWO_PI;
+    for (let i = 0; i < N; i++) phases[i] = rand() * TWO_PI;
   }
   resetPhases();
 
@@ -709,6 +722,7 @@ function freqToColor(freq, minF, maxF) {
 //  Section 2: Phase Transition Chart
 // ──────────────────────────────────────────────────────────────
 (function() {
+  var rand = mulberry32(2033);
   const svgEl = document.getElementById('svg-transition');
   const margin = { top: 20, right: 25, bottom: 40, left: 50 };
   let width, height;
@@ -730,9 +744,9 @@ function freqToColor(freq, minF, maxF) {
     Kvals.push(Kv);
     const runs = [];
     for (let trial = 0; trial < trials; trial++) {
-      const freqs = sampleFrequencies(N, 'lorentzian');
+      const freqs = sampleFrequencies(N, 'lorentzian', rand);
       const phases = new Float64Array(N);
-      for (let i = 0; i < N; i++) phases[i] = Math.random() * TWO_PI;
+      for (let i = 0; i < N; i++) phases[i] = rand() * TWO_PI;
       let acc = 0, n = 0;
       for (let s = 0; s < steps; s++) {
         kuramotoStep(phases, freqs, Kv, N, dt);
@@ -888,6 +902,7 @@ function freqToColor(freq, minF, maxF) {
 //  Section 3: Frequency Distribution
 // ──────────────────────────────────────────────────────────────
 (function() {
+  var rand = mulberry32(3046);
   const N = 60;
   const canvas = document.getElementById('canvas-freq-circle');
   const ctx = canvas.getContext('2d');
@@ -924,14 +939,14 @@ function freqToColor(freq, minF, maxF) {
     } else rRangeEl.textContent = '--';
   }
   let phases = new Float64Array(N);
-  let freqs = sampleFrequencies(N, dist);
+  let freqs = sampleFrequencies(N, dist, rand);
   let colors = [];
   let dpr = window.devicePixelRatio || 1;
 
   function resetSim() {
     rHist = []; simT = 0;
-    freqs = sampleFrequencies(N, dist);
-    for (let i = 0; i < N; i++) phases[i] = Math.random() * TWO_PI;
+    freqs = sampleFrequencies(N, dist, rand);
+    for (let i = 0; i < N; i++) phases[i] = rand() * TWO_PI;
     const [minF, maxF] = robustRange(freqs);
     colors = Array.from(freqs).map(f => freqToColor(f, minF, maxF));
     drawHistogram();
@@ -1083,6 +1098,7 @@ function freqToColor(freq, minF, maxF) {
 //  Section 4: Fireflies
 // ──────────────────────────────────────────────────────────────
 (function() {
+  var rand = mulberry32(4059);
   const canvas = document.getElementById('canvas-fireflies');
   const ctx = canvas.getContext('2d');
   const sliderK = document.getElementById('slider-firefly-K');
@@ -1113,8 +1129,8 @@ function freqToColor(freq, minF, maxF) {
 
   function initFireflies() {
     for (let i = 0; i < N; i++) {
-      phases[i] = Math.random();
-      freqs[i] = baseFreq + (Math.random() - 0.5) * freqSpread;
+      phases[i] = rand();
+      freqs[i] = baseFreq + (rand() - 0.5) * freqSpread;
       brightness[i] = 0;
     }
   }
@@ -1229,7 +1245,7 @@ function freqToColor(freq, minF, maxF) {
   canvas.addEventListener('keydown', (e) => {
     if (e.key !== 'Enter' && e.key !== ' ') return;
     e.preventDefault();
-    perturbAt(Math.floor(Math.random() * cols), Math.floor(Math.random() * rows));
+    perturbAt(Math.floor(rand() * cols), Math.floor(rand() * rows));
   });
   function perturbAt(cc, cr) {
     const perturbR = 5;
@@ -1304,6 +1320,7 @@ function freqToColor(freq, minF, maxF) {
 //  Section 5: Ring of drummers (nearest-neighbor coupling + audio)
 // ──────────────────────────────────────────────────────────────
 (function() {
+  var rand = mulberry32(5072);
   const canvas = document.getElementById('canvas-ring');
   const ctx = canvas.getContext('2d');
   const sliderK = document.getElementById('slider-ring-K');
@@ -1354,9 +1371,9 @@ function freqToColor(freq, minF, maxF) {
     const base = 2.0;
     oscs = [];
     for (let i = 0; i < N; i++) {
-      const nf = Math.max(0.5, base + (Math.random() - 0.5) * 2 * spread);
+      const nf = Math.max(0.5, base + (rand() - 0.5) * 2 * spread);
       oscs.push({
-        phase: Math.random() * TWO_PI,
+        phase: rand() * TWO_PI,
         naturalFreq: nf,
         flashing: 0,
         color: COLORS[i % COLORS.length],
@@ -1548,7 +1565,7 @@ function freqToColor(freq, minF, maxF) {
       const x = cx + ringR * Math.cos(angle);
       const y = cy + ringR * Math.sin(angle);
       if (Math.hypot(mx - x, my - y) < dotR * 2) {
-        oscs[i].phase = Math.random() * TWO_PI;
+        oscs[i].phase = rand() * TWO_PI;
         oscs[i].flashing = 1.0;
         perturbTime = simT;
         statRecovery.textContent = '...';
@@ -1559,9 +1576,9 @@ function freqToColor(freq, minF, maxF) {
   });
 
   btnPerturb.addEventListener('click', () => {
-    const indices = d3.shuffle(d3.range(N)).slice(0, 3);
+    const indices = d3.shuffler(rand)(d3.range(N)).slice(0, 3);
     for (const k of indices) {
-      oscs[k].phase = Math.random() * TWO_PI;
+      oscs[k].phase = rand() * TWO_PI;
       oscs[k].flashing = 1.0;
     }
     perturbTime = simT;
