@@ -23,7 +23,7 @@ Conway's rule commutes with the eight symmetries of the square, so a pattern's s
 A lattice gas on a square grid transports momentum anisotropically, while the same idea on hexagons gives isotropic Navier-Stokes, and the reason is a rank-4 tensor that the square velocity set cannot make isotropic. The reader decays a shear wave along two directions in each automaton and compares the measured viscosities.
 
 ### 5. Lattice Boltzmann and the D2Q9 Stencil
-Replace Boolean particles with continuous distributions on nine velocities, weighted so the square lattice's moments are isotropic through rank 4. The reader edits the equilibrium distribution live, then watches flow past a cylinder shed a Kármán vortex street with the Strouhal number measured as it runs.
+Replace Boolean particles with continuous distributions on nine velocities, weighted so the square lattice's moments match the Maxwellian's through rank 4 (eight moving vectors are already isotropic; the rest weight is what lets the rank-2 and rank-4 moments share one sound speed). The reader edits the equilibrium distribution live, then watches flow past a cylinder shed a Kármán vortex street with the Strouhal number measured as it runs.
 
 ### 6. Ising and the Z2 Break
 The Ising Hamiltonian is unchanged when every spin flips, yet below the critical temperature the system settles into one of the two signs. The reader runs Metropolis and Wolff updates on a live grid, watches the magnetisation trace wander and lock, and sweeps temperature to compare the measured magnetisation against Onsager's exact curve.
