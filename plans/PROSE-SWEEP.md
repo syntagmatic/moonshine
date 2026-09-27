@@ -96,8 +96,8 @@ Order: fact-checked series first, since word-only edits are safest there.
 | algorithms-ml | yes | 44f6da9, 94e1ad3 |
 | japan-earthquakes | yes | 2961c2c (Japanese updated to match) |
 | noether | | 2949828 |
-| parallel-coordinates | | |
-| mathematical-diagrams | | |
+| parallel-coordinates | | 861dd69 (subtitles, intros, outros included) |
+| mathematical-diagrams | | d99ff8f (subtitles, intros, outros included) |
 | game-is-the-math | | |
 | exceptional-atlas | | |
 | bioinformatics | | |
@@ -131,3 +131,20 @@ Order: fact-checked series first, since word-only edits are safest there.
 - noether 12 / index: Buchberger presented as the answer to Gordan's objection, but they concern different problems (page wording softened in the sweep; index card still says "the constructive answer").
 - noether 11: Fig 1 caption "at most d(12) = 6" is a loose bound; "Dedekind used ACC implicitly" needs a source.
 - japan-earthquakes 03: "about ten dots a week" conflicts with "about one a day" for 2001-2010.
+- parallel-coordinates 02: crossings "gather where many pairs share a linear trend" holds only for negative trends; positive trends converge outside the strip (the page says so earlier).
+- parallel-coordinates 03: "With equal coefficients the polylines form a symmetric fan" is unverified; the Hyperplanes section never shows the indexed-point representation the PROMPT implies.
+- parallel-coordinates 04: the greedy ordering grows the chain from both ends, so it's a variant of nearest-neighbour TSP, not the heuristic itself; "most of them hide the interesting structure" is unsupported.
+- parallel-coordinates 05: "to the right of the right axis for positive correlation" holds only for slopes between 0 and 1; 05 spells "h-star", 06 "hstar".
+- parallel-coordinates 06: the circle's bowtie is said to be widest at the center's height and pinch toward the extremes; band width 2r·sqrt((1-t)^2+t^2) is narrowest midway between the axes. Check the ellipse "wider on one side" claim too.
+- parallel-coordinates 07: slope is defined as (x_j - x_i)/d, so a slope range selects a diagonal band of differences, not a wedge by ratio; the wedge wording conflicts with the formula.
+- parallel-coordinates 08: the Fig 1 hint says labels turn red "outside the normal bundle" but the caption says "exceeds spec" (±3σ); the reactor data isn't captioned as simulated until Fig 2's text.
+- parallel-coordinates 09: "A controller can't evaluate the CPA formula for every pair" is doubtful; conflict-detection software computes CPA routinely.
+- parallel-coordinates 10: the 3-link solution family is called "the null space of the redundant arm"; it's the self-motion manifold (the null space is the Jacobian's). N - K holds generically, away from singularities.
+- parallel-coordinates 11: "slopes between axes show trade-off rates" conflates one design's two values with a rate between designs.
+- parallel-coordinates 12: text says "stereographic wireframe", aria label says "perspective wireframe".
+- mathematical-diagrams 02: Tait conjecture paraphrased as "as knotted as it looks"; the precise claim is about minimal crossing number.
+- mathematical-diagrams 03: "entropy falls off fastest toward the corners" is questionable (gradient is steepest at the edges); check Aitchison 1982 for perturbation and powering. Bug, not fact: ids m-delta and m-r3-2 are duplicated, so only the first copy renders.
+- mathematical-diagrams 04: "finite in finite type and has a lowest-weight vertex when the representation is finite-dimensional" is muddled; in finite type the second condition is redundant.
+- mathematical-diagrams 06: unbounded ends correspond to boundary lattice segments, not boundary lattice points (count 3d unchanged).
+- mathematical-diagrams 08: "the diagram determines the algebra, through its ordered dimension group" merges Bratteli's result with Elliott's.
+- mathematical-diagrams 10: check the intermediate contraction sizes 720 and 1500 against the figure code.
