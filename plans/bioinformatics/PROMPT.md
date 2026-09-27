@@ -1,6 +1,6 @@
 # Bioinformatics Visualization
 
-I want an eight-article series on the standard plots and methods of modern bioinformatics, for readers with some biology or some data science who have seen these figures in papers and never learned to read them. Biology now measures thousands of cells, millions of bases and whole patient cohorts at once, and the field has built a vocabulary of plots for data that size. What makes this one series is a single biological story running through every plot: the tumor suppressor TP53 and its target CDKN1A (p21), and how losing TP53 can leave p21 switched off. The first article looks at that story through five kinds of data at once; each later article takes one kind and goes deep.
+I want an eight-article series on the standard plots and methods of modern bioinformatics, for readers with some biology or some data science who have seen these figures in papers and never learned to read them. Biology now measures thousands of cells, millions of bases and whole patient cohorts at once, and the field has built a vocabulary of plots for data that size. What makes this one series is a single biological story running through it: the tumor suppressor TP53 and its target CDKN1A (p21), and how losing TP53 can leave p21 switched off. The first article looks at that story through five kinds of data at once; each later article takes one kind and goes deep.
 
 By the end a reader should be able to open a genome browser, a volcano plot, a clustered heatmap, a t-SNE map or a Kaplan-Meier curve and say what it computes, what it hides, and what question it can answer.
 
@@ -38,4 +38,4 @@ What the evidence says about patients: a response waterfall, Kaplan-Meier curves
 - Use one genome assembly throughout. Batch-drafted coordinates tend to mix GRCh37 and GRCh38 (chromosome lengths, ABL1, BRCA1, PIK3CA, CDKN2A, the 9;22 breakpoints); check every coordinate against GRCh38.
 - Never attach invented numbers to real names. A simulated forest plot gets generic study labels, never real consortia like TCGA or METABRIC with made-up years and effect sizes. Never present random synteny as real evolution.
 - Five semantic colors recur across the series (gene, sample, expression, significance, pathway) and the index introduces them as a small legend. Diverging scales need a midpoint that works on a dark background too.
-- Keep TP53 and p21 visible in every article, even the methods-heavy ones.
+- Keep TP53 and p21 at the center of articles 1, 4, 6 and 8, and let the others point back to them where it fits (the Circos plot and differential expression do). The genome browser works around EGFR, where the real CpG islands and gene models live, and dimensionality reduction uses generic simulated cells.
