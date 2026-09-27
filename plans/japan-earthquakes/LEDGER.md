@@ -648,3 +648,32 @@ Settled after the fixes above; docs/ changed where marked (English and Japanese)
 - Non-claim, Japan Trench map label hidden by dots: 01 map label moved from 145.5E to
   146.0E (east of the outer-rise events) and given a halo; 02 boundary labels were
   drawn before the dots and so sat under them, now raised above the dots with a halo.
+
+### Second opinion (fact-check hunt, 2026-09-27)
+
+- [ ] "Once three or more stations have picked up the P-wave" (07 `p8`), and the figure
+  model (warning 3 s after the third detection; `caption_simulation`, timeline label and
+  aria text) : WRONG. JMA locates the hypocenter and issues EEW from two or more
+  stations (Kodera et al. 2021, Front. Earth Sci. 9:726045: "hypocenter estimates using
+  two or more stations"; the two-station rule exists to screen out single-station
+  noise). Fixed in English and Japanese: `p8` now says two or more stations and
+  "locate" (heading "2. Locate." / 「2. 震源決定。」, since two stations do not
+  triangulate); caption says 2+ stations and the second detection; the model now uses
+  the second detection (`WARNING_STATIONS_NEEDED = 2`, timeline "2 stations detect").
+  Tohoku scenario: warning at 26.1 s after rupture (was 28.7), 8.9 s after first
+  detection, close to the recorded 8.6 s. Checked headless: status bar runs "need 2" to
+  warning at t=26.1 s, no page errors.
+- [ ] "A 500 km deep earthquake under the Sea of Japan will rattle buildings in Tokyo,
+  but gently" (02 `p13`) : WRONG. The 2015-05-30 Bonin earthquake (CSV: us20002ki3,
+  Mw 7.8, 664 km; JMA M8.1, 682 km), about 870 km south of Tokyo, gave JMA intensity 4
+  across central Tokyo and 5-upper at Ninomiya, Kanagawa (and Hahajima), and was felt in
+  all 47 prefectures for the first time on record; 13 injured, no major damage (JMA via
+  Japanese Wikipedia and tenki.jp event page). Fixed in English and Japanese: the
+  sentence now says deep does not always mean gentle and cites this event.
+- [?] "over an area roughly the size of Kyushu" (06 `p3`) : needs a human. Still
+  unsourced. Open sources found this session give only the whole source area (about
+  500 x 200 km, Tsushima et al. 2011, which includes subsidence) and a >2 m
+  initial-height region about 100 km wide (Saito et al. 2011 GRL, via search snippet;
+  paper paywalled). If that zone runs 300 to 400 km along the trench it is 30,000 to
+  40,000 km², against Kyushu's ~37,000, so the comparison is plausible but not shown.
+  Page left as is. Either cite a deformation model's uplift area or cut the clause.
