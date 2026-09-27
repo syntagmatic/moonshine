@@ -12,7 +12,8 @@ prompt in the same commit, so the prompt keeps matching the pages. A series
 that is still being planned gets its prompt first and its pages second.
 
 A series' claims ledger, when it has one, sits next to its prompt as
-`LEDGER.md`.
+`LEDGER.md`. `FACT-CHECK.md` in this directory tracks which series have been
+fact-checked and holds the open leads for all of them.
 
 ## The bar every prompt assumes
 
