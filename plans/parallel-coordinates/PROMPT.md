@@ -29,7 +29,7 @@ A cluster shows up as a tight bundle of polylines, and an outlier as a polyline 
 A convex set's boundary becomes a band between the axes, and a point is inside exactly when its whole extended line stays within that band. The reader drags test points around a circle, an ellipse and a polygon and watches the line stay in or leave the band, then sees how the test extends to three dimensions.
 
 ### 7. Brushing Is Slicing
-Selecting a range on one axis slices the data between two parallel hyperplanes, several brushes intersect those slices, and an angular brush between two axes selects a wedge bounded by lines through a point. The reader brushes axes, draws one strum line or two to make a wedge, and combines them.
+Selecting a range on one axis slices the data between two parallel hyperplanes, several brushes intersect those slices, and a strum between two axes selects a wedge bounded by lines through a point. The reader brushes axes, draws one strum line or two to make a wedge, and combines them.
 
 **Applied domains**
 
