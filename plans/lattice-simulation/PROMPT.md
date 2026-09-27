@@ -9,7 +9,7 @@ At the end a reader should be able to look at a lattice and a stencil and say wh
 ### Act I: Discretising space and time
 
 ### 1. Lattices and Wallpaper Groups
-The plane has five kinds of lattice and seventeen kinds of periodic pattern, and the point group at a lattice site decides what a simulation built on that lattice can get right. The reader drags two basis vectors and watches the lattice snap between the five Bravais types, then tiles one motif under each of the seventeen wallpaper groups and names groups in a short quiz. The article ends on why square and hexagonal lattices, with rotation orders 4 and 6, are the ones simulations use.
+The plane has five kinds of lattice and seventeen kinds of periodic pattern, and the point group at a lattice site limits what a simulation built on that lattice can get right. The reader drags two basis vectors and watches the lattice snap between the five Bravais types, then tiles one motif under each of the seventeen wallpaper groups and names groups in a short quiz. The article ends on why square and hexagonal lattices, with rotation orders 4 and 6, are the ones simulations use.
 
 ### 2. Symplectic Integrators
 A Hamiltonian flow preserves phase-space area; an integrator that preserves it too keeps its energy error bounded, and one that doesn't lets the error grow. The reader runs Euler, RK4 and velocity Verlet on a pendulum and watches Euler's orbit spiral out while Verlet's closes, watches a small square of initial conditions inflate or keep its area, and then runs a Kepler orbit where Verlet conserves angular momentum exactly and energy only up to a shadow Hamiltonian.
@@ -26,7 +26,7 @@ A lattice gas on a square grid transports momentum anisotropically, while the sa
 Replace Boolean particles with continuous distributions on nine velocities, weighted so the square lattice's moments are isotropic through rank 4. The reader edits the equilibrium distribution live, then watches flow past a cylinder shed a Kármán vortex street with the Strouhal number measured as it runs.
 
 ### 6. Ising and the Z2 Break
-The Ising Hamiltonian is unchanged when every spin flips, yet below the critical temperature the state picks one sign anyway. The reader runs Metropolis and Wolff updates on a live grid, watches the magnetisation trace wander and lock, and sweeps temperature to compare the measured magnetisation against Onsager's exact curve.
+The Ising Hamiltonian is unchanged when every spin flips, yet below the critical temperature the system settles into one of the two signs. The reader runs Metropolis and Wolff updates on a live grid, watches the magnetisation trace wander and lock, and sweeps temperature to compare the measured magnetisation against Onsager's exact curve.
 
 ## What to get right
 
