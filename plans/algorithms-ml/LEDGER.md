@@ -509,3 +509,11 @@ Totals: 43 claims. Verified 34 (x), wrong 6, imprecise or not shown by this grid
 - Generic AI phrasing and filler: light. "a tax on indecision" (`259`) is a small flourish; "Reinforcement learning works the same way" (`255`) is fine. No "delve", "crucial", "powerful", no restating conclusions.
 - Palette: blue #2563eb plus purple #8b5cf6 is the series role palette (data/model), a series-level choice, not specific to this essay.
 
+
+## Second opinion (fact-check hunt, 2026-09-27)
+
+Leads from plans/FACT-CHECK.md, each rechecked by rerunning the page's own code in node (scratchpad f2.mjs, f4.mjs).
+
+- [ ] 04: "the 95% rule keeps 6" (paragraph after Fig 4) : WRONG. Fig 4 now plots the sample's own eigenvalues (seed 77777, 1/n): cumulative 90.8% at 3, 94.7% at 4, 97.3% at 5, so the 95% rule keeps 5 (the 90% rule's 3 holds). Fixed: "the 95% rule keeps 5".
+- [ ] 01 Fig 4: "within 0.3 of it after about fifteen steps, averaged over many runs" : WRONG. Page code (seed 42 data, lr 0.1, 5,000 runs at batch 1): mean distance 0.575 at step 10, 0.436 at 15, 0.407 at 20, then flat at 0.40 through step 50; it never averages 0.3. Only a third of runs are within 0.3 at any step past 15. Fixed: "(in about fifteen steps, averaged over many runs)", which the caption's own "averages about 0.4" now completes. Batch 64 checked too: 0.100 at step 15, 0.000 by 40, so "stops on the minimum" holds.
+- [ ] 01 Fig 2: "Push the large rate to about 3.8 or more and the dot flies off the curve" : WRONG in part. Page's simulate() over slider values 2.50 to 5.00 in 0.01 steps: up to 3.13 the bounce stays on the chart; from 3.14 to 3.80 the verdict is still "Bounces, never settles" but the bounce is wider than the plotted range, so the dot leaves the chart (drawn hollow at the edge) from step 9; from 3.81 the verdict is "Diverges". Fixed: "Push the large rate past about 3.1 and the bounces grow wider than the chart, so the dot leaves it while still bouncing; from about 3.8 it diverges and flies off for good."
