@@ -1,0 +1,15 @@
+# Mathematical diagrams: claims ledger
+
+This series has not had a full fact-check. The rows below are only the leads
+flagged in plans/FACT-CHECK.md, each checked and settled.
+
+| Page | Claim | Verdict | Source or derivation | Fix |
+|---|---|---|---|---|
+| 02 | Tait: a reduced alternating diagram "is as knotted as it looks" | wrong (too loose), fixed | Tait's first conjecture, proved by Kauffman, Murasugi, Thistlethwaite (1987): a reduced alternating diagram has the minimal crossing number of its knot | Now says such a diagram uses the fewest crossings any diagram of its knot can have, and adds that one with a crossing therefore cannot be the unknot |
+| 03 | Entropy contours become rounded triangles "since entropy falls off fastest toward the corners" | wrong, fixed | Computed H along rays from the centre: at equal distance H is lower toward edge midpoints (1.0 bit at the inradius) than toward vertices (1.25 bits). Level H=1.3 reaches 0.79 inradii toward an edge, 0.92 toward a corner. Contours bulge toward the corners because H falls faster toward the edges | "rounded triangles pointing at the corners, since entropy falls off faster toward the edges than toward the corners" |
+| 03 | Aitchison introduced perturbation and powering in 1982 | fine with hedge, fixed | Aitchison 1982 (JRSS B 44) has log-ratios and perturbation; the power transformation is usually cited to the 1986 book (some authors cite 1982 for both) | "In that paper and his 1986 book he ... introduced perturbation and powering" |
+| 03 | (bug) duplicate ids `m-delta`, `m-r3-2` | fixed | Second prose copies (Fisher metric paragraph) never rendered; a hidden div also duplicated every math id | Renamed the second copies `m-delta-2`, `m-r3-3` with their own render calls; removed the unused hidden duplicate-id block |
+| 04 | Crystal "finite in finite type and has a lowest-weight vertex when the representation is finite-dimensional" | muddled, fixed | In finite type integrable highest-weight modules are finite-dimensional (Kac, Infinite-dimensional Lie algebras, ch. 10), so the second condition is redundant; in affine type they are infinite | States the finite-type fact directly and notes the affine case has no lowest vertex |
+| 06 | Boundary lattice points correspond to unbounded ends | wrong (count right), fixed | Unbounded ends are dual to primitive boundary edges of the subdivision; for degree d the boundary has 3d lattice points and 3d unit segments | Now says the 3d boundary points cut the boundary into 3d unit segments, each dual to one end of a smooth curve. Figure readout table (counts only) unchanged |
+| 08 | "the diagram determines the algebra, through its ordered dimension group" | wrong (merges two results), fixed | Bratteli 1972 (Trans. AMS 171): AF algebras isomorphic iff diagrams equivalent. Elliott 1976 (J. Algebra 38): ordered K0 with scale is a complete invariant | Splits into the two attributed theorems |
+| 10 | Intermediates of size 720 (columns first) and 1500 (rows first) | fine | Figure code dims a=2,b=30,c=20,d=25,e=18,f=2. AC(a,c,e)=720, BD(c,e,f)=720; AB(a,b,d)=1500, CD(b,d,f)=1500; outer AD=1,080,000 | none |
