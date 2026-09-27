@@ -3,7 +3,7 @@
 Agent skill + gallery for interactive technical explanations inspired by Distill.pub.
 Two halves: the `/shine` skill (a Claude Code plugin) that authors explanations, and
 `docs/`, a static site of finished essay series built with that skill. No build step,
-no dependencies, no tests; `package.json` is plugin-marketplace metadata only.
+no dependencies; `package.json` is plugin-marketplace metadata only.
 
 ## Layout
 
@@ -22,6 +22,8 @@ no dependencies, no tests; `package.json` is plugin-marketplace metadata only.
 - `plans/` — one `<series>/PROMPT.md` per live series: a prompt that could
   regenerate the series as it stands, kept in sync with its pages (see
   `plans/README.md`). Ledgers sit beside them as `LEDGER.md`
+- `tests/` — in-browser unit tests for some series' math libraries
+  (`tests/<series>.html`); kept out of `docs/` so they aren't published
 - `temp/` — scratch research
 
 ## Commands
@@ -34,7 +36,8 @@ no dependencies, no tests; `package.json` is plugin-marketplace metadata only.
   `serve` redirect to add it (and keeps `.html` URLs intact). The root `serve.json`
   does the same for `serve` run from the repo root (pages under `/docs/...`); keep
   the two in sync.
-- No build, lint, or test commands exist
+- Tests: serve the repo root (`python3 -m http.server 8000`) and open
+  `tests/<series>.html`; each page reports its pass/fail count. No build or lint
 
 ## Vendored assets
 

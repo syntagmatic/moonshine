@@ -30,7 +30,7 @@ See [`AGENTS.md`](AGENTS.md) for the claim convention. The file-level lock lives
 - Klein has at least one H^1 generator with α∪α ≠ 0; torus has α∪α = 0 for both (the bona-fide Klein-vs-torus distinguisher; betti numbers agree)
 - d(df) = 0 on the sphere mesh (Stokes-on-a-triangle)
 
-Run the checks in a browser by opening `docs/cohomology/lib/test.html`, or in Node via the harness at `temp/coh-test.js`.
+Run the checks in a browser by opening `tests/cohomology.html`, or in Node via the harness at `temp/coh-test.js`.
 
 ## Notes for next pass
 
