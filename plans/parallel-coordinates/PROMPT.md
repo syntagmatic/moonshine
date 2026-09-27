@@ -15,7 +15,7 @@ In parallel coordinates a point becomes a polyline, and a line becomes a point w
 Negative correlation makes an X of crossings between two axes, and positive correlation makes a parallel bundle. The reader varies the correlation and watches the pattern change, then reads the real Iris dataset.
 
 ### 3. Surfaces You Can't See
-A hyperplane in N-space leaves a signature of indexed points, and a curve appears as the envelope of its points' segments, traced by the dual points of its tangents. The reader moves along a circle or parabola and watches the dual curve form, with inflections and cusps trading places.
+A hyperplane in N-space constrains its points' polylines into a structured family, and a curve appears as the envelope of its points' segments, traced by the dual points of its tangents. The reader moves along a circle or parabola and watches the dual curve form, with inflections and cusps trading places.
 
 ### 4. Axis Order Is Everything
 Only adjacent axes show their relationship, so permuting the axes changes what you can see. The reader drags axes to reorder the real mtcars data, compares all orderings of four variables, and tries a greedy correlation-based ordering.
@@ -29,7 +29,7 @@ A cluster shows up as a tight bundle of polylines, and an outlier as a polyline 
 A convex set's boundary becomes a band between the axes, and a point is inside exactly when its whole extended line stays within that band. The reader drags test points around a circle, an ellipse and a polygon and watches the line stay in or leave the band, then sees how the test extends to three dimensions.
 
 ### 7. Brushing Is Slicing
-Selecting a range on one axis slices the data between two parallel hyperplanes, several brushes intersect those slices, and an angular brush between two axes selects by slope. The reader brushes axes, draws one strum line or two to make a wedge, and combines them.
+Selecting a range on one axis slices the data between two parallel hyperplanes, several brushes intersect those slices, and an angular brush between two axes selects a wedge bounded by lines through a point. The reader brushes axes, draws one strum line or two to make a wedge, and combines them.
 
 **Applied domains**
 
