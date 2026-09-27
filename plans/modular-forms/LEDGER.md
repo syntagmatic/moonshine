@@ -1339,3 +1339,13 @@ Applied by the main session from the agents' proposals.
 - Decomposition block: McKay 1978 noticed c(1) = 1 + 196883; the next ones are in Thompson 1979 and Conway-Norton 1979. The "numerical miracle that convinced Conway and Norton" sentence was dropped.
 
 Verification after the lib changes: render-check PASS on all fifteen pages and `lib/test.html`; the eight-configuration sweep above was run after these changes.
+
+## Leads from FACT-CHECK.md (2026-09-27)
+
+| page | claim | verdict | source or derivation | fix |
+|---|---|---|---|---|
+| 03 | "Finite area is what makes spaces of modular forms finite-dimensional" (`124`) | wrong, fixed | Derived. The existing row at 03 (`124`) accepted it as a heuristic, but finite area is not the mechanism: finiteness comes from compactness of the quotient with the cusp added plus holomorphy at the cusp, made exact by the valence formula (Part 5; Serre, A Course in Arithmetic, VII.3). | Reworded: finite area is a first sign; the working reason is compactness plus holomorphy at the cusp; points to Part 5's valence formula. |
+| 07 | "So tau(n) grows roughly as n^(11/2)" after the Deligne bound (`201`) | wrong, fixed | Derived: Deligne gives only the upper bound abs(tau(n)) <= d(n) n^(11/2). The typical size n^(11/2) is Rankin 1939 (Proc. Cambridge Philos. Soc. 35): sum over n <= x of tau(n)^2 ~ c x^12. | States the bound as a cap up to d(n), says it alone does not give the typical size, cites Rankin's mean-square asymptotic for that. |
+| 08 | "Hecke eigenforms have multiplicative coefficients" without a(1) = 1 | wrong, fixed | Derived: a(mn) = a(m)a(n) needs a(1) = 1; E4 as used on the page has a(n) = 240 sigma_3(n), and 240 sigma_3(6) != 240 sigma_3(2) * 240 sigma_3(3). The 08 subtitle itself only speaks of tau (tau(1) = 1) and the 08 body already normalises; the unnormalised wording was in 07 (`156`), the 08 index card and PROMPT.md. | 07 `156`, index card 08 and PROMPT.md now say "scaled so that a(1) = 1". |
+| 10 | "Fourier coefficients of a cusp form ... are point counts over finite fields" (`192`) | wrong, fixed | Derived: a_p(E) = p + 1 - #E(F_p) at good primes, so a_p determines the count but is not it. | Now "determine point counts ...: #E(F_p) = p + 1 - a_p(f) at every prime p of good reduction". PROMPT.md Part 10 line reworded the same way. |
+| 11 | "The constant c(0) = 744 is a convention" (`185`) | wrong, fixed | Derived: j = E4^3/Delta (the normalisation j(i) = 1728); E4^3 = 1 + 720q + ..., 1/Delta = q^-1 (1 + 24q + ...), so c(0) = 744 is forced. The real choice is j versus J = j - 744 (any j + c is a Hauptmodul). | Says 744 is forced by the 1728 normalisation (720 + 24) and that the convention is the choice of j versus the constant-term-0 Hauptmodul J. |

@@ -32,7 +32,7 @@ Eisenstein series are lattice sums whose q-expansions are divisor sums, with 691
 Δ is the unique normalised weight-12 cusp form; its coefficients τ(n) are multiplicative, congruent to σ₁₁ mod 691, and subject to Lehmer's open question. The reader tests multiplicativity on any coprime pair and checks the congruence across a table.
 
 ### 8. Hecke Operators and the Hecke Algebra
-Hecke operators commute, and on eigenforms they make coefficients multiplicative and the L-function an Euler product. The signature interactive is an exact Hecke calculator applying T_p to Δ, E₄, E₆ and a non-eigenform like E₄³.
+Hecke operators commute, and on eigenforms scaled so that a(1) = 1 they make coefficients multiplicative and the L-function an Euler product. The signature interactive is an exact Hecke calculator applying T_p to Δ, E₄, E₆ and a non-eigenform like E₄³.
 
 **Act III · Coefficients Become Curves**
 
@@ -40,7 +40,7 @@ Hecke operators commute, and on eigenforms they make coefficients multiplicative
 Under Γ₀(N) the quotient becomes a curve of positive genus, weight-2 cusp forms are its differentials, and the Mellin transform gives an L-function with a functional equation. The reader slides the level and sees genus and cusps change, then plots an L-function.
 
 ### 10. The Modularity Theorem and Elliptic Curves
-Point counts of an elliptic curve over 𝔽_p are coefficients of a weight-2 newform; with Ribet's theorem this settles Fermat. The reader builds a curve, sees its points on a finite-field grid, and compares Frobenius traces with the newform.
+Point counts of an elliptic curve over 𝔽_p are fixed by the coefficients of a weight-2 newform (#E(𝔽_p) = p + 1 − a_p at good primes); with Ribet's theorem this settles Fermat. The reader builds a curve, sees its points on a finite-field grid, and compares Frobenius traces with the newform.
 
 **Act IV · Coefficients Become Characters**
 
