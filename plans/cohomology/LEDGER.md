@@ -53,3 +53,12 @@ Run the checks in a browser by opening `docs/cohomology/lib/test.html`, or in No
 (If an essay finds the spine wrong or under-specified, propose the change here before editing `README.md`.)
 
 - _none yet_
+
+## Claims: leads from FACT-CHECK.md (2026-09-27)
+
+Only the flagged leads below were checked; this is not a full fact-check of the series.
+
+| page | claim | verdict | source or derivation | fix |
+|---|---|---|---|---|
+| 04 | df_z preset: "Arrows point upward, vanishing at the equator" | wrong, fixed | On the unit sphere the tangential gradient of z is e_z - z p, of length sqrt(1 - z^2): largest at the equator, zero at the poles | Now "Arrows point toward the north pole, longest at the equator and vanishing at the poles" |
+| 06 | Rips H1 class on the annulus fills "at a scale near the hole's diameter" | wrong (imprecise), fixed | Page's ε is the pairwise distance (balls of radius ε/2). For points evenly on a circle of radius r the Rips H1 class dies at ε = sqrt(3) r (chord of 120 degrees; Adamaszek and Adams 2017). Computed Figure 1's seeded annulus (inner radius 0.6, diameter 1.2): long H1 bar is [0.40, 1.11], so a little below the hole's diameter | Now "a little below the hole's diameter", plus one sentence giving sqrt(3) r for a circle |
