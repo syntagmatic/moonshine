@@ -54,7 +54,7 @@ The largest sporadic simple group, its order and character degrees, and McKay's 
 The Conway–Norton conjecture read as a specification, and the Frenkel–Lepowsky–Meurman construction from the Leech lattice that meets it with graded dimension j − 744. The reader sees those dimensions computed from partition counts and a lattice theta series.
 
 ### 14. Borcherds' Proof and Beyond
-Borcherds builds the Monster Lie algebra with the no-ghost theorem; its denominator identity is the product formula for j, and twisting by Monster elements finishes the proof. The reader multiplies out the product formula exactly and runs the replication cascade.
+Borcherds builds the Monster Lie algebra with the no-ghost theorem; its denominator identity is the product formula for j(p) − j(q), and twisting by Monster elements finishes the proof. The reader multiplies out the product formula exactly and runs the replication cascade.
 
 ## What to get right
 
