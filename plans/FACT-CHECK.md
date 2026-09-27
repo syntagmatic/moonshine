@@ -135,6 +135,35 @@ series has got and which suspect claims are still waiting for a look.
 - 10: check the intermediate contraction sizes 720 and 1500 against the
   figure code.
 
+### exceptional-atlas
+
+- 02: the old subtitle said the Weyl group "rebuilds the whole root system
+  from a single root"; the body says that holds only for simply-laced
+  systems (two orbits otherwise). The subtitle no longer says it; check the
+  index and PROMPT don't either.
+- 05: "every finite subgroup of SU(2) except Z/2 has a_ij in {0, 1}" also
+  fails for the trivial group; the intro credits the Platonic double covers
+  with all the ADE diagrams, but the cyclic and binary dihedral groups
+  aren't Platonic.
+- 07: "the three branched solutions of 1/p+1/q+1/r > 1" ignores the
+  (n, 2, 2) family (D_n); three holds only for the exceptional ones.
+- 08: Fig 9 caption says the 600-cell's inner products are cosines of
+  multiples of 36 degrees; cos 60 = 1/2 is also one.
+- 09: the kissing-number table's best-known values for dimensions 9 (272)
+  and 10 (336) may be out of date; "phi is a combination of modular forms of
+  weight 8 and 12" glosses over the quasimodular and weakly holomorphic
+  forms Viazovska used.
+
+### bioinformatics
+
+- 02: the PROMPT says TP53 and p21 appear in every article; 02 uses EGFR
+  throughout (scope, not a factual error).
+- 03: "Circos defines five primitives" undercounts its track types; check
+  "roughly 90 million years" for human-mouse divergence (estimates run
+  about 75 to 90 Mya).
+- 06: prose hard-codes "74 of the 80 patients" beside an in-browser
+  computation; confirm it's seeded.
+
 ### lithium-ion
 
 - 03: the activation energy is uncited.

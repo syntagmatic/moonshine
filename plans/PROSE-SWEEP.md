@@ -98,8 +98,8 @@ Order: fact-checked series first, since word-only edits are safest there.
 | noether | | 2949828 |
 | parallel-coordinates | | 861dd69 (subtitles, intros, outros included) |
 | mathematical-diagrams | | d99ff8f (subtitles, intros, outros included) |
-| exceptional-atlas | | |
-| bioinformatics | | |
+| exceptional-atlas | | ad4ba82 (subtitles, intros, outros included) |
+| bioinformatics | | 0c1ba77 (subtitles, intros, outros included) |
 | cohomology | | |
 | decision-trees | | |
 | lattice-simulation | | |
