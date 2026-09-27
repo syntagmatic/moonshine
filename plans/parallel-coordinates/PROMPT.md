@@ -1,6 +1,6 @@
 # Parallel Coordinates
 
-I want a twelve-part series on Alfred Inselberg's geometry of parallel coordinates. A five-dimensional point can't be pictured directly, but draw five parallel axes, connect its values with a polyline, and you can see it. The through-line is that this is a real geometry with a precise duality, and every pattern an analyst learns to read (crossings, bundles, envelopes, brushes) is a statement about that duality.
+I want a twelve-part series on Alfred Inselberg's geometry of parallel coordinates. A point in five dimensions can't be drawn in Cartesian coordinates, but draw five parallel axes and connect its values with a polyline, and it can. The through-line is that this is a real geometry with a precise duality, and every pattern an analyst learns to read (crossings, bundles, envelopes, brushes) is a statement about that duality.
 
 It is for readers comfortable with linear algebra and curious about high-dimensional geometry or data visualization. By the end they should be able to read correlation, clusters, outliers and hyperplanes off a plot, know why axis order matters, and follow four applications and the regular polytopes of four dimensions.
 
@@ -23,7 +23,7 @@ Only adjacent axes show their relationship, so permuting the axes changes what y
 **Geometric properties**
 
 ### 5. Bundles and Deviations
-A cluster is a tight bundle of polylines, and an outlier is a polyline that breaks away from one. The reader brushes the real UCI Wine data colored by cultivar, drags an injected outlier's values against a bundle, and sees its Mahalanobis distance split by axis.
+A cluster shows up as a tight bundle of polylines, and an outlier as a polyline that breaks away from one at the axes where it is unusual. The reader brushes the real UCI Wine data colored by cultivar, drags an injected outlier's values against a bundle, and sees its Mahalanobis distance split by axis.
 
 ### 6. Inside or Outside
 A convex set's boundary becomes a band between the axes, and a point is inside exactly when its whole extended line stays within that band. The reader drags test points around a circle, an ellipse and a polygon and watches the line stay in or leave the band, then sees how the test extends to three dimensions.
@@ -43,7 +43,7 @@ Two aircraft in a plane are one point in an eight-dimensional state space, and t
 A robot arm's joint angles are a point in configuration space, and inverse kinematics becomes brushing on the end-effector axes. The reader drags a target for a two-link or three-link arm and sees the family of joint configurations that reach it, with joint limits and redundancy.
 
 ### 11. The Pareto Front
-When no solution wins on every criterion, the Pareto front is the set where nothing improves without something else getting worse. The reader explores a hundred car designs scored on five objectives, tests dominance, adds objectives, and tries weighted-sum selection.
+When no design is best on every objective, the ones worth considering form the Pareto front, where no objective improves without another getting worse. Parallel coordinates show it for many objectives at once, one axis per objective. The reader explores a hundred car designs scored on five objectives, tests dominance, adds objectives, and tries weighted-sum selection.
 
 **Four dimensions**
 
