@@ -77,7 +77,8 @@ series' `LEDGER.md`. What follows is what those checks left for a human.
 - 11: the Du Bois BSA formula (0.007184 W^0.425 H^0.725) was taken via
   Wikipedia's citation; check it against Du Bois and Du Bois 1916, Arch
   Intern Med 17:863. The Grimes 2008 claim (clinical "nomograms" are mostly
-  points charts) rests on the abstract only.
+  points charts) rests on the abstract only. Mizuhashi's December 1937
+  chart is sourced from the IEEE history wiki (ETHW), not his paper.
 
 ### decision-trees
 
