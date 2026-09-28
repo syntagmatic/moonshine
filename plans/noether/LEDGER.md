@@ -73,3 +73,25 @@ flagged in `plans/FACT-CHECK.md` and settled on 2026-09-27.
 | 09 | Of the ten Einstein equations effectively six are independent; the four G^{0ν} equations are constraints | fine | Existing row above (Carroll §4.2); wording kept | none |
 | 09 | FRW with p = wρ: comoving energy ρa³ ∝ a^{−3w}, and its change equals −∫p d(a³) | derived, computed | ρ̇ = −3H(1 + w)ρ gives ρ ∝ a^{−3(1+w)}; d(ρa³) = −p d(a³) is the same equation. Page integrates Friedmann plus continuity by RK4 and measures slopes −3w to 4 decimals, first-law gap ≤ 1e-6 relative | none |
 | 09 | Klein published his exchange of letters with Hilbert on energy in 1918 | fine (from memory) | F. Klein, "Zu Hilberts erster Note über die Grundlagen der Physik", Nachr. Ges. Wiss. Göttingen (1918) 469-482, which prints the letters; cited from memory, not re-read. Kept from the previous page | none |
+
+### 03 enrichment
+
+| page | claim | verdict | source or derivation | fix |
+|---|---|---|---|---|
+| 03 | Johann Bernoulli posed the brachistochrone in the Acta Eruditorum in June 1696; Leibniz, Jakob Bernoulli, Tschirnhaus, l'Hôpital and Newton (anonymously) answered with the cycloid | fine | MacTutor, "The brachistochrone problem"; Wikipedia "Brachistochrone curve" (Acta Eruditorum May 1697 prints Leibniz, Johann, Jakob and a Latin translation of Newton; l'Hôpital's solution was not published until 1988). Checked by web search 2026-09-28 | Tschirnhaus added; "within months" dropped |
+| 03 | Hamilton stated the principle in 1834 | fine (from memory) | W. R. Hamilton, "On a General Method in Dynamics", Phil. Trans. R. Soc. 124 (1834) 247-308; cited from memory | none |
+| 03 | Fig 1/2 times: straight 0.639 s, sag (a = 0.35) 0.600 s, cycloid 0.583 s; best of the family -x - a sin πx is a = 0.267, T = 0.5970 s, 2.4% above the cycloid | computed | Node: cycloid through (1, -1) has θ = 2.4120, R = 0.5729, T = θ√(R/g) = 0.58290 s; chord rule 2ds/(v0+v1) gives 0.63855 / 0.60004 / 0.58290 at N = 200 to 20000; family scan min at a ≈ 0.265 (page golden-section 0.267) | none |
+| 03 | Fig 3: thrown ball L = ½q̇² - gq on [0, 1], least action over 8-segment paths -3.9472, smooth parabola -g²/24 = -4.0098 | derived, computed | S[(g/2)t(1-t)] = g²/24 - g²/12 = -g²/24; discrete EL q_{i+1} - 2q_i + q_{i-1} = -gh² is solved exactly by the parabola's knot values, S = -3.94718 (node and page) | none |
+| 03 | Fig 5: oscillator ω = π pinned at q = 0; d²S/dε² along sin(nπt/T) is (T/2)((nπ/T)² - ω²), negative once T > n s | derived, computed | S[ε sin(nπt/T)] = ε²(T/4)((nπ/T)² - ω²); page Simpson values match to 2 decimals (e.g. T = 1.4: -3.38, 7.19, 24.82) | none |
+| 03 | Fig 6: RK4 at dt = 1/240 s keeps pendulum energy (θ0 = 60°) to about 1e-10 relative | computed | Node: max abs(ΔE)/E = 7.5e-10 over 60 s; page readout 1e-10 over the first seconds | none |
+
+### 04 enrichment
+
+| page | claim | verdict | source or derivation | fix |
+|---|---|---|---|---|
+| 04 | Stiffened bowl ½(x²+y²) + y²: rotation about any centre fails; about the origin max abs(X·∇V) on [-2, 2]² is 8 | derived, computed | About c: X·∇V = 2xy + c_y x - 3c_x y, never identically zero; at c = 0 max abs(2xy) = 8. Page grid search over centres returns (0, 0) and 8.0000 | none |
+| 04 | Tilted bowl ½(x²+y²) - 0.8y is rotation-symmetric about (0, 0.8) | derived, computed | ∇V = (x, y - 0.8), X = (-(y - 0.8), x): X·∇V = 0. Page search returns (0.00, 0.80), 0.0000 | none |
+| 04 | Free particle: boost q + st shifts every path's action by s + s²/2 (0.625 at s = 0.5); scaling by 1 + s multiplies it by (1+s)², maps solutions to solutions, and is no quasi-symmetry | derived, computed | ΔS = ∫(sq̇ + s²/2) = s[q] + s²/2 with q(0) = 0, q(1) = 1; page: spread 0 for boost, 3.13 for scale, EL residual of the image 0 in both | Replaces the old Fig 1 side boxes |
+| 04 | Oscillator L = ½q̇² - ½q² has the quasi-symmetry X = sin t with δL = d/dt(q cos t); its charge q̇ sin t - q cos t is conserved | derived, computed | δL = q̇ cos t - q sin t = d/dt(q cos t); d/dt(q̇ sin t - q cos t) = (q̈ + q) sin t = 0 on shell. Page: grid test passes, RK4 drift 2e-9 over 8 s | none |
+| 04 | Vertical shift under gravity: δL = -g = d/dt(-gt), charge q̇ + gt conserved | derived, computed | Page RK4: q̇ drifts 78.48 over 8 s (= g·8), q̇ + gt holds to 8e-13 | none |
+| 04 | A gauge transformation changes a charged particle's Lagrangian by q dχ/dt | derived | L = ½mv² - qφ + qv·A with A -> A + ∇χ, φ -> φ - ∂χ/∂t gives δL = q(∂χ/∂t + v·∇χ) = q dχ/dt | none |
