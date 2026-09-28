@@ -69,7 +69,7 @@ cluster field, so under 1% of the sample is field stars.
 |---|---|---|
 | Five magnitudes is exactly a factor of 100 in flux; one magnitude is about 2.512 | D | Definition of the magnitude scale (Pogson); 100^(1/5) = 2.5119 |
 | Smaller magnitude = brighter; colour is a difference of magnitudes, BP-RP larger for redder stars | D | Follows from m = -2.5 log10 F + const; red star has less BP flux, so larger BP magnitude |
-| Gaia G is a broad visible band, BP and RP a blue and a red part of it | Open | Needs a passband source (Riello et al. 2021 or the DR3 documentation) before shipping |
+| Gaia G runs 330 to 1,030 nm (visible into near infrared); BP up to ~670 nm, RP from ~620 nm | C, S | ESA (E)DR3 passband table (cosmos.esa.int/web/gaia/edr3-passbands, version 2), wavelengths where transmission exceeds 1% of peak: G 330-1030, BP 330-673, RP 620-1042 nm. Photometry paper: Riello et al. 2021 (A&A 649, A3) |
 | M_G = G + 5 log10(parallax in mas) - 10 | D, S | d = 1000/parallax pc; G - 5 log10(d/10) = G - 5(2 - log10 parallax). Same form in Babusiaux et al. 2018 (A&A 616, A10), Sect. 2 |
 | sigma_M = (5/ln 10) sigma_parallax / parallax = 2.17 / (parallax/error) | D | First-order propagation through the log |
 | At parallax/error = 10, M_G uncertain by at most ~0.22 mag; the Gaia team used this cut for their HR diagrams | D, S | 2.17/10; Babusiaux et al. 2018 Sect. 2.1: "10% relative precision ... uncertainty on M_G smaller than 0.22 mag" |
@@ -90,7 +90,7 @@ cluster field, so under 1% of the sample is field stars.
 | 10 pc to 10 kpc spreads a sequence over 15 mag | D | 5 log10(10000/10) = 15 |
 | Blackbody colours: CIE 1931 fit (Wyman, Sloan & Shirley 2013), Planck spectrum, sRGB | C | Node test vs M. Charity's bbr_color table: 3000 K #ffb96e vs #ffb969, 4000 K #ffd4a5 vs #ffd5a1, 10000 K #cdd9ff vs #cfdaff |
 | Temperature from BP-RP uses the dwarf relation; white dwarf and giant colours approximate; hot end clamped at 10,700 K (B9V) | D | Stated in the caption |
-| Gaia DR3 summary paper is Gaia Collaboration, Vallenari et al. 2023 | Open | Title and first author checked on arXiv:2208.00211; journal reference (A&A 674, A1) still to confirm |
+| Gaia DR3 summary paper is Gaia Collaboration, Vallenari et al. 2023 (A&A 674, A1) | S | arXiv:2208.00211; DOI 10.1051/0004-6361/202243940 resolves via Crossref to volume 674, article A1, 2023 |
 
 ### Section 3, Leavitt's law (figures 4, 5, 6)
 
