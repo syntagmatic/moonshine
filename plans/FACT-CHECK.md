@@ -60,6 +60,13 @@ series' `LEDGER.md`. What follows is what those checks left for a human.
   memory; confirm them.
 - 11: "Dedekind stated ACC in 1894 for rings of algebraic integers" rests on
   one secondary source (Toader, arXiv:2408.08552).
+- Enrichment (2026-09-28): about 20 ledger rows in the "NN enrichment"
+  blocks are marked "from memory": Wilson 1974, Hairer-Lubich-Wanner on
+  implicit midpoint, the 1918 page range and Klein's publication of the
+  Hilbert letters, Hamilton 1834, Landau-Lifshitz precession, Fock 1935,
+  Carlitz 1960, Cox (p = a² + 5b², Thm 7.7), Neukirch on ideals above 2,
+  Noether's 1916 bound, Herzog 1970, the binary-quartic I, J generation.
+  Check each against its source.
 
 ### exceptional-atlas
 
