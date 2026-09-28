@@ -17,6 +17,9 @@ article ships.
 | `docs/astronomy/shared/data/cepheid-lc.csv` | Same archive, `phot/I/` for OGLE-LMC-CEP-3126, -0800, -0068 (484, 771, 642 epochs). | same script |
 | `docs/astronomy/shared/data/pantheon.csv` | Pantheon+ data release, `Pantheon+_Data/4_DISTANCES_AND_COVAR/Pantheon+SH0ES.dat` (GitHub PantheonPlusSH0ES/DataRelease). 1,701 light curves (Scolnic et al. 2022 count 1,550 distinct SNe; the file has 1,543 distinct CIDs); 77 calibrator light curves (43 SNe), 277 Hubble-flow light curves (238 SNe). Fetched 2026-09-27. | `scripts/astronomy/fetch-pantheon.py` |
 | `docs/astronomy/shared/data/bprp-teff.csv` | E. Mamajek, "A Modern Mean Dwarf Stellar Color and Effective Temperature Sequence", version 2022.04.16 (Pecaut & Mamajek 2013, ApJS 208, 9). Rows B9V to M9.5V with tabulated Bp-Rp (63 rows). | same script |
+| `docs/astronomy/shared/data/bsc5.csv` | CDS catalogue V/50, Yale Bright Star Catalogue 5th rev. ed. (Hoffleit & Warren 1991), `catalog.gz`. Every star with a J2000 position and V <= 5.5: 2,887 stars. Proper names from the IAU Catalog of Star Names (WGSN list, Mamajek's text version dated 2022-04-04), joined on HR number: 324 named. Fetched 2026-09-27. | `scripts/astronomy/fetch-sky.py` |
+| `docs/astronomy/shared/data/planets.csv` | JPL "Approximate Positions of the Planets" (Standish), Table 1 (1800 to 2050 AD), elements and rates for 8 bodies (EM barycentre as Earth). Fetched 2026-09-27. | same script |
+| `docs/astronomy/shared/data/eclipses.csv` | NASA Five Millennium Catalog of Solar Eclipses, `5MCSE/5MKSEcatalog.txt` (Espenak & Meeus; file dated 2008 Oct 07). All 11,898 eclipses, -1999 to +3000. Fetched 2026-09-27. | same script |
 
 Spot-check: source_ids 143207476804948736 and 143455554116023040 re-queried
 from the archive; G, BP-RP, parallax, parallax_error and RUWE match the
@@ -150,9 +153,75 @@ cluster field, so under 1% of the sample is field stars.
 | SN bar: calibrators, Hubble flow 78 to 685 Mpc, all Pantheon+ to 17 Gpc (luminosity distance, model-dependent beyond z 0.15) | C | MU_SH0ES ranges |
 | M_B to 1.0% from calibrator scatter; H0 1.1% stat, ~1.5% with the LMC anchor alone | C | sd/sqrt(43) = 0.021 mag; readout |
 
+## Article 1: The Sky From Where You Stand
+
+Model checks (2026-09-27):
+- Precession port (`LTP` in the page) against `pyerfa` `erfa.ltp`: max matrix
+  difference 2e-16 at epochs -10000, -3000, 0, 1000, 2000, 2026, 5000, 14000, 15000.
+- Planet model (`helio`) against JPL Horizons observer ecliptic longitude of Mars,
+  daily 2024-09-01 to 2025-05-01 (after adding 50.29"/yr general precession to go
+  from J2000 to of-date): max difference 0.011 deg; stations 2024 Dec 7 and
+  2025 Feb 24 on the same days in both.
+- Equation of time (Kepler model, eps 23.4393, e 0.01671, varpi 282.932): Meeus
+  Example 28.b, 1992 Oct 13.0, gives 13m42.6s; model 13m43.9s. Max difference from
+  Smart's series over 2026: 0.18 min.
+- Saros from date: lunation N = round((JD - 2451550.09766)/29.530588861) matches the
+  canon's lunation for 11,898/11,898; S = (38N + 132) mod 223 - 20 matches its saros
+  number for 11,898/11,898 (also computed live on the page).
+- Ballesteros 2012 eq. 14, T = 4600 [1/(0.92(B-V)+1.7) + 1/(0.92(B-V)+0.62)], read in
+  arXiv:1201.1809.
+
+| Claim | Kind | How we know |
+|---|---|---|
+| Earth's trip shifts the nearest stars by < 1" either way | S | Proxima's parallax 768 mas (Gaia DR3, article 2 data context) |
+| RA measured east from the March equinox, in hours; Dec from celestial equator | D | definitions |
+| Pole altitude = latitude; alt/az formulas; circumpolar if dec > 90 - lat | D | spherical triangle; code implements the same formulas (N, E, Up components) |
+| At the equator no star is circumpolar; at the pole the northern half never sets | D | from the condition above (refraction ignored) |
+| Fig 1 pole-star readout: nearest star V < 4 to the visible pole; Thuban (V 3.65) at 2800 BC, Polaris now | C | page readout at presets |
+| Nothing in the figures uses a distance; EoT needs orbit shape not size; retrograde depends on ratios of orbit sizes (Kepler III fixes period ratios) | D | geometry: directions invariant under uniform scaling |
+| Figure 1 counts: 1,399 above horizon, 329 circumpolar (40 N, 15 Jan 21:00, 2026) | C | page readout |
+| 2,887 stars to V 5.5 in BSC | C | fetch script count |
+| Sidereal day 23h56m04s; sky turns 0.9856 deg per solar day, 3m56s; 30 deg (2 h) per month | D | 360/(360+0.9856474) x 24 h; Almanac mean-longitude rate |
+| LST = L + 15(t - 12) with t local mean time | D | mean solar time = hour angle of mean Sun + 12 h, mean Sun RA = L |
+| Precession ~50"/yr, full turn ~26,000 yr | C | model: 50.38"/yr swept by the pole at 2000, 25,722 yr |
+| Polaris now 0.6-0.7 deg from pole, closest 0.46 deg ~AD 2100 | C | model with BSC proper motion; page computes the prose numbers |
+| Great Pyramid built c. 2600 BC | S | Wikipedia, Great Pyramid of Giza ("built c. 2600 BC"), read 2026-09-27. Secondary source; upgrade to a primary Egyptological date if revisited |
+| Thuban ~1 deg from pole in 2600 BC (1.12); closest 0.10 deg ~2800 BC (-2795) | C | model. Note: Wikipedia says "about two degrees"; we state the model's value |
+| Vega within 6 deg of pole ~AD 13,600 (5.70 deg at 13595) | C | model |
+| Obliquity drifts 22.6-24.2 deg over -12000..14000 | C | model (22.62, 24.22) |
+| Arcturus moves 16 deg in 26,000 yr; > 30 Moon widths | C | BSC pm (-1.093, -1.998)"/yr; 16.3 deg; Moon 0.5 deg |
+| Precession caused by Sun and Moon torque on the equatorial bulge | D | standard mechanics (torque on oblate spinning body) |
+| EoT = alpha_mean - alpha_sun = (L - lambda) + (lambda - alpha) | D | definition, sign sundial minus clock |
+| Perihelion early January | D | Almanac g = 0 at 1999 Jan 3.25 |
+| EoT extremes +16 min 25 s on 3 Nov, -14 min 15 s on 11 Feb (2026) | C | page readout; Smart's series agrees to 0.2 min |
+| Eccentricity term amplitude 7.7 min, tilt term 9.9 min | C | model (7.66, 9.87) |
+| Tilt term ~ eps^2 (tan^2(eps/2)), declination ~ eps; so small tilt gives an ellipse | D | Smart's series first term y sin 2L, y = tan^2(eps/2) |
+| 1 minute of time = 0.25 deg | D | 360/1440 |
+| Perihelion 283 deg from March equinox | C | Almanac L - g = 282.93 |
+| Mars model vs JPL ephemeris ~0.01 deg over 2024-25 | C | Horizons check above |
+| Retrograde spell averages 1990-2040: Mercury 22 d/13 deg, Venus 42/16, Mars 74/16, Jupiter 121/10, Saturn 137/7, Uranus 152/4, Neptune 159/3 | C | page (FIG3.AVG) |
+| Mars 2024-25 retrograde 7 Dec to 24 Feb, 79 d, 19.2 deg, opposition-centred | C | page; stations match Horizons |
+| Retrograde centred on opposition (outer) / inferior conjunction (inner) | D | geometry; seen in the strip at each spell |
+| Synodic 29.530589, draconic 27.212221, anomalistic 27.554550 d | S | NASA SEsaros page (Espenak) |
+| 223 syn = 6585.321 d; 242 drac = 6585.358; 239 anom = 6585.537 | D | products. NASA page prints 6585.3223 for 223 syn; the product of its own month is 6585.3213 |
+| Moon's orbit tilted ~5 deg (5.145) | S | NASA Moon fact sheet |
+| Sidereal month 27.32 d | S | NASA Moon fact sheet, sidereal period 655.720 h |
+| Nodes regress once per 18.6 yr | D | 1/(1/27.212221 - 1/27.3217) = 6,793 d = 18.60 yr |
+| Saros 18 yr 11 d (10 or 12), ~8 h; shift ~120 deg west | S/D | NASA page; 0.321 d = 7.7 h = 116 deg |
+| Median shift between consecutive central eclipses 117 deg west | C | canon, all series |
+| Moon ~0.5 deg (0.48) further from node each saros | D/C | (6585.3575 - 6585.3213)/27.2122 x 360 = 0.48 deg; page readout 0.5 |
+| Eclipse window ~35 deg wide around the node | D/C | mean complete-series length 73.5 x 0.48 deg per saros = 35 deg |
+| Complete families average 74 eclipses | C | canon, 116 complete series, mean 73.5 |
+| Complete series: 70-86 eclipses, 1,244-1,533 yr | C | canon, 116 series wholly inside the window |
+| About 40 series running at once | C | canon: 40 active in 2026; 39-47 over -1500..2500, mean 42 |
+| Inex = 358 months = 388.5 draconic months, opposite node; neighbouring series alternate | C | page readout 0.0 deg from opposite node; odd series gamma decreases (92+5 series), even increase (98) |
+| 669 months: day dial back within 13 deg | C | page readout (0.9 h short) |
+| Saros 139: 71 eclipses 1501-2763, 16 P, 12 H, 43 T; includes 2024 Apr 8 | C | canon |
+| Gamma step ~0.043 per saros | C | canon median 0.042 overall |
+| Gamma beyond ~+-1 misses Earth, only partial | D | gamma in Earth radii; partials at |gamma| > ~0.997 plus penumbra |
+
 ## Series-level facts (from PROMPT.md, to check when each article is written)
 
 Open: 51 Peg b 1995 (Mayor & Queloz); RV gives m sin i; transit probability
-~R*/a; Chandrasekhar limit ~1.4 Msun for C/O; Sun's CNO fraction ~1%; saros =
-223 synodic months, ~18 yr 11 d, ~1/3 of Earth's rotation shift; current SH0ES,
+~R*/a; Chandrasekhar limit ~1.4 Msun for C/O; Sun's CNO fraction ~1%; current SH0ES,
 CCHP and Planck H0 values (check at writing time).

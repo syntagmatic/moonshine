@@ -1,0 +1,1296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Sky From Where You Stand · Astronomy</title>
+<script src="../lib/motion.js"></script>
+<script src="../vendor/js/d3.v7.min.js"></script>
+<script src="../vendor/js/topojson-client.min.js"></script>
+<link rel="stylesheet" href="../vendor/katex@0.16.11/katex.min.css">
+<script src="../vendor/katex@0.16.11/katex.min.js"></script>
+<link href="../vendor/fonts/sans-serif-mono/fonts.css" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  color-scheme: light dark;
+  --article-width: 740px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem;
+  --line-height: 1.6;
+  --text: #1c1d24;
+  --text-2: #50525e;
+  --accent: #9a5b0f;
+  --accent-light: #f5e6cf;
+  --bg: #fafaf8;
+  --fig-bg: #ffffff;
+  --border: #e3e2de;
+  /* Series roles, fixed across all four articles:
+     observed data = ink (--text), models and fits = --c-model,
+     uncertainty = --c-band, observer / Earth = --c-earth,
+     stars = their blackbody colour (computed, never a variable). */
+  --c-model: #b8336a;
+  --c-band: #f3d3e0;
+  --c-earth: #2266bb;
+  /* The plot area of a diagram of stars is night sky in both themes, so
+     near-white blackbody colours stay visible. */
+  --sky: #10131f;
+  --sky-ink: #c9ccda;
+  --sky-dim: #6d7185;
+  --ground: #3a3326;
+  --horizon: #6ea8ee;
+  --sun: #f2b544;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --text: #e6e5e0; --text-2: #a8a9b3;
+    --accent: #e0a44c; --accent-light: #3d2c14;
+    --bg: #15161a; --fig-bg: #1c1d22; --border: #33343b;
+    --c-model: #f07aa8; --c-band: #4a2336; --c-earth: #6ea8ee;
+    --sky: #07080d; --sky-ink: #c9ccda; --sky-dim: #5d6174;
+    --ground: #2b261d;
+  }
+}
+
+body {
+  font-family: var(--body-font); font-size: var(--body-size); line-height: var(--line-height);
+  color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased;
+}
+
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1rem 6rem; }
+h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+p { margin: 0 0 1rem; }
+a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+.subtitle { font-family: var(--heading-font); font-size: 1.15rem; color: var(--text-2); margin-bottom: 2rem; }
+
+.figure { margin: 2rem 0; padding: 1.25rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; }
+.figure-wide { margin-left: -2rem; margin-right: -2rem; }
+@media (min-width: 1040px) { .figure-wide { margin-left: -7rem; margin-right: -7rem; } }
+.figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; line-height: 1.45; }
+.figure-label { font-weight: 600; color: var(--text); }
+.readout { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); min-height: 2.8em; font-variant-numeric: tabular-nums; margin: 0.25rem 0 0; line-height: 1.4; }
+.readout b { color: var(--text); font-weight: 600; }
+
+.margin-note { font-size: 0.8125rem; color: var(--text-2); line-height: 1.45; border-left: 2px solid var(--border); padding-left: 0.75rem; margin: 1rem 0; font-family: var(--heading-font); }
+
+.controls { display: flex; align-items: center; gap: 0.5rem 1.25rem; flex-wrap: wrap; margin-bottom: 0.75rem; font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); }
+.controls label { display: inline-flex; align-items: center; gap: 0.4rem; }
+.controls input[type="range"] { width: 150px; max-width: 100%; accent-color: var(--accent); }
+.controls .val { font-variant-numeric: tabular-nums; color: var(--text); min-width: 2.2em; display: inline-block; }
+.presets { display: inline-flex; gap: 0.35rem; flex-wrap: wrap; align-items: center; }
+.presets button { font: inherit; font-size: 0.8rem; min-height: 28px; padding: 0 0.6rem; background: var(--fig-bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px; cursor: pointer; }
+.presets button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-light); }
+
+.panels { display: grid; gap: 0.75rem 1rem; align-items: start; }
+.p-2-3 { grid-template-columns: 2fr 3fr; }
+.p-1-1 { grid-template-columns: 1fr 1fr; }
+.p-3-2 { grid-template-columns: 3fr 2fr; }
+.panels h3 { font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600; color: var(--text); margin: 0 0 0.25rem; }
+.panels h3 span { font-weight: 400; color: var(--text-2); }
+.fig-body { position: relative; width: 100%; }
+.fig-body canvas, .fig-body svg { position: absolute; left: 0; top: 0; display: block; }
+.fig-body svg { overflow: visible; }
+.sphere-wrap { max-width: 560px; margin: 0 auto; }
+.sphere-wrap canvas { cursor: grab; touch-action: none; }
+.sphere-wrap canvas:active { cursor: grabbing; }
+
+svg text { font-family: var(--heading-font); }
+svg .axis text { font-size: 11px; fill: var(--text-2); }
+svg .axis line, svg .axis path { stroke: var(--border); }
+svg .axis-label { font-size: 11px; fill: var(--text-2); }
+svg .gridline { stroke: var(--border); stroke-width: 1; }
+svg .zero { stroke: var(--text-2); stroke-width: 1; stroke-dasharray: 2 3; }
+svg .model { fill: none; stroke: var(--c-model); stroke-width: 2.2; }
+svg .model-thin { fill: none; stroke: var(--c-model); stroke-width: 1.3; stroke-dasharray: 5 3; }
+svg .model-dot { fill: none; stroke: var(--c-model); stroke-width: 1.3; stroke-dasharray: 1.5 2.5; }
+svg .model-lab { font-size: 11px; fill: var(--c-model); }
+svg .ink-lab { font-size: 11px; fill: var(--text); }
+svg .dim-lab { font-size: 11px; fill: var(--text-2); }
+svg .orbit { fill: none; stroke: var(--text-2); stroke-width: 1; }
+svg .orbit-earth { fill: none; stroke: var(--c-earth); stroke-width: 1.5; }
+svg .earth { fill: var(--c-earth); }
+svg .sun { fill: var(--accent); }
+svg .planet { fill: var(--text); }
+svg .sightline { stroke: var(--c-earth); stroke-width: 1; stroke-dasharray: 4 3; fill: none; }
+svg .ring { fill: none; stroke: var(--border); stroke-width: 6; }
+svg .ring-mark { fill: var(--text); }
+svg .track { fill: none; stroke: var(--text); stroke-width: 1.2; }
+svg .track-retro { fill: none; stroke: var(--text); stroke-width: 3.2; }
+svg .now { stroke: var(--accent); stroke-width: 1.5; }
+svg .now-dot { fill: var(--accent); stroke: var(--fig-bg); stroke-width: 1.5; }
+svg .dial-face { fill: var(--fig-bg); stroke: var(--border); stroke-width: 1.5; }
+svg .dial-tick { stroke: var(--text-2); stroke-width: 1; }
+svg .dial-hand { stroke: var(--text); stroke-width: 2.5; stroke-linecap: round; }
+svg .dial-node { fill: var(--c-earth); }
+svg .dial-miss { fill: var(--accent-light); stroke: none; }
+svg .cand { fill: var(--text); }
+svg .cand-hollow { fill: var(--fig-bg); stroke: var(--text-2); stroke-width: 1; }
+svg .cand-sel { fill: none; stroke: var(--accent); stroke-width: 2; }
+svg .land { fill: var(--border); stroke: none; }
+svg .map-edge { fill: none; stroke: var(--border); }
+svg .seq { fill: none; stroke: var(--text-2); stroke-width: 0.8; }
+svg .hit { fill: transparent; cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+canvas:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.katex-display { overflow-x: auto; overflow-y: hidden; padding: 2px 0; }
+.legend { display: inline-flex; gap: 0.9rem; flex-wrap: wrap; align-items: center; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 0.3rem; vertical-align: -1px; }
+
+@media (max-width: 640px) {
+  h1 { font-size: 1.75rem; }
+  .figure { padding: 1rem 0.6rem; }
+  .figure-wide { margin-left: 0; margin-right: 0; }
+  .p-2-3, .p-1-1, .p-3-2 { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="article">
+  <header>
+    <h1>The Sky From Where You Stand</h1>
+    <p class="subtitle">The naked-eye sky as a problem in spherical geometry and clocks.</p>
+  </header>
+
+  <p>Nearly everything astronomy knows about the universe beyond the Solar System arrived as light at one point: wherever a telescope, or an eye, happened to be. That light carries four things we can measure. It comes from a <b>direction</b>. It has a <b>brightness</b>. It has a <b>colour</b>, or more finely a spectrum. And it changes with <b>time</b>. This series pulls one thing after another out of that light, each resting on the one before. This article takes direction and time. The <a href="02-the-distance-ladder.html">second</a> turns angles and brightness into distance, the third reads the physics of stars from their colour and brightness once their distances are known, and the fourth finds planets around them from small dips and wobbles in their light.</p>
+
+  <p>Direction and time can be measured with nothing but eyes and a clock, and they go a long way. Every figure below works with angles on the sky and the times at which things happen, and not one of them needs to know how far away anything is. That is both the power of this geometry and, as the end of the article shows, its limit.</p>
+
+  <h2>The celestial sphere</h2>
+
+  <p>The stars are so far away that even Earth's yearly trip around the Sun, 300 million kilometres across, shifts the nearest of them by less than an arcsecond either way. We can't see how far away any of them is, so each star might as well be a point on a sphere around us, of any radius we like. A star's place on that sphere takes two angles, the way a city's place on Earth takes latitude and longitude. <b>Declination</b> &delta; is celestial latitude, measured from the celestial equator, the projection of Earth's equator onto the sky. <b>Right ascension</b> &alpha; is celestial longitude, measured east along the equator from the point where the Sun crosses it in March, and it is usually given in hours, 24 to a full turn. These coordinates belong to the stars, not to us, so a catalogue can list them once for everyone.</p>
+
+  <p>What you see depends on where you stand and when. From latitude &phi; the celestial pole stands &phi; degrees above your horizon (the north pole above the northern horizon, or for southern latitudes the south pole above the southern one), and the whole sphere turns about it once a day. To find a star in your own sky, its <b>altitude</b> <i>a</i> above the horizon and its <b>azimuth</b> <i>A</i> measured from north through east, you need a single clock: the <b>local sidereal time</b> &theta;, which is the right ascension crossing your meridian, the north-south line through the zenith. The star's hour angle <i>H</i> = &theta; &minus; &alpha; says how far it has turned past the meridian, and then</p>
+  <div id="eq-altaz"></div>
+  <p>A star stays up all night if its whole daily circle clears the horizon, which happens when &delta; &gt; 90&deg; &minus; &phi;. At the North Pole every star north of the celestial equator is circumpolar and none of the others ever rise. At the equator no star is circumpolar, and every star spends half of each turn above the horizon.</p>
+
+  <div class="figure figure-wide" id="fig-sphere">
+    <div class="controls">
+      <label>Latitude <input type="range" id="sp-lat" min="-90" max="90" step="1" value="40" aria-label="Observer's latitude in degrees"> <span class="val" id="sp-lat-v" style="min-width: 3.4em"></span></label>
+      <label>Date <input type="range" id="sp-day" min="0" max="364" step="1" value="14" aria-label="Day of the year"> <span class="val" id="sp-day-v" style="min-width: 3.6em"></span></label>
+      <label>Clock <input type="range" id="sp-time" min="12" max="36" step="0.05" value="21" aria-label="Local mean solar time, hours"> <span class="val" id="sp-time-v" style="min-width: 2.8em"></span></label>
+      <span class="presets"><button type="button" id="sp-play">Play</button></span>
+    </div>
+    <div class="controls">
+      <label>Year <input type="range" id="sp-year" min="-12000" max="14000" step="1" value="2026" style="width: 220px" aria-label="Year, from 12,001 BC to AD 14,000"> <span class="val" id="sp-year-v" style="min-width: 5.5em"></span></label>
+      <span class="presets" role="group" aria-label="Jump to a year">
+        <button type="button" data-year="-2799">2800 BC</button>
+        <button type="button" data-year="2026" aria-pressed="true">Today</button>
+        <button type="button" data-year="13600">AD 13,600</button>
+      </span>
+    </div>
+    <div class="sphere-wrap"><div class="fig-body" id="sp-plot"><canvas tabindex="0" role="img" aria-label="The celestial sphere with the bright stars, the observer's horizon, the celestial equator, the ecliptic and the Sun. Drag or use arrow keys to turn it."></canvas></div></div>
+    <p class="readout" id="sp-ro" aria-live="polite"></p>
+    <p class="figure-caption"><span class="figure-label">Figure 1.</span> The celestial sphere drawn as a globe, turned so the star patterns read as they do from the ground; drag it, or focus it and use the arrow keys. The blue circle is your horizon and the shaded half is below it. The dashed circle is the celestial equator and the gold one is the ecliptic, the Sun's yearly path, with the Sun on the chosen date. Stars inside the dotted circle around the pole never set. Press Play and watch them wheel round the pole, then drag the latitude: at the equator the dotted circle shrinks to nothing, and at the pole it grows to the whole equator. The faint curve through the pole is the pole's own path over 26,000 years. Stars are the 2,887 in the Yale Bright Star Catalogue down to magnitude 5.5, each coloured by the blackbody temperature that matches its B&minus;V colour.</p>
+  </div>
+
+  <p>The sky turns once in a <b>sidereal day</b> of 23 hours 56 minutes 4 seconds, not in 24 hours. The difference is the Sun's own motion. While Earth turns once, it also moves about 1/365 of the way round its orbit, so the Sun slides about a degree east against the stars, and Earth has to turn that extra degree, four minutes' worth, to bring the Sun back to the meridian. Clocks keep solar time. So at the same clock time each night the stars stand a degree further west, and each star rises four minutes earlier than the night before. Hold the clock still in figure 1 and drag the date: a month turns the sky by 30&deg;, two hours of clock time, which is why the winter constellations belong to winter.</p>
+
+  <p>The pole itself moves. Earth's equator bulges, and the Sun and Moon pull on the bulge, trying to bring it into line with their own orbits. A spinning top answers a sideways pull by swinging its axis around, and Earth's axis swings around the pole of the ecliptic by about 50 arcseconds a year, a full circle in about 26,000 years. This is the <b>precession of the equinoxes</b>. Right ascension and declination are measured from the equator and the March equinox, so every star's coordinates slowly change, and a catalogue has to say which year's equator it means (J2000 for the one used here). Drag the year. Today the pole is <span id="sp-pol-now">0.7</span>&deg; from Polaris, and it will be closest, <span id="sp-pol-min">0.46</span>&deg;, around AD <span id="sp-pol-yr">2100</span>. When the Great Pyramid was built, around 2600 BC, the pole was about a degree from Thuban in Draco, which it had passed within a tenth of a degree around 2800 BC. By AD 13,600 it swings to within 6&deg; of Vega, which will make a bright but not very accurate pole star.</p>
+
+  <p class="margin-note">The precession is the long-term model of Vondr&aacute;k, Capitaine and Wallace (2011), built to stay accurate over long time spans, where a constant precession rate drifts off. Over the slider's range it also lets the tilt of Earth's axis drift between 22.6&deg; and 24.2&deg;. Each star also drifts with its own proper motion, applied here in a straight line: over the slider's 26,000 years Arcturus crosses 16&deg; of sky, more than thirty times the Moon's width.</p>
+
+  <h2>Sundials and clocks</h2>
+
+  <p>A sundial reads <b>apparent solar time</b>, the hour angle of the real Sun. It doesn't keep a steady rate, so clocks keep <b>mean solar time</b> instead: the hour angle of an imaginary Sun that moves along the celestial equator at a perfectly uniform rate. The gap between the two is the <b>equation of time</b>. It has two sign conventions. Here it is sundial minus clock, positive when the sundial is ahead, which is the right ascension of the mean Sun minus that of the true Sun:</p>
+  <div id="eq-eot"></div>
+  <p>The two brackets are two separate causes, and they simply add. The first is the eccentricity of Earth's orbit. Earth moves fastest at perihelion in early January, so the Sun's true longitude &lambda; runs ahead of the uniform mean longitude <i>L</i> for half the year and behind it for the other half, by an amount Kepler's equation gives. The second is the tilt. Even a Sun that moved uniformly along the ecliptic would not move uniformly in right ascension, because the ecliptic is tilted against the equator. Near the equinoxes part of its motion goes north or south and is lost to right ascension. Near the solstices all of it goes east, and it goes east at high declination, where the hour circles crowd together, so it counts for extra. The first cause repeats once a year and the second twice.</p>
+
+  <p>Photograph the Sun at the same clock time every day for a year and it traces a figure eight on the sky, the <b>analemma</b>: up and down with the Sun's declination, east and west with the equation of time.</p>
+
+  <div class="figure figure-wide" id="fig-eot">
+    <div class="controls">
+      <label>Tilt &epsilon; <input type="range" id="eo-eps" min="0" max="40" step="0.1" value="23.44" aria-label="Obliquity in degrees"> <span class="val" id="eo-eps-v" style="min-width: 3.2em"></span></label>
+      <label>Eccentricity <i>e</i> <input type="range" id="eo-e" min="0" max="0.06" step="0.0005" value="0.0167" aria-label="Orbital eccentricity"> <span class="val" id="eo-e-v" style="min-width: 3.2em"></span></label>
+      <span class="presets" role="group" aria-label="Presets">
+        <button type="button" data-p="earth" aria-pressed="true">Earth</button>
+        <button type="button" data-p="circ">Circular orbit</button>
+        <button type="button" data-p="small">Small tilt</button>
+      </span>
+    </div>
+    <div class="panels p-2-3">
+      <div>
+        <h3>The analemma <span>the Sun at noon by the clock</span></h3>
+        <div class="fig-body" id="eo-ana"><svg role="img" aria-label="The Sun's declination against the equation of time over a year: a figure eight."></svg></div>
+      </div>
+      <div>
+        <h3>The equation of time <span>and its two causes</span></h3>
+        <div class="fig-body" id="eo-curve"><svg role="img" aria-label="The equation of time through the year, with the eccentricity and tilt terms that add up to it."></svg></div>
+      </div>
+    </div>
+    <p class="readout" id="eo-ro" aria-live="polite"></p>
+    <p class="figure-caption"><span class="figure-label">Figure 2.</span> Hover or tap the curve to follow a date on both panels, or focus it and use the arrow keys. With Earth's values the eccentricity term swings about 7.7 minutes each way over a year and the tilt term about 9.9 minutes each way twice a year; they reinforce in November and partly cancel in May. Set the eccentricity to zero and only the tilt term remains: the eight becomes symmetric, both lobes the same size, because that term repeats every half year. Now restore the eccentricity and drag the tilt down. The tilt term shrinks with the square of the tilt, faster than the declination, which shrinks only in proportion, so the eccentricity term takes over and the eight opens into an ellipse. The Sun's east-west offset is plotted in minutes of time; one minute is a quarter of a degree, so the real analemma is much thinner than drawn. The model is a Kepler orbit with Earth's perihelion 283&deg; from the March equinox and leaves out the small wobbles the Moon and planets add.</p>
+  </div>
+
+  <h2>Retrograde motion</h2>
+
+  <p>The planets wander against the stars, mostly eastward, the same way as the Sun and Moon. But every so often a planet slows, stops, runs backwards for weeks, stops again and resumes. In a Sun-centred picture it is what overtaking looks like from Earth. The direction to Mars is the line from Earth to Mars, and when Earth, on the faster inside track, passes Mars, that line swings backwards against the distant stars, the way a slower car on a motorway seems to slide backwards against the hills while you pass it.</p>
+
+  <p>The figure computes both planets' positions from JPL's approximate orbital elements, solving Kepler's equation for each, and the direction to the planet as seen from Earth is the direction of the difference between the two position vectors. Over the retrograde loop of 2024 and 2025, the Mars longitudes it gives agree with JPL's full ephemeris to about a hundredth of a degree. Orbits themselves are the subject of other pieces in this gallery: why Kepler orbits close, in <a href="../noether/07-keplers-hidden-symmetry.html">Kepler's hidden symmetry</a>, and how to integrate one without it spiralling away, in <a href="../lattice-simulation/02-symplectic-integrators.html">symplectic integrators</a>.</p>
+
+  <div class="figure figure-wide" id="fig-retro">
+    <div class="controls">
+      <span class="presets" role="group" aria-label="Choose a planet">
+        <button type="button" data-pl="Mercury">Mercury</button>
+        <button type="button" data-pl="Venus">Venus</button>
+        <button type="button" data-pl="Mars" aria-pressed="true">Mars</button>
+        <button type="button" data-pl="Jupiter">Jupiter</button>
+        <button type="button" data-pl="Saturn">Saturn</button>
+      </span>
+      <span class="presets"><button type="button" id="rt-play">Play</button></span>
+      <label>Date <input type="range" id="rt-t" min="0" max="1095" step="1" value="160" style="width: 200px" aria-label="Days after 2024 July 1"> <span class="val" id="rt-date" style="min-width: 6.5em"></span></label>
+    </div>
+    <div class="panels p-2-3">
+      <div>
+        <h3>From above <span>the ring stands for the distant stars</span></h3>
+        <div class="fig-body" id="rt-top"><svg role="img" aria-label="Top view of the Sun, Earth and the chosen planet, with the line of sight from Earth to the planet."></svg></div>
+      </div>
+      <div>
+        <h3>From Earth <span id="rt-sub">Mars's ecliptic longitude, 2024 to 2027</span></h3>
+        <div class="fig-body" id="rt-strip"><svg role="img" aria-label="The chosen planet's ecliptic longitude seen from Earth over three years, with retrograde stretches drawn heavier."></svg></div>
+        <h3 style="margin-top: 0.75rem">Every planet <span>average retrograde spell, 1990 to 2040</span></h3>
+        <div class="fig-body" id="rt-all"><svg role="img" aria-label="Average length in days and size in degrees of the retrograde spells of each planet against its distance from the Sun."></svg></div>
+      </div>
+    </div>
+    <p class="readout" id="rt-ro" aria-live="polite"></p>
+    <p class="figure-caption"><span class="figure-label">Figure 3.</span> Scrub the date through January 2025 and watch Earth pass Mars: the sightline stops, swings back across the ring and then resumes. In the longitude chart, the longitude climbs steadily except for the heavy stretches, which centre on opposition for the outer planets and on inferior conjunction, when the planet passes between us and the Sun, for Mercury and Venus. The lower chart repeats the calculation for all seven planets over fifty years. Every spell lasts longer the farther out the planet is; beyond Mars, the farther the planet, the less ground it loses.</p>
+  </div>
+
+  <p>The outer planets' pattern follows from the geometry. A distant planet hardly moves in a year, so its retrograde spell lasts most of the time Earth spends on the near side of its orbit, which approaches half a year as the planet gets farther away; Neptune spends <span id="rt-nep-d">158</span> days of every year going backwards. But from a distant planet Earth's orbit looks small, so the backwards swing it causes shrinks, down to <span id="rt-nep-a">3</span>&deg; for Neptune. Mars sits at the other extreme: it spends only about <span id="rt-mars-d">72</span> days in retrograde, but backs up by <span id="rt-mars-a">15</span>&deg;.</p>
+
+  <h2>Why eclipses repeat</h2>
+
+  <p>A solar eclipse needs a new Moon, and there is one every <b>synodic month</b>, 29.53 days. Most new Moons pass the Sun by, because the Moon's orbit is tilted about 5&deg; to the ecliptic, so the Moon crosses the Sun's path only at two points, the <b>nodes</b>, and only a new Moon near a node can cover the Sun. The Moon returns to the same node every <b>draconic month</b> of 27.21 days, shorter than its 27.32-day orbit around the stars because the nodes themselves slide backwards round the ecliptic once every 18.6 years. And the Moon's distance, which decides whether a central eclipse is total or annular, cycles with the <b>anomalistic month</b> of 27.55 days, from one perigee to the next.</p>
+
+  <p>So an eclipse repeats with the same geometry when three clocks come round together. They almost do, after 223 synodic months:</p>
+  <div id="eq-saros"></div>
+  <p>That interval is the <b>saros</b>, 18 years and 11 days (or 10, or 12, depending on leap days) and about 8 hours. In those 8 hours Earth turns about a third of the way round, so the next eclipse in the family falls about 120&deg; of longitude further west.</p>
+
+  <div class="figure" id="fig-clocks">
+    <div class="controls">
+      <label>Synodic months <i>N</i> <input type="range" id="ck-n" min="1" max="700" step="1" value="223" style="width: 200px" aria-label="Number of synodic months"> <span class="val" id="ck-n-v"></span></label>
+      <span class="presets" role="group" aria-label="Known eclipse cycles">
+        <button type="button" data-n="6">6</button>
+        <button type="button" data-n="223" aria-pressed="true">223</button>
+        <button type="button" data-n="358">358</button>
+        <button type="button" data-n="669">669</button>
+      </span>
+    </div>
+    <div class="fig-body" id="ck-dials"><svg role="img" aria-label="Four dials showing what is left over after N synodic months in draconic months, anomalistic months and days."></svg></div>
+    <div class="fig-body" id="ck-cands" style="margin-top: 0.5rem"><svg role="img" aria-label="For every N from 1 to 700, how far the Moon is from a node after N synodic months. Click a dot to choose N."></svg></div>
+    <p class="readout" id="ck-ro" aria-live="polite"></p>
+    <p class="figure-caption"><span class="figure-label">Figure 4.</span> Each dial divides a span of <i>N</i> synodic months by one kind of month, and the hand shows the fraction left over. The synodic dial always reads zero, because we count from new Moon to new Moon. An eclipse can recur when the draconic hand points at either node (the blue marks, top and bottom), and it recurs with the same total or annular character when the anomalistic hand is also near the top. The shaded wedge on each dial is how far the hand misses its target. The dots below are every <i>N</i> up to 700, placed by how far the Moon then sits from the nearest node; solid dots are also within 20&deg; of perigee, and dots within 12&deg; of a node are drawn larger. Click near one. At 6 months the Moon is near the opposite node, so eclipses come in seasons half a year apart. At 223 all three hands are near the top. At 358, the inex, the Moon is at the opposite node; that is why neighbouring saros series alternate between the two nodes. At 669, three saroses, even the day dial comes back round.</p>
+  </div>
+
+  <p>The saros isn't exact, and the small mismatch is what makes an eclipse family finite. After each saros the new Moon sits about half a degree further along its orbit from the node than the time before. An eclipse is possible only while the new Moon falls inside a window around the node, and the canon's complete families average 74 eclipses, so that window is about 74 steps of 0.48&deg;, some 35&deg;, wide. A family is born with a small partial eclipse at one pole of the Earth, drifts across the globe a little each time as the Moon's shadow crosses Earth slightly further north or south, and dies at the other pole after some 70 to 86 eclipses and 12 to 15 centuries. New families start all the time, so about 40 run at once.</p>
+
+  <div class="figure figure-wide" id="fig-saros">
+    <div class="controls">
+      <span class="legend">
+        <span><i style="background: var(--text)"></i>total</span>
+        <span><i style="background: var(--accent)"></i>annular</span>
+        <span><i style="background: color-mix(in srgb, var(--text) 50%, var(--accent))"></i>hybrid</span>
+        <span><i style="background: var(--text-2); opacity: 0.45"></i>partial</span>
+      </span>
+      <label>Saros <input type="range" id="sa-s" min="-13" max="190" step="1" value="139" style="width: 180px" aria-label="Saros series number"> <span class="val" id="sa-s-v"></span></label>
+    </div>
+    <div class="fig-body" id="sa-pano"><canvas tabindex="0" role="img" aria-label="Every solar eclipse from 2000 BC to AD 3000, one row per saros series. Click a row, or use up and down arrow keys, to choose a series."></canvas></div>
+    <div class="panels p-1-1" style="margin-top: 0.75rem">
+      <div>
+        <h3>The series, eclipse by eclipse <span>gamma, where the shadow's axis passes</span></h3>
+        <div class="fig-body" id="sa-gamma"><svg role="img" aria-label="Gamma of each eclipse in the chosen series against year: a steady drift from one pole to the other."></svg></div>
+      </div>
+      <div>
+        <h3>Where each is greatest <span id="sa-map-sub"></span></h3>
+        <div class="fig-body" id="sa-map"><svg role="img" aria-label="Map of the points of greatest eclipse for the chosen saros series."></svg></div>
+      </div>
+    </div>
+    <p class="readout" id="sa-ro" aria-live="polite"></p>
+    <p class="figure-caption"><span class="figure-label">Figure 5.</span> Every solar eclipse from 2000 BC to AD 3000 in NASA's Five Millennium Canon, placed on the row of its saros series; each row's series number is computed from the eclipse's date alone. Each family is a streak about 1,300 years long, partial at both ends and central in the middle, and new families keep starting, so the streaks stack into a diagonal band. Choose a row to follow one family. Its gamma, the distance of the Moon's shadow axis from Earth's centre in Earth radii, marches from one side of the Earth to the other; beyond about &plusmn;1 the axis misses Earth and only partial eclipses remain. On the map, successive greatest-eclipse points jump about 120&deg; west, so every third one comes back to the same stretch of longitude, a little further north or south. Series 139 contains the total eclipse of 8 April 2024 across North America, ringed.</p>
+  </div>
+
+  <h2>What angles can't tell us</h2>
+
+  <p>Look back at the five figures and none of them uses a distance. The globe in figure 1 has an arbitrary radius. The equation of time needs the shape of Earth's orbit, not its size. Retrograde motion depends on the ratios of the orbits' sizes, not the sizes themselves, and the saros is a statement about ratios of periods. The celestial sphere has no radius; we chose one for convenience. The one place where geometry reaches out into the third dimension is the one exception to the stars' fixed directions: the tiny back-and-forth shift of the nearest stars as Earth carries us round the Sun. That parallax is where <a href="02-the-distance-ladder.html">the next article</a> begins.</p>
+
+  <footer style="margin-top: 4rem; padding-top: 2rem; border-top: 1px solid var(--border); font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2);">
+    <p>Stars: the <a href="https://cdsarc.cds.unistra.fr/viz-bin/cat/V/50">Yale Bright Star Catalogue</a>, 5th revised edition (Hoffleit &amp; Warren 1991), from CDS; star names from the IAU Catalog of Star Names (<a href="https://www.pas.rochester.edu/~emamajek/WGSN/IAU-CSN.txt">WGSN</a>). Colour to temperature: Ballesteros 2012 (EPL 97, 34008). Precession: Vondr&aacute;k, Capitaine &amp; Wallace 2011 (A&amp;A 534, A22), as implemented in <a href="https://github.com/liberfa/erfa">ERFA</a>. The Sun's position and mean longitude: the Astronomical Almanac's low-precision formulae.</p>
+    <p>Planets: E. M. Standish, <a href="https://ssd.jpl.nasa.gov/planets/approx_pos.html">Approximate Positions of the Planets</a> (JPL), Table 1, 1800 to 2050; checked against the JPL Horizons ephemeris. Eclipses: F. Espenak &amp; J. Meeus, <a href="https://eclipse.gsfc.nasa.gov/SEcat5/SEcatalog.html">Five Millennium Canon of Solar Eclipses</a> (NASA/TP-2006-214141), and the month lengths from NASA's <a href="https://eclipse.gsfc.nasa.gov/SEsaros/SEsaros.html">saros page</a>. Coastlines: Natural Earth via world-atlas.</p>
+    <p><a href="index.html">Astronomy</a>, Part 1 of 4. Next: <a href="02-the-distance-ladder.html">The Distance Ladder</a>.</p>
+    <p>Built with <a href="https://github.com/enjalot/moonshine" style="color: var(--text-2);">moonshine</a>.</p>
+  </footer>
+</div>
+
+<script>
+// ── Shared helpers ──
+const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const narrow = () => matchMedia('(max-width: 640px)').matches;
+function responsive(el, render) {
+  let w = 0;
+  new ResizeObserver(() => {
+    if (el.clientWidth > 0 && el.clientWidth !== w) { w = el.clientWidth; render(w); }
+  }).observe(el);
+}
+const DEG = Math.PI / 180, AS = DEG / 3600;
+const wrap180 = x => ((x % 360) + 540) % 360 - 180;
+const fmtYear = y => y <= 0 ? `${d3.format(',')(1 - y)} BC` : (y < 1000 ? `AD ${y}` : `AD ${d3.format(y >= 10000 ? ',' : '')(y)}`);
+
+katex.render(String.raw`\sin a = \sin\varphi\,\sin\delta + \cos\varphi\,\cos\delta\,\cos H, \qquad \tan A = \frac{-\cos\delta\,\sin H}{\sin\delta\,\cos\varphi - \cos\delta\,\sin\varphi\,\cos H}`,
+  document.getElementById('eq-altaz'), { throwOnError: false, displayMode: true });
+katex.render(String.raw`E \;=\; \alpha_{\text{mean}} - \alpha_{\odot} \;=\; \underbrace{(L - \lambda)}_{\text{eccentricity}} \;+\; \underbrace{(\lambda - \alpha_{\odot})}_{\text{tilt}}, \qquad \tan\alpha_\odot = \cos\varepsilon\,\tan\lambda`,
+  document.getElementById('eq-eot'), { throwOnError: false, displayMode: true });
+katex.render(String.raw`\begin{aligned} 223 \times 29.530589\ \text{d} &= 6585.321\ \text{d} \quad\text{(synodic)}\\ 242 \times 27.212221\ \text{d} &= 6585.358\ \text{d} \quad\text{(draconic)}\\ 239 \times 27.554550\ \text{d} &= 6585.537\ \text{d} \quad\text{(anomalistic)} \end{aligned}`,
+  document.getElementById('eq-saros'), { throwOnError: false, displayMode: true });
+
+// ── Blackbody colour ──
+// CIE 1931 2-degree colour-matching functions, multi-lobe Gaussian fit of
+// Wyman, Sloan & Shirley (2013, JCGT 2(2)). Planck spectrum at T integrated
+// against them, XYZ to linear sRGB, scaled so the brightest channel is 1.
+const blackbody = (() => {
+  const g = (x, m, s1, s2) => { const t = (x - m) / (x < m ? s1 : s2); return Math.exp(-0.5 * t * t); };
+  const xb = l => 1.056*g(l,599.8,37.9,31.0) + 0.362*g(l,442.0,16.0,26.7) - 0.065*g(l,501.1,20.4,26.2);
+  const yb = l => 0.821*g(l,568.8,46.9,40.5) + 0.286*g(l,530.9,16.3,31.1);
+  const zb = l => 1.217*g(l,437.0,11.8,36.0) + 0.681*g(l,459.0,26.0,13.8);
+  const enc = v => Math.round(255 * (v <= 0.0031308 ? 12.92 * v : 1.055 * v ** (1 / 2.4) - 0.055));
+  const cache = new Map();
+  return T => {
+    const k = Math.round(T / 50) * 50;
+    if (cache.has(k)) return cache.get(k);
+    let X = 0, Y = 0, Z = 0;
+    for (let l = 380; l <= 780; l += 5) {
+      const m = l * 1e-9, B = 1 / (m ** 5 * (Math.exp(1.438777e-2 / (m * k)) - 1));
+      X += B * xb(l); Y += B * yb(l); Z += B * zb(l);
+    }
+    const rgb = [3.2406*X - 1.5372*Y - 0.4986*Z, -0.9689*X + 1.8758*Y + 0.0415*Z, 0.0557*X - 0.2040*Y + 1.0570*Z];
+    const mx = Math.max(...rgb);
+    const hex = d3.rgb(...rgb.map(v => enc(Math.max(0, v / mx)))).formatHex();
+    cache.set(k, hex);
+    return hex;
+  };
+})();
+// B-V to blackbody temperature, Ballesteros 2012 (EPL 97, 34008), eq. 14.
+const bvTeff = bv => 4600 * (1 / (0.92 * bv + 1.7) + 1 / (0.92 * bv + 0.62));
+
+// ── Long-term precession ──
+// Vondrak, Capitaine & Wallace 2011 (A&A 534, A22), ported from ERFA
+// ltpecl.c, ltpequ.c and ltp.c; matches pyerfa's erfa.ltp to 1e-16 from
+// 10,000 BC to AD 15,000. epj is the Julian epoch.
+const LTP = (() => {
+  const pqpol = [[5851.607687, -0.1189000, -0.00028913, 0.000000101], [-1600.886300, 1.1689818, -0.00000020, -0.000000437]];
+  const pqper = [[708.15,-5486.751211,-684.661560,667.666730,-5523.863691],[2309.00,-17.127623,2446.283880,-2354.886252,-549.747450],[1620.00,-617.517403,399.671049,-428.152441,-310.998056],[492.20,413.442940,-356.652376,376.202861,421.535876],[1183.00,78.614193,-186.387003,184.778874,-36.776172],[622.00,-180.732815,-316.800070,335.321713,-145.278396],[882.00,-87.676083,198.296701,-185.138669,-34.744450],[547.00,46.140315,101.135679,-120.972830,22.885731]];
+  const xypol = [[5453.282155, 0.4252841, -0.00037173, -0.000000152], [-73750.930350, -0.7675452, -0.00018725, 0.000000231]];
+  const xyper = [[256.75,-819.940624,75004.344875,81491.287984,1558.515853],[708.15,-8444.676815,624.033993,787.163481,7774.939698],[274.20,2600.009459,1251.136893,1251.296102,-2219.534038],[241.45,2755.175630,-1102.212834,-1257.950837,-2523.969396],[2309.00,-167.659835,-2660.664980,-2966.799730,247.850422],[492.20,871.855056,699.291817,639.744522,-846.485643],[396.10,44.769698,153.167220,131.600209,-1393.124055],[288.90,-512.313065,-950.865637,-445.040117,368.526116],[231.10,-819.415595,499.754645,584.522874,749.045012],[1610.00,-538.071099,-145.188210,-89.756563,444.704518],[620.00,-189.793622,558.116553,524.429630,235.934465],[157.87,-402.922932,-23.923029,-13.549067,374.049623],[220.30,179.516345,-165.405086,-210.157124,-171.330180],[1200.00,-9.814756,9.344131,-44.919798,-22.899655]];
+  const eps0 = 84381.406 * AS;
+  function series(pol, per, t) {
+    let p = 0, q = 0;
+    for (const [P, a, b, c, d] of per) {
+      const w = 2 * Math.PI * t / P, s = Math.sin(w), co = Math.cos(w);
+      p += co * a + s * c; q += co * b + s * d;
+    }
+    let w = 1;
+    for (let i = 0; i < 4; i++) { p += pol[0][i] * w; q += pol[1][i] * w; w *= t; }
+    return [p * AS, q * AS];
+  }
+  function ecl(epj) {
+    const [p, q] = series(pqpol, pqper, (epj - 2000) / 100);
+    const w = Math.sqrt(Math.max(0, 1 - p * p - q * q)), s = Math.sin(eps0), c = Math.cos(eps0);
+    return [p, -q * c - w * s, -q * s + w * c];
+  }
+  function equ(epj) {
+    const [x, y] = series(xypol, xyper, (epj - 2000) / 100);
+    return [x, y, Math.sqrt(Math.max(0, 1 - x * x - y * y))];
+  }
+  const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const unit = v => { const n = Math.hypot(...v); return v.map(x => x / n); };
+  function matrix(epj) {
+    const pe = equ(epj), pc = ecl(epj), x = unit(cross(pe, pc));
+    return [x, cross(pe, x), pe];
+  }
+  return { ecl, equ, matrix };
+})();
+const mul = (M, v) => [M[0][0]*v[0] + M[0][1]*v[1] + M[0][2]*v[2], M[1][0]*v[0] + M[1][1]*v[1] + M[1][2]*v[2], M[2][0]*v[0] + M[2][1]*v[1] + M[2][2]*v[2]];
+const dot = (a, b) => a[0]*b[0] + a[1]*b[1] + a[2]*b[2];
+
+function kepler(M, e) {
+  let E = M + e * Math.sin(M);
+  for (let i = 0; i < 30; i++) {
+    const dE = (E - e * Math.sin(E) - M) / (1 - e * Math.cos(E));
+    E -= dE; if (Math.abs(dE) < 1e-12) break;
+  }
+  return E;
+}
+// Days from J2000.0 (2000 Jan 1 12h) to 0h on a proleptic Gregorian date.
+function daysJ2000(y, m, d) {
+  const t = new Date(0); t.setUTCFullYear(y, m, d); t.setUTCHours(0, 0, 0, 0);
+  return t.getTime() / 864e5 + 2440587.5 - 2451545.0;
+}
+// The Sun from the Astronomical Almanac's low-precision formulae (about 0.01
+// degree near the present): mean longitude L, mean anomaly g, and ecliptic
+// longitude lambda, all in degrees, referred to the equinox of date.
+function sun(n) {
+  const L = 280.460 + 0.9856474 * n, g = 357.528 + 0.9856003 * n;
+  return { L, g, lam: L + 1.915 * Math.sin(g * DEG) + 0.020 * Math.sin(2 * g * DEG) };
+}
+
+// ── Figure 1: the celestial sphere ──
+(async function () {
+  const raw = await d3.csv('shared/data/bsc5.csv', d3.autoType);
+  const stars = raw.map(s => {
+    const a = s.ra * DEG, d = s.dec * DEG;
+    return {
+      name: s.name, bayer: s.bayer, V: s.V,
+      p: [Math.cos(d) * Math.cos(a), Math.cos(d) * Math.sin(a), Math.sin(d)],
+      e: [-Math.sin(a), Math.cos(a), 0],
+      nn: [-Math.sin(d) * Math.cos(a), -Math.sin(d) * Math.sin(a), Math.cos(d)],
+      pa: s.pmra * AS, pd: s.pmdec * AS,
+      col: blackbody(bvTeff(s.bv == null ? 0.6 : Math.max(-0.35, Math.min(2.2, s.bv)))),
+    };
+  });
+  // Straight-line proper motion from J2000 (tangent-plane step, renormalised).
+  function starAt(s, epj) {
+    const dt = epj - 2000;
+    const v = [0, 1, 2].map(i => s.p[i] + dt * (s.pa * s.e[i] + s.pd * s.nn[i]));
+    const n = Math.hypot(...v); return [v[0] / n, v[1] / n, v[2] / n];
+  }
+  const LABELLED = new Set(['Polaris', 'Vega', 'Thuban', 'Sirius', 'Arcturus', 'Capella', 'Rigel', 'Betelgeuse', 'Procyon', 'Altair', 'Deneb', 'Aldebaran', 'Antares', 'Spica', 'Canopus', 'Fomalhaut', 'Regulus', 'Achernar', 'Acrux', 'Dubhe', 'Kochab', 'Schedar']);
+
+  const el = document.getElementById('sp-plot'), canvas = el.querySelector('canvas'), ctx = canvas.getContext('2d');
+  const S = { lat: 40, day: 14, time: 21, year: 2026, vaz: 20, valt: 28, playing: false };
+  const dpr = window.devicePixelRatio || 1;
+  let W = 0, H = 0, R = 0, proj;
+  let C = {};
+  function readColors() {
+    C = { sky: css('--sky'), ink: css('--sky-ink'), dim: css('--sky-dim'), ground: css('--ground'), hz: css('--horizon'), sun: css('--sun'), bg: css('--fig-bg') };
+  }
+
+  // Everything the scene needs, from the controls: epoch, precession matrix,
+  // local sidereal time, and the transform to the horizon frame.
+  function scene() {
+    const n0 = daysJ2000(S.year, 0, 1 + S.day);
+    const t = ((S.time % 24) + 24) % 24;
+    const n = n0 + t / 24;            // local mean solar time at longitude 0
+    const epj = 2000 + n / 365.25;
+    const Pm = LTP.matrix(epj);
+    const sn = sun(n);
+    // Mean solar time is the hour angle of the mean Sun plus 12 h, and the
+    // mean Sun's right ascension is L, so LST = L + 15 deg x (t - 12).
+    const lst = ((sn.L + 15 * (t - 12)) % 360 + 360) % 360;
+    const ph = S.lat * DEG, th = lst * DEG;
+    const cth = Math.cos(th), sth = Math.sin(th), cph = Math.cos(ph), sph = Math.sin(ph);
+    // Equatorial of date -> [azimuth deg, altitude deg].
+    const hz = v => {
+      const cH = v[0] * cth + v[1] * sth, sH = v[0] * sth - v[1] * cth;
+      const N = v[2] * cph - cH * sph, E = -sH, U = v[2] * sph + cH * cph;
+      return [Math.atan2(E, N) / DEG, Math.asin(Math.max(-1, Math.min(1, U))) / DEG];
+    };
+    const eclp = mul(Pm, LTP.ecl(epj));
+    const eps = Math.acos(eclp[2]);
+    const lam = sn.lam * DEG;
+    // Sun on the ecliptic of date: rotate (cos lam, sin lam, 0) by eps about x.
+    const sunv = [Math.cos(lam), Math.sin(lam) * Math.cos(eps), Math.sin(lam) * Math.sin(eps)];
+    return { n, epj, Pm, lst, hz, eclp, eps, sunv, sn };
+  }
+
+  function layout(w) {
+    W = w; H = Math.round(Math.min(w, narrow() ? 380 : 520));
+    el.style.height = H + 'px';
+    canvas.width = W * dpr; canvas.height = H * dpr;
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    R = H / 2 - 22;
+    proj = d3.geoOrthographic().translate([W / 2, H / 2]).scale(R).clipAngle(90);
+    draw();
+  }
+
+  function draw() {
+    if (!W) return;
+    readColors();
+    const sc = scene();
+    proj.rotate([-S.vaz, -S.valt]);
+    const path = d3.geoPath(proj, ctx);
+    const c0 = [Math.cos(S.valt * DEG) * Math.cos(S.vaz * DEG), Math.cos(S.valt * DEG) * Math.sin(S.vaz * DEG), Math.sin(S.valt * DEG)];
+    const front = (az, alt) => Math.cos(alt * DEG) * Math.cos(az * DEG) * c0[0] + Math.cos(alt * DEG) * Math.sin(az * DEG) * c0[1] + Math.sin(alt * DEG) * c0[2] > 0;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = C.sky;
+    ctx.beginPath(); path({ type: 'Sphere' }); ctx.fill();
+
+    // Stars.
+    const scale = R / 240;
+    let up = 0, circ = 0;
+    const polarLimit = 90 - Math.abs(S.lat);
+    const labels = [];
+    let best = null;
+    for (const s of stars) {
+      const v = mul(sc.Pm, starAt(s, sc.epj));
+      const [az, alt] = sc.hz(v);
+      if (alt > 0) up++;
+      const decDate = Math.asin(v[2]) / DEG;
+      if (S.lat > 0 ? decDate > polarLimit : S.lat < 0 ? decDate < -polarLimit : false) circ++;
+      // Pole star: the nearest star brighter than magnitude 4 to the pole you can see.
+      if (s.V < 4 && (S.lat >= 0 ? v[2] > 0 : v[2] < 0)) {
+        const sep = Math.acos(Math.min(1, Math.abs(v[2]))) / DEG;
+        if (!best || sep < best.sep) best = { name: s.name || s.bayer.replace(/^\d+/, '').trim(), sep };
+      }
+      if (!front(az, alt)) continue;
+      const [x, y] = proj([az, alt]);
+      const r = Math.max(0.55, (2.9 - 0.45 * s.V)) * scale;
+      ctx.fillStyle = s.col;
+      ctx.beginPath(); ctx.arc(x, y, r, 0, 2 * Math.PI); ctx.fill();
+      if (s.name && LABELLED.has(s.name) && alt > -5) labels.push([s.name, x, y, r]);
+    }
+    // Sun.
+    const [saz, salt] = sc.hz(sc.sunv);
+    if (front(saz, salt)) {
+      const [x, y] = proj([saz, salt]);
+      ctx.fillStyle = C.sun; ctx.beginPath(); ctx.arc(x, y, 6 * scale + 2, 0, 2 * Math.PI); ctx.fill();
+      labels.push(['Sun', x, y, 6 * scale + 2]);
+    }
+    // Ground: the hemisphere below the horizon, dimming what lies behind it.
+    ctx.globalAlpha = 0.78; ctx.fillStyle = C.ground;
+    ctx.beginPath(); path(d3.geoCircle().center([0, -90]).radius(90).precision(2)()); ctx.fill();
+    ctx.globalAlpha = 1;
+
+    const ring = (center, radius, color, width, dash) => {
+      ctx.strokeStyle = color; ctx.lineWidth = width; ctx.setLineDash(dash || []);
+      ctx.beginPath(); path(d3.geoCircle().center(center).radius(radius).precision(1)()); ctx.stroke();
+      ctx.setLineDash([]);
+    };
+    const ncp = [0, S.lat];
+    ring(ncp, 90, C.ink, 1, [4, 4]);                                  // celestial equator
+    ring(sc.hz(sc.eclp), 90, C.sun, 1.6);                              // ecliptic
+    if (Math.abs(S.lat) > 0.5) ring(S.lat > 0 ? ncp : [180, -S.lat], Math.abs(S.lat), C.ink, 1, [1.5, 3]); // circumpolar limit
+    ring([0, 90], 90, C.hz, 2);                                        // horizon
+
+    // The pole's path over the slider's range, in today's frame of the stars.
+    const pts = d3.range(-12000, 14001, 100).map(y => sc.hz(mul(sc.Pm, LTP.equ(y))));
+    ctx.strokeStyle = C.dim; ctx.lineWidth = 1; ctx.setLineDash([]);
+    ctx.beginPath(); path({ type: 'LineString', coordinates: pts }); ctx.stroke();
+    ctx.font = `11px ${css('--heading-font')}`;
+    ctx.fillStyle = C.dim;
+    for (const y of [-9999, -4999, 5000, 10000]) {
+      const p = sc.hz(mul(sc.Pm, LTP.equ(y)));
+      if (!front(...p)) continue;
+      const [x, yy] = proj(p);
+      ctx.beginPath(); ctx.arc(x, yy, 2, 0, 2 * Math.PI); ctx.fill();
+      ctx.fillText(fmtYear(y), x + 5, yy + 4);
+    }
+    // The pole of date.
+    const pole = S.lat >= 0 ? ncp : [180, -S.lat];
+    if (front(...pole)) {
+      const [x, y] = proj(pole);
+      ctx.strokeStyle = C.ink; ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.moveTo(x - 6, y); ctx.lineTo(x + 6, y); ctx.moveTo(x, y - 6); ctx.lineTo(x, y + 6); ctx.stroke();
+    }
+    // Labels, clipped to the globe.
+    ctx.save(); ctx.beginPath(); path({ type: 'Sphere' }); ctx.clip();
+    ctx.fillStyle = C.ink;
+    for (const [name, x, y, r] of labels) ctx.fillText(name, x + r + 3, y - r - 1);
+    ctx.restore();
+    // Compass points on the horizon.
+    ctx.fillStyle = C.hz; ctx.font = `600 12px ${css('--heading-font')}`;
+    for (const [lab, az] of [['N', 0], ['E', 90], ['S', 180], ['W', 270]]) {
+      if (!front(az, 0)) continue;
+      const [x, y] = proj([az, 0]);
+      ctx.fillText(lab, x - 4, y + 15);
+    }
+    // Rim.
+    ctx.strokeStyle = C.dim; ctx.lineWidth = 1;
+    ctx.beginPath(); path({ type: 'Sphere' }); ctx.stroke();
+
+    const h = sc.lst / 15, hh = Math.floor(h), mm = Math.floor((h - hh) * 60);
+    const poleName = S.lat >= 0 ? 'north' : 'south';
+    const bestTxt = best ? `The star brighter than magnitude 4 nearest the ${poleName} celestial pole is <b>${best.name}</b>, ${best.sep.toFixed(best.sep < 2 ? 2 : 1)}&deg; away.` : '';
+    const daily = sun(sc.n + 1).L - sun(sc.n).L;
+    document.getElementById('sp-ro').innerHTML =
+      `Local sidereal time <b>${hh}h ${String(mm).padStart(2, '0')}m</b>. <b>${d3.format(',')(up)}</b> of the ${d3.format(',')(stars.length)} stars are above the horizon, and <b>${d3.format(',')(circ)}</b> never set at this latitude. ` +
+      `A day later at the same clock time the sky has turned a further ${daily.toFixed(2)}&deg;, about ${(daily * 4).toFixed(2)} minutes of rotation. ${bestTxt} Tilt of the axis ${(sc.eps / DEG).toFixed(2)}&deg;.`;
+    FIG1.last = { up, circ, best, eps: sc.eps / DEG, lst: sc.lst };
+  }
+  const FIG1 = window.FIG1 = {};
+
+  // Controls.
+  const q = id => document.getElementById(id);
+  const fmtLat = v => `${Math.abs(v)}&deg; ${v > 0 ? 'N' : v < 0 ? 'S' : ''}`.trim();
+  const fmtDay = d => d3.utcFormat('%-d %b')(new Date(Date.UTC(2025, 0, 1 + d)));
+  const fmtTime = t => { t = ((t % 24) + 24) % 24; const h = Math.floor(t), m = Math.floor((t - h) * 60); return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`; };
+  function syncLabels() {
+    q('sp-lat-v').innerHTML = fmtLat(S.lat);
+    q('sp-day-v').textContent = fmtDay(S.day);
+    q('sp-time-v').textContent = fmtTime(S.time);
+    q('sp-year-v').textContent = fmtYear(S.year);
+    document.querySelectorAll('#fig-sphere [data-year]').forEach(b => b.setAttribute('aria-pressed', String(+b.dataset.year === S.year)));
+  }
+  let raf = 0;
+  const kick = () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; syncLabels(); draw(); }); };
+  q('sp-lat').addEventListener('input', e => { S.lat = +e.target.value; kick(); });
+  q('sp-day').addEventListener('input', e => { S.day = +e.target.value; kick(); });
+  q('sp-time').addEventListener('input', e => { S.time = +e.target.value; kick(); });
+  q('sp-year').addEventListener('input', e => { S.year = +e.target.value; kick(); });
+  document.querySelectorAll('#fig-sphere [data-year]').forEach(b => b.addEventListener('click', () => {
+    S.year = +b.dataset.year; q('sp-year').value = S.year; kick();
+  }));
+  // Play: one sidereal hour of rotation per second, only while on screen.
+  let onScreen = false, last = 0;
+  const playBtn = q('sp-play');
+  function tick(ts) {
+    if (!S.playing || !onScreen) { last = 0; return; }
+    if (last) {
+      S.time += (ts - last) / 1000;
+      if (S.time >= 36) S.time -= 24;
+      q('sp-time').value = S.time; syncLabels(); draw();
+    }
+    last = ts; requestAnimationFrame(tick);
+  }
+  playBtn.addEventListener('click', () => {
+    S.playing = !S.playing; playBtn.textContent = S.playing ? 'Pause' : 'Play';
+    last = 0; if (S.playing) requestAnimationFrame(tick);
+  });
+  Motion.onVisible(q('fig-sphere'), v => { onScreen = v; if (v && S.playing) { last = 0; requestAnimationFrame(tick); } });
+
+  // Drag and keys turn the view.
+  d3.select(canvas).call(d3.drag()
+    .on('drag', ev => {
+      S.vaz = (S.vaz - ev.dx * 0.35 + 360) % 360;
+      S.valt = Math.max(-30, Math.min(90, S.valt + ev.dy * 0.35));
+      kick();
+    }));
+  canvas.addEventListener('keydown', ev => {
+    const k = { ArrowLeft: [5, 0], ArrowRight: [-5, 0], ArrowUp: [0, -5], ArrowDown: [0, 5] }[ev.key];
+    if (!k) return;
+    ev.preventDefault();
+    S.vaz = (S.vaz + k[0] + 360) % 360; S.valt = Math.max(-30, Math.min(90, S.valt + k[1])); kick();
+  });
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', draw);
+
+  // Pole-star numbers for the prose, computed from the same model.
+  const polaris = stars.find(s => s.name === 'Polaris');
+  const sepAt = y => Math.acos(Math.min(1, dot(LTP.equ(y), starAt(polaris, y)))) / DEG;
+  let bestP = [99, 0];
+  for (let y = 1900; y <= 2300; y += 1) { const d = sepAt(y); if (d < bestP[0]) bestP = [d, y]; }
+  q('sp-pol-now').textContent = sepAt(2026).toFixed(1);
+  q('sp-pol-min').textContent = bestP[0].toFixed(2);
+  q('sp-pol-yr').textContent = Math.round(bestP[1] / 10) * 10;
+
+  syncLabels();
+  responsive(el, layout);
+})();
+
+// ── Figure 2: the equation of time and the analemma ──
+(function () {
+  const VARPI = 282.93;          // longitude of perihelion, L - g in the Almanac formulae
+  const S = { eps: 23.44, e: 0.0167, day: 306 };
+  const YEAR0 = daysJ2000(2026, 0, 1) + 0.5;  // noon, 1 January 2026
+  const days = d3.range(0, 365);
+  // Equation of time for a Kepler orbit: mean anomaly from the Almanac, true
+  // longitude from Kepler's equation, right ascension by projection.
+  function eot(n, eps, e) {
+    const g = (357.528 + 0.9856003 * n) * DEG, E = kepler(g, e);
+    const nu = 2 * Math.atan2(Math.sqrt(1 + e) * Math.sin(E / 2), Math.sqrt(1 - e) * Math.cos(E / 2));
+    const lam = nu + VARPI * DEG, L = g + VARPI * DEG;
+    const alpha = Math.atan2(Math.cos(eps * DEG) * Math.sin(lam), Math.cos(lam));
+    const w = x => Math.atan2(Math.sin(x), Math.cos(x));
+    const ecc = w(L - lam) / DEG * 4, tilt = w(lam - alpha) / DEG * 4;
+    return { ecc, tilt, total: ecc + tilt, dec: Math.asin(Math.sin(eps * DEG) * Math.sin(lam)) / DEG };
+  }
+  const anaEl = document.getElementById('eo-ana'), curEl = document.getElementById('eo-curve');
+  const A = { svg: d3.select(anaEl).select('svg') }, K = { svg: d3.select(curEl).select('svg') };
+  const M = { t: 10, r: 14, b: 38, l: 44 };
+  let data = [];
+  const dateOf = d => new Date(Date.UTC(2026, 0, 1 + d));
+  const firsts = d3.range(12).map(m => ({ d: Math.round((Date.UTC(2026, m, 1) - Date.UTC(2026, 0, 1)) / 864e5), lab: d3.utcFormat('%b')(new Date(Date.UTC(2026, m, 1))) }));
+
+  function compute() { data = days.map(d => ({ d, ...eot(YEAR0 + d, S.eps, S.e) })); }
+
+  function setupAna(w) {
+    const h = narrow() ? 300 : 330;
+    A.w = w; A.h = h; anaEl.style.height = h + 'px';
+    A.svg.attr('width', w).attr('height', h).selectAll('*').remove();
+    A.gx = A.svg.append('g').attr('class', 'axis').attr('transform', `translate(0,${h - M.b})`);
+    A.gy = A.svg.append('g').attr('class', 'axis').attr('transform', `translate(${M.l},0)`);
+    A.svg.append('text').attr('class', 'axis-label').attr('x', (M.l + w - M.r) / 2).attr('y', h - 4).attr('text-anchor', 'middle').text('sundial minus clock (min)  → Sun west of south');
+    A.svg.append('text').attr('class', 'axis-label').attr('transform', `translate(11,${(M.t + h - M.b) / 2}) rotate(-90)`).attr('text-anchor', 'middle').text('declination (°)');
+    A.zx = A.svg.append('line').attr('class', 'zero'); A.zy = A.svg.append('line').attr('class', 'zero');
+    A.path = A.svg.append('path').attr('class', 'model');
+    A.marks = A.svg.append('g'); A.now = A.svg.append('circle').attr('class', 'now-dot').attr('r', 5);
+    draw();
+  }
+  function setupCurve(w) {
+    const h = narrow() ? 240 : 330;
+    K.w = w; K.h = h; curEl.style.height = h + 'px';
+    K.svg.attr('width', w).attr('height', h).selectAll('*').remove();
+    K.x = d3.scaleUtc().domain([dateOf(0), dateOf(364)]).range([M.l, w - M.r]);
+    K.gx = K.svg.append('g').attr('class', 'axis').attr('transform', `translate(0,${h - M.b})`)
+      .call(d3.axisBottom(K.x).ticks(d3.utcMonth.every(narrow() ? 2 : 1)).tickFormat(d3.utcFormat('%b')));
+    K.gy = K.svg.append('g').attr('class', 'axis').attr('transform', `translate(${M.l},0)`);
+    K.svg.append('text').attr('class', 'axis-label').attr('transform', `translate(11,${(M.t + h - M.b) / 2}) rotate(-90)`).attr('text-anchor', 'middle').text('minutes (sundial ahead ↑)');
+    K.zero = K.svg.append('line').attr('class', 'zero');
+    K.ecc = K.svg.append('path').attr('class', 'model-thin');
+    K.tilt = K.svg.append('path').attr('class', 'model-dot');
+    K.tot = K.svg.append('path').attr('class', 'model');
+    K.labs = K.svg.append('g');
+    K.now = K.svg.append('line').attr('class', 'now');
+    K.nowDot = K.svg.append('circle').attr('class', 'now-dot').attr('r', 4.5);
+    K.hit = K.svg.append('rect').attr('class', 'hit').attr('x', M.l).attr('y', M.t).attr('width', w - M.l - M.r).attr('height', h - M.t - M.b)
+      .attr('tabindex', 0).attr('role', 'slider').attr('aria-label', 'Date on the equation-of-time curve')
+      .on('pointermove pointerdown', ev => { const [x] = d3.pointer(ev); setDay(Math.round((K.x.invert(x) - dateOf(0)) / 864e5)); })
+      .on('keydown', ev => { const s = { ArrowLeft: -1, ArrowRight: 1, PageDown: -30, PageUp: 30 }[ev.key]; if (s) { ev.preventDefault(); setDay(S.day + s); } });
+    draw();
+  }
+  function setDay(d) { S.day = Math.max(0, Math.min(364, d)); drawNow(); }
+  const lim = (v, step, min) => Math.max(min, Math.ceil(v / step) * step);
+
+  function draw() {
+    if (!A.w || !K.w) return;
+    compute();
+    // Axes stay put unless the curve would leave them, so shrinking the tilt
+    // visibly shrinks the declination range.
+    const xm = lim(d3.max(data, r => Math.abs(r.total)) * 1.05, 10, 20);
+    const ym = S.eps > 27 ? 45 : 30;
+    A.x = d3.scaleLinear().domain([-xm, xm]).range([M.l, A.w - M.r]);
+    A.y = d3.scaleLinear().domain([-ym, ym]).range([A.h - M.b, M.t]);
+    A.gx.call(d3.axisBottom(A.x).ticks(6)); A.gy.call(d3.axisLeft(A.y).ticks(6));
+    A.zx.attr('x1', A.x(0)).attr('x2', A.x(0)).attr('y1', M.t).attr('y2', A.h - M.b);
+    A.zy.attr('x1', M.l).attr('x2', A.w - M.r).attr('y1', A.y(0)).attr('y2', A.y(0));
+    A.path.attr('d', d3.line().x(r => A.x(r.total)).y(r => A.y(r.dec))(data.concat([data[0]])));
+    const mk = A.marks.selectAll('g').data(firsts).join(en => { const g = en.append('g'); g.append('circle').attr('r', 2.6).attr('fill', 'var(--fig-bg)').attr('stroke', 'var(--c-model)'); g.append('text').attr('class', 'dim-lab'); return g; });
+    mk.attr('transform', f => `translate(${A.x(data[f.d].total)},${A.y(data[f.d].dec)})`);
+    mk.select('text').attr('x', f => data[f.d].total >= 0 ? 6 : -6).attr('text-anchor', f => data[f.d].total >= 0 ? 'start' : 'end').attr('dy', '0.35em').text(f => narrow() && f.d % 2 ? '' : f.lab);
+
+    const km = lim(d3.max(data, r => Math.max(Math.abs(r.total), Math.abs(r.ecc), Math.abs(r.tilt))) * 1.1, 5, 10);
+    K.y = d3.scaleLinear().domain([-km, km]).range([K.h - M.b, M.t]);
+    K.gy.call(d3.axisLeft(K.y).ticks(6));
+    K.zero.attr('x1', M.l).attr('x2', K.w - M.r).attr('y1', K.y(0)).attr('y2', K.y(0));
+    const ln = key => d3.line().x(r => K.x(dateOf(r.d))).y(r => K.y(r[key]))(data);
+    K.ecc.attr('d', ln('ecc')); K.tilt.attr('d', ln('tilt')); K.tot.attr('d', ln('total'));
+    // Direct labels at each curve's largest value.
+    const labs = [['total', 'total'], ['ecc', 'eccentricity'], ['tilt', 'tilt']].map(([k, t]) => {
+      const r = data.reduce((a, b) => (b[k] > a[k] ? b : a));
+      return { k, t, x: K.x(dateOf(r.d)), y: K.y(r[k]), v: r[k] };
+    }).filter(l => Math.abs(l.v) > 0.3)
+      .filter((l, i, arr) => !arr.slice(0, i).some(o => Math.abs(o.x - l.x) < 70 && Math.abs(o.y - l.y) < 14));
+    K.labs.selectAll('text').data(labs, l => l.k).join('text').attr('class', 'model-lab')
+      .attr('x', l => Math.min(K.w - M.r - 4, Math.max(M.l + 4, l.x))).attr('y', l => l.y - 7)
+      .attr('text-anchor', l => l.x > K.w - 90 ? 'end' : l.x < M.l + 60 ? 'start' : 'middle').text(l => l.t);
+    drawNow();
+  }
+  function drawNow() {
+    if (!A.x || !K.y) return;
+    const r = data[S.day];
+    A.now.attr('cx', A.x(r.total)).attr('cy', A.y(r.dec));
+    K.now.attr('x1', K.x(dateOf(r.d))).attr('x2', K.x(dateOf(r.d))).attr('y1', M.t).attr('y2', K.h - M.b);
+    K.nowDot.attr('cx', K.x(dateOf(r.d))).attr('cy', K.y(r.total));
+    K.hit.attr('aria-valuetext', d3.utcFormat('%-d %B')(dateOf(r.d)));
+    const mx = data.reduce((a, b) => (b.total > a.total ? b : a)), mn = data.reduce((a, b) => (b.total < a.total ? b : a));
+    const ms = v => { const s = Math.round(Math.abs(v) * 60); return `${Math.floor(s / 60)} min ${String(s % 60).padStart(2, '0')} s`; };
+    const fmt = d3.utcFormat('%-d %B');
+    document.getElementById('eo-ro').innerHTML =
+      `<b>${fmt(dateOf(r.d))}</b>: the sundial is ${r.total >= 0 ? 'ahead of' : 'behind'} the clock by <b>${ms(r.total)}</b> ` +
+      `(eccentricity ${r.ecc >= 0 ? '+' : '&minus;'}${Math.abs(r.ecc).toFixed(1)}, tilt ${r.tilt >= 0 ? '+' : '&minus;'}${Math.abs(r.tilt).toFixed(1)} min), and the noon Sun stands at declination ${r.dec < 0 ? '&minus;' : ''}${Math.abs(r.dec).toFixed(1)}&deg;. ` +
+      `Over the year: most ahead ${ms(mx.total)} on ${fmt(dateOf(mx.d))}, most behind ${ms(mn.total)} on ${fmt(dateOf(mn.d))}.`;
+    window.FIG2 = { mx, mn, data };
+  }
+  const q = id => document.getElementById(id);
+  function sync() {
+    q('eo-eps-v').innerHTML = `${S.eps.toFixed(1)}&deg;`; q('eo-e-v').textContent = S.e.toFixed(4);
+    q('eo-eps').value = S.eps; q('eo-e').value = S.e;
+    const p = S.eps === 23.44 && S.e === 0.0167 ? 'earth' : S.e === 0 && S.eps === 23.44 ? 'circ' : S.eps === 3 && S.e === 0.0167 ? 'small' : '';
+    document.querySelectorAll('#fig-eot [data-p]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.p === p)));
+  }
+  q('eo-eps').addEventListener('input', e => { S.eps = +e.target.value; sync(); draw(); });
+  q('eo-e').addEventListener('input', e => { S.e = +e.target.value; sync(); draw(); });
+  document.querySelectorAll('#fig-eot [data-p]').forEach(b => b.addEventListener('click', () => {
+    [S.eps, S.e] = { earth: [23.44, 0.0167], circ: [23.44, 0], small: [3, 0.0167] }[b.dataset.p];
+    sync(); draw();
+  }));
+  sync();
+  responsive(anaEl, setupAna);
+  responsive(curEl, setupCurve);
+})();
+
+// ── Figure 3: retrograde motion ──
+(async function () {
+  const rows = await d3.csv('shared/data/planets.csv', d3.autoType);
+  const EL = Object.fromEntries(rows.map(r => [r.body, r]));
+  // Heliocentric J2000 ecliptic position (au) from JPL's approximate
+  // elements (Standish, Table 1), T in Julian centuries from J2000.
+  function helio(el, T) {
+    const a = el.a + el.a_dot * T, e = el.e + el.e_dot * T;
+    const I = (el.I + el.I_dot * T) * DEG, L = el.L + el.L_dot * T;
+    const vp = el.varpi + el.varpi_dot * T, Om = (el.Omega + el.Omega_dot * T) * DEG;
+    const w = vp * DEG - Om;
+    const E = kepler(wrap180(L - vp) * DEG, e);
+    const xp = a * (Math.cos(E) - e), yp = a * Math.sqrt(1 - e * e) * Math.sin(E);
+    const cw = Math.cos(w), sw = Math.sin(w), cO = Math.cos(Om), sO = Math.sin(Om), cI = Math.cos(I), sI = Math.sin(I);
+    return [(cw * cO - sw * sO * cI) * xp + (-sw * cO - cw * sO * cI) * yp,
+            (cw * sO + sw * cO * cI) * xp + (-sw * sO + cw * cO * cI) * yp,
+            (sw * sI) * xp + (cw * sI) * yp];
+  }
+  const N0 = daysJ2000(2024, 6, 1), SPAN = 1096;
+  const T = n => n / 36525;
+  const geoLon = (pl, n) => { const E = helio(EL.Earth, T(n)), P = helio(EL[pl], T(n)); return Math.atan2(P[1] - E[1], P[0] - E[0]) / DEG; };
+  // Daily longitudes, unwrapped, and the retrograde spells found in them
+  // (stations located by linear interpolation of the daily rate).
+  function series(pl, n0, days) {
+    const out = []; let prev = null, off = 0;
+    for (let i = 0; i <= days; i++) {
+      let l = geoLon(pl, n0 + i);
+      if (prev !== null) { while (l + off - prev > 180) off -= 360; while (l + off - prev < -180) off += 360; }
+      out.push({ i, lon: l + off }); prev = l + off;
+    }
+    const spells = [];
+    let start = null;
+    for (let i = 1; i < out.length; i++) {
+      const retro = out[i].lon < out[i - 1].lon;
+      out[i].retro = retro;
+      if (retro && start === null) start = i - 1;
+      if (!retro && start !== null) { spells.push({ a: start, b: i - 1, arc: out[start].lon - out[i - 1].lon }); start = null; }
+    }
+    if (start !== null) spells.push({ a: start, b: out.length - 1, arc: out[start].lon - out[out.length - 1].lon, open: true });
+    for (const s of spells) if (s.a === 0) s.open = true;
+    return { out, spells };
+  }
+  const PLANETS = ['Mercury', 'Venus', 'Mars', 'Jupiter', 'Saturn', 'Uranus', 'Neptune'];
+  // Fifty-year averages for the comparison chart.
+  const AVG = PLANETS.map(pl => {
+    const { spells } = series(pl, daysJ2000(1990, 0, 1), Math.round(50 * 365.25));
+    const full = spells.filter(s => !s.open);
+    return { pl, a: EL[pl].a, days: d3.mean(full, s => s.b - s.a), arc: d3.mean(full, s => s.arc), n: full.length };
+  });
+  window.FIG3 = { AVG };
+  const byPl = Object.fromEntries(AVG.map(r => [r.pl, r]));
+  const r0 = v => Math.round(v);
+  document.getElementById('rt-nep-d').textContent = r0(byPl.Neptune.days);
+  document.getElementById('rt-nep-a').textContent = byPl.Neptune.arc.toFixed(0);
+  document.getElementById('rt-mars-d').textContent = r0(byPl.Mars.days);
+  document.getElementById('rt-mars-a').textContent = byPl.Mars.arc.toFixed(0);
+
+  const S = { pl: 'Mars', t: 160, playing: false };
+  let SER = series(S.pl, N0, SPAN);
+  const topEl = document.getElementById('rt-top'), stripEl = document.getElementById('rt-strip'), allEl = document.getElementById('rt-all');
+  const Tp = { svg: d3.select(topEl).select('svg') }, St = { svg: d3.select(stripEl).select('svg') }, Al = { svg: d3.select(allEl).select('svg') };
+  const M = { t: 10, r: 12, b: 32, l: 46 };
+  const dateOf = i => new Date((N0 + i + 2451545 - 2440587.5) * 864e5);
+  const fmtD = d3.utcFormat('%Y %b %-d');
+
+  function setupTop(w) {
+    const h = Math.min(w, narrow() ? 300 : 360);
+    Tp.w = w; Tp.h = h; topEl.style.height = h + 'px';
+    Tp.svg.attr('width', w).attr('height', h).selectAll('*').remove();
+    Tp.g = Tp.svg.append('g').attr('transform', `translate(${w / 2},${h / 2})`);
+    Tp.ring = Tp.g.append('circle').attr('class', 'ring');
+    Tp.orbE = Tp.g.append('path').attr('class', 'orbit-earth');
+    Tp.orbP = Tp.g.append('path').attr('class', 'orbit');
+    Tp.trail = Tp.g.append('g');
+    Tp.sight = Tp.g.append('line').attr('class', 'sightline');
+    Tp.g.append('circle').attr('class', 'sun').attr('r', 5);
+    Tp.earth = Tp.g.append('circle').attr('class', 'earth').attr('r', 4.5);
+    Tp.planet = Tp.g.append('circle').attr('class', 'planet').attr('r', 4);
+    Tp.hit = Tp.g.append('circle').attr('class', 'ring-mark').attr('r', 3.5);
+    Tp.lab = Tp.g.append('text').attr('class', 'dim-lab');
+    Tp.labE = Tp.g.append('text').attr('class', 'dim-lab').text('Earth').style('fill', 'var(--c-earth)');
+    drawTop(true);
+  }
+  function setupStrip(w) {
+    const h = narrow() ? 200 : 220;
+    St.w = w; St.h = h; stripEl.style.height = h + 'px';
+    St.svg.attr('width', w).attr('height', h).selectAll('*').remove();
+    St.x = d3.scaleUtc().domain([dateOf(0), dateOf(SPAN)]).range([M.l, w - M.r]);
+    St.svg.append('g').attr('class', 'axis').attr('transform', `translate(0,${h - M.b})`).call(d3.axisBottom(St.x).ticks(narrow() ? 4 : 7));
+    St.gy = St.svg.append('g').attr('class', 'axis').attr('transform', `translate(${M.l},0)`);
+    St.svg.append('text').attr('class', 'axis-label').attr('transform', `translate(11,${(M.t + h - M.b) / 2}) rotate(-90)`).attr('text-anchor', 'middle').text('ecliptic longitude (°)');
+    St.wrap = St.svg.append('g');
+    St.line = St.svg.append('path').attr('class', 'track');
+    St.retro = St.svg.append('g');
+    St.now = St.svg.append('line').attr('class', 'now');
+    St.dot = St.svg.append('circle').attr('class', 'now-dot').attr('r', 4.5);
+    St.hit = St.svg.append('rect').attr('class', 'hit').attr('x', M.l).attr('y', M.t).attr('width', w - M.l - M.r).attr('height', h - M.t - M.b)
+      .on('pointerdown pointermove', ev => { if (ev.type === 'pointermove' && !ev.buttons) return; const [x] = d3.pointer(ev); setT(Math.round((St.x.invert(x) - dateOf(0)) / 864e5)); });
+    drawStrip();
+  }
+  function setupAll(w) {
+    const h = narrow() ? 170 : 150;
+    Al.w = w; Al.h = h; allEl.style.height = h + 'px';
+    Al.svg.attr('width', w).attr('height', h).selectAll('*').remove();
+    const x = d3.scaleLog().domain([0.3, 40]).range([M.l, w - M.r - 10]);
+    const y = d3.scaleLinear().domain([0, 180]).range([h - M.b, M.t + 6]);
+    Al.svg.append('g').attr('class', 'axis').attr('transform', `translate(0,${h - M.b})`).call(d3.axisBottom(x).tickValues([0.5, 1, 2, 5, 10, 20]).tickFormat(d => d + ' au'));
+    Al.svg.append('g').attr('class', 'axis').attr('transform', `translate(${M.l},0)`).call(d3.axisLeft(y).ticks(4));
+    Al.svg.append('text').attr('class', 'axis-label').attr('transform', `translate(11,${(M.t + h - M.b) / 2}) rotate(-90)`).attr('text-anchor', 'middle').text('days');
+    Al.x = x; Al.y = y;
+    const g = Al.svg.append('g').selectAll('g').data(AVG).join('g').attr('transform', r => `translate(${x(r.a)},${y(r.days)})`);
+    g.append('circle').attr('r', 4).attr('class', 'planet');
+    // Name above, degrees lost below (Neptune's name goes below too, clear of Uranus).
+    const abbr = { Mercury: 'Me', Venus: 'Ve', Mars: 'Ma', Jupiter: 'Ju', Saturn: 'Sa', Uranus: 'Ur', Neptune: 'Ne' };
+    g.append('text').attr('class', 'ink-lab').attr('dy', r => r.pl === 'Neptune' ? '2.5em' : '-0.7em').attr('text-anchor', 'middle').text(r => narrow() ? abbr[r.pl] : r.pl);
+    g.append('text').attr('class', 'dim-lab').attr('dy', '1.35em').attr('text-anchor', 'middle').text(r => `${Math.round(r.arc)}°`);
+    Al.sel = Al.svg.append('circle').attr('r', 7).attr('class', 'cand-sel');
+    drawAll();
+  }
+  function drawAll() { if (!Al.x) return; const r = byPl[S.pl]; Al.sel.attr('cx', Al.x(r.a)).attr('cy', Al.y(r.days)); }
+
+  function scaleTop() {
+    const a = Math.max(EL[S.pl].a * (1 + EL[S.pl].e), 1.02);
+    return (Math.min(Tp.w, Tp.h) / 2 - 14) / (a * 1.35);
+  }
+  function drawTop(full) {
+    if (!Tp.w) return;
+    const k = scaleTop(), Rr = Math.min(Tp.w, Tp.h) / 2 - 8;
+    // Screen: x = ecliptic X, y up = ecliptic Y (seen from the north).
+    const P = v => [v[0] * k, -v[1] * k];
+    if (full) {
+      const orbitPath = pl => { const per = 365.25 * Math.pow(EL[pl].a, 1.5); return d3.line()(d3.range(0, 1.001, 1 / 240).map(f => P(helio(EL[pl], T(N0 + f * per))))); };
+      Tp.ring.attr('r', Rr);
+      Tp.orbE.attr('d', orbitPath('Earth'));
+      Tp.orbP.attr('d', orbitPath(S.pl));
+    }
+    const n = N0 + S.t;
+    const E = P(helio(EL.Earth, T(n))), Pl = P(helio(EL[S.pl], T(n)));
+    // Where the Earth-to-planet ray meets the ring.
+    const ray = (e, p) => {
+      const dx = p[0] - e[0], dy = p[1] - e[1], L = Math.hypot(dx, dy), ux = dx / L, uy = dy / L;
+      const b = e[0] * ux + e[1] * uy, c = e[0] * e[0] + e[1] * e[1] - Rr * Rr, s = -b + Math.sqrt(b * b - c);
+      return [e[0] + s * ux, e[1] + s * uy];
+    };
+    const hit = ray(E, Pl);
+    Tp.earth.attr('cx', E[0]).attr('cy', E[1]);
+    Tp.planet.attr('cx', Pl[0]).attr('cy', Pl[1]);
+    Tp.sight.attr('x1', E[0]).attr('y1', E[1]).attr('x2', hit[0]).attr('y2', hit[1]);
+    Tp.hit.attr('cx', hit[0]).attr('cy', hit[1]);
+    Tp.lab.attr('x', Pl[0] + 7).attr('y', Pl[1] - 6).text(S.pl);
+    Tp.labE.attr('x', E[0] + 7).attr('y', E[1] + 13);
+    // Trail on the ring: the last 120 days of sightline hits.
+    const tr = d3.range(Math.max(0, S.t - 120), S.t + 1, 3).map(i => { const nn = N0 + i; return { i, p: ray(P(helio(EL.Earth, T(nn))), P(helio(EL[S.pl], T(nn)))), r: SER.out[i].retro }; });
+    Tp.trail.selectAll('circle').data(tr).join('circle').attr('r', d => d.r ? 2.4 : 1.6)
+      .attr('cx', d => d.p[0]).attr('cy', d => d.p[1]).attr('fill', 'var(--text)').attr('fill-opacity', d => 0.25 + 0.6 * (d.i - S.t + 120) / 120);
+  }
+  function drawStrip() {
+    if (!St.w) return;
+    const ext = d3.extent(SER.out, r => r.lon);
+    St.y = d3.scaleLinear().domain([ext[0] - 10, ext[1] + 10]).range([St.h - M.b, M.t]);
+    St.gy.call(d3.axisLeft(St.y).ticks(6).tickFormat(v => `${((v % 360) + 360) % 360}`));
+    // Longitude wraps at 360; mark each wrap so the axis labels read correctly.
+    const wraps = d3.range(Math.ceil(St.y.domain()[0] / 360) * 360, St.y.domain()[1], 360);
+    St.wrap.selectAll('g').data(wraps).join(en => { const g = en.append('g'); g.append('line').attr('class', 'zero'); g.append('text').attr('class', 'dim-lab').attr('dy', -3); return g; })
+      .call(g => g.select('line').attr('x1', M.l).attr('x2', St.w - M.r).attr('y1', v => St.y(v)).attr('y2', v => St.y(v)))
+      .call(g => g.select('text').attr('x', St.w - M.r - 4).attr('text-anchor', 'end').attr('y', v => St.y(v)).text('0\u00b0 = 360\u00b0'));
+    const line = d3.line().x(r => St.x(dateOf(r.i))).y(r => St.y(r.lon));
+    St.line.attr('d', line(SER.out));
+    St.retro.selectAll('path').data(SER.spells).join('path').attr('class', 'track-retro').attr('d', s => line(SER.out.slice(s.a, s.b + 1)));
+    drawNow();
+  }
+  function drawNow() {
+    if (!St.y) return;
+    const r = SER.out[S.t];
+    St.now.attr('x1', St.x(dateOf(S.t))).attr('x2', St.x(dateOf(S.t))).attr('y1', M.t).attr('y2', St.h - M.b);
+    St.dot.attr('cx', St.x(dateOf(S.t))).attr('cy', St.y(r.lon));
+    document.getElementById('rt-date').textContent = fmtD(dateOf(S.t));
+    // Readout: the spell nearest the current date.
+    const sp = SER.spells.filter(s => !s.open);
+    const near = sp.length ? sp.reduce((a, b) => (Math.abs((a.a + a.b) / 2 - S.t) < Math.abs((b.a + b.b) / 2 - S.t) ? a : b)) : null;
+    const inner = EL[S.pl].a < 1;
+    const now = r.retro ? `On ${fmtD(dateOf(S.t))} ${S.pl} is <b>moving backwards</b>.` : `On ${fmtD(dateOf(S.t))} ${S.pl} is moving forwards (east).`;
+    const spTxt = near ? ` Its nearest retrograde spell runs from ${fmtD(dateOf(near.a))} to ${fmtD(dateOf(near.b))}: <b>${near.b - near.a} days</b>, backing up <b>${near.arc.toFixed(1)}&deg;</b>, centred on ${inner ? 'inferior conjunction' : 'opposition'}. ` : ' ';
+    const avg = byPl[S.pl];
+    document.getElementById('rt-ro').innerHTML = now + spTxt + `Averaged over 1990 to 2040: ${Math.round(avg.days)} days and ${avg.arc.toFixed(1)}&deg; per spell, ${avg.n} spells.`;
+  }
+  function setT(t) { S.t = Math.max(0, Math.min(SPAN, t)); document.getElementById('rt-t').value = S.t; drawTop(false); drawNow(); }
+  document.getElementById('rt-t').addEventListener('input', e => setT(+e.target.value));
+  document.querySelectorAll('#fig-retro [data-pl]').forEach(b => b.addEventListener('click', () => {
+    S.pl = b.dataset.pl; SER = series(S.pl, N0, SPAN);
+    document.querySelectorAll('#fig-retro [data-pl]').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+    document.getElementById('rt-sub').textContent = `${S.pl}'s ecliptic longitude, 2024 to 2027`;
+    drawTop(true); drawStrip(); drawAll();
+  }));
+  // Play: two days per frame-second tick, only while visible.
+  let onScreen = false, last = 0;
+  const btn = document.getElementById('rt-play');
+  function tick(ts) {
+    if (!S.playing || !onScreen) { last = 0; return; }
+    if (last) { let t = S.t + (ts - last) / 1000 * 40; if (t > SPAN) t = 0; S.tf = t; setT(Math.round(t)); }
+    last = ts; requestAnimationFrame(tick);
+  }
+  btn.addEventListener('click', () => { S.playing = !S.playing; btn.textContent = S.playing ? 'Pause' : 'Play'; last = 0; if (S.playing) requestAnimationFrame(tick); });
+  Motion.onVisible(document.getElementById('fig-retro'), v => { onScreen = v; if (v && S.playing) { last = 0; requestAnimationFrame(tick); } });
+  responsive(topEl, setupTop);
+  responsive(stripEl, setupStrip);
+  responsive(allEl, setupAll);
+})();
+
+// ── Figure 4: three clocks ──
+(function () {
+  // Month lengths in days, from NASA's saros page (Espenak).
+  const SYN = 29.530589, DRA = 27.212221, ANO = 27.554550;
+  const S = { N: 223 };
+  const frac = x => x - Math.floor(x);
+  function residuals(N) {
+    const D = N * SYN;
+    const dra = frac(D / DRA) * 360, ano = frac(D / ANO) * 360, day = frac(D) * 360;
+    const nodeMiss = Math.min(dra % 180, 180 - (dra % 180));   // to the nearer node, degrees
+    const anoMiss = Math.min(ano, 360 - ano);
+    return { N, D, dra, ano, day, nodeMiss, anoMiss, nodeOpp: Math.abs(wrap180(dra)) > 90 };
+  }
+  window.FIG4 = { residuals };
+  const dEl = document.getElementById('ck-dials'), cEl = document.getElementById('ck-cands');
+  const Dd = { svg: d3.select(dEl).select('svg') }, Cc = { svg: d3.select(cEl).select('svg') };
+  const DIALS = [
+    { k: 'syn', t: 'synodic', sub: '29.53 d' }, { k: 'dra', t: 'draconic', sub: '27.21 d, node to node' },
+    { k: 'ano', t: 'anomalistic', sub: '27.55 d, perigee to perigee' }, { k: 'day', t: 'days', sub: 'Earth’s rotation' },
+  ];
+  function setupDials(w) {
+    const cols = w < 520 ? 2 : 4, cw = w / cols, r = Math.min(cw / 2 - 14, narrow() ? 46 : 64);
+    const rowsN = 4 / cols, h = rowsN * (2 * r + 58);
+    Dd.w = w; dEl.style.height = h + 'px';
+    Dd.svg.attr('width', w).attr('height', h).selectAll('*').remove();
+    Dd.g = Dd.svg.selectAll('g').data(DIALS).join('g').attr('transform', (d, i) => `translate(${cw * (i % cols) + cw / 2},${Math.floor(i / cols) * (2 * r + 58) + r + 8})`);
+    Dd.g.append('circle').attr('class', 'dial-face').attr('r', r);
+    Dd.g.append('path').attr('class', 'dial-miss');
+    Dd.g.each(function () {
+      d3.select(this).selectAll('line.dial-tick').data(d3.range(12)).join('line').attr('class', 'dial-tick')
+        .attr('x1', i => (r - 5) * Math.sin(i * Math.PI / 6)).attr('y1', i => -(r - 5) * Math.cos(i * Math.PI / 6))
+        .attr('x2', i => r * Math.sin(i * Math.PI / 6)).attr('y2', i => -r * Math.cos(i * Math.PI / 6));
+    });
+    Dd.g.filter(d => d.k === 'dra').selectAll('circle.dial-node').data([0, 180]).join('circle').attr('class', 'dial-node').attr('r', 4).attr('cx', 0).attr('cy', a => a ? r : -r);
+    Dd.g.filter(d => d.k === 'ano').append('circle').attr('class', 'dial-node').attr('r', 4).attr('cy', -r);
+    Dd.g.append('line').attr('class', 'dial-hand');
+    Dd.g.append('circle').attr('r', 3).attr('fill', 'var(--text)');
+    Dd.g.append('text').attr('class', 'ink-lab').attr('y', r + 18).attr('text-anchor', 'middle').style('font-weight', 600).text(d => d.t);
+    Dd.g.append('text').attr('class', 'dim-lab').attr('y', r + 32).attr('text-anchor', 'middle').text(d => d.sub);
+    Dd.g.append('text').attr('class', 'dim-lab val').attr('y', r + 46).attr('text-anchor', 'middle');
+    Dd.r = r;
+    draw();
+  }
+  function setupCands(w) {
+    const h = 150, m = { t: 10, r: 10, b: 30, l: 40 };
+    Cc.w = w; cEl.style.height = h + 'px';
+    Cc.svg.attr('width', w).attr('height', h).selectAll('*').remove();
+    Cc.x = d3.scaleLinear().domain([0, 700]).range([m.l, w - m.r]);
+    Cc.y = d3.scaleLinear().domain([0, 90]).range([m.t, h - m.b]);
+    Cc.svg.append('g').attr('class', 'axis').attr('transform', `translate(0,${h - m.b})`).call(d3.axisBottom(Cc.x).ticks(7));
+    Cc.svg.append('g').attr('class', 'axis').attr('transform', `translate(${m.l},0)`).call(d3.axisLeft(Cc.y).tickValues([0, 30, 60, 90]).tickFormat(d => d + '°'));
+    Cc.svg.append('text').attr('class', 'axis-label').attr('x', w - m.r).attr('y', h - 2).attr('text-anchor', 'end').text('synodic months N');
+    Cc.svg.append('text').attr('class', 'axis-label').attr('transform', `translate(10,${(h - m.b + m.t) / 2}) rotate(-90)`).attr('text-anchor', 'middle').text('from node');
+    const all = d3.range(1, 701).map(residuals);
+    Cc.svg.append('g').selectAll('circle').data(all).join('circle')
+      .attr('class', d => d.anoMiss < 20 ? 'cand' : 'cand-hollow').attr('r', d => d.nodeMiss < 12 ? 2.6 : 1.4)
+      .attr('cx', d => Cc.x(d.N)).attr('cy', d => Cc.y(d.nodeMiss));
+    Cc.lab = Cc.svg.append('text').attr('class', 'ink-lab');
+    Cc.sel = Cc.svg.append('circle').attr('class', 'cand-sel').attr('r', 6);
+    Cc.svg.append('rect').attr('class', 'hit').attr('x', m.l).attr('y', 0).attr('width', w - m.l - m.r).attr('height', h - m.b)
+      .on('click', ev => {
+        const [x, y] = d3.pointer(ev);
+        let best = null, bd = 1e9;
+        for (const d of all) { const dd = Math.hypot(Cc.x(d.N) - x, Cc.y(d.nodeMiss) - y); if (dd < bd) { bd = dd; best = d; } }
+        if (best) setN(best.N);
+      });
+    draw();
+  }
+  function setN(N) { S.N = N; document.getElementById('ck-n').value = N; draw(); }
+  function draw() {
+    const R = residuals(S.N);
+    document.getElementById('ck-n-v').textContent = S.N;
+    document.querySelectorAll('#fig-clocks [data-n]').forEach(b => b.setAttribute('aria-pressed', String(+b.dataset.n === S.N)));
+    if (Dd.g) {
+      const ang = { syn: 0, dra: R.dra, ano: R.ano, day: R.day }, r = Dd.r - 10;
+      Dd.g.select('.dial-hand').attr('x1', 0).attr('y1', 0)
+        .attr('x2', d => r * Math.sin(ang[d.k] * DEG)).attr('y2', d => -r * Math.cos(ang[d.k] * DEG));
+      const arc = d3.arc().innerRadius(0).outerRadius(Dd.r - 1);
+      Dd.g.select('.dial-miss').attr('d', d => {
+        const a = ang[d.k];
+        if (d.k === 'syn') return null;
+        const target = d.k === 'dra' ? (Math.abs(wrap180(a)) > 90 ? 180 : 0) : 0;
+        const w = wrap180(a - target);
+        return arc({ startAngle: target * DEG, endAngle: (target + w) * DEG });
+      });
+      const fmt = { syn: () => `${S.N} exactly`, dra: () => `${(R.D / DRA).toFixed(3)}`, ano: () => `${(R.D / ANO).toFixed(3)}`, day: () => `${R.D.toFixed(3)}` };
+      Dd.g.select('text.val').text(d => fmt[d.k]());
+    }
+    if (Cc.x) {
+      Cc.sel.attr('cx', Cc.x(S.N)).attr('cy', Cc.y(R.nodeMiss));
+      Cc.lab.attr('x', Cc.x(S.N) + (S.N > 600 ? -10 : 10)).attr('y', Cc.y(R.nodeMiss) + (R.nodeMiss > 60 ? -8 : 16)).attr('text-anchor', S.N > 600 ? 'end' : 'start').text(S.N);
+    }
+    const yrs = R.D / 365.25;
+    const dayTxt = R.day < 180 ? `${(R.day / 15).toFixed(1)} hours past a whole number of days, so a repeat eclipse would fall about ${Math.round(R.day)}&deg; of longitude further west` : `${((360 - R.day) / 15).toFixed(1)} hours short of a whole number of days, so a repeat would fall about ${Math.round(360 - R.day)}&deg; further east`;
+    document.getElementById('ck-ro').innerHTML =
+      `<b>${S.N}</b> synodic month${S.N === 1 ? '' : 's'} = <b>${R.D.toFixed(3)} days</b> (${yrs.toFixed(2)} years). The Moon is then <b>${R.nodeMiss.toFixed(1)}&deg;</b> of its orbit from the ${R.nodeOpp ? 'opposite' : 'same'} node, and ${R.anoMiss.toFixed(0)}&deg; from perigee. The span is ${dayTxt}.`;
+  }
+  document.getElementById('ck-n').addEventListener('input', e => { S.N = +e.target.value; draw(); });
+  document.querySelectorAll('#fig-clocks [data-n]').forEach(b => b.addEventListener('click', () => setN(+b.dataset.n)));
+  responsive(dEl, setupDials);
+  responsive(cEl, setupCands);
+})();
+
+// ── Figure 5: saros families ──
+(async function () {
+  const [rows, world] = await Promise.all([
+    d3.csv('shared/data/eclipses.csv', d3.autoType),
+    d3.json('../vendor/data/world-atlas/countries-110m.json'),
+  ]);
+  const land = topojson.feature(world, world.objects.land);
+  // Lunation number from the date (Meeus: new Moon k = 0 on 2000 Jan 6),
+  // then the saros series from the lunation: one saros is 223 lunations and
+  // one inex (358 lunations) steps to the next series, and 38 x 358 = 1
+  // (mod 223), so S = (38 N + 132) mod 223 - 20.
+  function jd(y, m, d) {
+    let Y = y, Mo = m; if (Mo <= 2) { Y -= 1; Mo += 12; }
+    let B = 0;
+    if (y > 1582 || (y === 1582 && (m > 10 || (m === 10 && d >= 15)))) { const A = Math.floor(Y / 100); B = 2 - A + Math.floor(A / 4); }
+    return Math.floor(365.25 * (Y + 4716)) + Math.floor(30.6001 * (Mo + 1)) + d + B - 1524.5;
+  }
+  const mod = (a, n) => ((a % n) + n) % n;
+  let agree = 0;
+  for (const r of rows) {
+    r.jd = jd(r.y, r.m, r.d) + r.td / 24;
+    r.N = Math.round((r.jd - 2451550.09766) / 29.530588861);
+    r.S = mod(38 * r.N + 132, 223) - 20;
+    if (r.S === r.saros) agree++;
+    r.year = r.y + (r.jd - jd(r.y, 1, 1)) / 365.25;
+  }
+  const bySaros = d3.group(rows, r => r.S);
+  const Smin = d3.min(rows, r => r.S), Smax = d3.max(rows, r => r.S);
+  window.FIG5 = { agree, n: rows.length };
+  // Hybrid eclipses are total along part of the track and annular elsewhere,
+  // so they take the colour halfway between the two.
+  const colorOf = t => ({ T: css('--text'), A: css('--accent'), H: d3.interpolateRgb(css('--text'), css('--accent'))(0.5), P: css('--text-2') })[t];
+
+  const S = { s: 139 };
+  const pEl = document.getElementById('sa-pano'), canvas = pEl.querySelector('canvas'), ctx = canvas.getContext('2d');
+  const gEl = document.getElementById('sa-gamma'), mEl = document.getElementById('sa-map');
+  const G = { svg: d3.select(gEl).select('svg') }, Mp = { svg: d3.select(mEl).select('svg') };
+  const dpr = window.devicePixelRatio || 1;
+  const P = { m: { t: 8, r: 10, b: 26, l: 40 } };
+
+  function setupPano(w) {
+    const rowH = narrow() ? 1.3 : 1.6, h = Math.round((Smax - Smin + 1) * rowH) + P.m.t + P.m.b;
+    P.w = w; P.h = h; pEl.style.height = h + 'px';
+    canvas.width = w * dpr; canvas.height = h * dpr; canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
+    P.x = d3.scaleLinear().domain([-2000, 3000]).range([P.m.l, w - P.m.r]);
+    P.y = d3.scaleLinear().domain([Smin - 0.5, Smax + 0.5]).range([P.m.t, h - P.m.b]);
+    drawPano();
+  }
+  function drawPano() {
+    if (!P.w) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, P.w, P.h);
+    const rh = Math.max(1.2, P.y(1) - P.y(0));
+    const sel = P.y(S.s);
+    ctx.fillStyle = css('--accent-light');
+    ctx.fillRect(P.m.l, sel - rh * 1.6, P.w - P.m.l - P.m.r, rh * 3.2);
+    for (const t of ['P', 'A', 'H', 'T']) {
+      ctx.fillStyle = colorOf(t); ctx.globalAlpha = t === 'P' ? 0.45 : 1;
+      for (const r of rows) if (r.type === t) ctx.fillRect(P.x(r.year) - 0.8, P.y(r.S) - rh / 2, 1.6, rh);
+    }
+    ctx.globalAlpha = 1;
+    // The chosen series, drawn again at three times the row height.
+    for (const r of bySaros.get(S.s) || []) {
+      ctx.fillStyle = colorOf(r.type); ctx.globalAlpha = r.type === 'P' ? 0.6 : 1;
+      ctx.fillRect(P.x(r.year) - 1, sel - rh * 1.5, 2, rh * 3);
+    }
+    ctx.globalAlpha = 1;
+    // Axes.
+    ctx.fillStyle = css('--text-2'); ctx.strokeStyle = css('--border'); ctx.font = `11px ${css('--heading-font')}`;
+    ctx.textAlign = 'center';
+    for (const y of [-1999, -999, 1, 1000, 2000, 3000]) {
+      const x = P.x(y);
+      ctx.beginPath(); ctx.moveTo(x, P.h - P.m.b); ctx.lineTo(x, P.h - P.m.b + 4); ctx.stroke();
+      ctx.fillText(y <= 0 ? `${1 - y} BC` : y === 1 ? 'AD 1' : `${y}`, Math.min(P.w - 18, Math.max(P.m.l + 12, x)), P.h - P.m.b + 16);
+    }
+    ctx.textAlign = 'right';
+    for (const s of [0, 50, 100, 150]) ctx.fillText(String(s), P.m.l - 6, P.y(s) + 4);
+    ctx.save(); ctx.translate(11, (P.m.t + P.h - P.m.b) / 2); ctx.rotate(-Math.PI / 2); ctx.textAlign = 'center'; ctx.fillText('saros series', 0, 0); ctx.restore();
+    ctx.textAlign = 'left';
+    const first = bySaros.get(S.s);
+    if (first) {
+      const xr = P.x(d3.max(first, r => r.year)) + 6;
+      ctx.fillStyle = css('--text'); ctx.font = `600 11px ${css('--heading-font')}`;
+      ctx.fillText(`saros ${S.s}`, Math.min(xr, P.w - 60), sel + 4);
+    }
+    // The 2024 eclipse and the present.
+    ctx.strokeStyle = css('--text-2'); ctx.setLineDash([2, 3]);
+    ctx.beginPath(); ctx.moveTo(P.x(2026), P.m.t); ctx.lineTo(P.x(2026), P.h - P.m.b); ctx.stroke(); ctx.setLineDash([]);
+  }
+  const pickRow = ev => { const r = canvas.getBoundingClientRect(); const s = Math.round(P.y.invert(ev.clientY - r.top)); return Math.max(Smin, Math.min(Smax, s)); };
+  canvas.addEventListener('click', ev => setS(pickRow(ev)));
+  canvas.addEventListener('keydown', ev => { const k = { ArrowUp: -1, ArrowDown: 1 }[ev.key]; if (k) { ev.preventDefault(); setS(S.s + k); } });
+
+  function setupGamma(w) {
+    const h = narrow() ? 200 : 220, m = { t: 10, r: 10, b: 30, l: 40 };
+    G.w = w; G.h = h; G.m = m; gEl.style.height = h + 'px';
+    G.svg.attr('width', w).attr('height', h).selectAll('*').remove();
+    G.gx = G.svg.append('g').attr('class', 'axis').attr('transform', `translate(0,${h - m.b})`);
+    G.y = d3.scaleLinear().domain([-1.6, 1.6]).range([h - m.b, m.t]);
+    G.svg.append('g').attr('class', 'axis').attr('transform', `translate(${m.l},0)`).call(d3.axisLeft(G.y).tickValues([-1.5, -1, -0.5, 0, 0.5, 1, 1.5]));
+    for (const v of [-1, 1]) G.svg.append('line').attr('class', 'zero').attr('x1', m.l).attr('x2', w - m.r).attr('y1', G.y(v)).attr('y2', G.y(v));
+    G.svg.append('text').attr('class', 'dim-lab').attr('x', w - m.r).attr('y', G.y(1) - 4).attr('text-anchor', 'end').text('edge of Earth');
+    G.svg.append('text').attr('class', 'axis-label').attr('transform', `translate(10,${(h - m.b + m.t) / 2}) rotate(-90)`).attr('text-anchor', 'middle').text('gamma (Earth radii)');
+    G.pts = G.svg.append('g');
+    drawSeries();
+  }
+  function setupMap(w) {
+    const h = Math.round(w / 2) + 4;
+    Mp.w = w; Mp.h = h; mEl.style.height = h + 'px';
+    Mp.svg.attr('width', w).attr('height', h).selectAll('*').remove();
+    Mp.proj = d3.geoEquirectangular().fitExtent([[2, 2], [w - 2, h - 2]], { type: 'Sphere' });
+    const path = d3.geoPath(Mp.proj);
+    Mp.svg.append('path').attr('class', 'map-edge').attr('d', path({ type: 'Sphere' }));
+    Mp.svg.append('path').attr('class', 'land').attr('d', path(land));
+    Mp.pts = Mp.svg.append('g');
+    Mp.labs = Mp.svg.append('g');
+    Mp.ring = Mp.svg.append('circle').attr('class', 'cand-sel').attr('r', 7);
+    drawSeries();
+  }
+  function drawSeries() {
+    const ser = (bySaros.get(S.s) || []).slice().sort((a, b) => a.N - b.N);
+    if (G.w && ser.length) {
+      G.x = d3.scaleLinear().domain(d3.extent(ser, r => r.year)).nice().range([G.m.l, G.w - G.m.r]);
+      G.gx.call(d3.axisBottom(G.x).ticks(5).tickFormat(y => y <= 0 ? `${1 - y} BC` : `${y}`));
+      G.pts.selectAll('circle').data(ser, r => r.N).join('circle').attr('r', r => r.type === 'P' ? 2.2 : 3.2)
+        .attr('cx', r => G.x(r.year)).attr('cy', r => G.y(r.gamma))
+        .attr('fill', r => colorOf(r.type)).attr('fill-opacity', r => r.type === 'P' ? 0.5 : 1);
+    }
+    if (Mp.proj && ser.length) {
+      const central = ser.filter(r => r.type !== 'P');
+      const xy = r => Mp.proj([r.lon, r.lat]);
+      Mp.pts.selectAll('circle').data(ser, r => r.N).join('circle').attr('r', r => r.type === 'P' ? 1.8 : 2.8)
+        .attr('cx', r => xy(r)[0]).attr('cy', r => xy(r)[1]).attr('fill', r => colorOf(r.type)).attr('fill-opacity', r => r.type === 'P' ? 0.5 : 1);
+      // Label four consecutive central members (around the present if the
+      // series is running now) to show the westward jumps.
+      const nowIdx = central.findIndex(r => r.y >= 2020);
+      const k = nowIdx > 0 && central[nowIdx].y < 2045 ? nowIdx - 1 : Math.max(0, Math.floor(central.length / 2) - 1);
+      const seg = central.slice(k, k + 4);
+      Mp.labs.selectAll('text').data(seg, r => r.N).join('text').attr('class', 'ink-lab')
+        .attr('x', r => xy(r)[0]).attr('y', (r, i) => xy(r)[1] + (i % 2 ? 16 : -7)).attr('text-anchor', r => xy(r)[0] > Mp.w - 30 ? 'end' : xy(r)[0] < 30 ? 'start' : 'middle')
+        .style('paint-order', 'stroke').style('stroke', 'var(--fig-bg)').style('stroke-width', '3px').text(r => r.y);
+      const e24 = ser.find(r => r.y === 2024 && r.m === 4 && r.d === 8);
+      Mp.ring.style('display', e24 ? null : 'none');
+      if (e24) Mp.ring.attr('cx', xy(e24)[0]).attr('cy', xy(e24)[1]);
+      document.getElementById('sa-map-sub').textContent = seg.length > 1 ? `${seg.length} in a row labelled` : '';
+    }
+    // Readout.
+    const cnt = d3.rollup(ser, v => v.length, r => r.type);
+    const whole = ser.length && ser[0].y > -1999 + 30 && ser[ser.length - 1].y < 3000 - 30;
+    const steps = [];
+    for (let i = 1; i < ser.length; i++) if (ser[i].type !== 'P' && ser[i - 1].type !== 'P') steps.push(wrap180(ser[i].lon - ser[i - 1].lon));
+    const dg = d3.median(ser.slice(1).map((r, i) => r.gamma - ser[i].gamma));
+    const yr = y => y <= 0 ? `${1 - y} BC` : `AD ${y}`;
+    const typeTxt = [['P', 'partial'], ['A', 'annular'], ['H', 'hybrid'], ['T', 'total']].filter(([k]) => cnt.get(k)).map(([k, t]) => `${cnt.get(k)} ${t}`).join(', ');
+    document.getElementById('sa-s-v').textContent = S.s;
+    document.getElementById('sa-ro').innerHTML = ser.length ?
+      `<b>Saros ${S.s}</b>: ${ser.length === 1 ? `one eclipse, in ${yr(ser[0].y)}` : `${ser.length} eclipses from ${yr(ser[0].y)} to ${yr(ser[ser.length - 1].y)}`}${whole ? '' : ' (running past the edge of the canon)'}: ${typeTxt}. ` +
+      (ser.length > 1 ? `Gamma moves ${dg > 0 ? 'north' : 'south'} by a median ${Math.abs(dg).toFixed(3)} per saros` : '') + (steps.length ? `, and each central eclipse lands a median ${Math.abs(d3.median(steps)).toFixed(0)}&deg; ${d3.median(steps) < 0 ? 'west' : 'east'} of the last. ` : ser.length > 1 ? '. ' : '') +
+      `Series numbers computed from the dates agree with the canon's for ${d3.format(',')(agree)} of ${d3.format(',')(rows.length)} eclipses.` : '';
+  }
+  function setS(s) { S.s = Math.max(Smin, Math.min(Smax, s)); document.getElementById('sa-s').value = S.s; drawPano(); drawSeries(); }
+  document.getElementById('sa-s').addEventListener('input', e => setS(+e.target.value));
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { drawPano(); drawSeries(); });
+  responsive(pEl, setupPano);
+  responsive(gEl, setupGamma);
+  responsive(mEl, setupMap);
+})();
+</script>
+</body>
+</html>
