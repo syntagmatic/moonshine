@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Geometry and Pruning · Decision Trees</title>
+<script src="../lib/motion.js"></script>
 <script src="../vendor/js/d3.v7.min.js"></script>
 <link href="../vendor/fonts/sans-serif-mono/fonts.css" rel="stylesheet">
-<script src="../lib/motion.js"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
@@ -25,19 +25,21 @@
   --border: #e2e2e8;
   --c-pos: #2563eb;
   --c-neg: #dc2626;
-  --c-axis: #2563eb;
+  --c-split: #059669;
+  --c-gain: #16a34a;
   --c-oblique: #7c3aed;
-  --c-mono: #059669;
-  --c-train: #7c3aed;
+  --c-train: #64748b;
   --c-test: #ea580c;
-  --c-sweet: #059669;
+  --c-cv: #0891b2;
 }
-.t-axis { color: var(--c-axis); font-weight: 600; }
+.t-pos { color: var(--c-pos); font-weight: 600; }
+.t-neg { color: var(--c-neg); font-weight: 600; }
+.t-split { color: var(--c-split); font-weight: 600; }
+.t-gain { color: var(--c-gain); font-weight: 600; }
 .t-oblique { color: var(--c-oblique); font-weight: 600; }
-.t-mono { color: var(--c-mono); font-weight: 600; }
 .t-train { color: var(--c-train); font-weight: 600; }
 .t-test { color: var(--c-test); font-weight: 600; }
-.t-sweet { color: var(--c-sweet); font-weight: 600; }
+.t-cv { color: var(--c-cv); font-weight: 600; }
 
 body { font-family: var(--body-font); font-size: var(--body-size); line-height: var(--line-height); color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased; }
 .article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
@@ -48,54 +50,41 @@ p { margin: 0 0 1rem; }
 a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
 a:hover { color: #1d4ed8; }
 code { font-family: var(--mono-font); font-size: 0.9em; background: #f1f1f5; padding: 0.15em 0.4em; border-radius: 3px; }
+.m { font-style: italic; white-space: nowrap; }
 
 .back-link { font-family: var(--heading-font); font-size: 0.85rem; display: inline-block; margin-bottom: 1rem; color: var(--text-2); text-decoration: none; }
 .back-link:hover { color: var(--accent); }
-
 .header { padding: 3rem 0 2rem; border-bottom: 1px solid var(--border); margin-bottom: 2.5rem; }
 .header .subtitle { font-family: var(--heading-font); font-size: 1.15rem; color: var(--text-2); max-width: 620px; }
 
-.figure { margin: 2rem 0; padding: 1.5rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
-.figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; line-height: 1.45; }
+.figure { margin: 1.75rem 0; padding: 1.1rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.7rem; line-height: 1.45; }
 .figure-label { font-weight: 600; color: var(--text); }
-
-.btn { font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600; padding: 0.4rem 0.85rem; border-radius: 5px; border: 1px solid var(--border); background: var(--fig-bg); color: var(--text); cursor: pointer; user-select: none; transition: background 0.15s, border-color 0.15s; }
-.btn:hover { border-color: var(--accent); background: var(--accent-light); }
-.btn.active { background: var(--accent); color: white; border-color: var(--accent); }
-
-
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 0.9rem; align-items: start; }
+.two > div { min-width: 0; }
+@media (max-width: 640px) { .two { grid-template-columns: 1fr; } }
+.viz-label { font-family: var(--heading-font); font-size: 0.75rem; font-weight: 700; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.25rem; }
+.fig svg { display: block; width: 100%; height: auto; }
 svg text { font-family: var(--heading-font); }
+.hit { cursor: pointer; touch-action: none; }
 
-.panel { display: grid; grid-template-columns: 1fr 260px; gap: 1.5rem; align-items: start; }
-@media (max-width: 680px) { .panel { grid-template-columns: 1fr; } }
-.controls-col { display: flex; flex-direction: column; gap: 0.85rem; font-family: var(--heading-font); font-size: 0.9rem; }
-.slider-row { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 0.5rem 1rem; }
-.slider-row .lbl { color: var(--text-2); font-weight: 600; font-size: 0.82rem; }
-.slider-row .val { font-family: var(--mono-font); color: var(--text); min-width: 3rem; text-align: right; font-weight: 600; }
-.slider-row input[type="range"] { width: 100%; }
+.controls { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem; margin-top: 0.7rem; font-family: var(--heading-font); font-size: 0.85rem; }
+.controls label { color: var(--text-2); font-weight: 600; display: flex; align-items: center; gap: 0.5rem; flex: 1 1 200px; }
+.controls input[type="range"] { flex: 1; min-width: 100px; }
+.controls .val { font-family: var(--mono-font); color: var(--text); min-width: 3.2rem; text-align: right; }
+.seg { display: inline-flex; flex-wrap: wrap; gap: 0.25rem; }
+.btn { font-family: var(--heading-font); font-size: 0.8rem; font-weight: 600; padding: 0.35rem 0.7rem; border-radius: 5px; border: 1px solid var(--border); background: var(--fig-bg); color: var(--text); cursor: pointer; user-select: none; }
+.btn:hover { border-color: var(--accent); background: var(--accent-light); }
+.btn[aria-pressed="true"] { background: var(--accent); color: white; border-color: var(--accent); }
+.btn:focus-visible, input:focus-visible, .hit:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.readout { font-family: var(--heading-font); font-size: 0.88rem; line-height: 1.5; color: var(--text); margin-top: 0.6rem; min-height: 2.7em; }
+.readout .n { font-family: var(--mono-font); font-size: 0.92em; }
 
-.mode-toggle { display: flex; gap: 0.3rem; }
-.mode-toggle .btn { flex: 1; padding: 0.4rem 0.3rem; font-size: 0.75rem; }
-.mode-toggle .btn.axis.active { background: var(--c-axis); border-color: var(--c-axis); }
-.mode-toggle .btn.oblique.active { background: var(--c-oblique); border-color: var(--c-oblique); }
-
-.stat-box { padding: 0.8rem 1rem; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; font-family: var(--heading-font); font-size: 0.86rem; line-height: 1.55; }
-.stat-box .label { font-size: 0.72rem; font-weight: 700; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.3rem; }
-.stat-box .row { display: flex; justify-content: space-between; gap: 0.5rem; margin-top: 0.15rem; }
-.stat-box .row .k { color: var(--text-2); }
-.stat-box .row .v { font-family: var(--mono-font); font-weight: 600; color: var(--text); }
-
-.nav-footer { margin-top: 5rem; padding-top: 2rem; border-top: 1px solid var(--border); display: flex; justify-content: space-between; font-family: var(--heading-font); font-size: 0.9rem; }
+.nav-footer { margin-top: 5rem; padding-top: 2rem; border-top: 1px solid var(--border); display: flex; justify-content: space-between; gap: 1rem; font-family: var(--heading-font); font-size: 0.9rem; }
 .nav-footer a { color: var(--accent); text-decoration: none; }
 .nav-footer a:hover { text-decoration: underline; }
-.nav-footer .spacer { flex: 1; }
 
-.dual-viz { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
-@media (max-width: 680px) { .dual-viz { grid-template-columns: 1fr; } }
-.viz-label { font-family: var(--heading-font); font-size: 0.75rem; font-weight: 700; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.35rem; }
-
-@media (prefers-reduced-motion: reduce) { html:not([data-motion="full"]) * { transition-duration: 0s !important; animation-duration: 0s !important; } }
-@media (max-width: 680px) { h1 { font-size: 1.75rem; } .article { padding: 1.5rem 1rem 4rem; } }
+@media (max-width: 680px) { h1 { font-size: 1.75rem; } .article { padding: 1.5rem 1rem 4rem; } .figure { padding: 0.8rem; } }
 
 /* Dark mode: same hues, lighter shades */
 @media (prefers-color-scheme: dark) {
@@ -103,12 +92,12 @@ svg text { font-family: var(--heading-font); }
     --text: #e6e6ee; --text-2: #a3a3b8;
     --accent: #60a5fa; --accent-light: #1e3a5f;
     --bg: #14141c; --fig-bg: #1c1c28; --border: #34344a;
-    --c-pos: #60a5fa; --c-neg: #f87171; --c-axis: #60a5fa; --c-oblique: #a78bfa; --c-mono: #34d399; --c-train: #a78bfa; --c-test: #fb923c; --c-sweet: #34d399;
+    --c-pos: #60a5fa; --c-neg: #f87171; --c-split: #34d399; --c-gain: #4ade80; --c-oblique: #a78bfa; --c-train: #94a3b8; --c-test: #fb923c; --c-cv: #22d3ee;
   }
   html { color-scheme: dark; }
   a:hover { color: #93c5fd; }
   code { background: #262636; }
-  .btn.active, button[aria-pressed="true"] { color: #14141c; }
+  .btn[aria-pressed="true"] { color: #14141c; }
 }
 </style>
 </head>
@@ -119,445 +108,791 @@ svg text { font-family: var(--heading-font); }
 
 <div class="header">
   <h1>Geometry and Pruning</h1>
-  <p class="subtitle">Chapter 2 of 6. Every split is a horizontal or vertical line in feature space, and a fully grown tree memorises its training data. This chapter looks at what each of those costs.</p>
+  <p class="subtitle">Chapter 2 of 6. What axis-aligned splits buy, what they cost, and how to cut a grown tree back.</p>
 </div>
 
-<p>Chapter 1 grew trees one greedy split at a time. This chapter looks at the shape of what they draw, and at when to stop growing them. In feature space, a tree is a set of axis-aligned rectangles. "Is x greater than 5?" is a vertical line and "is y greater than 10?" is a horizontal one. Each leaf is a rectangle, and the tree predicts whatever the leaf says. So a tree cannot draw a diagonal, and left unconstrained it keeps splitting until it has memorised the training data.</p>
+<p>Each split tests one feature against a threshold, so in the plane it is a vertical or horizontal line and each leaf is a rectangle.</p>
 
-<h2>Rank invariance</h2>
+<h2>Why rescaling a feature changes nothing</h2>
 
-<p>A tree compares one feature to a threshold, so it uses the <em>ordering</em> of values and ignores their magnitudes. A monotonic transformation (log, square root, standardization, a change of units) leaves the tree's structure unchanged.</p>
+<p>A split only asks which side of a threshold a value falls on, so the tree sees the order of the values and nothing else. A strictly increasing transform keeps that order.</p>
 
-<p>Most ML models need preprocessing such as scaling, log transforms and one-hot encoding. Trees accept raw numbers in mixed units, which is a large part of why they still dominate tabular data.</p>
-
-<h2>Diagonal boundaries</h2>
-
-<p>If the true boundary is "positive if x + y &gt; 10," a tree approximates it with a staircase of small rectangles, and each step spends data. A line that one oblique cut would handle costs a tree dozens of splits.</p>
-
-<p>Oblique trees allow a hyperplane at any angle; CART (1984) already offered these linear-combination splits, and OC1 (1994) searched for them with randomized hill climbing. They are rarely used in practice, because finding the best diagonal at every node costs far more than sorting one feature, and oblique splits give up rank invariance.</p>
-
-<h2>Overfitting</h2>
-
-<p>Left unchecked, the tree splits until every leaf holds one training row. Training error is zero and the boundary is jagged and generalizes poorly.</p>
-
-<p>The classical fix is <em>cost-complexity pruning</em>. Grow the tree fully, then penalize leaves with a single knob α: score = training error + α × leaves. At α = 0 the full tree wins; at high α only one leaf remains. The best α is where test error bottoms out.</p>
-
-<p>Growing first and pruning afterwards matters because early stopping can't tell whether a mediocre split sets up two good splits one level down. Post-pruning sees the whole tree before it cuts.</p>
-
-<h2>Rotation, oblique splits and pruning</h2>
-
-<p>Figure 1 puts these ideas on one 2D classification problem with a tilted true boundary.</p>
-
-<div class="figure">
-  <div id="main" class="panel">
+<div class="figure fig" id="f1">
+  <div class="two">
     <div>
-      <div class="dual-viz">
-        <div>
-          <div class="viz-label">Decision boundary</div>
-          <div id="m-boundary"></div>
-        </div>
-        <div>
-          <div class="viz-label">Train vs test error</div>
-          <div id="m-errcurve"></div>
-        </div>
-      </div>
+      <div class="viz-label">Depth-3 tree grown on the x as drawn</div>
+      <div id="f1-map"></div>
     </div>
-    <div class="controls-col">
-      <div style="font-weight: 700; font-size: 0.85rem;">Split style</div>
-      <div class="mode-toggle" id="m-mode">
-        <button class="btn axis active" data-m="axis">Axis-aligned</button>
-        <button class="btn oblique" data-m="oblique">Oblique</button>
-      </div>
-      <div class="slider-row">
-        <div class="lbl">rotation</div>
-        <input type="range" id="m-rot" min="0" max="90" step="1" value="45">
-        <div class="val" id="m-rot-val">45°</div>
-      </div>
-      <div class="slider-row">
-        <div class="lbl">α (prune)</div>
-        <input type="range" id="m-alpha" min="0" max="100" step="1" value="0">
-        <div class="val" id="m-alpha-val">0.00</div>
-      </div>
-      <div style="font-weight: 700; font-size: 0.85rem; margin-top: 0.3rem;">Transform x-axis</div>
-      <div class="mode-toggle" id="m-trans">
-        <button class="btn active" data-t="none">x</button>
-        <button class="btn" data-t="log">log x</button>
-        <button class="btn" data-t="sqrt">√x</button>
-        <button class="btn" data-t="sq">x²</button>
-      </div>
-      <div class="stat-box">
-        <div class="label">Tree at this α</div>
-        <div class="row"><span class="k">leaves</span><span class="v" id="m-leaves">&nbsp;</span></div>
-        <div class="row"><span class="k">depth</span><span class="v" id="m-depth">&nbsp;</span></div>
-        <div class="row"><span class="k"><span class="t-train">train</span> error</span><span class="v" id="m-trerr">&nbsp;</span></div>
-        <div class="row"><span class="k"><span class="t-test">test</span> error</span><span class="v" id="m-teerr">&nbsp;</span></div>
-      </div>
+    <div>
+      <div class="viz-label">Test error under each transform</div>
+      <div id="f1-chart"></div>
     </div>
   </div>
-  <p class="figure-caption"><span class="figure-label">Figure 1.</span> Rotation turns the true boundary from 0° (vertical, easy for axis-aligned splits) through 45° (diagonal, the hard case) to 90° (horizontal, easy again). The split-style toggle lets the tree cut obliquely, which collapses the staircase into a single line. α prunes the weakest branches first and simplifies the boundary. The transform buttons apply a monotonic function to the x-axis: the drawing changes, but the same points land in the same leaves. The right panel shows training and test error as α sweeps, with the <span class="t-sweet">sweet spot</span> marked.</p>
+  <div class="controls">
+    <span class="seg" id="f1-trans" role="group" aria-label="Transform applied to x">
+      <button class="btn" data-t="raw" aria-pressed="false">x</button>
+      <button class="btn" data-t="sqrt" aria-pressed="false">√x</button>
+      <button class="btn" data-t="log" aria-pressed="true">log x</button>
+      <button class="btn" data-t="sq" aria-pressed="false">x²</button>
+    </span>
+  </div>
+  <p class="readout" id="f1-read" aria-live="polite"></p>
+  <p class="figure-caption"><span class="figure-label">Figure 1.</span> 150 seeded synthetic points: x log-normal, y uniform, 8% of labels flipped. The axis is spaced in the transformed units, ticked at raw values. Each transform regrows the tree and a 7-nearest-neighbour classifier (unscaled distances) and compares them with their raw-x versions on 300 fresh points; rings mark where the neighbour vote flipped. Cuts sit midway between neighbouring training values, so their raw positions shift slightly, but no training point changes leaf.</p>
 </div>
 
-<p>At 45° the axis-aligned tree does worst, and raising α leaves a crude staircase. At 0° the axis-aligned tree is fine and pruning removes little error.</p>
+<p>Nearest neighbours measure distance, so someone has to choose the scale. A tree never asks.</p>
 
-<h2>Why trees keep axis-aligned splits</h2>
+<h2>What a diagonal costs</h2>
 
-<p>Allowing arbitrary linear combinations at every node (<code>2x + 3y &gt; 5</code>) solves the diagonal problem, but it moves away from trees toward linear models or, with sigmoids stacked, neural networks. Trees sit at one end of that spectrum, where every split is local and discrete.</p>
+<p>The cost shows when the true boundary is diagonal: the tree can only build a staircase, and every step needs data to place.</p>
 
-<p>For tabular data the staircase is usually good enough, because a thousand staircases combined can track any boundary, diagonal or not. The next two chapters build those combinations, starting with many trees grown on the same data.</p>
+<div class="figure fig" id="f2">
+  <div class="two">
+    <div>
+      <div class="viz-label">Regions at the chosen angle</div>
+      <div id="f2-map"></div>
+    </div>
+    <div>
+      <div class="viz-label">Swept over the boundary angle</div>
+      <div id="f2-chart"></div>
+    </div>
+  </div>
+  <div class="controls">
+    <label>angle <input type="range" id="f2-rot" min="0" max="90" step="5" value="45"><span class="val" id="f2-rot-val">45°</span></label>
+    <span class="seg" id="f2-mode" role="group" aria-label="Split style">
+      <button class="btn" data-m="axis" aria-pressed="true">Grown tree</button>
+      <button class="btn" data-m="oblique" aria-pressed="false">One oblique cut</button>
+    </span>
+  </div>
+  <p class="readout" id="f2-read" aria-live="polite"></p>
+  <p class="figure-caption"><span class="figure-label">Figure 2.</span> Seeded synthetic points, uniform on the square, labelled without noise by a line through the centre (0° vertical, 90° horizontal). At each 5° the chart grows <span class="t-split">axis-aligned trees</span> to purity on 200 and on 800 points, and finds the best <span class="t-oblique">single oblique cut</span> on the 200 by a 1° scan of directions. Test error is on 2,000 fresh points. Click the chart to pick an angle.</p>
+</div>
+
+<p>Quadrupling the data roughly doubles the leaves at 45°. The staircase refines but never becomes the line.</p>
+
+<h2>What an oblique split has to search</h2>
+
+<p>An oblique split cuts along any direction. CART (1984) already offered these linear-combination splits, and OC1 (1994) searched for them by randomized hill climbing.</p>
+
+<div class="figure fig" id="f3">
+  <div class="two">
+    <div>
+      <div class="viz-label">Best cut across this direction</div>
+      <div id="f3-map"></div>
+    </div>
+    <div>
+      <div class="viz-label"><span class="t-gain">Gini gain</span> of the best cut, by direction</div>
+      <div id="f3-chart"></div>
+    </div>
+  </div>
+  <div class="controls">
+    <label>direction <input type="range" id="f3-ang" min="0" max="179" step="1" value="0"><span class="val" id="f3-ang-val">0°</span></label>
+  </div>
+  <p class="readout" id="f3-read" aria-live="polite"></p>
+  <p class="figure-caption"><span class="figure-label">Figure 3.</span> 80 seeded synthetic points in one node, two Gaussian clouds offset along a 40° diagonal. For each direction every cut between neighbouring projections is scored by Gini gain, and the curve keeps the best. A standard tree tries only the two <span class="t-split">axis directions</span>. Drag along the curve.</p>
+</div>
+
+<p>Practical methods search this continuum of directions heuristically, and an oblique cut loses rank invariance: take the log of x and the best cut changes. For tabular data the staircase usually wins, and the ensembles of the next chapters refine it.</p>
+
+<h2>Pruning a grown tree back</h2>
+
+<p>Cost-complexity pruning, from CART, grows the tree to purity and then charges α per leaf: a subtree <span class="m">T</span> scores <span class="m">R(T) + α|T|</span>, with <span class="m">R</span> counting training errors. Each internal node <span class="m">t</span> has a price <span class="m">g(t) = (R(t) − R(T<sub>t</sub>)) / (|T<sub>t</sub>| − 1)</span>, the training errors its branch saves per extra leaf, and the cheapest branch goes first.</p>
+
+<div class="figure fig" id="f4">
+  <div class="two">
+    <div>
+      <div class="viz-label">Tree at this step</div>
+      <div id="f4-map"></div>
+    </div>
+    <div>
+      <div class="viz-label">Error along the pruning path</div>
+      <div id="f4-chart"></div>
+    </div>
+  </div>
+  <div class="controls">
+    <label>step <input type="range" id="f4-step" min="0" max="8" step="1" value="0"><span class="val" id="f4-step-val">0</span></label>
+  </div>
+  <p class="readout" id="f4-read" aria-live="polite"></p>
+  <p class="figure-caption"><span class="figure-label">Figure 4.</span> 200 seeded synthetic points, 45° boundary, 10% of labels flipped; test error on 3,000 fresh points. Each slider step is one breakpoint of the weakest-link sequence. Dashed lines are pruned splits; the outlined branches go next, and the readout does the arithmetic.</p>
+</div>
+
+<p>Growing first matters because a useless-looking split can set up good ones below it, as XOR did in chapter 1.</p>
+
+<h2>Choosing α without the test set</h2>
+
+<p>Figure 4 peeked at test error. Five-fold cross-validation instead prunes on four fifths of the training data, scores each α on the held-out fifth, and averages the five rotations. CART's one-standard-error rule takes the simplest tree within one standard error of the minimum.</p>
+
+<div class="figure fig" id="f5">
+  <div id="f5-chart"></div>
+  <div class="viz-label" style="margin-top:0.4rem">Tree size chosen, 20 fold shuffles</div>
+  <div id="f5-strip"></div>
+  <div class="controls">
+    <button class="btn" id="f5-prev" aria-label="Previous fold shuffle">← Shuffle</button>
+    <button class="btn" id="f5-next" aria-label="Next fold shuffle">Shuffle →</button>
+    <span class="val" id="f5-seed" style="text-align:left">1 of 20</span>
+  </div>
+  <p class="readout" id="f5-read" aria-live="polite"></p>
+  <p class="figure-caption"><span class="figure-label">Figure 5.</span> Figure 4's training data. <span class="t-cv">Dots</span> are 5-fold CV error at α values between Figure 4's breakpoints, with one-standard-error bars; the top row gives the full-data tree's leaves. The <span class="t-test">line</span> is fresh-test error, for comparison only. The columns rerun the selection for 20 random fold assignments; hollow dots mark the current one.</p>
+</div>
+
+<p>Reshuffle the folds and the chosen tree jumps between sizes. The next chapter turns that instability into an advantage by averaging many trees.</p>
 
 <div class="nav-footer">
   <a href="01-single-tree.html">← Chapter 1: The Single Tree</a>
-  <span class="spacer"></span>
   <a href="03-voting-ensembles.html">Chapter 3: Voting Ensembles →</a>
 </div>
 
 </div>
 
-<script>
-function prng(seed) { var s = seed >>> 0; return function () { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
-function gini(pts) {
-  if (pts.length === 0) return 0;
-  var p = pts.filter(function (pt) { return pt.c === 1; }).length / pts.length;
-  return 2 * p * (1 - p);
-}
-
-var TRANSFORMS = {
-  none: { fn: function (x) { return x; }, inv: function (x) { return x; }, label: 'x' },
-  log: { fn: function (x) { return Math.log(x + 0.1) - Math.log(0.1); }, inv: function (t) { return 0.1 * Math.exp(t) - 0.1; }, label: 'log(x+0.1)' },
-  sqrt: { fn: function (x) { return Math.sqrt(x); }, inv: function (x) { return x * x; }, label: '√x' },
-  sq: { fn: function (x) { return x * x; }, inv: function (x) { return Math.sqrt(x); }, label: 'x²' }
-};
-
-(function () {
-  var state = { mode: 'axis', rot: 45, alpha: 0, trans: 'none' };
-  var N = 160, Ntest = 400;
-
-  // Dataset generator: class depends on rotated boundary through center.
-  function makeData(seed, n) {
-    var r = prng(seed);
-    var out = [];
-    var theta = state.rot * Math.PI / 180;
-    for (var i = 0; i < n; i++) {
-      var x = r(), y = r();
-      var side = (x - 0.5) * Math.cos(theta) + (y - 0.5) * Math.sin(theta);
-      var noise = (r() - 0.5) * 0.1;
-      var c = (side + noise) > 0 ? 1 : 0;
-      out.push({ x: x, y: y, c: c });
-    }
-    return out;
-  }
-
-  function buildAxisTree(pts, region, depth, maxDepth, minLeaf) {
-    var pos = pts.filter(function (p) { return p.c === 1; }).length;
-    var neg = pts.length - pos;
-    var pred = pos >= neg ? 1 : 0;
-    var err = Math.min(pos, neg);
-    if (depth >= maxDepth || pts.length < 2 * minLeaf || pos === 0 || neg === 0) {
-      return { leaf: true, pred: pred, region: region, count: pts.length, err: err };
-    }
-    var parentG = gini(pts);
-    var best = null;
-    ['x', 'y'].forEach(function (axis) {
-      var sorted = pts.slice().sort(function (a, b) { return a[axis] - b[axis]; });
-      for (var i = minLeaf; i <= sorted.length - minLeaf; i++) {
-        if (sorted[i][axis] - sorted[i - 1][axis] < 1e-6) continue;
-        var thr = (sorted[i][axis] + sorted[i - 1][axis]) / 2;
-        var left = sorted.slice(0, i), right = sorted.slice(i);
-        var g = parentG - (left.length / pts.length * gini(left) + right.length / pts.length * gini(right));
-        if (!best || g > best.gain) best = { axis: axis, threshold: thr, gain: g, left: left, right: right };
-      }
-    });
-    if (!best || best.gain < 1e-9) {
-      return { leaf: true, pred: pred, region: region, count: pts.length, err: err };
-    }
-    var lRegion = Object.assign({}, region), rRegion = Object.assign({}, region);
-    if (best.axis === 'x') { lRegion.xHi = best.threshold; rRegion.xLo = best.threshold; }
-    else { lRegion.yHi = best.threshold; rRegion.yLo = best.threshold; }
-    return {
-      leaf: false, axis: best.axis, threshold: best.threshold, region: region,
-      count: pts.length, err: err, pred: pred,
-      left: buildAxisTree(best.left, lRegion, depth + 1, maxDepth, minLeaf),
-      right: buildAxisTree(best.right, rRegion, depth + 1, maxDepth, minLeaf)
+<script id="dt-core">
+// ---- core: pure functions, no DOM (tested in node) ----
+var DT = (function () {
+  function rng(seed) {
+    var a = seed >>> 0;
+    return function () {
+      a = (a + 0x6D2B79F5) >>> 0;
+      var t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
   }
+  function gauss(r) { var u = r() || 1e-12, v = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); }
+  function giniC(pos, n) { if (n === 0) return 0; var p = pos / n; return 2 * p * (1 - p); }
 
-  function buildObliqueSplit(pts) {
-    var best = null, parentG = gini(pts);
-    for (var a = 0; a < 180; a += 3) {
-      var ang = a * Math.PI / 180;
-      var cs = Math.cos(ang), sn = Math.sin(ang);
-      var projs = pts.map(function (p) { return { proj: (p.x - 0.5) * cs + (p.y - 0.5) * sn, c: p.c }; });
-      projs.sort(function (u, v) { return u.proj - v.proj; });
-      for (var i = 3; i < projs.length - 3; i++) {
-        if (projs[i].proj - projs[i - 1].proj < 1e-6) continue;
-        var thr = (projs[i].proj + projs[i - 1].proj) / 2;
-        var left = projs.slice(0, i).map(function (pp) { return { c: pp.c }; });
-        var right = projs.slice(i).map(function (pp) { return { c: pp.c }; });
-        var g = parentG - (left.length / pts.length * gini(left) + right.length / pts.length * gini(right));
-        if (!best || g > best.gain) best = { angle: ang, threshold: thr, gain: g };
-      }
+  // Best Gini split of pts (each has .c in {0,1}) along numeric values v(p).
+  // Returns {thr, gain, i} with thr the midpoint between neighbours, or null.
+  function bestCut(pts, v, minLeaf) {
+    var n = pts.length, order = pts.slice().sort(function (a, b) { return v(a) - v(b); });
+    var totPos = 0; for (var i = 0; i < n; i++) totPos += order[i].c;
+    var parent = giniC(totPos, n), lp = 0, best = null;
+    for (var k = 1; k < n; k++) {
+      lp += order[k - 1].c;
+      if (k < minLeaf || n - k < minLeaf) continue;
+      var a = v(order[k - 1]), b = v(order[k]);
+      if (b - a < 1e-12) continue;
+      var g = parent - (k / n) * giniC(lp, k) - ((n - k) / n) * giniC(totPos - lp, n - k);
+      if (!best || g > best.gain + 1e-12) best = { thr: (a + b) / 2, gain: g, k: k };
     }
     return best;
   }
 
-  function countLeaves(node) { if (node.leaf) return 1; return countLeaves(node.left) + countLeaves(node.right); }
-  function treeDepth(node) { if (node.leaf) return 0; return 1 + Math.max(treeDepth(node.left), treeDepth(node.right)); }
-  function subtreeErr(node) { if (node.leaf) return node.err; return subtreeErr(node.left) + subtreeErr(node.right); }
+  // Axis-aligned CART-style tree on keys (e.g. ['x','y']). Grows to purity by default.
+  var nextId = 0;
+  function build(pts, keys, opts, region, depth) {
+    opts = opts || {}; depth = depth || 0;
+    if (!region) { region = {}; keys.forEach(function (k) { var vs = pts.map(function (p) { return p[k]; }); region[k] = [Math.min.apply(null, vs), Math.max.apply(null, vs)]; }); }
+    var pos = 0; pts.forEach(function (p) { pos += p.c; });
+    var node = { id: nextId++, n: pts.length, pos: pos, pred: pos * 2 > pts.length ? 1 : (pos * 2 < pts.length ? 0 : (opts.tieClass || 0)), region: region, depth: depth };
+    node.err = node.pred === 1 ? pts.length - pos : pos;
+    var maxDepth = opts.maxDepth == null ? 99 : opts.maxDepth, minLeaf = opts.minLeaf || 1;
+    if (depth >= maxDepth || pos === 0 || pos === pts.length) { node.leaf = true; return node; }
+    var best = null;
+    keys.forEach(function (k) {
+      var b = bestCut(pts, function (p) { return p[k]; }, minLeaf);
+      if (b && (!best || b.gain > best.gain + 1e-12)) { best = b; best.key = k; }
+    });
+    if (!best || best.gain <= 1e-12) { node.leaf = true; return node; }
+    node.key = best.key; node.thr = best.thr; node.gain = best.gain;
+    var L = [], R = [];
+    pts.forEach(function (p) { (p[best.key] <= best.thr ? L : R).push(p); });
+    var rl = Object.assign({}, region), rr = Object.assign({}, region);
+    rl[best.key] = [region[best.key][0], best.thr]; rr[best.key] = [best.thr, region[best.key][1]];
+    node.left = build(L, keys, opts, rl, depth + 1);
+    node.right = build(R, keys, opts, rr, depth + 1);
+    return node;
+  }
+  function predict(t, p) { while (!t.leaf) t = p[t.key] <= t.thr ? t.left : t.right; return t.pred; }
+  function leafOf(t, p) { while (!t.leaf) t = p[t.key] <= t.thr ? t.left : t.right; return t.id; }
+  function leaves(t, out) { out = out || []; if (t.leaf) out.push(t); else { leaves(t.left, out); leaves(t.right, out); } return out; }
+  function nLeaves(t) { return t.leaf ? 1 : nLeaves(t.left) + nLeaves(t.right); }
+  function errRate(t, pts) { var e = 0; pts.forEach(function (p) { if (predict(t, p) !== p.c) e++; }); return e / pts.length; }
 
-  function pruneAt(node, alpha) {
-    if (node.leaf) return Object.assign({}, node);
-    var lPr = pruneAt(node.left, alpha);
-    var rPr = pruneAt(node.right, alpha);
-    var keptErr = subtreeErr(lPr) + subtreeErr(rPr);
-    var keptLeaves = countLeaves(lPr) + countLeaves(rPr);
-    var keptScore = keptErr + alpha * keptLeaves;
-    var collapsedScore = node.err + alpha;
-    if (collapsedScore <= keptScore) {
-      return { leaf: true, pred: node.pred, region: node.region, count: node.count, err: node.err };
+  // Prune: return copy with the ids in `cut` turned into leaves.
+  function pruned(t, cut) {
+    if (t.leaf || cut[t.id]) return Object.assign({}, t, { leaf: true, left: null, right: null, wasSplit: !t.leaf });
+    return Object.assign({}, t, { left: pruned(t.left, cut), right: pruned(t.right, cut) });
+  }
+  // Weakest-link (cost-complexity) pruning path, R in misclassified training counts.
+  // Returns [{alpha, cut, leaves, tree}], alpha nondecreasing, first alpha 0 (full tree).
+  function prunePath(full) {
+    var cut = {}, path = [{ alpha: 0, cut: {}, tree: full, leaves: nLeaves(full) }];
+    for (;;) {
+      var t = pruned(full, cut);
+      if (t.leaf) break;
+      var gmin = Infinity, cands = [];
+      (function walk(n) {
+        if (n.leaf) return { R: n.err, L: 1 };
+        var a = walk(n.left), b = walk(n.right), R = a.R + b.R, L = a.L + b.L;
+        var g = (n.err - R) / (L - 1);
+        if (g < gmin - 1e-9) { gmin = g; cands = [n.id]; } else if (Math.abs(g - gmin) <= 1e-9) cands.push(n.id);
+        return { R: R, L: L };
+      })(t);
+      var c2 = Object.assign({}, cut); cands.forEach(function (id) { c2[id] = true; });
+      cut = c2;
+      var tt = pruned(full, cut);
+      path.push({ alpha: gmin, cut: cut, tree: tt, leaves: nLeaves(tt) });
     }
-    return Object.assign({}, node, { left: lPr, right: rPr });
+    return path;
+  }
+  // Optimal subtree for a given alpha (bottom-up), for cross-validation.
+  function pruneAlpha(t, alpha) {
+    if (t.leaf) return t;
+    var l = pruneAlpha(t.left, alpha), r = pruneAlpha(t.right, alpha);
+    var keptR = 0, keptL = 0;
+    leaves(l).concat(leaves(r)).forEach(function (lf) { keptR += lf.err; keptL++; });
+    if (t.err + alpha <= keptR + alpha * keptL + 1e-9) return Object.assign({}, t, { leaf: true, left: null, right: null });
+    return Object.assign({}, t, { left: l, right: r });
   }
 
-  function predictAxis(tree, p) {
-    if (tree.leaf) return tree.pred;
-    if (tree.axis === 'x') return predictAxis(p.x <= tree.threshold ? tree.left : tree.right, p);
-    return predictAxis(p.y <= tree.threshold ? tree.left : tree.right, p);
+  // Oblique: best Gini gain of a cut perpendicular to direction angle a (deg), about centre (.5,.5).
+  function projCut(pts, adeg, minLeaf) {
+    var a = adeg * Math.PI / 180, cs = Math.cos(a), sn = Math.sin(a);
+    var b = bestCut(pts, function (p) { return (p.x - 0.5) * cs + (p.y - 0.5) * sn; }, minLeaf || 1);
+    if (!b) return null;
+    // side predictions
+    var lp = 0, ln = 0, rp = 0, rn = 0;
+    pts.forEach(function (p) { var s = (p.x - 0.5) * cs + (p.y - 0.5) * sn; if (s <= b.thr) { ln++; lp += p.c; } else { rn++; rp += p.c; } });
+    return { angle: adeg, thr: b.thr, gain: b.gain, predL: lp * 2 >= ln ? 1 : 0, predR: rp * 2 >= rn ? 1 : 0, cs: cs, sn: sn };
+  }
+  function angleScan(pts, step) {
+    var out = [];
+    for (var a = 0; a < 180; a += step) out.push(projCut(pts, a));
+    return out;
+  }
+  function obliquePredict(s, p) { return ((p.x - 0.5) * s.cs + (p.y - 0.5) * s.sn) <= s.thr ? s.predL : s.predR; }
+
+  // k-NN with plain Euclidean distance on keys.
+  function knn(train, keys, k, p) {
+    var d = train.map(function (q) { var s = 0; keys.forEach(function (kk) { var z = q[kk] - p[kk]; s += z * z; }); return { d: s, c: q.c }; });
+    d.sort(function (a, b) { return a.d - b.d; });
+    var pos = 0; for (var i = 0; i < k; i++) pos += d[i].c;
+    return pos * 2 > k ? 1 : 0;
   }
 
-  var train, test, FULL_TREE, obliqueSplit, alphaMax = 20;
-  function rebuildData() {
-    train = makeData(5, N);
-    test = makeData(17, Ntest);
-    FULL_TREE = buildAxisTree(train, { xLo: 0, xHi: 1, yLo: 0, yHi: 1 }, 0, 12, 1);
-    obliqueSplit = buildObliqueSplit(train);
+  // ---- data ----
+  // Fig 1: x is skewed (log-normal), y uniform.
+  function skewData(seed, n) {
+    var r = rng(seed), out = [];
+    for (var i = 0; i < n; i++) {
+      var x = Math.exp(0.9 * gauss(r) + 1.2), y = r();
+      var c = (Math.log(x) > 1.4 && y > 0.3) || y > 0.82 ? 1 : 0;
+      if (r() < 0.08) c = 1 - c;
+      out.push({ x: x, y: y, c: c });
+    }
+    return out;
   }
-  rebuildData();
-
-  // Boundary SVG
-  var Wb = 280, Hb = 280, pB = 4;
-  var svgB = d3.select('#m-boundary').append('svg')
-    .attr('viewBox', '0 0 ' + Wb + ' ' + Hb)
-    .attr('width', '100%').style('max-width', Wb + 'px')
-    .attr('role', 'img');
-  function XB(x) { return pB + TRANSFORMS[state.trans].fn(x) * (Wb - 2 * pB) / TRANSFORMS[state.trans].fn(1); }
-  function YB(y) { return Hb - pB - y * (Hb - 2 * pB); }
-  svgB.append('rect').attr('x', pB).attr('y', pB).attr('width', Wb - 2 * pB).attr('height', Hb - 2 * pB)
-    .attr('fill', 'none').attr('stroke', 'var(--border)');
-  var regionLayer = svgB.append('g');
-  var splitLayer = svgB.append('g');
-  var dataLayer = svgB.append('g');
-  var truthLayer = svgB.append('g');
-
-  // Error curve SVG
-  var We = 280, He = 280, padL = 42, padR = 10, padT = 20, padB = 34;
-  var svgE = d3.select('#m-errcurve').append('svg')
-    .attr('viewBox', '0 0 ' + We + ' ' + He)
-    .attr('width', '100%').style('max-width', We + 'px')
-    .attr('role', 'img');
-
-  function trainTestErr(tree) {
-    var tr = 0, te = 0;
-    train.forEach(function (p) { if (predictAxis(tree, p) !== p.c) tr++; });
-    test.forEach(function (p) { if (predictAxis(tree, p) !== p.c) te++; });
-    return { tr: tr / train.length, te: te / test.length };
+  // Uniform square, label by side of a line through the centre at `rot` degrees
+  // (0 = vertical boundary), with label flips at rate `flip`.
+  function squareXY(seed, n) { var r = rng(seed), o = []; for (var i = 0; i < n; i++) o.push({ x: r(), y: r(), u: r() }); return o; }
+  function labelRot(xy, rot, flip) {
+    var t = rot * Math.PI / 180, cs = Math.cos(t), sn = Math.sin(t);
+    return xy.map(function (p) { var c = ((p.x - 0.5) * cs + (p.y - 0.5) * sn) > 0 ? 1 : 0; if (p.u < flip) c = 1 - c; return { x: p.x, y: p.y, c: c }; });
+  }
+  // Fig 2: two Gaussian clouds offset along direction `dir` degrees.
+  function blobs(seed, n, dir) {
+    var r = rng(seed), out = [], t = dir * Math.PI / 180;
+    for (var i = 0; i < n; i++) {
+      var c = i % 2, s = c ? 1 : -1;
+      out.push({ x: 0.5 + s * 0.09 * Math.cos(t) + 0.13 * gauss(r), y: 0.5 + s * 0.09 * Math.sin(t) + 0.13 * gauss(r), c: c });
+    }
+    return out;
   }
 
-  function renderBoundary() {
-    regionLayer.selectAll('*').remove();
-    splitLayer.selectAll('*').remove();
-    dataLayer.selectAll('*').remove();
-    truthLayer.selectAll('*').remove();
-
-    if (state.mode === 'axis') {
-      var tree = pruneAt(FULL_TREE, state.alpha);
-      var leaves = [];
-      function coll(n) { if (n.leaf) leaves.push(n); else { coll(n.left); coll(n.right); } }
-      coll(tree);
-      leaves.forEach(function (lf) {
-        regionLayer.append('rect')
-          .attr('x', XB(lf.region.xLo)).attr('y', YB(lf.region.yHi))
-          .attr('width', XB(lf.region.xHi) - XB(lf.region.xLo))
-          .attr('height', YB(lf.region.yLo) - YB(lf.region.yHi))
-          .attr('fill', lf.pred === 1 ? 'var(--c-pos)' : 'var(--c-neg)').attr('opacity', 0.13);
+  // CV over alpha: returns per-alpha {alpha, cv, se, foldRates}
+  function cvPrune(train, alphas, K, seed) {
+    var r = rng(seed), idx = train.map(function (_, i) { return i; });
+    for (var i = idx.length - 1; i > 0; i--) { var j = Math.floor(r() * (i + 1)); var t = idx[i]; idx[i] = idx[j]; idx[j] = t; }
+    var fold = []; idx.forEach(function (ix, pos) { fold[ix] = pos % K; });
+    var errs = alphas.map(function () { return []; }), tot = alphas.map(function () { return 0; });
+    for (var f = 0; f < K; f++) {
+      var tr = train.filter(function (_, i) { return fold[i] !== f; }), ho = train.filter(function (_, i) { return fold[i] === f; });
+      var full = build(tr, ['x', 'y']);
+      alphas.forEach(function (a, ai) {
+        var e = 0, t = pruneAlpha(full, a * (K - 1) / K); // alpha scaled to fold training size
+        ho.forEach(function (p) { if (predict(t, p) !== p.c) e++; });
+        errs[ai].push(e / ho.length); tot[ai] += e;
       });
-      function drawSplits(n) {
-        if (n.leaf) return;
-        if (n.axis === 'x') {
-          splitLayer.append('line').attr('x1', XB(n.threshold)).attr('x2', XB(n.threshold))
-            .attr('y1', YB(n.region.yHi)).attr('y2', YB(n.region.yLo))
-            .attr('stroke', 'var(--c-axis)').attr('stroke-width', 1.2);
-        } else {
-          splitLayer.append('line').attr('x1', XB(n.region.xLo)).attr('x2', XB(n.region.xHi))
-            .attr('y1', YB(n.threshold)).attr('y2', YB(n.threshold))
-            .attr('stroke', 'var(--c-axis)').attr('stroke-width', 1.2);
-        }
-        drawSplits(n.left); drawSplits(n.right);
-      }
-      drawSplits(tree);
-      var et = trainTestErr(tree);
-      document.getElementById('m-leaves').textContent = countLeaves(tree);
-      document.getElementById('m-depth').textContent = treeDepth(tree);
-      document.getElementById('m-trerr').textContent = (100 * et.tr).toFixed(1) + '%';
-      document.getElementById('m-teerr').textContent = (100 * et.te).toFixed(1) + '%';
-    } else {
-      // Oblique single-split mode
-      var split = obliqueSplit;
-      if (split) {
-        var cs = Math.cos(split.angle), sn = Math.sin(split.angle);
-        function lineY(x) { return Math.abs(sn) > 1e-6 ? 0.5 + (split.threshold - cs * (x - 0.5)) / sn : null; }
-        function lineX(y) { return Math.abs(cs) > 1e-6 ? 0.5 + (split.threshold - sn * (y - 0.5)) / cs : null; }
-        var cands = [];
-        if (Math.abs(sn) > 1e-6) { cands.push({ x: 0, y: lineY(0) }); cands.push({ x: 1, y: lineY(1) }); }
-        if (Math.abs(cs) > 1e-6) { cands.push({ x: lineX(0), y: 0 }); cands.push({ x: lineX(1), y: 1 }); }
-        var inBox = cands.filter(function (p) { return p.x >= -0.001 && p.x <= 1.001 && p.y >= -0.001 && p.y <= 1.001; });
-        var uniq = [];
-        inBox.forEach(function (p) { if (!uniq.find(function (q) { return Math.abs(q.x - p.x) < 1e-3 && Math.abs(q.y - p.y) < 1e-3; })) uniq.push(p); });
-        if (uniq.length >= 2) {
-          var a = uniq[0], b = uniq[1];
-          function sideOf(x, y) { return cs * (x - 0.5) + sn * (y - 0.5) - split.threshold; }
-          var corners = [[0, 0], [1, 0], [1, 1], [0, 1]];
-          var posCorners = corners.filter(function (c) { return sideOf(c[0], c[1]) > 0; });
-          var negCorners = corners.filter(function (c) { return sideOf(c[0], c[1]) <= 0; });
-          function makePoly(cList, p1, p2) {
-            var all = cList.map(function (c) { return { x: c[0], y: c[1] }; }).concat([p1, p2]);
-            var cx = 0, cy = 0;
-            all.forEach(function (p) { cx += p.x; cy += p.y; });
-            cx /= all.length; cy /= all.length;
-            all.sort(function (u, v) { return Math.atan2(u.y - cy, u.x - cx) - Math.atan2(v.y - cy, v.x - cx); });
-            return all;
-          }
-          var centroidPt = train[0];
-          var cSide = sideOf(centroidPt.x, centroidPt.y);
-          var cClass = centroidPt.c;
-          var posClass = (cClass === 1 && cSide > 0) || (cClass === 0 && cSide <= 0) ? 1 : 0;
-          var posPoly = makePoly(posCorners, a, b);
-          var negPoly = makePoly(negCorners, a, b);
-          regionLayer.append('polygon')
-            .attr('points', posPoly.map(function (p) { return XB(p.x) + ',' + YB(p.y); }).join(' '))
-            .attr('fill', posClass === 1 ? 'var(--c-pos)' : 'var(--c-neg)').attr('opacity', 0.13);
-          regionLayer.append('polygon')
-            .attr('points', negPoly.map(function (p) { return XB(p.x) + ',' + YB(p.y); }).join(' '))
-            .attr('fill', posClass === 1 ? 'var(--c-neg)' : 'var(--c-pos)').attr('opacity', 0.13);
-          splitLayer.append('line').attr('x1', XB(a.x)).attr('y1', YB(a.y)).attr('x2', XB(b.x)).attr('y2', YB(b.y))
-            .attr('stroke', 'var(--c-oblique)').attr('stroke-width', 2);
-        }
-        var err = 0;
-        test.forEach(function (p) {
-          var sp = cs * (p.x - 0.5) + sn * (p.y - 0.5) - split.threshold;
-          var cp = cs * (centroidPt.x - 0.5) + sn * (centroidPt.y - 0.5) - split.threshold;
-          var pred = (sp > 0) === (cp > 0) ? centroidPt.c : 1 - centroidPt.c;
-          if (pred !== p.c) err++;
-        });
-        document.getElementById('m-leaves').textContent = 2;
-        document.getElementById('m-depth').textContent = 1;
-        document.getElementById('m-trerr').textContent = 'n/a';
-        document.getElementById('m-teerr').textContent = (100 * err / test.length).toFixed(1) + '%';
-      }
     }
-
-    // Data
-    train.forEach(function (p) {
-      dataLayer.append('circle').attr('cx', XB(p.x)).attr('cy', YB(p.y)).attr('r', 2)
-        .attr('fill', p.c === 1 ? 'var(--c-pos)' : 'var(--c-neg)').attr('opacity', 0.85);
+    return alphas.map(function (a, ai) {
+      var m = tot[ai] / train.length, rs = errs[ai], mu = d3mean(rs), v = 0;
+      rs.forEach(function (x) { v += (x - mu) * (x - mu); });
+      return { alpha: a, cv: m, se: Math.sqrt(v / (K - 1) / K) };
     });
-
-    // True boundary overlay
-    var theta = state.rot * Math.PI / 180;
-    function ptOnBoundary(t) { return { x: 0.5 + Math.cos(theta + Math.PI / 2) * t, y: 0.5 + Math.sin(theta + Math.PI / 2) * t }; }
-    var p1 = ptOnBoundary(-1.5), p2 = ptOnBoundary(1.5);
-    truthLayer.append('line').attr('x1', XB(Math.max(0, Math.min(1, p1.x)))).attr('y1', YB(Math.max(0, Math.min(1, p1.y))))
-      .attr('x2', XB(Math.max(0, Math.min(1, p2.x)))).attr('y2', YB(Math.max(0, Math.min(1, p2.y))))
-      .attr('stroke', 'var(--text)').attr('stroke-width', 1).attr('stroke-dasharray', '3 3').attr('opacity', 0.55);
   }
-
-  function renderErrCurve() {
-    svgE.selectAll('*').remove();
-    svgE.append('line').attr('x1', padL).attr('x2', We - padR).attr('y1', He - padB).attr('y2', He - padB).attr('stroke', 'var(--border)');
-    svgE.append('line').attr('x1', padL).attr('x2', padL).attr('y1', padT).attr('y2', He - padB).attr('stroke', 'var(--border)');
-    svgE.append('text').attr('x', (padL + We - padR) / 2).attr('y', He - 10).attr('text-anchor', 'middle')
-      .attr('font-size', 10).attr('fill', 'var(--text-2)').text('α (pruning strength)');
-    svgE.append('text').attr('transform', 'translate(12,' + ((padT + He - padB) / 2) + ') rotate(-90)').attr('text-anchor', 'middle')
-      .attr('font-size', 10).attr('fill', 'var(--text-2)').text('error rate');
-
-    // Sweep α, compute train/test error.
-    var sweep = [];
-    var stepCount = 50;
-    for (var i = 0; i <= stepCount; i++) {
-      var a = alphaMax * i / stepCount;
-      var t = pruneAt(FULL_TREE, a);
-      var et = trainTestErr(t);
-      sweep.push({ alpha: a, tr: et.tr, te: et.te });
+  function d3mean(a) { var s = 0; a.forEach(function (x) { s += x; }); return s / a.length; }
+  function cvChoose(res) {
+    var iMin = 0; res.forEach(function (d, i) { if (d.cv < res[iMin].cv - 1e-12) iMin = i; });
+    var lim = res[iMin].cv + res[iMin].se, i1 = iMin;
+    res.forEach(function (d, i) { if (d.cv <= lim + 1e-12 && d.alpha > res[i1].alpha) i1 = i; });
+    return { iMin: iMin, i1se: i1 };
+  }
+  // CV alpha grid: geometric midpoints of the path's breakpoints.
+  function alphaGrid(path) {
+    var a = [];
+    for (var i = 0; i < path.length; i++) {
+      var lo = path[i].alpha, hi = i + 1 < path.length ? path[i + 1].alpha : path[i].alpha * 2;
+      if (i === 0) { a.push(Math.max(1e-3, hi / 2)); continue; }
+      a.push(Math.sqrt(lo * hi));
     }
-    var eMax = Math.max.apply(null, sweep.map(function (d) { return Math.max(d.tr, d.te); })) * 1.1;
-    function X(a) { return padL + a / alphaMax * (We - padL - padR); }
-    function Y(e) { return He - padB - e / eMax * (He - padT - padB); }
-    [0, 0.1, 0.2, 0.3, 0.4].forEach(function (e) {
-      if (e > eMax) return;
-      svgE.append('line').attr('x1', padL).attr('y1', Y(e)).attr('x2', padL - 4).attr('y2', Y(e)).attr('stroke', 'var(--border)');
-      svgE.append('text').attr('x', padL - 6).attr('y', Y(e) + 3).attr('text-anchor', 'end')
-        .attr('font-size', 9).attr('fill', 'var(--text-2)').text((e * 100).toFixed(0) + '%');
-    });
-
-    var trainPath = sweep.map(function (d, i) { return (i === 0 ? 'M' : 'L') + X(d.alpha) + ',' + Y(d.tr); }).join('');
-    var testPath = sweep.map(function (d, i) { return (i === 0 ? 'M' : 'L') + X(d.alpha) + ',' + Y(d.te); }).join('');
-    svgE.append('path').attr('d', trainPath).attr('fill', 'none').attr('stroke', 'var(--c-train)').attr('stroke-width', 2);
-    svgE.append('path').attr('d', testPath).attr('fill', 'none').attr('stroke', 'var(--c-test)').attr('stroke-width', 2);
-
-    // Sweet spot
-    var best = sweep.reduce(function (b, d) { return !b || d.te < b.te ? d : b; }, null);
-    if (best) {
-      svgE.append('line').attr('x1', X(best.alpha)).attr('x2', X(best.alpha))
-        .attr('y1', padT).attr('y2', He - padB)
-        .attr('stroke', 'var(--c-sweet)').attr('stroke-width', 1).attr('stroke-dasharray', '3 3').attr('opacity', 0.75);
-      // Label sits above the plot area so it never collides with the train/test legend.
-      svgE.append('text').attr('x', X(best.alpha) + 4).attr('y', padT - 6)
-        .attr('font-size', 9).attr('font-weight', 700).attr('fill', 'var(--c-sweet)').text('sweet spot');
-    }
-
-    // Current α
-    svgE.append('line').attr('x1', X(state.alpha)).attr('x2', X(state.alpha))
-      .attr('y1', padT).attr('y2', He - padB)
-      .attr('stroke', 'var(--text)').attr('stroke-width', 1).attr('opacity', 0.4);
-
-    // Labels
-    svgE.append('text').attr('x', padL + 4).attr('y', padT + 11).attr('font-size', 10).attr('font-weight', 700).attr('fill', 'var(--c-train)').text('train');
-    svgE.append('text').attr('x', padL + 4).attr('y', padT + 24).attr('font-size', 10).attr('font-weight', 700).attr('fill', 'var(--c-test)').text('test');
+    return a;
   }
 
-  function render() {
-    renderBoundary(); renderErrCurve();
-    svgB.attr('aria-label', 'Decision regions of a ' + (state.mode === 'oblique' ? 'single oblique split' : 'pruned axis-aligned tree') +
-      ' on two-class points whose true boundary, dashed, is tilted ' + state.rot + ' degrees. Leaves: ' + document.getElementById('m-leaves').textContent +
-      ', test error ' + document.getElementById('m-teerr').textContent + '.');
-    svgE.attr('aria-label', 'Training and test error against pruning strength alpha, with the test-error minimum marked as the sweet spot and the current alpha as a vertical line.');
-  }
-
-  d3.selectAll('#m-mode button').on('click', function () {
-    state.mode = this.getAttribute('data-m');
-    d3.selectAll('#m-mode button').classed('active', function () { return this.getAttribute('data-m') === state.mode; });
-    render();
-  });
-  d3.select('#m-rot').on('input', function () {
-    state.rot = +this.value;
-    document.getElementById('m-rot-val').textContent = state.rot + '°';
-    rebuildData();
-    render();
-  });
-  d3.select('#m-alpha').on('input', function () {
-    state.alpha = (+this.value) / 100 * alphaMax;
-    document.getElementById('m-alpha-val').textContent = state.alpha.toFixed(2);
-    render();
-  });
-  d3.selectAll('#m-trans button').on('click', function () {
-    state.trans = this.getAttribute('data-t');
-    d3.selectAll('#m-trans button').classed('active', function () { return this.getAttribute('data-t') === state.trans; });
-    render();
-  });
-
-  render();
+  return { rng: rng, gauss: gauss, bestCut: bestCut, build: build, predict: predict, leafOf: leafOf, leaves: leaves, nLeaves: nLeaves,
+    errRate: errRate, pruned: pruned, prunePath: prunePath, pruneAlpha: pruneAlpha, projCut: projCut, angleScan: angleScan,
+    obliquePredict: obliquePredict, knn: knn, skewData: skewData, squareXY: squareXY, labelRot: labelRot, blobs: blobs,
+    cvPrune: cvPrune, cvChoose: cvChoose, alphaGrid: alphaGrid };
 })();
+if (typeof module !== 'undefined') module.exports = DT;
+</script>
+<script>
+// ---- views ----
+(function () {
+  var pct = function (e) { return (100 * e).toFixed(1) + '%'; };
+  function N(s) { return '<span class="n">' + s + '</span>'; }
+  function mkSvg(sel, w, h, label) {
+    return d3.select(sel).append('svg').attr('viewBox', '0 0 ' + w + ' ' + h).attr('role', 'img').attr('aria-label', label);
+  }
+  function styleAxis(g) {
+    g.selectAll('text').attr('font-size', 11).attr('fill', 'var(--text-2)');
+    g.selectAll('line,path').attr('stroke', 'var(--border)');
+    return g;
+  }
+  var CLS = function (c) { return c === 1 ? 'var(--c-pos)' : 'var(--c-neg)'; };
+  // Keep the part of polygon `poly` where f(p) <= 0 (Sutherland-Hodgman, one half-plane).
+  function clipHalf(poly, f) {
+    var out = [];
+    for (var i = 0; i < poly.length; i++) {
+      var a = poly[i], b = poly[(i + 1) % poly.length], fa = f(a), fb = f(b);
+      if (fa <= 0) out.push(a);
+      if ((fa <= 0) !== (fb <= 0)) { var t = fa / (fa - fb); out.push({ x: a.x + t * (b.x - a.x), y: a.y + t * (b.y - a.y) }); }
+    }
+    return out;
+  }
+  var SQ = [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 1, y: 1 }, { x: 0, y: 1 }];
+  function drawOblique(g, s, sx, sy) {
+    var fL = function (p) { return (p.x - 0.5) * s.cs + (p.y - 0.5) * s.sn - s.thr; };
+    var fR = function (p) { return -fL(p); };
+    [[fL, s.predL], [fR, s.predR]].forEach(function (h) {
+      var poly = clipHalf(SQ, h[0]);
+      if (poly.length > 2) g.append('polygon').attr('points', poly.map(function (p) { return sx(p.x) + ',' + sy(p.y); }).join(' ')).attr('fill', CLS(h[1])).attr('opacity', 0.14);
+    });
+    var seg = clipHalf(SQ, fL).filter(function (p) { return Math.abs(fL(p)) < 1e-9; });
+    if (seg.length >= 2) g.append('line').attr('x1', sx(seg[0].x)).attr('y1', sy(seg[0].y)).attr('x2', sx(seg[1].x)).attr('y2', sy(seg[1].y)).attr('stroke', 'var(--c-oblique)').attr('stroke-width', 2);
+  }
+  // Leaves as shaded rectangles, splits as lines; `full` (optional) draws pruned splits faint.
+  function drawTree(g, tree, sx, sy, full, cutSet) {
+    DT.leaves(tree).forEach(function (lf) {
+      var r = lf.region;
+      g.append('rect').attr('x', sx(r.x[0])).attr('y', sy(r.y[1])).attr('width', Math.max(0, sx(r.x[1]) - sx(r.x[0]))).attr('height', Math.max(0, sy(r.y[0]) - sy(r.y[1])))
+        .attr('fill', CLS(lf.pred)).attr('opacity', 0.14);
+    });
+    function lines(n, faint) {
+      if (n.leaf) return;
+      var r = n.region, ln = n.key === 'x'
+        ? { x1: sx(n.thr), x2: sx(n.thr), y1: sy(r.y[0]), y2: sy(r.y[1]) }
+        : { x1: sx(r.x[0]), x2: sx(r.x[1]), y1: sy(n.thr), y2: sy(n.thr) };
+      g.append('line').attr('x1', ln.x1).attr('x2', ln.x2).attr('y1', ln.y1).attr('y2', ln.y2)
+        .attr('stroke', faint ? 'var(--text-2)' : 'var(--c-split)').attr('stroke-width', faint ? 0.7 : 1.3)
+        .attr('stroke-dasharray', faint ? '2 3' : null).attr('opacity', faint ? 0.6 : 1);
+      lines(n.left, faint); lines(n.right, faint);
+    }
+    if (full) {
+      (function walk(n, under) {
+        if (n.leaf) return;
+        var gone = under || !!cutSet[n.id];
+        if (gone) { lines(n, true); return; }
+        walk(n.left, false); walk(n.right, false);
+      })(full, false);
+      (function kept(n) { if (n.leaf) return; var r = n.region, isX = n.key === 'x';
+        g.append('line').attr('x1', isX ? sx(n.thr) : sx(r.x[0])).attr('x2', isX ? sx(n.thr) : sx(r.x[1])).attr('y1', isX ? sy(r.y[0]) : sy(n.thr)).attr('y2', isX ? sy(r.y[1]) : sy(n.thr))
+          .attr('stroke', 'var(--c-split)').attr('stroke-width', 1.3);
+        kept(n.left); kept(n.right); })(tree);
+    } else lines(tree, false);
+  }
+  function drawPoints(g, pts, sx, sy, r) {
+    g.selectAll(null).data(pts).enter().append('circle').attr('cx', function (p) { return sx(p.x); }).attr('cy', function (p) { return sy(p.y); })
+      .attr('r', r || 2.2).attr('fill', function (p) { return CLS(p.c); }).attr('opacity', 0.85);
+  }
+  function truthLine(g, rot, sx, sy) {
+    var t = rot * Math.PI / 180, dx = -Math.sin(t), dy = Math.cos(t);
+    var seg = clipHalf(SQ, function (p) { return (p.x - 0.5) * Math.cos(t) + (p.y - 0.5) * Math.sin(t); }).filter(function (p) { return Math.abs((p.x - 0.5) * Math.cos(t) + (p.y - 0.5) * Math.sin(t)) < 1e-9; });
+    if (seg.length >= 2) g.append('line').attr('x1', sx(seg[0].x)).attr('y1', sy(seg[0].y)).attr('x2', sx(seg[1].x)).attr('y2', sy(seg[1].y))
+      .attr('stroke', 'var(--text)').attr('stroke-width', 1.2).attr('stroke-dasharray', '4 3').attr('opacity', 0.7);
+    return { dx: dx, dy: dy };
+  }
+  function unitMap(sel, label, W) {
+    W = W || 300;
+    var svg = mkSvg(sel, W, W, label), p = 6;
+    var sx = d3.scaleLinear().domain([0, 1]).range([p, W - p]), sy = d3.scaleLinear().domain([0, 1]).range([W - p, p]);
+    svg.append('rect').attr('x', p).attr('y', p).attr('width', W - 2 * p).attr('height', W - 2 * p).attr('fill', 'none').attr('stroke', 'var(--border)');
+    return { svg: svg, sx: sx, sy: sy, g: svg.append('g') };
+  }
+  function pressed(groupSel, attr, val) {
+    d3.selectAll(groupSel + ' button').attr('aria-pressed', function () { return String(this.getAttribute(attr) === val); });
+  }
+  // Pointer + keyboard scrubbing on a chart rect (value from x position).
+  function scrub(rect, xToVal, set) {
+    function at(ev) { var pt = d3.pointer(ev, rect.node()); set(xToVal(pt[0])); }
+    rect.on('pointerdown', function (ev) { this.setPointerCapture(ev.pointerId); at(ev); })
+      .on('pointermove', function (ev) { if (ev.buttons) at(ev); });
+  }
 
-if (window.Motion) window.Motion.mountBanner();
+  // ===== Figure 1: monotone transforms =====
+  (function () {
+    var tr = DT.skewData(8, 150), te = DT.skewData(1008, 300);
+    var TF = {
+      raw: { f: function (x) { return x; }, name: 'x' },
+      sqrt: { f: Math.sqrt, name: '√x' },
+      log: { f: Math.log, name: 'log x' },
+      sq: { f: function (x) { return x * x; }, name: 'x²' }
+    };
+    var all = tr.concat(te), lo = d3.min(all, function (p) { return p.x; }), hi = d3.max(all, function (p) { return p.x; });
+    function pathOf(t, p) { var s = ''; while (!t.leaf) { var L = p[t.key] <= t.thr; s += L ? 'L' : 'R'; t = L ? t.left : t.right; } return s; }
+    function grow(k) {
+      var f = TF[k].f, m = function (p) { return { x: f(p.x), y: p.y, c: p.c, raw: p.x }; };
+      var tr2 = tr.map(m), te2 = te.map(m);
+      var t = DT.build(tr2, ['x', 'y'], { maxDepth: 3 }, { x: [f(lo), f(hi)], y: [0, 1] });
+      return { tr: tr2, te: te2, t: t,
+        paths: tr2.map(function (p) { return pathOf(t, p); }),
+        tp: te2.map(function (p) { return DT.predict(t, p); }),
+        kp: te2.map(function (p) { return DT.knn(tr2, ['x', 'y'], 7, p); }) };
+    }
+    var KEYS = ['raw', 'sqrt', 'log', 'sq'], R = {};
+    KEYS.forEach(function (k) { R[k] = grow(k); });
+    var base = R.raw;
+    KEYS.forEach(function (k) {
+      var r = R[k]; r.flips = []; r.dT = 0; r.same = 0; r.eT = 0; r.eK = 0;
+      r.te.forEach(function (p, i) {
+        if (r.kp[i] !== base.kp[i]) r.flips.push(p);
+        if (r.tp[i] !== base.tp[i]) r.dT++;
+        if (r.tp[i] !== p.c) r.eT++; if (r.kp[i] !== p.c) r.eK++;
+      });
+      r.paths.forEach(function (s, i) { if (s === base.paths[i]) r.same++; });
+      r.eT /= te.length; r.eK /= te.length; r.L = DT.nLeaves(r.t);
+    });
+    var W = 300, H = 300, pl = 30, pr = 8, pt = 6, pb = 34;
+    var svg = mkSvg('#f1-map', W, H, '');
+    var gR = svg.append('g'), gP = svg.append('g'), gA = svg.append('g').attr('transform', 'translate(0,' + (H - pb) + ')'), gY = svg.append('g').attr('transform', 'translate(' + pl + ',0)');
+    var xl = svg.append('text').attr('x', W - pr).attr('y', H - 3).attr('text-anchor', 'end').attr('font-size', 11).attr('fill', 'var(--text-2)');
+    var sy = d3.scaleLinear().domain([0, 1]).range([H - pb, pt]);
+    styleAxis(gY.call(d3.axisLeft(sy).ticks(4).tickSize(3)));
+    svg.append('rect').attr('x', pl).attr('y', pt).attr('width', W - pl - pr).attr('height', H - pb - pt).attr('fill', 'none').attr('stroke', 'var(--border)');
+    // right: test error by transform, tree vs 7-NN
+    var C = mkSvg('#f1-chart', W, H, 'Dot plot of test error for the tree and for 7-nearest-neighbour under each of four transforms of x.');
+    var cx = d3.scalePoint().domain(KEYS).range([pl + 30, W - pr - 26]);
+    var cy = d3.scaleLinear().domain([0, Math.max(0.35, d3.max(KEYS, function (k) { return R[k].eK; }) * 1.15)]).nice().range([H - pb, pt + 10]);
+    var band = C.append('g');
+    styleAxis(C.append('g').attr('transform', 'translate(0,' + (H - pb) + ')').call(d3.axisBottom(cx).tickFormat(function (k) { return TF[k].name; }).tickSize(3)));
+    styleAxis(C.append('g').attr('transform', 'translate(' + pl + ',0)').call(d3.axisLeft(cy).ticks(5).tickSize(3).tickFormat(function (v) { return Math.round(v * 100) + '%'; })));
+    [['eT', 'var(--c-split)', 'tree'], ['eK', 'var(--text-2)', '7-NN']].forEach(function (q) {
+      C.append('path').attr('d', d3.line().x(function (k) { return cx(k); }).y(function (k) { return cy(R[k][q[0]]); })(KEYS)).attr('fill', 'none').attr('stroke', q[1]).attr('stroke-width', 1.4).attr('opacity', 0.6);
+      KEYS.forEach(function (k) { C.append('circle').attr('cx', cx(k)).attr('cy', cy(R[k][q[0]])).attr('r', 4).attr('fill', q[1]); });
+      var last = R.sq[q[0]];
+      C.append('text').attr('x', cx('sq') + 7).attr('y', cy(last) + 4).attr('font-size', 11).attr('font-weight', 700).attr('fill', q[1]).text(q[2]);
+    });
+    var hits = C.append('g');
+    KEYS.forEach(function (k) {
+      hits.append('rect').attr('class', 'hit').attr('x', cx(k) - 28).attr('y', pt).attr('width', 56).attr('height', H - pb - pt).attr('fill', 'transparent')
+        .on('click', function () { select(k); });
+    });
+    function select(k) { pressed('#f1-trans', 'data-t', k); render(k); }
+    function render(k) {
+      var r = R[k], f = TF[k].f;
+      var sx = d3.scaleLinear().domain([f(lo), f(hi)]).range([pl, W - pr]);
+      gR.selectAll('*').remove(); gP.selectAll('*').remove();
+      drawTree(gR, r.t, sx, sy);
+      drawPoints(gP, r.tr, sx, sy, 2.4);
+      gP.selectAll(null).data(r.flips).enter().append('circle').attr('cx', function (p) { return sx(p.x); }).attr('cy', function (p) { return sy(p.y); })
+        .attr('r', 4.5).attr('fill', 'none').attr('stroke', 'var(--text)').attr('stroke-width', 1).attr('opacity', 0.75);
+      var cand = { raw: [5, 10, 20, 40], sqrt: [1, 2, 5, 10, 20, 40], log: [0.5, 1, 2, 5, 10, 20, 40], sq: [10, 20, 30, 40] }[k];
+      var ticks = cand.filter(function (v) { return v >= lo && v <= hi; });
+      gA.selectAll('*').remove();
+      styleAxis(gA.call(d3.axisBottom(sx).tickValues(ticks.map(f)).tickFormat(function (v, i) { return ticks[i]; }).tickSize(3)));
+      xl.text('x, spaced as ' + TF[k].name);
+      band.selectAll('*').remove();
+      band.append('rect').attr('x', cx(k) - 22).attr('y', pt).attr('width', 44).attr('height', H - pb - pt).attr('fill', 'var(--accent-light)').attr('opacity', 0.6);
+      svg.attr('aria-label', 'Scatter of 150 points with x spaced as ' + TF[k].name + ', shaded by a depth-3 tree with ' + r.L + ' leaves; ' + r.flips.length + ' fresh points ringed where the nearest-neighbour vote changed.');
+      document.getElementById('f1-read').innerHTML = k === 'raw'
+        ? 'Raw x. The tree has ' + N(r.L) + ' leaves and test error ' + N(pct(r.eT)) + '; 7-nearest-neighbour on unscaled distances has ' + N(pct(r.eK)) + '. Pick a transform to compare.'
+        : 'Regrown on ' + TF[k].name + ': ' + N(r.same + ' of 150') + ' training points land in the same leaf as on raw x and ' + N(r.dT + ' of 300') + ' test predictions change. 7-nearest-neighbour changes ' + N(r.flips.length + ' of 300') + ' and its test error moves from ' + N(pct(base.eK)) + ' to ' + N(pct(r.eK)) + '.';
+    }
+    d3.selectAll('#f1-trans button').on('click', function () { select(this.getAttribute('data-t')); });
+    select('log');
+  })();
+
+  // ===== Figure 2: rotation sweep =====
+  (function () {
+    var xy = DT.squareXY(8, 800), teXY = DT.squareXY(508, 2000);
+    var angles = d3.range(0, 91, 5), sweep = {};
+    angles.forEach(function (a) {
+      var t2 = DT.labelRot(xy.slice(0, 200), a, 0), t8 = DT.labelRot(xy, a, 0), tt = DT.labelRot(teXY, a, 0);
+      var unit = { x: [0, 1], y: [0, 1] };
+      var T2 = DT.build(t2, ['x', 'y'], {}, unit), T8 = DT.build(t8, ['x', 'y'], {}, unit);
+      var ob = null; DT.angleScan(t2, 1).forEach(function (c) { if (c && (!ob || c.gain > ob.gain + 1e-12)) ob = c; });
+      var eo = 0; tt.forEach(function (p) { if (DT.obliquePredict(ob, p) !== p.c) eo++; });
+      sweep[a] = { a: a, pts: t2, T2: T2, L2: DT.nLeaves(T2), L8: DT.nLeaves(T8), e2: DT.errRate(T2, tt), eo: eo / tt.length, ob: ob };
+    });
+    var S = angles.map(function (a) { return sweep[a]; });
+    var state = { a: 45, mode: 'axis' };
+    var M = unitMap('#f2-map', '');
+    var W = 300, H = 300, pl = 34, pr = 8, h1 = 150, gap = 26;
+    var svg = mkSvg('#f2-chart', W, H, 'Two charts over boundary angle 0 to 90 degrees: leaves of the fully grown tree for 200 and 800 points, and test error of the tree against one oblique cut.');
+    var sx = d3.scaleLinear().domain([0, 90]).range([pl, W - pr]);
+    var yL = d3.scaleLinear().domain([0, d3.max(S, function (d) { return d.L8; }) * 1.1]).nice().range([h1, 8]);
+    var yE = d3.scaleLinear().domain([0, Math.max(0.08, d3.max(S, function (d) { return d.e2; }) * 1.15)]).nice().range([H - 22, h1 + gap + 4]);
+    styleAxis(svg.append('g').attr('transform', 'translate(' + pl + ',0)').call(d3.axisLeft(yL).ticks(4).tickSize(3)));
+    styleAxis(svg.append('g').attr('transform', 'translate(' + pl + ',0)').call(d3.axisLeft(yE).ticks(3).tickSize(3).tickFormat(function (v) { return Math.round(v * 100) + '%'; })));
+    styleAxis(svg.append('g').attr('transform', 'translate(0,' + (H - 22) + ')').call(d3.axisBottom(sx).tickValues([0, 15, 30, 45, 60, 75, 90]).tickFormat(function (v) { return v + '°'; }).tickSize(3)));
+    styleAxis(svg.append('g').attr('transform', 'translate(0,' + h1 + ')').call(d3.axisBottom(sx).tickValues([0, 45, 90]).tickFormat('').tickSize(3)));
+    function line(y, acc) { return d3.line().x(function (d) { return sx(d.a); }).y(function (d) { return y(acc(d)); })(S); }
+    svg.append('path').attr('d', line(yL, function (d) { return d.L8; })).attr('fill', 'none').attr('stroke', 'var(--c-split)').attr('stroke-width', 1.6).attr('stroke-dasharray', '5 3');
+    svg.append('path').attr('d', line(yL, function (d) { return d.L2; })).attr('fill', 'none').attr('stroke', 'var(--c-split)').attr('stroke-width', 2);
+    svg.append('path').attr('d', line(yL, function () { return 2; })).attr('fill', 'none').attr('stroke', 'var(--c-oblique)').attr('stroke-width', 1.6);
+    svg.append('path').attr('d', line(yE, function (d) { return d.e2; })).attr('fill', 'none').attr('stroke', 'var(--c-split)').attr('stroke-width', 2);
+    svg.append('path').attr('d', line(yE, function (d) { return d.eo; })).attr('fill', 'none').attr('stroke', 'var(--c-oblique)').attr('stroke-width', 1.6);
+    function lab(x, y, t, c, anchor) { svg.append('text').attr('x', x).attr('y', y).attr('font-size', 11).attr('font-weight', 600).attr('fill', c).attr('text-anchor', anchor || 'start').text(t); }
+    lab(pl + 4, 16, 'leaves', 'var(--text-2)');
+    lab(pl + 4, h1 + gap + 10, 'test error', 'var(--text-2)');
+    var peak = sweep[45];
+    lab(sx(45), yL(peak.L8) - 6, '800 pts', 'var(--c-split)', 'middle');
+    lab(sx(45), yL(peak.L2) + 14, '200 pts', 'var(--c-split)', 'middle');
+    lab(sx(72), yL(2) - 5, 'oblique', 'var(--c-oblique)', 'middle');
+    var cur = svg.append('g');
+    var hit = svg.append('rect').attr('class', 'hit').attr('x', pl).attr('y', 0).attr('width', W - pl - pr).attr('height', H - 22).attr('fill', 'transparent');
+    scrub(hit, function (px) { return Math.max(0, Math.min(90, Math.round(sx.invert(px) / 5) * 5)); }, function (a) { if (a !== state.a) { state.a = a; document.getElementById('f2-rot').value = a; render(); } });
+    function render() {
+      var d = sweep[state.a];
+      document.getElementById('f2-rot-val').textContent = state.a + '°';
+      M.g.selectAll('*').remove();
+      if (state.mode === 'axis') drawTree(M.g, d.T2, M.sx, M.sy); else drawOblique(M.g, d.ob, M.sx, M.sy);
+      truthLine(M.g, state.a, M.sx, M.sy);
+      drawPoints(M.g, d.pts, M.sx, M.sy, 2);
+      M.svg.attr('aria-label', 'Unit square, true boundary at ' + state.a + ' degrees dashed, shaded by ' + (state.mode === 'axis' ? 'a fully grown axis-aligned tree with ' + d.L2 + ' leaves' : 'one oblique cut') + '.');
+      cur.selectAll('*').remove();
+      cur.append('line').attr('x1', sx(state.a)).attr('x2', sx(state.a)).attr('y1', 6).attr('y2', H - 22).attr('stroke', 'var(--text)').attr('opacity', 0.35);
+      [[yL(d.L2), 'var(--c-split)'], [yL(d.L8), 'var(--c-split)'], [yE(d.e2), 'var(--c-split)'], [yE(d.eo), 'var(--c-oblique)']].forEach(function (q) {
+        cur.append('circle').attr('cx', sx(state.a)).attr('cy', q[0]).attr('r', 3.2).attr('fill', q[1]);
+      });
+      document.getElementById('f2-read').innerHTML = 'At ' + N(state.a + '°') + ' the grown tree needs ' + N(d.L2) + ' leaves from 200 points and ' + N(d.L8) + ' from 800; its test error is ' + N(pct(d.e2)) +
+        ' (200 points) against ' + N(pct(d.eo)) + ' for one oblique cut, found at ' + N(d.ob.angle + '°') + '.';
+    }
+    d3.select('#f2-rot').on('input', function () { state.a = +this.value; render(); });
+    d3.selectAll('#f2-mode button').on('click', function () { state.mode = this.getAttribute('data-m'); pressed('#f2-mode', 'data-m', state.mode); render(); });
+    render();
+  })();
+
+  // ===== Figure 3: oblique split search =====
+  (function () {
+    var pts = DT.blobs(3, 80, 40), scan = DT.angleScan(pts, 1);
+    var best = scan.reduce(function (b, c) { return c.gain > b.gain ? c : b; });
+    var bestAx = scan[0].gain >= scan[90].gain ? scan[0] : scan[90];
+    var cands = 0; scan.forEach(function (c, i) {
+      var a = i * Math.PI / 180, v = pts.map(function (p) { return +((p.x - 0.5) * Math.cos(a) + (p.y - 0.5) * Math.sin(a)).toFixed(12); });
+      cands += new Set(v).size - 1;
+    });
+    var axC = 0; ['x', 'y'].forEach(function (k) { axC += new Set(pts.map(function (p) { return p[k]; })).size - 1; });
+    var state = { a: 0 };
+    var M = unitMap('#f3-map', '');
+    var ext = [d3.min(pts, function (p) { return Math.min(p.x, p.y); }) - 0.03, d3.max(pts, function (p) { return Math.max(p.x, p.y); }) + 0.03];
+    // Zoom the unit-square map onto the cloud (the cut geometry is about the centre, so keep it square).
+    M.sx.domain(ext); M.sy.domain(ext);
+    var W = 300, H = 300, pl = 40, pr = 10, pt = 16, pb = 26;
+    var svg = mkSvg('#f3-chart', W, H, 'Gini gain of the best cut against cut direction from 0 to 180 degrees; axis directions 0 and 90 marked, and the best direction marked.');
+    var sx = d3.scaleLinear().domain([0, 180]).range([pl, W - pr]);
+    var sy = d3.scaleLinear().domain([0, best.gain * 1.15]).nice().range([H - pb, pt]);
+    styleAxis(svg.append('g').attr('transform', 'translate(0,' + (H - pb) + ')').call(d3.axisBottom(sx).tickValues([0, 45, 90, 135, 180]).tickFormat(function (v) { return v + '°'; }).tickSize(3)));
+    styleAxis(svg.append('g').attr('transform', 'translate(' + pl + ',0)').call(d3.axisLeft(sy).ticks(4).tickSize(3)));
+    var ln = d3.line().x(function (d) { return sx(d.angle); }).y(function (d) { return sy(d.gain); });
+    svg.append('path').attr('d', ln(scan.concat([Object.assign({}, scan[0], { angle: 180 })]))).attr('fill', 'none').attr('stroke', 'var(--c-gain)').attr('stroke-width', 1.8);
+    [[0, 'x'], [90, 'y'], [180, 'x']].forEach(function (q) {
+      var c = scan[q[0] % 180];
+      svg.append('circle').attr('cx', sx(q[0])).attr('cy', sy(c.gain)).attr('r', 4).attr('fill', 'var(--c-split)');
+      if (q[0] === 180) return;
+      svg.append('text').attr('x', sx(q[0]) + 6).attr('y', sy(c.gain) + 14).attr('text-anchor', 'start').attr('font-size', 11).attr('font-weight', 600).attr('fill', 'var(--c-split)').text('cut on ' + q[1]);
+    });
+    svg.append('circle').attr('cx', sx(best.angle)).attr('cy', sy(best.gain)).attr('r', 4).attr('fill', 'var(--c-oblique)');
+    svg.append('text').attr('x', sx(best.angle)).attr('y', sy(best.gain) - 7).attr('text-anchor', 'middle').attr('font-size', 11).attr('font-weight', 600).attr('fill', 'var(--c-oblique)').text('best, ' + best.angle + '°');
+    var cur = svg.append('g');
+    var hit = svg.append('rect').attr('class', 'hit').attr('x', pl).attr('y', 0).attr('width', W - pl - pr).attr('height', H - pb).attr('fill', 'transparent');
+    scrub(hit, function (px) { return Math.max(0, Math.min(179, Math.round(sx.invert(px)))); }, function (a) { if (a !== state.a) { state.a = a; document.getElementById('f3-ang').value = a; render(); } });
+    function render() {
+      var c = scan[state.a], isAx = state.a === 0 || state.a === 90, col = isAx ? 'var(--c-split)' : 'var(--c-oblique)';
+      document.getElementById('f3-ang-val').textContent = state.a + '°';
+      M.g.selectAll('*').remove();
+      var sxx = M.sx, syy = M.sy;
+      // shaded halves, clipped to the zoomed box
+      var box = [{ x: ext[0], y: ext[0] }, { x: ext[1], y: ext[0] }, { x: ext[1], y: ext[1] }, { x: ext[0], y: ext[1] }];
+      var f = function (p) { return (p.x - 0.5) * c.cs + (p.y - 0.5) * c.sn - c.thr; };
+      [[f, c.predL], [function (p) { return -f(p); }, c.predR]].forEach(function (h) {
+        var poly = clipHalf(box, h[0]);
+        if (poly.length > 2) M.g.append('polygon').attr('points', poly.map(function (p) { return sxx(p.x) + ',' + syy(p.y); }).join(' ')).attr('fill', CLS(h[1])).attr('opacity', 0.14);
+      });
+      var seg = clipHalf(box, f).filter(function (p) { return Math.abs(f(p)) < 1e-9; });
+      if (seg.length >= 2) M.g.append('line').attr('x1', sxx(seg[0].x)).attr('y1', syy(seg[0].y)).attr('x2', sxx(seg[1].x)).attr('y2', syy(seg[1].y)).attr('stroke', col).attr('stroke-width', 2);
+      // direction arrow from the centre
+      var L = 0.12;
+      M.g.append('line').attr('x1', sxx(0.5)).attr('y1', syy(0.5)).attr('x2', sxx(0.5 + L * c.cs)).attr('y2', syy(0.5 + L * c.sn)).attr('stroke', 'var(--text)').attr('stroke-width', 1.2);
+      M.g.append('circle').attr('cx', sxx(0.5 + L * c.cs)).attr('cy', syy(0.5 + L * c.sn)).attr('r', 2.5).attr('fill', 'var(--text)');
+      drawPoints(M.g, pts, sxx, syy, 3);
+      M.svg.attr('aria-label', '80 points in two classes with the best cut perpendicular to direction ' + state.a + ' degrees; Gini gain ' + c.gain.toFixed(3) + '.');
+      cur.selectAll('*').remove();
+      cur.append('line').attr('x1', sx(state.a)).attr('x2', sx(state.a)).attr('y1', pt - 6).attr('y2', H - pb).attr('stroke', 'var(--text)').attr('opacity', 0.35);
+      cur.append('circle').attr('cx', sx(state.a)).attr('cy', sy(c.gain)).attr('r', 5).attr('fill', 'none').attr('stroke', 'var(--text)').attr('stroke-width', 1.5);
+      var where = state.a === 0 ? ' (a vertical cut on x)' : state.a === 90 ? ' (a horizontal cut on y)' : '';
+      document.getElementById('f3-read').innerHTML = 'Direction ' + N(state.a + '°') + where + ': best gain ' + N(c.gain.toFixed(3)) + '. The two axis directions reach ' + N(bestAx.gain.toFixed(3)) +
+        ' after scoring ' + N(axC) + ' cuts; scanning all 180 directions reaches ' + N(best.gain.toFixed(3)) + ' at ' + N(best.angle + '°') + ' after ' + N(d3.format(',')(cands)) + '.';
+    }
+    d3.select('#f3-ang').on('input', function () { state.a = +this.value; render(); });
+    render();
+  })();
+
+  // ===== Figures 4 and 5: pruning path and cross-validation (shared data) =====
+  var P = (function () {
+    var tr = DT.labelRot(DT.squareXY(7, 200), 45, 0.1), te = DT.labelRot(DT.squareXY(907, 3000), 45, 0.1);
+    var full = DT.build(tr, ['x', 'y'], {}, { x: [0, 1], y: [0, 1] }), path = DT.prunePath(full);
+    path.forEach(function (s) { s.tr = DT.errRate(s.tree, tr); s.te = DT.errRate(s.tree, te); });
+    return { tr: tr, te: te, full: full, path: path };
+  })();
+
+  (function () {
+    var path = P.path, K = path.length - 1, state = { k: 0 };
+    var iBest = 0; path.forEach(function (s, i) { if (s.te < path[iBest].te) iBest = i; });
+    var slider = document.getElementById('f4-step'); slider.max = K;
+    var M = unitMap('#f4-map', '');
+    var W = 300, H = 300, pl = 38, pr = 10, pt = 14, pb = 34;
+    var svg = mkSvg('#f4-chart', W, H, 'Training and test error against the number of leaves for each subtree on the pruning path, leaves on a log scale.');
+    var sx = d3.scaleLog().domain([0.85, path[0].leaves * 1.2]).range([pl, W - pr]);
+    var sy = d3.scaleLinear().domain([0, Math.max(0.55, d3.max(path, function (s) { return s.te; }))]).range([H - pb, pt]);
+    var lv = path.map(function (s) { return s.leaves; });
+    var tv = [1, 2, 5, 10, 20, 50].filter(function (v) { return v <= path[0].leaves * 1.2; });
+    styleAxis(svg.append('g').attr('transform', 'translate(0,' + (H - pb) + ')').call(d3.axisBottom(sx).tickValues(tv).tickFormat(d3.format('d')).tickSize(3)));
+    styleAxis(svg.append('g').attr('transform', 'translate(' + pl + ',0)').call(d3.axisLeft(sy).ticks(5).tickSize(3).tickFormat(function (v) { return Math.round(v * 100) + '%'; })));
+    svg.append('text').attr('x', (pl + W - pr) / 2).attr('y', H - 4).attr('text-anchor', 'middle').attr('font-size', 11).attr('fill', 'var(--text-2)').text('leaves (log scale)');
+    [['tr', 'var(--c-train)', 'train'], ['te', 'var(--c-test)', 'test']].forEach(function (q) {
+      svg.append('path').attr('d', d3.line().curve(d3.curveStepAfter).x(function (s) { return sx(s.leaves); }).y(function (s) { return sy(s[q[0]]); })(path.slice().reverse()))
+        .attr('fill', 'none').attr('stroke', q[1]).attr('stroke-width', 1.4).attr('opacity', 0.5);
+      svg.selectAll(null).data(path).enter().append('circle').attr('cx', function (s) { return sx(s.leaves); }).attr('cy', function (s) { return sy(s[q[0]]); }).attr('r', 3).attr('fill', q[1]);
+    });
+    svg.append('text').attr('x', sx(path[0].leaves)).attr('y', sy(path[0].tr) - 8).attr('text-anchor', 'end').attr('font-size', 11).attr('font-weight', 700).attr('fill', 'var(--c-train)').text('train');
+    svg.append('text').attr('x', sx(path[0].leaves)).attr('y', sy(path[0].te) - 8).attr('text-anchor', 'end').attr('font-size', 11).attr('font-weight', 700).attr('fill', 'var(--c-test)').text('test');
+    svg.append('text').attr('x', sx(path[iBest].leaves)).attr('y', sy(path[iBest].te) + 16).attr('text-anchor', 'middle').attr('font-size', 11).attr('fill', 'var(--c-test)').text('lowest test');
+    var cur = svg.append('g');
+    var hit = svg.append('rect').attr('class', 'hit').attr('x', pl).attr('y', 0).attr('width', W - pl - pr).attr('height', H - pb).attr('fill', 'transparent');
+    scrub(hit, function (px) { var L = sx.invert(px), bi = 0; path.forEach(function (s, i) { if (Math.abs(Math.log(s.leaves / L)) < Math.abs(Math.log(path[bi].leaves / L))) bi = i; }); return bi; },
+      function (k) { if (k !== state.k) { state.k = k; slider.value = k; render(); } });
+    function findNode(t, id) { if (t.id === id) return t; if (t.leaf) return null; return findNode(t.left, id) || findNode(t.right, id); }
+    function subtreeStats(n) { var ls = DT.leaves(n), R = 0; ls.forEach(function (l) { R += l.err; }); return { R: R, L: ls.length }; }
+    function render() {
+      var s = path[state.k];
+      document.getElementById('f4-step-val').textContent = state.k + '/' + K;
+      M.g.selectAll('*').remove();
+      drawTree(M.g, s.tree, M.sx, M.sy, P.full, s.cut);
+      truthLine(M.g, 45, M.sx, M.sy);
+      drawPoints(M.g, P.tr, M.sx, M.sy, 2);
+      var txt = 'Step ' + N(state.k) + ': ' + (state.k === 0 ? 'the full tree, α below ' + N(path[1].alpha.toFixed(2)) : 'α ≥ ' + N(s.alpha.toFixed(2))) + ', ' + N(s.leaves) + (s.leaves === 1 ? ' leaf' : ' leaves') + ', training error ' + N(pct(s.tr)) + ', test error ' + N(pct(s.te)) + '. ';
+      if (state.k < K) {
+        var nxt = path[state.k + 1], ids = Object.keys(nxt.cut).filter(function (id) { return !s.cut[id]; }).map(Number);
+        var nodes = ids.map(function (id) { return findNode(s.tree, id); }).filter(function (n) { return n && !n.leaf; });
+        // drop nodes nested inside another node pruned at the same step
+        nodes = nodes.filter(function (n) { return !nodes.some(function (m) { return m !== n && findNode(m, n.id); }); });
+        nodes.sort(function (a, b) { return subtreeStats(b).L - subtreeStats(a).L; });
+        nodes.forEach(function (n) {
+          var r = n.region;
+          M.g.append('rect').attr('x', M.sx(r.x[0])).attr('y', M.sy(r.y[1])).attr('width', M.sx(r.x[1]) - M.sx(r.x[0])).attr('height', M.sy(r.y[0]) - M.sy(r.y[1]))
+            .attr('fill', 'none').attr('stroke', 'var(--text)').attr('stroke-width', 2);
+        });
+        var n0 = nodes[0], st = subtreeStats(n0);
+        txt += 'Next to go' + (nodes.length > 1 ? ' (with ' + (nodes.length - 1) + ' other branch' + (nodes.length > 2 ? 'es' : '') + ' at the same price)' : '') + ': a branch of ' + N(st.L) + ' leaves over ' + N(n0.n) + ' points, g = (' + N(n0.err) + ' − ' + N(st.R) + ') / (' + N(st.L) + ' − 1) = ' + N(((n0.err - st.R) / (st.L - 1)).toFixed(2)) + '.';
+      } else txt += 'Only the root is left.';
+      document.getElementById('f4-read').innerHTML = txt;
+      M.svg.attr('aria-label', 'Pruned tree at step ' + state.k + ' with ' + s.leaves + ' leaves over 200 noisy points; the true 45 degree boundary is dashed.');
+      cur.selectAll('*').remove();
+      [s.tr, s.te].forEach(function (e) { cur.append('circle').attr('cx', sx(s.leaves)).attr('cy', sy(e)).attr('r', 6).attr('fill', 'none').attr('stroke', 'var(--text)').attr('stroke-width', 1.5); });
+    }
+    d3.select(slider).on('input', function () { state.k = +this.value; render(); });
+    render();
+  })();
+
+  (function () {
+    var path = P.path, grid = DT.alphaGrid(path), NS = 20, state = { s: 1 };
+    var runs = [];
+    for (var s = 1; s <= NS; s++) { var res = DT.cvPrune(P.tr, grid, 5, s), ch = DT.cvChoose(res); runs.push({ res: res, iMin: ch.iMin, i1: ch.i1se }); }
+    var gT = grid.map(function (a) { var t = DT.pruneAlpha(P.full, a); return { L: DT.nLeaves(t), te: DT.errRate(t, P.te) }; });
+    var W = Math.max(300, Math.min(680, document.getElementById('f5-chart').clientWidth || 640)), H = 250, pl = 40, pr = 12, pt = 30, pb = 30;
+    var svg = mkSvg('#f5-chart', W, H, 'Cross-validated error with one-standard-error bars at each alpha, log scale, with fresh-test error for comparison.');
+    var sx = d3.scaleLog().domain([grid[0] / 1.5, grid[grid.length - 1] * 1.5]).range([pl, W - pr]);
+    var yMax = Math.max(0.6, d3.max(runs, function (r) { return d3.max(r.res, function (d) { return d.cv + d.se; }); }));
+    var sy = d3.scaleLinear().domain([0, yMax]).range([H - pb, pt]);
+    styleAxis(svg.append('g').attr('transform', 'translate(0,' + (H - pb) + ')').call(d3.axisBottom(sx).tickValues([0.3, 1, 3, 10, 30]).tickFormat(d3.format('~g')).tickSize(3)));
+    styleAxis(svg.append('g').attr('transform', 'translate(' + pl + ',0)').call(d3.axisLeft(sy).ticks(4).tickSize(3).tickFormat(function (v) { return Math.round(v * 100) + '%'; })));
+    svg.append('text').attr('x', W - pr).attr('y', H - 3).attr('text-anchor', 'end').attr('font-size', 11).attr('fill', 'var(--text-2)').text('α, errors charged per leaf (log scale)');
+    svg.append('text').attr('x', pl - 6).attr('y', 12).attr('text-anchor', 'end').attr('font-size', 11).attr('fill', 'var(--text-2)').text('leaves');
+    grid.forEach(function (a, i) { svg.append('text').attr('x', sx(a)).attr('y', 12).attr('text-anchor', 'middle').attr('font-size', 11).attr('fill', 'var(--text-2)').text(gT[i].L); });
+    svg.append('path').attr('d', d3.line().x(function (a) { return sx(a); }).y(function (a, i) { return sy(gT[i].te); })(grid)).attr('fill', 'none').attr('stroke', 'var(--c-test)').attr('stroke-width', 1.5).attr('opacity', 0.8);
+    svg.append('text').attr('x', sx(grid[grid.length - 2]) + 6).attr('y', sy(gT[grid.length - 2].te) + 14).attr('font-size', 11).attr('font-weight', 600).attr('fill', 'var(--c-test)').text('fresh test');
+    var dyn = svg.append('g');
+    // strip: leaves chosen per shuffle, min rule and 1-SE rule
+    var SW = W, SH = 104, sb = SH - 20;
+    var strip = mkSvg('#f5-strip', SW, SH, 'Paired dot columns: for each tree size, how many of 20 fold shuffles chose it under the lowest-CV rule and under the 1-SE rule.');
+    var lvs = path.map(function (p) { return p.leaves; }).reverse();
+    var bx = d3.scaleBand().domain(lvs).range([pl, SW - pr]).padding(0.1);
+    styleAxis(strip.append('g').attr('transform', 'translate(0,' + sb + ')').call(d3.axisBottom(bx).tickSize(0).tickPadding(5)));
+    strip.select('.domain').attr('stroke', 'var(--border)');
+    strip.append('text').attr('x', pl - 6).attr('y', sb + 15).attr('text-anchor', 'end').attr('font-size', 11).attr('fill', 'var(--text-2)').text('leaves');
+    var lg = strip.append('g').attr('transform', 'translate(' + (SW - pr) + ',10)');
+    lg.append('circle').attr('cx', -150).attr('cy', -4).attr('r', 3).attr('fill', 'var(--c-cv)');
+    lg.append('text').attr('x', -144).attr('y', 0).attr('font-size', 11).attr('fill', 'var(--text-2)').text('lowest CV');
+    lg.append('circle').attr('cx', -68).attr('cy', -4).attr('r', 3).attr('fill', 'var(--c-train)');
+    lg.append('text').attr('x', -62).attr('y', 0).attr('font-size', 11).attr('fill', 'var(--text-2)').text('1-SE rule');
+    var step = Math.min(6.5, (sb - 20) / 12);
+    [['iMin', -1], ['i1', 1]].forEach(function (rw) {
+      var cnt = {};
+      runs.forEach(function (r) {
+        var L = gT[r[rw[0]]].L, k = cnt[L] = (cnt[L] || 0) + 1;
+        r['pos_' + rw[0]] = { x: bx(L) + bx.bandwidth() / 2 + rw[1] * 4, y: sb - 4 - (k - 1) * step };
+      });
+    });
+    var sdots = strip.append('g');
+    function renderStrip() {
+      sdots.selectAll('*').remove();
+      runs.forEach(function (r, j) {
+        ['iMin', 'i1'].forEach(function (key) {
+          var p = r['pos_' + key], on = j + 1 === state.s;
+          sdots.append('circle').attr('cx', p.x).attr('cy', p.y).attr('r', on ? 4 : 2.6)
+            .attr('fill', on ? 'var(--fig-bg)' : (key === 'iMin' ? 'var(--c-cv)' : 'var(--c-train)')).attr('stroke', on ? 'var(--text)' : 'none').attr('stroke-width', 1.6);
+        });
+      });
+    }
+    function render() {
+      var r = runs[state.s - 1], res = r.res;
+      document.getElementById('f5-seed').textContent = state.s + ' of ' + NS;
+      dyn.selectAll('*').remove();
+      var lim = res[r.iMin].cv + res[r.iMin].se;
+      dyn.append('line').attr('x1', pl).attr('x2', W - pr).attr('y1', sy(lim)).attr('y2', sy(lim)).attr('stroke', 'var(--c-cv)').attr('stroke-dasharray', '3 3').attr('opacity', 0.6);
+      res.forEach(function (d) {
+        dyn.append('line').attr('x1', sx(d.alpha)).attr('x2', sx(d.alpha)).attr('y1', sy(d.cv - d.se)).attr('y2', sy(d.cv + d.se)).attr('stroke', 'var(--c-cv)').attr('stroke-width', 1.5);
+        dyn.append('circle').attr('cx', sx(d.alpha)).attr('cy', sy(d.cv)).attr('r', 3.5).attr('fill', 'var(--c-cv)');
+      });
+      var a = res[r.iMin], b = res[r.i1];
+      dyn.append('circle').attr('cx', sx(a.alpha)).attr('cy', sy(a.cv)).attr('r', 7).attr('fill', 'none').attr('stroke', 'var(--text)').attr('stroke-width', 1.4);
+      dyn.append('text').attr('x', sx(a.alpha)).attr('y', sy(a.cv + a.se) - 6).attr('text-anchor', 'middle').attr('font-size', 11).attr('font-weight', 600).attr('fill', 'var(--text)').text(r.iMin === r.i1 ? 'min = 1-SE' : 'min');
+      if (r.i1 !== r.iMin) {
+        dyn.append('rect').attr('x', sx(b.alpha) - 6).attr('y', sy(b.cv) - 6).attr('width', 12).attr('height', 12).attr('fill', 'none').attr('stroke', 'var(--text)').attr('stroke-width', 1.4);
+        dyn.append('text').attr('x', sx(b.alpha)).attr('y', sy(b.cv + b.se) - 6).attr('text-anchor', 'middle').attr('font-size', 11).attr('font-weight', 600).attr('fill', 'var(--text)').text('1-SE');
+      }
+      var tA = gT[r.iMin], tB = gT[r.i1];
+      document.getElementById('f5-read').innerHTML = 'Shuffle ' + N(state.s) + ': lowest CV error ' + N(pct(a.cv)) + ' ± ' + N(pct(a.se)) + ' at α ≈ ' + N(a.alpha.toFixed(2)) + ', a ' + N(tA.L) + '-leaf tree' +
+        (r.i1 === r.iMin ? ', which the 1-SE rule also keeps' : '; the 1-SE rule takes α ≈ ' + N(b.alpha.toFixed(2)) + ', ' + N(tB.L) + ' leaves') + (r.i1 === r.iMin ? '. Its fresh-test error: ' + N(pct(tA.te)) : '. Fresh-test error of the two: ' + N(pct(tA.te)) + ' and ' + N(pct(tB.te))) + '.';
+      renderStrip();
+    }
+    d3.select('#f5-next').on('click', function () { state.s = state.s % NS + 1; render(); });
+    d3.select('#f5-prev').on('click', function () { state.s = (state.s + NS - 2) % NS + 1; render(); });
+    render();
+  })();
+
+  if (window.Motion && window.Motion.mountBanner) window.Motion.mountBanner();
+})();
 </script>
 
 </body>
