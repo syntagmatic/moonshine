@@ -58,3 +58,34 @@ flagged in plans/FACT-CHECK.md, each checked and settled.
 | 05 | Extension figure: three Z/2 pieces give Z/8, Z/4 + Z/2 or (Z/2)^3 with element orders 1,1,2,4 / 1,3,4 / 1,7 | fine | Invariant factors from determinantal divisors of the relation matrix; order counts by enumeration, all 8 toggle combinations | Replaces the old hard-coded labels |
 | 05 | (bug) duplicate ids: a hidden div repeated 38 math ids; 4 summary formulas rendered only into it | fixed | Hidden block never displayed; getElementById hit the prose copies first | Removed; math now renders from data-tex attributes, so ids are no longer needed |
 | 05 | Convention: toy chart homological, sandbox cohomological, convergence stated cohomologically | unified, fixed | | All charts homological, d^r of bidegree (-r, r-1); convergence stated as E^inf_{p,q} = F_pH_{p+q}/F_{p-1}H_{p+q} |
+
+## 11 Nomograms (new page)
+
+Every checkable claim on the page when it was written. Traité = d'Ocagne, Traité de nomographie (1899), archive.org traitdenomograp00ocaggoog (OCR read this session).
+
+| Page | Claim | Verdict | Source or derivation | Fix |
+|---|---|---|---|---|
+| 11 | Du Bois formula BSA = 0.007184 W^0.425 H^0.725 m^2 (W kg, H cm), 1916 | sourced | Du Bois & Du Bois, Arch Intern Med 17(6):863-71 (1916), via the Wikipedia citation: a = 71.84 cm^2 = 0.007184 m^2. Original not read | none; read the 1916 paper if possible |
+| 11 | Fig 1: 175 cm, 70 kg reads 1.85 m^2; formula 1.848 | computed | Headless test: default readout 1.85 vs 1.8481; 60+ keyed and dragged ruler positions all within 0.0049 m^2 of the formula (reading shown to 0.01) | none |
+| 11 | Fig 1 is "drawn from the Du Bois formula, not copied from a historical chart" | fine | Boothby & Sandiford 1921 (Boston Med Surg J 185:337-354) published nomographic charts; their layout was not checked, so no facsimile is claimed | none |
+| 11 | Parallel scales: middle divides the gap m1 : m2, modulus m3 = m1 m2/(m1+m2) | derived | Line through (xL, bot - m1 f1) and (xR, bot - m2 f2) at lambda = m1/(m1+m2) gives bot - m3 (f1+f2); also Doerfler 2009 p. 459 | none |
+| 11 | Fig 4 agrees for all presets; moving the middle scale without restretching disagrees | computed | Headless test: each preset agrees within 0.5%; restretch off and middle moved gives 9.371 vs 8.062 | none |
+| 11 | N chart: w = u/v read on the diagonal at fraction t = w/(w + m2/m1) | derived | Similar triangles; node check t = 0.6923 both ways; Doerfler 2009 p. 461 | none |
+| 11 | Railway law of 1842 prompted earthwork estimates; Lalanne invented anamorphosis in 1843, memoir in Annales des Ponts et Chaussées 1846 | sourced | Traité, introduction pp. vi-vii | none |
+| 11 | Logarithmic anamorphosis was Lalanne's first form of the idea | sourced | Traité §28 | none |
+| 11 | d'Ocagne found the alignment method in 1884 by a duality applied to Lalanne's charts | sourced | Traité, introduction p. vii ("une certaine transformation dualistique appliquée aux abaques de Lalanne", Annales des Ponts et Chaussées 1884); duality maps concurrent lines to aligned points, Traité ch. III. Doerfler's "invented in 1880" is not used | none |
+| 11 | Massau, 1884, generalized anamorphosis to arbitrary families of straight lines | sourced | Traité, introduction p. vii and §41 (Mémoire sur l'intégration graphique, Annales de l'Association des ingénieurs sortis des Écoles spéciales de Gand, 1884) | none |
+| 11 | d'Ocagne coined "nomographie" with his 1891 pamphlet; Traité 1899 | sourced | Traité, introduction pp. vi, viii (Les calculs usuels effectués au moyen des abaques, 1891). No date is given for the word "nomogram": the Traité says "abaque" | none |
+| 11 | Lallemand's hexagonal charts (1886): same-modulus scales on axes at 120 degrees, transparent whose index lines are a regular hexagon's diagonals, scales parallel to an equilateral triangle's sides | sourced | Traité, introduction p. vii (Comptes rendus 1886) and §32 | none |
+| 11 | Duality y = sx + c to (s, -c) turns the 45-degree-rotated log chart into three parallel scales a, k, b | derived | Rotating X = log a, Y = log b by x = X - Y, y = X + Y gives lines of slope -1, +1, 0 with intercepts 2 log a, 2 log b, log k; duals (-1, -2 log a), (1, -2 log b), (0, -log k) are collinear iff log a + log b = log k. Fig 2 test: ruler reads 10.00 for 2.5 x 4 | none |
+| 11 | det of three points = twice signed area; default A(-3,-1), B(3,2), C(1,-1) gives -12; C = (1,1) collinear | computed | Headless test reads -12, then 0 after moving C | none |
+| 11 | Rows (-1,u,1), (1,v,1), (0,w/2,1) have determinant w - u - v | derived | Cofactor expansion | none |
+| 11 | Three-scale alignment chart exists iff the equation has a determinant form with one variable per row; scales may be curved | derived | Collinearity of (x_i(t_i), y_i(t_i)) is that determinant; Doerfler 2009 "standard nomographic form" | none |
+| 11 | Warmus 1959, Nomographic Functions, a systematic treatment of which functions admit the form | sourced (secondary) | Evesham review, deadreckonings.com 2011 | none |
+| 11 | Quadratic rows (0,p,1), (1,0.4q,1), (1/(0.4z+1), -0.4z^2/(0.4z+1), 1) have det -0.4(z^2+pz+q)/(0.4z+1) | derived | Node check at roots and non-roots | none |
+| 11 | Fig 5 crossings match the quadratic formula; tangent at double root; miss when complex; off-chart root reported | computed | Headless test: presets give 2.001/2.999, touch 2.000, none, 3.000 with -2 off chart; 30 keyed rulers had every crossing within 0.02 of a root | none |
+| 11 | Traité notes the line through the two roots meets the coefficient scales, and has a chart for z^3 + pz + q = 0 | sourced | Traité §79 footnote and §81 | none |
+| 11 | Projective maps keep alignments: matrix times invertible 3x3, rows rescaled, det times nonzero | derived | Linear algebra; Traité "la transformation homographique, qui conserve l'alignement des points" (ch. III); Fig 6 test: distances 0.000 px after corner moves, 3.5-7 px under the bilinear warp | none |
+| 11 | z = infinity is where the p and q scale lines meet; z = -2.5 is the curve's other point at infinity on the same horizon | derived | Homogeneous rows: p -> [0,p,1] ~ [0,1,0] as p -> inf, same for q and for z -> inf; z = -2.5 gives [1,-2.5,0]. Fig 6 horizon preset shows the z = inf marker on the page | none |
+| 11 | log_t(t^A + t^B) -> max(A, B) as t -> infinity | derived | max <= log_t(sum) <= max + log_t 2 | none |
+| 11 | Grimes 2008: medical heyday about 1925-1975; word spreading again; personal computing removed the need, publish software | sourced (abstract) | Ann Intern Med 149:273-275, PubMed 18711159 abstract as summarized in search; full text not read | none |
