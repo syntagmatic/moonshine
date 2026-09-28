@@ -146,3 +146,27 @@ flagged in `plans/FACT-CHECK.md` and settled on 2026-09-27.
 | 02 | A real binary cubic has three real zero lines when Δ > 0 and one when Δ < 0; for x³ − 3xy² + ty³, Δ = 108 − 27t², zero at t = ±2 | derived, computed | Cubic formula with (a, b, c, d) = (1, 0, −3, t); page bisects Δ and reports ±2.000; root count from bracketing matches the sign | none |
 | 02 | x² + y² and −x² − y² (Δ = −4) lie in different SL2(ℝ) orbits | derived, computed | Definiteness is preserved by any real invertible substitution; page: a′ > 0 on all 400 forms from x² + y² and < 0 on all 400 from −x² − y² | none |
 | 02 | Noether's 1907 dissertation topic: the system of forms of the ternary biquadratic form, under Gordan at Erlangen | fine (unchanged from before) | Title Über die Bildung des Formensystems der ternären biquadratischen Form (MacTutor biography) | none |
+
+### 06 enrichment
+
+| page | claim | verdict | source or derivation | fix |
+|---|---|---|---|---|
+| 06 | Fig 2: RK4 energy drift on the pendulum falls with a measured log-log slope near 5, leapfrog near 2, driven oscillator 0; RK4 drift grows with run length, leapfrog does not | computed | Page measures it live; independent node run (scratch proto06.js) gives max dH at T = 20: 6.7e-4, 2.1e-5, 6.8e-7 ... for h = 0.4, 0.2, 0.1 (ratio ~32 per halving) and leapfrog ratio 4; T = 200 raises RK4 tenfold, leapfrog unchanged; driven dH = 0.510 at every h | Prose says only "falls along a straight line"; slopes quoted from the readout, not stated |
+| 06 | Leapfrog stays close to a slightly perturbed H for very long times | from memory | Backward error analysis for symplectic integrators (Hairer, Lubich, Wanner, Geometric Numerical Integration, ch. IX) | none |
+| 06 | Fig 3: driven oscillator dH/dt = -q f'(t); H(40) - H(0) = 0.2234 at Omega = 0.8 | derived, computed | H = ½q'² + ½q² - q f; independent node RK4 at h = 0.001 gives 0.2234; page accumulates -dL/dt as a separate ODE slot and reports the gap (3e-11) | none |
+| 06 | Spinning hoop: H = ½θ'² - ½ω² sin²θ - cos θ conserved, T + V changes by the motor work; bottom unstable for ω > 1, swing centre cos θ = 1/ω² (m = R = g = 1) | derived, computed | Motor torque d(ω sin²θ)/dt, power 2ω² sinθ cosθ θ'; page integrates the work as an ODE slot, matches ΔE to 4e-11; node proto gives T + V range [-0.844, 1.493] at ω = 1.6 | none |
+| 06 | Fig 7: δL vanishes exactly where the charge holds, 20 of 20 cells; vertical shift in gravity changes L by -(m1 + m2) g = -0.6 | computed | Page tests both halves separately; independent node census (scratch census06.js, numerical gradients) gives the same hold/drift pattern | none |
+| 06 | Demo kicks at t = 4.91 and 12.5 take H 0.303 -> 1.093 -> 2.374, over the separatrix | computed | Chosen as upward zero crossings of θ in a node run (scratch kick.js); page recomputes the H values live | none |
+
+### 07 enrichment
+
+| page | claim | verdict | source or derivation | fix |
+|---|---|---|---|---|
+| 07 | Perihelion advance per orbit for V = -1/r - α/r³ is 6πα/L⁴ to first order (GM = m = 1) | derived, computed | Landau & Lifshitz, Mechanics §15 problem 3 (δU = β/r³ gives δφ = -6πβαm²/M⁴), from memory; page fits d/α = c1 + c2 α + c3 α² on α ≤ 0.02 and gets c1/pred = 1.0001 (L = 1.125), 1.0000 (L = 1.5), 1.0023 (L = 0.9) | none |
+| 07 | With α = GM L²/c² this is Einstein's 6πGM/(c² a(1 - e²)) | derived | GR orbit equation u'' + u = GM/h² + 3GM u²/c² matches the Newtonian one with -α/r³ when α = GM h²/c²; h² = GM a(1 - e²) | Old text said "the form of the leading GR correction" only; kept that wording plus the mapping |
+| 07 | Fig 1 at α = 0.02: perihelion advances 14.9° per orbit; E (with the -α/r³ term) and Lz hold to ~1e-12 | computed | Independent node run (scratch proto07b.js): ratio 1.1064 x 6π(0.02)/1.125⁴ = 0.2604 rad = 14.92° | Old Fig 2 monitored the unperturbed Kepler energy, which is not the conserved quantity when α ≠ 0; now the full energy is monitored |
+| 07 | Flow of Ã_y from the unit circular orbit gives e = sin s, L = cos s at fixed E = -1/2; images stay equally spaced in time | computed | Node (scratch flow07.js) confirms to 1e-6 or better for s ≤ 1.2; page reports the same checks live | none |
+| 07 | {L_i, Ã_j} = ε Ã_k, {Ã_i, Ã_j} = ε L_k for E < 0 and -ε L_k for E > 0 (so(4), so(3,1)) | computed | Goldstein, Classical Mechanics (3rd ed.) §9.7, from memory; page checks all 36 finite-difference brackets to ~1e-10 | none |
+| 07 | Fock (1935) mapped bound hydrogen states of one energy onto S³ | from memory | V. Fock, Z. Phys. 98 (1935) 145, "Zur Theorie des Wasserstoffatoms" | none |
+| 07 | V = -1/r - β/r² has exact levels -1/(2(n_r + ℓ' + 1)²), ℓ'(ℓ' + 1) = ℓ(ℓ + 1) - 2β; the 1/r³ term is too singular for the quantum problem | derived | Standard (e.g. Landau & Lifshitz QM §35-36 on fall to the centre for potentials more singular than 1/r²), from memory; page's grid solver agrees with the formula to 4e-4 relative | none |
+| 07 | Fine structure and the Lamb shift split levels of the same n in real hydrogen | from memory | Standard (Lamb and Retherford 1947 for 2s½/2p½); not verified against a source this session | none |
