@@ -200,6 +200,58 @@
   // ─────────────────────────────────────────── commutative diagrams ──
 
   var commDiag = {
+    // Words are arrays of morphism labels in standard right-to-left order
+    // (g ∘ f is ['g', 'f']). A relation { a: word, b: word } may be applied
+    // in either direction at any position.
+    rewrites: function (word, relations) {
+      var out = [];
+      relations.forEach(function (rel, ri) {
+        [[rel.a, rel.b], [rel.b, rel.a]].forEach(function (pair) {
+          var L = pair[0], R = pair[1];
+          if (L.length === 0) return;
+          for (var i = 0; i + L.length <= word.length; i++) {
+            if (arrEq(word.slice(i, i + L.length), L)) {
+              out.push({ word: word.slice(0, i).concat(R, word.slice(i + L.length)), rel: ri, at: i });
+            }
+          }
+        });
+      });
+      return out;
+    },
+
+    // Breadth-first search for a chain of rewrites from word a to word b.
+    // Returns the chain [{ word, rel, at }, ...] starting at a (rel = -1), or
+    // null when none exists within the limits. In an acyclic diagram every
+    // rewrite of a path is another path with the same ends, so the search
+    // space is finite and the answer is exact; the limits only guard
+    // hand-built diagrams with cycles.
+    equalityChain: function (a, b, relations, opts) {
+      opts = opts || {};
+      var maxLen = opts.maxLen || 16, maxStates = opts.maxStates || 20000;
+      var key = function (w) { return w.join('\u0001'); };
+      var start = { word: a.slice(), rel: -1, at: -1, prev: null };
+      var seen = {}; seen[key(a)] = true;
+      var queue = [start], count = 1;
+      var target = key(b);
+      while (queue.length) {
+        var cur = queue.shift();
+        if (key(cur.word) === target) {
+          var chain = [];
+          for (var n = cur; n; n = n.prev) chain.unshift({ word: n.word, rel: n.rel, at: n.at });
+          return chain;
+        }
+        var next = commDiag.rewrites(cur.word, relations);
+        for (var i = 0; i < next.length; i++) {
+          var k = key(next[i].word);
+          if (seen[k] || next[i].word.length > maxLen) continue;
+          seen[k] = true;
+          if (++count > maxStates) return null;
+          queue.push({ word: next[i].word, rel: next[i].rel, at: next[i].at, prev: cur });
+        }
+      }
+      return null;
+    },
+
     // Check if two paths compose to the same morphism (by label equality)
     // paths: array of arrays of morphism labels
     checkCommutativity: function (paths) {
@@ -296,8 +348,8 @@
             { id: 'B', x: 320, y: 260, label: 'B' }
           ],
           arrows: [
-            { from: 'X', to: 'A', label: 'fₐ' },
-            { from: 'X', to: 'B', label: 'f_b' },
+            { from: 'X', to: 'A', label: 'p' },
+            { from: 'X', to: 'B', label: 'q' },
             { from: 'X', to: 'AxB', label: '∃!h', style: 'dashed' },
             { from: 'AxB', to: 'A', label: 'π₁' },
             { from: 'AxB', to: 'B', label: 'π₂' }
@@ -305,9 +357,12 @@
           commutes: true
         };
       },
+      // Two exact rows joined by vertical maps: the input to the snake lemma
+      // (which then builds kernel and cokernel rows), not the lemma itself.
+      // Kept under the old key so existing callers still resolve.
       snakeLemma: function () {
         return {
-          name: 'Snake lemma',
+          name: 'Morphism of short exact sequences',
           nodes: [
             { id: '0a', x: 30, y: 80, label: '0' },
             { id: 'A', x: 130, y: 80, label: 'A' },
