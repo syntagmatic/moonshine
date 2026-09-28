@@ -39,3 +39,14 @@ flagged in `plans/FACT-CHECK.md` and settled on 2026-09-27.
 | 08 | Implicit midpoint conserves the energy of a linear system exactly | fine (from memory) | Quadratic invariants are conserved by the implicit midpoint rule (Hairer, Lubich, Wanner, Geometric Numerical Integration, ch. IV; cited from memory). Confirmed numerically in node and on the page | none |
 | 08 | Wilson built lattice gauge theory with link phases in 1974 | fine (from memory) | K. G. Wilson, "Confinement of quarks", Phys. Rev. D 10 (1974) 2445; cited from memory, not re-read | none |
 | 08 | Fig 5: e^{iβx}ψ run with link phases U_j = e^{-iβh} has the same density as ψ at all times | derived, computed | Links transform as U_j -> e^{iα_j} U_j e^{-iα_{j+1}}; with α = βx and U = 1 this gives U_j = e^{-iβh}, and H' = G H G† so the CN evolution commutes with G; page shows max density gap ~1e-14 vs 0.22 without the field at β = 1 | none |
+
+### 12 enrichment
+
+| page | claim | verdict | source or derivation | fix |
+|---|---|---|---|---|
+| 12 | Fig 1: for I = (6x³, 4x³ + 4x² + 5) in ℤ[x] the leading-coefficient chain is (75) ⊊ (15) ⊊ (3) ⊊ (1) = ⋯, d* = 3 | computed, cross-checked | Page computes a BigInt echelon form of all shifts x^k f of degree ≤ 24 and checks degree 40 gives the same chain. Mod 3, I = (x³ + x² + 2) has no nonzero element of degree ≤ 2, so 3 divides J_0, J_1, J_2; mod 5, I = (x²), so 5 divides J_0, J_1. Consistent with 75, 15, 3 | none |
+| 12 | Fig 2: a walk that stalls on a leading coefficient outside J_δ proves the input is not in I | derived | Everything subtracted lies in I, so the stalled h is in I iff g is; h ∈ I would put lc(h) in J_δ. Valid because J_δ is computed exactly (Fig 1) | none |
+| 12 | Noether (1916): in characteristic zero the invariants of a finite group G acting linearly are generated in degree ≤ \|G\| | fine (from memory) | E. Noether, "Der Endlichkeitssatz der Invarianten endlicher Gruppen", Math. Ann. 77 (1916) 89-92; cited from memory, not re-read | none |
+| 12 | Fig 3: for Z/n acting by (ζx, ζ^k y) the invariants are spanned by monomials with a + kb ≡ 0 mod n, and every minimal generator has a, b ≤ n | derived | Diagonal action sends each monomial to a multiple of itself. x^n and y^n are invariant, so a monomial with a > n (or b > n) factors off x^n (y^n). Page finds generators by brute force over that box and shows max degree ≤ n | none |
+| 12 | Fig 4: (x² − y, xy − 1) has reduced lex basis {x − y², y³ − 1} and graded basis {x² − y, xy − 1, y² − x}; both leave 3 standard monomials | computed | Exact BigInt-rational Buchberger in the page, matched in node. By hand: y(x² − y) − x(xy − 1) = x − y², and (xy − 1) − y(x − y²) = y³ − 1 | none |
+| 12 | Fig 5: y³ − 1 is in (x² − y, xy − 1) but has remainder y³ − 1 on division by the two generators | derived | y³ − 1 = (xy − 1) − y(x − y²) with x − y² = y(x² − y) − x(xy − 1); no leading term of x² − y or xy − 1 (lex) divides y³ | none |
