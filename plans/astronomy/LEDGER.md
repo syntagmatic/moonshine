@@ -13,6 +13,8 @@ article ships.
 | `docs/astronomy/shared/data/gaia-100pc.csv` | ESA Gaia archive TAP, `gaiadr3.gaia_source` left-joined to `external.gaiaedr3_gcns_main_1`. All sources with parallax > 10 mas and G and BP-RP present, 1-in-6 by `MOD(random_index, 6) = 0`. 83,111 rows, fetched 2026-09-27. | `scripts/astronomy/fetch-gaia-hr.py` |
 | `docs/astronomy/shared/data/parallax-stars.csv` | ESA Gaia archive TAP, `gaiadr3.gaia_source`, five named stars by source_id (identifiers from SIMBAD TAP: zet Dor, ksi Boo A, HD 245409 = V2689 Ori, 61 Cyg A). 4 rows, fetched 2026-09-27. | `scripts/astronomy/fetch-parallax.py` |
 | `docs/astronomy/shared/data/m67.csv` | ESA Gaia archive TAP, `gaiadr3.gaia_source` within 0.5 deg of (132.846, 11.814), proper motion within 0.8 mas/yr of (-10.97, -2.94); no parallax cut. Lindegren et al. 2021 zero point subtracted, coefficients from the `gaiadr3_zeropoint` 0.1.0 wheel on PyPI. 1,338 rows, fetched 2026-09-27. | same script |
+| `docs/astronomy/shared/data/cepheids.csv` | OGLE Collection of Variable Stars, `ogle4/OCVS/{lmc,smc}/cep/cepF.dat` (Soszynski et al. 2015, Acta Astron. 65, 297). Single-mode F Cepheids with both I and V: 2,314 LMC, 2,637 SMC. Fetched 2026-09-27. | `scripts/astronomy/fetch-cepheids.py` |
+| `docs/astronomy/shared/data/cepheid-lc.csv` | Same archive, `phot/I/` for OGLE-LMC-CEP-3126, -0800, -0068 (484, 771, 642 epochs). | same script |
 | `docs/astronomy/shared/data/bprp-teff.csv` | E. Mamajek, "A Modern Mean Dwarf Stellar Color and Effective Temperature Sequence", version 2022.04.16 (Pecaut & Mamajek 2013, ApJS 208, 9). Rows B9V to M9.5V with tabulated Bp-Rp (63 rows). | same script |
 
 Spot-check: source_ids 143207476804948736 and 143455554116023040 re-queried
@@ -88,6 +90,31 @@ cluster field, so under 1% of the sample is field stars.
 | Blackbody colours: CIE 1931 fit (Wyman, Sloan & Shirley 2013), Planck spectrum, sRGB | C | Node test vs M. Charity's bbr_color table: 3000 K #ffb96e vs #ffb969, 4000 K #ffd4a5 vs #ffd5a1, 10000 K #cdd9ff vs #cfdaff |
 | Temperature from BP-RP uses the dwarf relation; white dwarf and giant colours approximate; hot end clamped at 10,700 K (B9V) | D | Stated in the caption |
 | Gaia DR3 summary paper is Gaia Collaboration, Vallenari et al. 2023 | Open | Title and first author checked on arXiv:2208.00211; journal reference (A&A 674, A1) still to confirm |
+
+### Section 3, Leavitt's law (figures 4, 5, 6)
+
+| Claim | Kind | How we know |
+|---|---|---|
+| LMC is the Milky Way's largest satellite, ~50x M67's distance | D | 49.59 kpc / 0.835 kpc = 59; "fifty times further" than "less than a kiloparsec" |
+| Cepheids thousands of times as luminous as the Sun | C | LMC V fit at 10 d: 14.76; minus 18.477 = M_V -3.7; Sun M_V 4.83; 10^(8.55/2.5) = 2,600 |
+| Leavitt 1908 (brighter variables have longer periods, Harvard Annals); 1912 paper on 25 SMC Cepheids (Harvard Circular 173, Pickering credits Leavitt) | S | Wikipedia, "Henrietta Swan Leavitt" (read 2026-09-27); secondary source |
+| mu = m - M = 5 log10(d/10 pc) | D | As in section 2 |
+| Over 6.2 years a 10-day Cepheid completes >200 cycles; a 0.1% period error slides the last cycle ~0.2 out of phase | D | 2,247/10 = 225; 225 x 0.001 = 0.22 |
+| PDM statistic (Stellingwerf 1978) with 10 bins; grid step 1/(6T) in frequency | C | Page code; deepest dip 12.6343 d vs OGLE 12.63666 d for CEP-0800 (grid resolution 0.005 d at 12.6 d) |
+| Secondary dips at 2P, 3P and at (k +/- f)/n cycles per day | C | Python check listing the PDM minima for CEP-0800 |
+| Cepheid light curves rise faster than they fall | C | Folded CEP-0800: rise over ~0.35 of the cycle |
+| LMC W_I fit: slope -3.315, 15.889 at 1 d, sigma 0.078 (2,223 kept) vs OGLE -3.314, 15.888, 0.077; I: -2.907/16.820/0.145 vs -2.911/16.822/0.146; V: -2.660/17.422/0.205 vs -2.690/17.438/0.208 | C, S | Page and Python reproduce; published values from Soszynski et al. 2015 Table 2 (read from the paper PDF) |
+| Scatter ~0.2 mag in V, 0.15 in I, under 0.08 in W_I, about half of I; single-star distance error under 4% | C | Fits above; 0.078 x 0.4605 = 3.6% |
+| W_I = I - 1.55(V - I), "extinction-free" | S | Soszynski et al. 2015, Sect. 4 |
+| Dust dims I by a fixed multiple (~1.55) of the V-I reddening, so W is unchanged | D | W' = (I + A_I) - 1.55(V - I + E) = W when A_I = 1.55 E |
+| SMC scatter twice the LMC's (0.159 vs 0.078 in W) | C | Fits |
+| SMC eclipsing binaries span up to 10 kpc in distance | S | Graczyk et al. 2020 (ApJ 904, 13), abstract, arXiv:2010.08754 |
+| Metal-poor Cepheids slightly fainter, ~0.2 mag per dex | S | Breuval et al. 2025 (ApJ 994, 111), abstract, arXiv:2507.15936: gamma ~ -0.2 mag/dex, metal-rich brighter |
+| SMC offset 0.553 mag (median, W) gives 64.0 kpc vs 62.44 +/- 0.47 +/- 0.81 from eclipsing binaries | C, S | Page readout; Graczyk et al. 2020 abstract |
+| LMC distance 49.59 +/- 0.09 (stat) +/- 0.54 (sys) kpc from 20 eclipsing binaries, surface brightness-colour calibration; mu = 18.477, sigma 0.024 mag (1.1%) | S, D | Pietrzynski et al. 2019 (Nature 567, 200), abstract, arXiv:1903.08096; 5 log10(4959) = 18.477 |
+| Eclipsing-binary sizes come from eclipses plus orbital velocities | D | Standard double-lined eclipsing binary method; the abstract names the systems as eclipsing binaries |
+| SH0ES anchors: Gaia parallaxes of MW Cepheids, NGC 4258 masers, LMC DEBs; Cepheids in hosts of 42 SNe Ia at z < 0.01 (a few tens of Mpc) | S, D | Riess et al. 2022 (ApJL 934, L7), abstract, arXiv:2112.04510; cz < 3000 km/s / 73 = 41 Mpc. "Masers in its nucleus": general knowledge, the abstract says only "masers in N4258" |
+| 30-day Cepheid at W = 24.5: M_W = -7.48, mu = 31.98, 24.9 Mpc; with 10 Cepheids +/-1.6% | C | Figure readout |
 
 ## Series-level facts (from PROMPT.md, to check when each article is written)
 
