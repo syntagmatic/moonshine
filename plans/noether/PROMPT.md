@@ -9,47 +9,47 @@ By the end a reader should be able to derive a conserved quantity from a symmetr
 **Act I · The Principle of Invariance**
 
 ### 1. What Is an Invariant?
-Group actions, orbits, stabilisers, and functions a group leaves unchanged. The reader rotates a point and sees which computed quantities hold still and drags a point to see its orbit and stabiliser satisfy orbit-stabiliser.
+Group actions, orbits, stabilisers, and functions a group leaves unchanged. The reader rotates a point and sees which computed quantities hold still, drags a point to see its orbit and stabiliser satisfy orbit-stabiliser, composes moves in the D4 Cayley table, counts square colourings by Burnside, and reduces a symmetric polynomial to elementary ones step by step.
 
 ### 2. Invariants of a Binary Form
-Noether's 1907 dissertation topic: invariants of binary forms under linear substitution, starting with the discriminant. The reader transforms a quadratic or cubic form by a matrix and sees the discriminant scale by the predicted power of the determinant.
+Noether's 1907 dissertation topic: invariants of binary forms under linear substitution, starting with the discriminant. The reader transforms a quadratic, cubic or quartic form by an integer matrix and sees the discriminant and the quartic invariants I and J scale by the predicted power of the determinant in exact arithmetic, fits those powers on a log-log plot, and watches a cubic's roots merge where the discriminant vanishes.
 
 ### 3. Least Action and Lagrangians
-The action principle and the Euler–Lagrange equation, with the brachistochrone as the first variational problem. The reader races beads down a straight line, a sagging curve and a cycloid, then drags a trial path and watches the action bottom out at the true motion.
+The action principle and the Euler–Lagrange equation, with the brachistochrone as the first variational problem. The reader races beads down a straight line, a sagging curve and a cycloid, compares a family of curves against the cycloid, relaxes a knotted trial path onto the true motion, checks the Euler-Lagrange residual by finite differences, and sees when the action is a saddle rather than a minimum.
 
 ### 4. Symmetries of a Lagrangian
-Continuous symmetries as infinitesimal generators, and the change in L that the theorem is built on, including quasi-symmetries that shift L by a total derivative. In a generator workshop the reader picks a Lagrangian and a transformation and sees whether L is invariant.
+Continuous symmetries as infinitesimal generators, and the change in L that the theorem is built on, including quasi-symmetries that shift L by a total derivative. A computed grid of Lagrangians against generators sorts true symmetries, quasi-symmetries and non-symmetries, and the reader integrates each charge with and without the total-derivative term.
 
 ### 5. Noether's First Theorem
-A short derivation turns each continuous symmetry into a conserved current. The reader pairs Lagrangians with generators, runs the motion, and sees the predicted charge stay flat or drift.
+A short derivation turns each continuous symmetry into a conserved current. The reader checks the on-shell identity at the heart of the proof, breaks a two-block system's translation symmetry and measures momentum drift against the breaking strength, reads a Lagrangian-by-generator census of charges, and follows the gravity quasi-symmetry on a projectile hodograph.
 
 **Act II · Conservation Laws from Symmetry**
 
 ### 6. Energy, Momentum and Angular Momentum
-Time translation gives energy, space translation momentum, rotation angular momentum. The signature interactive is the pendulum phase portrait: the reader seeds trajectories and then kicks the pendulum, and energy holds between kicks and jumps at each one.
+Time translation gives energy, space translation momentum, rotation angular momentum. The signature interactive is the pendulum phase portrait: the reader kicks the pendulum, and energy holds between kicks and jumps at each one. A drift-against-step plot separates integrator error from physics, a driven oscillator and a spinning hoop show H and T + V parting ways, and a census pairs five Lagrangians with four transformations.
 
 ### 7. Kepler's Hidden Symmetry
-The Laplace–Runge–Lenz vector is a fourth conserved quantity of the inverse-square orbit, coming from a hidden SO(4) that also explains hydrogen's degeneracies. The reader adds a small 1/r³ correction and watches the LRL vector precess while energy and angular momentum stay flat.
+The Laplace–Runge–Lenz vector is a fourth conserved quantity of the inverse-square orbit, coming from a hidden SO(4) that also explains hydrogen's degeneracies. The reader adds a small 1/r³ correction and watches the LRL vector precess at the first-order rate while energy and angular momentum stay flat, follows the flow the LRL vector generates, reads the SO(4) bracket table, and sees hydrogen-like levels lose their degeneracy.
 
 ### 8. Phase and Electric Charge
-Global phase rotation of a Schrödinger field is an internal symmetry whose conserved charge is total probability, and making the phase local forces a gauge field. The reader rotates the phase of a wave packet, watches the current carry a conserved total, and sees a local phase break the kinetic term.
+Global phase rotation of a Schrödinger field is an internal symmetry whose conserved charge is total probability, and making the phase local forces a gauge field. The reader rotates the phase of a wave packet, checks charge in a box against the current through its walls, adds a phase-breaking term and sees charge drift at the predicted rate, and sees a local phase break the kinetic term on a lattice until link phases repair it.
 
 ### 9. Noether's Second Theorem
-Local symmetries give identities instead of conservation laws: the gauge identity in electromagnetism and the contracted Bianchi identity in general relativity. The reader toggles a field shift between global and local.
+Local symmetries give identities instead of conservation laws: the gauge identity in electromagnetism and the contracted Bianchi identity in general relativity. The reader shifts phases on a lattice globally and locally, checks the Maxwell identity off shell on a grid, sees gauge choices fan out solutions while invariant quantities agree, and tracks energy in an expanding universe.
 
 **Act III · The Algebraic Revolution**
 
 ### 10. Ideals as the New Numbers
-Unique factorisation fails in ℤ[√−5], and Dedekind rescues it by factoring ideals. The reader sees 6 factor two incompatible ways on the lattice of the ring, then sees the ideal factorisation that refines both and the class group of order 2 that measures the failure.
+Unique factorisation fails in ℤ[√−5], and Dedekind rescues it by factoring ideals. The reader sees 6 factor two incompatible ways on the lattice of the ring, multiplies ideals as sublattices, sees every factorisation refine to the same prime ideals, sorts primes by class, and reads class numbers of ℤ[√−d].
 
 ### 11. Noetherian Rings
-Rings where every ascending chain of ideals stabilises. The reader builds chains in ℤ and in k[x] by adding elements, fills a staircase of monomial ideals in k[x, y] that must stop, and sees a ring in infinitely many variables where the chain never does.
+Rings where every ascending chain of ideals stabilises. The reader builds chains in ℤ and in k[x] by adding elements, fills a staircase of monomial ideals in k[x, y] that must stop, races the same random monomial stream in two and in infinitely many variables, and sees the ideals above 2 in all algebraic integers climb forever.
 
 ### 12. Hilbert's Basis Theorem
-If R is Noetherian so is R[x], the result Gordan called theology. Then Buchberger's algorithm, a later constructive tool for polynomial ideals whose termination rests on the same chain condition; it is not an answer to Gordan's objection, which was about invariants. The reader steps through it on a small ideal as S-polynomials join the basis until it closes.
+If R is Noetherian so is R[x], the result Gordan called theology. Then Buchberger's algorithm, a later constructive tool for polynomial ideals whose termination rests on the same chain condition; it is not an answer to Gordan's objection, which was about invariants. The reader watches the leading-coefficient chain of the proof stop, walks a reduction down to zero, finds generators of a cyclic invariant ring against Noether's bound, and steps Buchberger's algorithm through a small ideal in exact arithmetic as S-polynomials join the basis until it closes.
 
 ### 13. Noether Normalization
-Every affine variety is a finite cover of affine space, and the dimension of that space is the variety's dimension. The reader slides a fiber along an elliptic curve and watches two preimages merge at the branch points.
+Every affine variety is a finite cover of affine space, and the dimension of that space is the variety's dimension. The reader slides a fiber along an elliptic curve and watches two preimages merge at the branch points, counts real fibers over the cone's base, sees a generic substitution stop a root escaping to infinity, and reads dimension off Hilbert-function growth.
 
 ## What to get right
 
