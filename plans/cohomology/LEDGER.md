@@ -107,3 +107,17 @@ All numbers are computed in the page over ℝ (inline signed coboundaries, Gauss
 | 04 | Figure 3 sphere (annulus coned at both ends: 17 V, 45 E, 30 F, χ = 2): random cochain projected onto ker δ¹ is closed (max abs(dω) 8e-16) and all 29 non-tree edges agree with df | checked | Projection ω = r − δ¹ᵀy with δ¹δ¹ᵀy = δ¹r; H¹(S²; ℝ) = 0 so closed = exact; tried two seeds and roots 0, centre | none |
 | 04 | Figure 5 ranks over ℝ: tetrahedron (4, 6, 4) ranks 3, 3; icosahedron (12, 30, 20) 11, 19; icosphere 1 (42, 120, 80) 41, 79; icosphere 2 (162, 480, 320) 161, 319; all H* = (1, 0, 1). Annulus (15, 30, 15) → (1, 1, 0); torus7 → (1, 2, 1); RP² (6, 15, 10) → (1, 0, 0); Klein (9, 27, 18) → (1, 1, 0) | checked | node run of the same elimination; ℤ/2 column: RP² (1, 1, 1), Klein (1, 2, 1), others equal to ℝ | none |
 | 04 | Over ℝ, RP² and the Klein bottle have H² = 0 because they are non-orientable, and RP² has H¹ = 0 | standard | H₁(RP²; ℤ) = ℤ/2, H₁(K; ℤ) = ℤ ⊕ ℤ/2, H₂ = 0 for both; universal coefficients over ℝ | none |
+
+### 03 (enrichment, 2026-09-27)
+
+All numbers are computed in the page with COH over ℤ/2 (cohomology.ring, cup.table, cup.product, cup._expressInBasis, coboundary.apply/matrix) on the lib's own triangulations, re-derived in node, and read back from the page headlessly.
+
+| page | claim | verdict | source or derivation | fix |
+|---|---|---|---|---|
+| 03 | Cup tables: RP² α² = γ (3 of 10 triangles); T² α² = 0 (0 of 14), αβ = βα = γ (1), β² = 0 (2); Klein α² = 0, αβ = γ, β² = γ (3 of 18); wedge all four H¹ products 0 (0 of 4); S² 1 ⌣ γ = γ | checked | COH.cup.table in node and the page's table; H² coefficient agrees with triangle-count parity in every case | none |
+| 03 | On a closed connected surface over ℤ/2, a 2-cochain is a coboundary iff it is 1 on an even number of triangles | standard | δ(edge) = the two triangles containing it, so im δ¹ ⊆ even cochains; H² = ℤ/2 makes im δ¹ codimension 1, so equality | none |
+| 03 | Figure 2 (torus7, lib basis α, β): with f on {0, 2}, α′ = α + δf has 8 edges, α′ ⌣ β is 1 on 3 triangles, α ⌣ β on 1, they differ on 4 = supp δ(f ⌣ β), class γ | checked | node: exhaustive over all 1- and 2-vertex f, the changed set equals δ(f ⌣ β) every time (f ⌣ β[v0,v1] = f(v0)β[v0,v1]) | none |
+| 03 | Squaring H¹ → H² is linear over ℤ/2; zero on T², nonzero on the Klein bottle, so the rings differ though Betti numbers are (1, 2, 1) for both | checked | (x+y)² = x² + xy + yx + y² and xy = yx in cohomology over ℤ/2; page squares every class on the summed cocycle and checks against xᵀGx | none |
+| 03 | Cup pairing G has full rank on closed surfaces (T², K: 2; RP²: 1) and is 0 on S¹ ∨ S¹ ∨ S² | checked | Poincaré duality over ℤ/2 for closed manifolds; ranks computed by Gaussian elimination in the page | none |
+| 03 | Reversing the vertex order turns the Alexander–Whitney cochain α ⌣ β into β ⌣ α (original order); the two differ by δc | checked | reversed σ = [v2, v1, v0]: front [v2, v1], back [v1, v0], value α[v1v2]β[v0v1] = (β ⌣ α)(σ). Page: reverse differs from identity on 2 triangles, c = {13, 14, 24} solves δc = difference; shuffles and swaps checked the same way | none |
+| 03 | H*(OP²; ℤ) = ℤ[α]/(α³), \|α\| = 8, OP² = F₄/Spin(9) of real dimension 16 | standard | Borel; standard | none |
