@@ -610,16 +610,21 @@
     return out;
   };
 
+  // Sum ω along a vertex loop. Every consecutive pair must be an edge of the
+  // mesh; a jump between non-adjacent vertices throws rather than counting 0.
   deRham.integrate = function (mesh, omega, loop) {
     if (!loop || loop.length < 2) return 0;
+    function step(i, j) {
+      var key = (i < j) ? i + ',' + j : j + ',' + i;
+      if (mesh.edgeIndex[key] === undefined) {
+        throw new Error('deRham.integrate: ' + i + ' and ' + j + ' are not joined by an edge');
+      }
+      return edgeValue(mesh, omega, i, j);
+    }
     var s = 0;
-    for (var i = 0; i < loop.length - 1; i++) {
-      s += edgeValue(mesh, omega, loop[i], loop[i + 1]);
-    }
+    for (var i = 0; i < loop.length - 1; i++) s += step(loop[i], loop[i + 1]);
     // If caller didn't explicitly close the loop, close it.
-    if (loop[loop.length - 1] !== loop[0]) {
-      s += edgeValue(mesh, omega, loop[loop.length - 1], loop[0]);
-    }
+    if (loop[loop.length - 1] !== loop[0]) s += step(loop[loop.length - 1], loop[0]);
     return s;
   };
 
@@ -949,8 +954,9 @@
   // complex with n vertices: solve min_θ ||δθ − ω||² over the edges, i.e. the
   // graph-Laplacian system L θ = δᵀω, then take θ mod 1. One vertex per
   // connected component is pinned to make L invertible (the objective does not
-  // see per-component constants). Returns angles in [0, 2π) and the harmonic
-  // residual ω − δθ on each edge.
+  // see per-component constants). Returns { angles, theta }: angles in
+  // [0, 2π) and the unwrapped potential θ. Callers wanting the harmonic
+  // residual ω − δθ compute it from theta.
   persistCoh.circularCoords = function (n, edges, intVec) {
     var L = [], rhs = new Float64Array(n);
     for (var i = 0; i < n; i++) L[i] = new Float64Array(n);
