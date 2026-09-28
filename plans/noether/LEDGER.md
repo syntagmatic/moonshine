@@ -29,3 +29,13 @@ flagged in `plans/FACT-CHECK.md` and settled on 2026-09-27.
 | 04 | Fig 1 no-JS text "δL (at λ = 1.5) = 1.25" | wrong, fixed | ½(λ² - 1) at λ = 1.5 is 0.625; the page's own update() computes 0.6250 | Static text now 0.6250 |
 | 11 | A chain from (f) in k[x] has at most deg f + 1 distinct steps | off by one, fixed | Each strict step drops at least one irreducible factor, and f has at most deg f of them, e.g. (x²) ⊂ (x) ⊂ (1) has 2 steps | Now "at most deg f strict steps" |
 | 13 | Noether normalization gives a polynomial ring "in fewer variables" | wrong, fixed | d = dim k[x]/I ≤ n with equality for I = 0, as the page's own affine-plane row shows | Now "at most n variables (fewer unless the ideal is zero)" |
+
+### 08 enrichment
+
+| page | claim | verdict | source or derivation | fix |
+|---|---|---|---|---|
+| 08 | Fig 2: the Crank-Nicolson lattice current J = Im(ψ_j* ψ_{j+1})/h satisfies a discrete continuity equation exactly | derived, computed | With m = (ψ^n + ψ^{n+1})/2, h(|ψ_j^{n+1}|² - |ψ_j^n|²) = 2h Re(m_j* Δψ_j) = -dt (J_{j+1/2} - J_{j-1/2}) evaluated on m; the page checks box charge against start value plus integrated edge flux, gap ~1e-14 | none |
+| 08 | Adding -λ Re(ψ²) to L gives dN/dt = -(2λ/ħ) ∫ Im(ψ²) dx while energy stays conserved | derived, computed | EOM iħψ_t = Hψ + λψ*; dN/dt = ∫ 2 Re(ψ* ψ_t) = -(2λ/ħ)∫ Im ψ². The implicit midpoint step obeys the same identity exactly on the midpoint; page reports the per-step gap (~1e-13) and energy drift (~1e-14). Unstable for λ at or above the trap ground energy 1 (node run at λ = 1 grows 29×), so the slider stops at 0.6 | none |
+| 08 | Implicit midpoint conserves the energy of a linear system exactly | fine (from memory) | Quadratic invariants are conserved by the implicit midpoint rule (Hairer, Lubich, Wanner, Geometric Numerical Integration, ch. IV; cited from memory). Confirmed numerically in node and on the page | none |
+| 08 | Wilson built lattice gauge theory with link phases in 1974 | fine (from memory) | K. G. Wilson, "Confinement of quarks", Phys. Rev. D 10 (1974) 2445; cited from memory, not re-read | none |
+| 08 | Fig 5: e^{iβx}ψ run with link phases U_j = e^{-iβh} has the same density as ψ at all times | derived, computed | Links transform as U_j -> e^{iα_j} U_j e^{-iα_{j+1}}; with α = βx and U = 1 this gives U_j = e^{-iβh}, and H' = G H G† so the CN evolution commutes with G; page shows max density gap ~1e-14 vs 0.22 without the field at β = 1 | none |
