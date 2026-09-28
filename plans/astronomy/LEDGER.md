@@ -26,6 +26,12 @@ article ships.
 | `docs/astronomy/shared/data/mist-iso.csv` | MIST v1.2 isochrones, `UBVRIplus` tarball, [Fe/H] = 0, v/vcrit = 0.4, Gaia EDR3 G/BP/RP, log age 7.5 to 10.15 (54 ages), EEP 202 to 707, odd EEPs below 454 dropped. 20,353 rows. | same script |
 | `docs/astronomy/shared/data/clusters.csv` | Hunt & Reffert 2023 (A&A 673, A114), VizieR `J/A+A/673/A114/members`, every listed member of Melotte_22 (1,721) and NGC_2682 (1,844). Lindegren 2021 zero point subtracted, evaluated at G = 6 for brighter stars. Fetched 2026-09-27. | same script |
 
+| `docs/astronomy/shared/data/hosts.csv` | Gaia DR3 `gaia_source` joined to `astrophysical_parameters` for HD 209458 (1779546757669063552) and 51 Peg (2835207319109249920), IDs from SIMBAD TAP; Lindegren 2021 zero point subtracted. Quadratic TESS limb darkening from Claret 2017 (VizieR `J/A+A/600/A30/table25`, ATLAS, [M/H] = 0, xi = 2 km/s, LSM), bilinear in Teff and log g at the GSP-Phot values. Archive planet parameters (`pscomppars`) as reference columns. Fetched 2026-09-28. | `scripts/astronomy/fetch-planets.py` |
+| `docs/astronomy/shared/data/transit-hd209458.csv` | MAST, TESS sector 56 two-minute SPOC light curve `tess2022244194134-s0056-0000000420814525-0243-s_lc.fits`, PDCSAP flux, QUALITY = 0. Windows of +/-0.25 d around predicted mid-transits (archive ephemeris), each divided by a line fitted to \|dt\| > 0.09 d. 8 transits, 2,880 rows. | same script |
+| `docs/astronomy/shared/data/lc-hd209458.csv` | Same file, whole sector normalised by its median, 30-minute bins with at least 8 cadences. 1,253 rows. | same script |
+| `docs/astronomy/shared/data/rv-51peg.csv` | Butler et al. 2017 (AJ 153, 208) LCES HIRES/Keck velocities, VizieR `J/AJ/153/208/table1`, Name = HD217014. 43 velocities on 36 nights, 2006-07 to 2014-01. | same script |
+| `docs/astronomy/shared/data/exoplanets.csv` | NASA Exoplanet Archive TAP, `pscomppars`, 6,372 planets queried 2026-09-28; values whose reflink is CALCULATED_VALUE dropped; masses kept only with provenance Mass or Msini; periods for planets without one computed from `pl_orbsmax` and `st_mass` (flag `per_calc`). 6,340 rows with a period and a radius or mass. | same script |
+
 Spot-check: source_ids 143207476804948736 and 143455554116023040 re-queried
 from the archive; G, BP-RP, parallax, parallax_error and RUWE match the
 first two CSV rows after rounding (2026-09-27).
@@ -300,9 +306,79 @@ Model checks (2026-09-27, node, same code as the page):
 | Stars of 8 to 10 Msun hardest to model; 7 and 8 Msun MIST tracks stop with cores still growing | C | MIST ends at TP-AGB start for 7, 8 Msun (README EEP table); "hardest to model" is a hedge, not re-read |
 | Chandrasekhar found the limit by solving hydrostatic balance with the degenerate EOS | D | general knowledge (Chandrasekhar 1931, ApJ 74, 81), not re-read |
 
+## Article 4: Finding Other Worlds
+
+Model checks (2026-09-28, node, same code as the page):
+- Transit integral (annuli, n = 400) against the exact uniform-disc overlap area for k = 0.01,
+  0.1, 0.3 over z = 0 to 1.3: max difference 6.8e-6.
+- Grid fit (k, b, a/R*) on all 2,880 points: k = 0.1205, b = 0.50, a/R* = 8.8, rms 391 ppm; the
+  page's Nelder-Mead with the stellar density free lands at k = 0.1212, b = 0.55, a/R* = 8.47
+  (the b and a/R* degeneracy), rms 394 ppm. Archive: k = 0.1209, b = 0.507.
+- GLS on the HIRES velocities: highest peak 4.2306 d (grid), next 1.3048 d; Keplerian fit P =
+  4.23079 d, K = 56.7 +/- 0.6 m/s, e = 0.008, rms 2.42 m/s (parameters e cos w, e sin w and mean longitude at the median epoch; a time-of-periastron parameter made the covariance singular at e = 0). Tal-Or et al. 2019 corrected velocities
+  (J/MNRAS/484/L8) give the same K (56.5).
+- Binary-lens ray shooting against a point-source solution of the fifth-order lens polynomial
+  (Laguerre roots, 3 or 5 images): agreement within 0.15% everywhere except within 0.1 Einstein
+  times of the caustic crossing, for the OGLE-2005-BLG-390 geometry. q = 1e-9 reproduces the
+  point-lens A(u) to 1e-6.
+
+| Claim | Kind | How we know |
+|---|---|---|
+| Jupiter reflects a few billionths of the Sun's light; half an arcsecond from the Sun at 10 pc | D | p (R_J/a)^2 = 0.52 x (7.15e4 / 7.78e8)^2 = 4.4e-9 (geometric albedo ~0.5, general knowledge); 5.2 AU / 10 pc = 0.52 arcsec |
+| ~100 imaged planets, ~6,000 known | C | Archive: 97 by imaging, 6,372 total (2026-09-28) |
+| Jupiter covers ~1% of the Sun's disc, Earth 84 ppm | D | (7.149e4/6.957e5)^2 = 1.06%; (6.371e3/6.957e5)^2 = 8.4e-5 |
+| Quadratic limb darkening law; coefficients from model atmospheres by band | S | Claret 2017 tables (ATLAS/PHOENIX, TESS band) |
+| Ingress fraction ~ k/(1 - b^2) | D | chord half-length sqrt(1 - b^2); planet crosses the limb over 2k/ sqrt(1-b^2) of it, fraction k/(1-b^2) to first order |
+| HD 209458 was the first star seen transited; planet known from RV; two groups in 1999 | S | Charbonneau et al. 2000 abstract (astro-ph/9911436): "known from radial velocity measurements", two transits; Henry et al. 2000 is the second group; "1999" general knowledge (papers submitted Nov 1999), not re-read |
+| TESS observed it for 28 days in 2022, 8 transits, 3.52 d period | C | Sector 56 file, BTJD 2825.26 to 2853.14 (2022 Sep); 8 windows kept |
+| T = 6,080 K, L = 1.66 Lsun, R = 1.162 Rsun (Gaia FLAME 1.197), M = 1.09 Msun from MIST | C | page readout; BC_G = 0.075 |
+| BC_G polynomial, Teff_sun 5772 K, M_bol,sun = 4.74 | S | Andrae et al. 2018 (arXiv:1804.09374 source, flame.tex Table "bcgcoeff" and parameter table) |
+| Fit: k = 0.121 (12%), b = 0.55 ("about half-way"), Rp = 1.37 RJ, depth 1.61%, duration 3.11 h | C | page readout after Fit |
+| Charbonneau: 1.27 RJ assuming 1.1 Rsun | S | Charbonneau et al. 2000 abstract |
+| HD 209458 b mass about 0.7 MJ | C | archive pl_bmasse 232.0 = 0.73 MJ |
+| a = 0.047 AU, twenty times closer than Earth | S, D | archive pl_orbsmax 0.04707; 1/0.047 = 21 |
+| Transit probability ~R*/a: 12% for HD 209458 b, 0.47% for Earth | D, C | 1/8.47 = 11.8% (page a/R*); Rsun/AU = 0.465% |
+| Transit shape plus Kepler's third law give the star's mean density; fit 0.92 vs 0.98 g/cm^3 from M and R | D, C | rho = 3 pi (a/R)^3 / (G P^2); page readout |
+| K formula | D | two-body momentum balance, projected on the line of sight |
+| Jupiter moves the Sun at 12.5 m/s; Earth 9 cm/s | C | page readout (Jupiter, Earth presets): 28.43 m/s x (P/1 yr)^-1/3 scaling |
+| 12.5 m/s is 4 parts in 1e8 | D | 12.5 / 2.998e8 = 4.2e-8 |
+| RV precision comes from thousands of lines against a known reference spectrum | D | general knowledge (iodine cell for HIRES), not re-read |
+| 51 Peg b announced October 1995 by Mayor and Queloz | S | Nobel Prize physics 2019 press release (nobelprize.org, read 2026-09-28) |
+| 51 Peg ~15 pc, a little more massive than the Sun | C, S | 1000/64.44 mas = 15.5 pc; Birkby et al. 2017 Table: M* = 1.100 +/- 0.066 |
+| 43 HIRES velocities, 2006 to 2014, ~1 m/s each, 7.5-year span | C | rv-51peg.csv: BJD 2453927 to 2456676; err 0.9 to 1.3 m/s |
+| GLS = weighted least-squares sine with floating mean | S | Zechmeister & Kuerster 2009 (A&A 496, 577), definition; general knowledge of the method, not re-read |
+| Alias at 1.305 d is one cycle per sidereal day minus 1/4.231 | D, C | 1.00274 - 0.23636 = 0.76638 -> 1.3048 d, matching the grid peak 1.3048 (solar-day alias would be 1.3095) |
+| Keplerian fit: P 4.23079 d, K 56.7 +/- 0.6 m/s, e 0.008, rms 2.4 m/s | C | page readout |
+| Excess scatter partly from the star's surface | D | hedged ("part of the excess"); stellar jitter is general knowledge, not quantified |
+| Birkby: 639 velocities, K = 54.93 +/- 0.18, m sin i = 0.466 MJ, M* = 1.100, [Fe/H] = 0.198, Kp = 133 km/s, Mp = 0.476 MJ, 70 < i < 82.2 | S | Birkby et al. 2017 (AJ 153, 138), arXiv:1701.07257 abstract and source Table (orbital solution) |
+| [Fe/H] = 0.198 is ~60% more iron relative to hydrogen | D | 10^0.198 = 1.58 |
+| m sin i = 0.481 MJ for 1.10 Msun; 0.439 for the MIST 0.96 | C | page readout |
+| 10% in M* is ~7% in m | D | 1.1^(2/3) = 1.066 |
+| P(true > x min) = 1 - sqrt(1 - 1/x^2): 13% at 2, 2% at 5, median 2/sqrt 3 = 1.155 | D | cos i uniform |
+| 51 Peg b true/min = 1.02 | D, S | 0.476 / 0.466 (Birkby) |
+| theta_E formula; ~0.55 mas for 0.3 Msun at 4 kpc, source 8 kpc | D, C | page readout (Figure 5): R_E = 2.21 AU |
+| Point-lens A(u), two images | D | standard; checked against the polynomial solver |
+| Caustics: point-source magnification infinite; planet perturbs only near an image | D | fold singularity of the lens map; standard |
+| OGLE-2005-BLG-390: d = 1.610, q = 7.6e-5, u0 = 0.359, tE = 11.03 d, t* = 0.282 d (rho = 0.0256), theta = 2.756 rad; host 0.22 Msun, planet 5.5 ME at 2.6 AU, ~50 K; 650 data points from six networks; no few-Earth-mass planet known beyond 0.15 AU | S | Beaulieu et al. 2006 (Nature 439, 437), arXiv:astro-ph/0601563 PDF: Table 1, text, Fig. 1 caption, abstract |
+| Path direction: published theta + 180 deg in our axes (planet on +x) puts the caustic crossing 10.1 days after the peak | C | page: with 2.756 rad the deviation is < 0.1%; with 2.756 + pi it is +14.7% at +10.1 d. The observed anomaly was about ten days after the peak (general reading of the paper; its date axis not re-read) |
+| Peak magnification 2.92, planet adds +14.7% for about half a day | C | page readout; FWHM of the deviation 0.49 d (cold critique measurement) |
+| Source a giant, ~4,800 K | S, D | paper: G4III giant source; 4,800 K is an approximate G4III temperature, general knowledge |
+| s < 1 splits the planetary caustic into two off-axis, on the far side of the host | D, C | standard binary-lens topology; visible in the sky panel with q = 1e-3, s = 0.8 (not at the OGLE q). Second preset (s = 1.05, q = 1e-3) is a single resonant caustic |
+| Transit limit: 7.1 sigma threshold; 30 ppm CDPP at 6.5 h for 12th-mag dwarfs | S | Jenkins et al. 2010 (arXiv:1001.0258) abstract: 7.1 sigma; Gilliland et al. 2011 (arXiv:1107.5207) source: "CDPP ... about 30 ppm, or 50% higher than planned" |
+| Kepler four years | D | general knowledge (2009 to 2013 primary mission), not re-read |
+| Transit limit 0.95 RE at 1 yr; 1 m/s limit 11.2 ME at 1 yr | C | page readout |
+| Lensing zone 0.6 to 1.6 R_E | D | Gould & Loeb 1992 definition, general knowledge; consistent with Beaulieu: d = 1.61 "near the outer edge of the so-called lensing zone" |
+| Radius gap 1.5 to 2.0 RE, factor >= 2, P < 100 d, CKS; rocky cores <= 1.5 RE with varying gas | S | Fulton et al. 2017 (AJ 154, 109), arXiv:1703.10375 abstract |
+| Gap visible in the archive's Kepler radii below ~8% precision | C | page histogram (658 planets at 8%) |
+| Solar System periods, radii, masses | D | standard values (NASA fact sheet), not re-read |
+| Microlensing zone is beyond the snow line of small stars; giant planets thought to form there | D | general knowledge (snow line ~2.7 AU (M/Msun) scaling), not re-read; hedged "thought to" |
+| Figure 2 51 Peg b preset: 0.466 MJ x 1.1^(-2/3) around 1 Msun gives K = 54.9 m/s | C | page FIG2.K = 54.94, matching Birkby's K |
+| True mass 2% above Birkby's own minimum 0.466 (the page's own m sin i is 0.481) | S, D | Birkby Table; prose states their K and minimum mass explicitly |
+| HD 209458 b radius: ~70% of the 1.27 to 1.37 RJ change is the stellar radius | D | cold critique: 1.162/1.1 = 1.056 vs 1.37/1.27 = 1.079; written "most of that difference" |
+
 ## Series-level facts (from PROMPT.md, to check when each article is written)
 
-Open: 51 Peg b 1995 (Mayor & Queloz); RV gives m sin i; transit probability
-~R*/a. Checked in article 3: Chandrasekhar limit (1.456 computed, ~1.4 quoted) and the
+Checked in article 4 (2026-09-28): 51 Peg b 1995 (Mayor & Queloz, Nobel press release); RV
+gives m sin i (Birkby's true mass 2% above it); transit probability ~R*/a. Checked in article 3: Chandrasekhar limit (1.456 computed, ~1.4 quoted) and the
 Sun's CNO fraction (0.6% formulas, 0.8% MIST, Borexino ~99% pp). H0 values checked in
 article 2 (2026-09-27).
