@@ -68,6 +68,20 @@ Only the flagged leads below were checked; this is not a full fact-check of the 
 | index, 06 | "compute every number by linear algebra over ℤ/2, or over ℤ/47 in the last essay"; "Essays 02 to 05 worked over ℤ/2" | wrong, fixed | 04 uses real-valued edge values and states H^1(S^2; R), H^1(A; R) (coh-math.js: "de Rham uses R"); 02, 03, 05 are over ℤ/2 | Index names the de Rham essay's real-valued forms as the second exception; 06 now says 02, 03 and 05, with 04 on real-valued forms |
 | 04 | d(df) = (∂_y∂_x f - ∂_x∂_y f) dx∧dy | wrong (sign), fixed | d(∂_x f dx + ∂_y f dy) = ∂_y∂_x f dy∧dx + ∂_x∂_y f dx∧dy = (∂_x∂_y f - ∂_y∂_x f) dx∧dy (∂_x∂_y f meaning ∂_x of ∂_y f); still 0 | Terms swapped to the correct order |
 
+### 01 (enrichment, 2026-09-27)
+
+All numbers are computed in the page over ℤ/2 from COH and TDA; the ones below were re-derived in node and read back from the page headlessly.
+
+| page | claim | verdict | source or derivation | fix |
+|---|---|---|---|---|
+| 01 | Figure 1 default (α on 01 and 02, b both triangles): ⟨δα, b⟩ = ⟨α, ∂b⟩ = 1, three amber cells, column 02 cancels out of ∂b | checked | By hand: δα(012) = 1+1+0 = 0, δα(023) = 1+0+0 = 1; ∂b = 01+12+23+03; ⟨α, ∂b⟩ = α(01) = 1. Page readout agrees, and after toggling b to {012} both read 0 with 2 cells | none |
+| 01 | The library's H¹ generator of annulus(8, 16) is three edges cutting the strip once (8-9, 0-9, 0-1), pairing 1 with γ_in and γ_out, and stays 1 under repeated δf | checked | COH.cohomology.compute(annulus, 1).basis[0] in node; page readout after δf at v = 0 and v = 3 still (1, 1) and "nonzero class" | none |
+| 01 | Flipping a single edge breaks closedness and the two loop evaluations can disagree | checked | Flipping inner edge 0-1 from the generator: δα = 1 on 1 triangle, ⟨α, γ_in⟩ = 1, ⟨α, γ_out⟩ = 0 | none |
+| 01 | Figure 3: BFS tree from vertex 0 leaves 25 of 48 edges; for the generator 3 disagree with δf, the same 3 for generator + δg, 0 for δg; the amber edges are exactly the loops with odd winding | checked | 48 − 23 = 25. Stepped through all 25 left-over edges headlessly in both modes: ⟨α, loop⟩ = 1 exactly for 4-17, 4-5, 16-17 (winding 1), 0 for the other 22 (winding 0). If α' = α + δg then f' = f + g + g(0), so the defect set is class-invariant | none |
+| 01 | Figure 4 ranks: annulus 3+6 (9, 18, 9), ranks 8, 9; 8+16 (24, 48, 24), ranks 23, 24; 16+32 (48, 96, 48), ranks 47, 48; all H* = (1, 1, 0). Coned annulus (25, 56, 32), ranks 24, 32, H* = (1, 0, 0) | checked | Gaussian elimination on COH.coboundary.matrix in node, cross-checked against COH.cohomology.compute in the page (readout says "matching") | none |
+| 01 | Over a field the pairing between H¹ and H₁ is perfect | standard | Universal coefficients over a field: H¹(X; F) ≅ Hom(H₁(X; F), F) | none |
+| 01 | Hairy ball: Euler class of TS² evaluates to 2 on [S²] and would vanish given a nowhere-zero field; homology can prove the theorem via degree of the antipodal map | standard | e(TS²)[S²] = χ(S²) = 2; a nowhere-zero section forces e = 0; antipodal map has degree −1 on S², a nowhere-zero field gives a homotopy to the identity | none |
+
 ### 05 (enrichment, 2026-09-27)
 
 All numbers below were computed with COH over ℤ/2 in node on the page's own complexes and checked against the page headlessly.
