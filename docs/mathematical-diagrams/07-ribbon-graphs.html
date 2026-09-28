@@ -138,7 +138,15 @@ svg text { font-family: var(--heading-font); }
 @media (max-width: 700px) {
   h1 { font-size: 1.75rem; }
   .figure { padding: 1rem; }
-  .metric-layout { grid-template-columns: 1fr; }
+  .metric-layout { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 0.5rem; }
+  .metric-layout > div:last-child { display: contents; }
+  #metric-bars-svg { margin-top: 0.3rem; }
+  .metric-layout .bars-wrap { grid-column: 1 / -1; }
+  #ternary-svg text { font-size: 19px; }
+  #ternary-svg .region-label { display: none; }
+  #ternary-svg .region-label.center { display: inline; }
+  #metric-graph-svg text { font-size: 24px; }
+  .c-readout { font-size: 0.8rem; }
   .thumb-row { flex-direction: column; gap: 0.2rem; }
   .thumb-head { flex: none; padding: 0; }
   .thumb { width: 40px; height: 40px; }
@@ -236,13 +244,13 @@ svg text { font-family: var(--heading-font); }
     </div>
     <div>
       <div class="svg-wrap"><svg id="metric-graph-svg" viewBox="-150 -88 300 176" role="img" aria-label="Metric ribbon graph"></svg></div>
-      <div class="svg-wrap"><svg id="metric-bars-svg" viewBox="0 0 300 100" role="img" aria-label="Boundary walks drawn to scale"></svg></div>
+      <div class="svg-wrap bars-wrap"><svg id="metric-bars-svg" viewBox="0 0 300 100" role="img" aria-label="Boundary walks drawn to scale"></svg></div>
     </div>
   </div>
   <div class="c-readout" id="c-readout" aria-live="polite"></div>
   <div class="figure-caption">
     <span class="figure-label">Figure 3.</span>
-    Drag the point, or focus it and use the arrow keys; the perimeters always total 12. In the central triangle every perimeter is below half the total and the graph is a theta. In a corner one perimeter beats the other two combined and the graph is a dumbbell. On the dividing lines one edge has length zero and the graph is a figure-eight. The bars are the boundary walks, computed from the rotation system and drawn to scale.
+    Drag the point, or focus it and use the arrow keys; the perimeters total 12. The central triangle, where every perimeter is below half the total, gives a theta; each corner gives a dumbbell; the dividing lines give a figure-eight with one edge of length zero. The bars are the boundary walks, computed from the rotation system and drawn to scale.
   </div>
 </div>
 
@@ -377,7 +385,7 @@ math('m-2v', '2^{v}', false);
 
   function dir(a) { return [Math.cos(a), Math.sin(a)]; }
   function centerline(G, A, k) {
-    var R = G.def.R, ed = G.E[k], U = G.V[ed.u], W = G.V[ed.v];
+    var R = radius(G), ed = G.E[k], U = G.V[ed.u], W = G.V[ed.v];
     var d0 = dir(A.slot[2 * k]), d1 = dir(A.slot[2 * k + 1]);
     var P0 = [U.x + R * d0[0], U.y + R * d0[1]], P3 = [W.x + R * d1[0], W.y + R * d1[1]];
     var kk = 0.42 * Math.hypot(U.x - W.x, U.y - W.y);
@@ -408,7 +416,7 @@ math('m-2v', '2^{v}', false);
 
   function geomOf(G) {
     var off = G.def.w / 2 - INSET;
-    return { off: off, delta: Math.atan(off / G.def.R), r: G.def.R - INSET };
+    return { off: off, delta: Math.atan(off / radius(G)), r: radius(G) - INSET };
   }
   function faceSegments(G, A, c) {
     var gm = geomOf(G), segs = [];
@@ -424,8 +432,15 @@ math('m-2v', '2^{v}', false);
   }
 
   var layers = {};
+  // Disks grow on narrow screens so dart labels inside them stay at least 11.5px tall.
+  var rEff = {};
+  function radius(G) { return rEff[G.def.label] || G.def.R; }
   function renderA(keepWalk) {
     var G = GRAPHS[state.graph], def = G.def, A = analyze(G, state.mask);
+    wrapA.style.maxWidth = def.maxW + 'px';
+    var scale = (wrapA.clientWidth || def.vb[2]) / def.vb[2];
+    var minFs = 11.5 / scale;
+    rEff[def.label] = Math.min(def.R * 1.45, Math.max(def.R, minFs / 0.5));
     if (state.face >= A.cycles.length) state.face = 0;
     var segs = faceSegments(G, A, A.cycles[state.face]);
     cur = { G: G, A: A, segs: segs };
@@ -435,9 +450,8 @@ math('m-2v', '2^{v}', false);
     wrapA.style.maxWidth = def.maxW + 'px';
     svgA.attr('viewBox', def.vb.join(' '));
     svgA.selectAll('*').remove();
-    var gm = geomOf(G), R = def.R;
-    var scale = (wrapA.clientWidth || def.vb[2]) / def.vb[2];
-    var fs = Math.min(R * 0.5, Math.max(R * 0.4, 10.5 / scale));
+    var gm = geomOf(G), R = radius(G);
+    var fs = Math.min(R * 0.5, Math.max(R * 0.4, minFs));
 
     var bands = svgA.append('g');
     G.E.forEach(function (ed, k) {
@@ -796,11 +810,11 @@ math('m-2v', '2^{v}', false);
   var walls = tsvg.append('polygon').attr('points', mids.map(function (q) { return q.join(','); }).join(' '))
     .attr('fill', 'none').attr('stroke', 'var(--text-2)').attr('stroke-width', 1.4).attr('stroke-dasharray', '4 3');
   var cen = toXY([4, 4, 4]);
-  tsvg.append('text').attr('x', cen[0]).attr('y', cen[1] + 4).attr('text-anchor', 'middle').attr('font-size', 12)
+  tsvg.append('text').attr('class', 'region-label center').attr('x', cen[0]).attr('y', cen[1] + 4).attr('text-anchor', 'middle').attr('font-size', 12)
     .attr('fill', 'var(--text-2)').text('theta');
   [0, 1, 2].forEach(function (k) {
     var c = [(TV[k][0] + cornerMids[k][0][0] + cornerMids[k][1][0]) / 3, (TV[k][1] + cornerMids[k][0][1] + cornerMids[k][1][1]) / 3];
-    tsvg.append('text').attr('x', c[0]).attr('y', c[1] + (k === 2 ? 10 : 2)).attr('text-anchor', 'middle').attr('font-size', 10.5)
+    tsvg.append('text').attr('class', 'region-label').attr('x', c[0]).attr('y', c[1] + (k === 2 ? 10 : 2)).attr('text-anchor', 'middle').attr('font-size', 10.5)
       .attr('fill', 'var(--text-2)').text('dumbbell');
   });
   tsvg.append('polygon').attr('points', TV.map(function (q) { return q.join(','); }).join(' '))
