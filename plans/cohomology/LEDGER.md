@@ -67,3 +67,16 @@ Only the flagged leads below were checked; this is not a full fact-check of the 
 | 04 | Latitude dω: "the equatorial band is white and the polar caps light up"; bullet says nonzero "on triangles that wrap a pole" | wrong, fixed | Same node run: dω is nonzero on 2 of 320 faces, +2π on face 110 at the north pole and -2π on face 141 at the south, each the pole-fan triangle straddling θ = ±π (atan2(0,0) = 0 at the pole vertex) | Now "every triangle is white except one at each pole, which reads ±2π", with the reason; bullet says "one triangle at each pole" |
 | index, 06 | "compute every number by linear algebra over ℤ/2, or over ℤ/47 in the last essay"; "Essays 02 to 05 worked over ℤ/2" | wrong, fixed | 04 uses real-valued edge values and states H^1(S^2; R), H^1(A; R) (coh-math.js: "de Rham uses R"); 02, 03, 05 are over ℤ/2 | Index names the de Rham essay's real-valued forms as the second exception; 06 now says 02, 03 and 05, with 04 on real-valued forms |
 | 04 | d(df) = (∂_y∂_x f - ∂_x∂_y f) dx∧dy | wrong (sign), fixed | d(∂_x f dx + ∂_y f dy) = ∂_y∂_x f dy∧dx + ∂_x∂_y f dx∧dy = (∂_x∂_y f - ∂_y∂_x f) dx∧dy (∂_x∂_y f meaning ∂_x of ∂_y f); still 0 | Terms swapped to the correct order |
+
+### 05 (enrichment, 2026-09-27)
+
+All numbers below were computed with COH over ℤ/2 in node on the page's own complexes and checked against the page headlessly.
+
+| page | claim | verdict | source or derivation | fix |
+|---|---|---|---|---|
+| 05 | Klein bottle, "bands sideways": U ∪ V has β = (1, 3, 0) against the Klein bottle's (1, 2, 1) | checked | COH.mv.cover leaves 6 simplices missing; COH.cohomology on fromMaximal(U ∪ V) gives (1, 3, 0); COH.mv.exactness on that cover is exact | none |
+| 05 | Degree 0: coker d₀ has one dimension per independent cycle of the graph (nodes = components of U and V, edges = components of U ∩ V) | checked | d₀ over ℤ/2 is the graph's incidence matrix (each row has a 1 in its U and its V component), rank = nodes − graph components; cokernel = edges − rank = cycle rank. Page shows it equal to the lib's rank of δ* from degree 0 (two annuli: 2 − 1 = 1; star: 1 − 1 = 0) | none |
+| 05 | Two annuli on T²: the δ*-born H¹ class counts, mod 2, crossings of one overlap circle | checked | δ*(indicator of one overlap circle) = δ of that indicator extended into U; it is 1 exactly on edges leaving that circle into the U-only band, so it pairs with a loop by its crossing parity | reworded from "crosses from one band to the other" |
+| 05 | Star of a vertex on the 4×4 torus: U ∩ V is one hexagon; β(U) = (1, 2, 0), β(V) = (1, 0, 0), β(U∩V) = (1, 1, 0); both H¹ classes come from U | checked | COH on the page's complex; ranks π*₁ = 2, d₁ = 0, δ*₀ = 0 | none |
+| 05 | In every preset of Figure 3, H² comes entirely from the overlap | checked | for all five preset rows β₂(U) = β₂(V) = 0 and rank δ*₁ = 1 | none |
+| 05 | Octahedron: flipping a spoke [n, eᵢ] flips δη_U on exactly the two northern triangles containing it, so the triangle count keeps its parity and δ*[η] = (sum of η around the equator) · generator | checked | headless run: default count 1; spoke [0,1] → 1; then [0,2] → 3; then equator [2,3] → 2 with class 0 | none |
