@@ -95,3 +95,14 @@ flagged in `plans/FACT-CHECK.md` and settled on 2026-09-27.
 | 04 | Oscillator L = ½q̇² - ½q² has the quasi-symmetry X = sin t with δL = d/dt(q cos t); its charge q̇ sin t - q cos t is conserved | derived, computed | δL = q̇ cos t - q sin t = d/dt(q cos t); d/dt(q̇ sin t - q cos t) = (q̈ + q) sin t = 0 on shell. Page: grid test passes, RK4 drift 2e-9 over 8 s | none |
 | 04 | Vertical shift under gravity: δL = -g = d/dt(-gt), charge q̇ + gt conserved | derived, computed | Page RK4: q̇ drifts 78.48 over 8 s (= g·8), q̇ + gt holds to 8e-13 | none |
 | 04 | A gauge transformation changes a charged particle's Lagrangian by q dχ/dt | derived | L = ½mv² - qφ + qv·A with A -> A + ∇χ, φ -> φ - ∂χ/∂t gives δL = q(∂χ/∂t + v·∇χ) = q dχ/dt | none |
+
+### 13 enrichment
+
+| page | claim | verdict | source or derivation | fix |
+|---|---|---|---|---|
+| 13 | Fig 3: projecting xy = 1 to t = x - cy gives fibers c y² + t y - 1 = 0; for c ≠ 0 two points with multiplicity at every t, for c = 0 one point for t ≠ 0 and none at t = 0 | derived, computed | Substitute x = t + cy into xy = 1. The page counts roots with multiplicity at 601 samples of t in [-3, 3] and plots \|y\|; at c = 0.25 the largest \|y\| is 12.32 (root of 0.25y² + 3y - 1), at c = 0 it is 100 (y = 1/t at t = 0.01) | none |
+| 13 | Fig 4: k[t³, t⁴, t⁵] is free over k[t³] on 1, t⁴, t⁵ (rank 3), over k[t⁴] on 1, t⁵, t⁶, t³ (rank 4) | derived, computed | Semigroup ⟨3, 4, 5⟩ = ℕ minus {1, 2}; least element in each residue class mod a (the Apéry set) generates that class over k[t^a]. Page computes the semigroup and Apéry set | none |
+| 13 | The ideal of the curve (t³, t⁴, t⁵) is (y² - xz, x³ - yz, z² - x²y) | fine (from memory), checked | 2×2 minors of [[x, y, z], [y, z, x²]]; each vanishes on the curve by direct substitution. That they generate the whole ideal is cited from memory (Herzog 1970, monomial space curves); consistent with the page's HF(s) = 5s - 1, degree 5, and fiber count 3 over k[x] matching Fig 4's rank | none |
+| 13 | For large s the number of standard monomials of degree ≤ s (graded order) is a polynomial in s of degree dim A | fine (from memory) | Affine Hilbert polynomial; Cox, Little, O'Shea, Ideals, Varieties, and Algorithms, ch. 9 §3; cited from memory. Page values: line s + 1, plane (s+1)(s+2)/2, elliptic curve 3s, hyperbola 2s + 1, cone (s+1)², each with d matching the known dimension | none |
+| 13 | Fig 5: generic fiber sizes 2 (elliptic over k[x], hyperbola over k[x + y], cone over k[x, y]) and 3 (curve over k[x]) | computed | Page adds the subring's linear equations at five seeded random rational base points, runs exact Buchberger and counts standard monomials of the zero-dimensional quotient; matched in node | none |
+| 13 | Fig 2 census on the 41×41 grid over [-2, 2]²: real fiber 2 / 1 / 0 at 800 / 81 / 800 samples | computed | 20 nonzero values per sign on each axis: 2·20·20 = 800 per sign class, 41 + 41 - 1 = 81 on the axes | none |
