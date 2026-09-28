@@ -4,11 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Lattice Boltzmann &amp; the D2Q9 Stencil · Simulating on a Lattice</title>
+<script src="../lib/motion.js"></script>
 <script src="../vendor/js/d3.v7.min.js"></script>
 <link rel="stylesheet" href="../vendor/katex@0.16.11/katex.min.css">
 <script src="../vendor/katex@0.16.11/katex.min.js"></script>
 <link href="../vendor/fonts/sans-serif-mono/fonts.css" rel="stylesheet">
-<script src="../lib/motion.js"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -28,11 +28,11 @@
   --border: #e2e2e8;
   --c-rest: #64748b;
   --c-axis: #2563eb;
-  --c-diag: #7c3aed;
-  --c-wall: #1e293b;
-  --c-pos: #dc2626;
-  --c-neg: #2563eb;
-  --c-neutral: #f8fafc;
+  --c-diag: #0d9488;
+  --c-q9: #059669;
+  --c-q5: #dc2626;
+  --c-q8: #b45309;
+  --c-custom: #475569;
   --c-a1: #2563eb;
   --c-a2: #dc2626;
   --c-flow: #ea580c;
@@ -41,12 +41,13 @@
   --c-broken: #db2777;
 }
 
-.t-a1 { color: var(--c-a1); font-weight: 600; }
-.t-a2 { color: var(--c-a2); font-weight: 600; }
 .t-flow { color: var(--c-flow); font-weight: 600; }
 .t-conserved { color: var(--c-conserved); font-weight: 600; }
 .t-point-group { color: var(--c-point-group); font-weight: 600; }
 .t-broken { color: var(--c-broken); font-weight: 600; }
+.t-q9 { color: var(--c-q9); font-weight: 600; }
+.t-q5 { color: var(--c-q5); font-weight: 600; }
+.t-q8 { color: var(--c-q8); font-weight: 600; }
 
 body { font-family: var(--body-font); font-size: var(--body-size); line-height: var(--line-height); color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased; }
 .article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
@@ -54,7 +55,6 @@ body { font-family: var(--body-font); font-size: var(--body-size); line-height: 
 h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
 h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
 h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
-h3 { font-size: 1.15rem; margin: 2rem 0 0.75rem; }
 
 p { margin: 0 0 1rem; }
 a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
@@ -66,121 +66,53 @@ a:hover { color: #1d4ed8; }
 .header { padding: 3rem 0 2rem; border-bottom: 1px solid var(--border); margin-bottom: 2.5rem; }
 .header .subtitle { font-family: var(--heading-font); font-size: 1.15rem; color: var(--text-2); max-width: 640px; }
 
-.figure { margin: 2rem 0; padding: 1.5rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.figure { margin: 2rem 0; padding: 1.25rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
 .figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; line-height: 1.4; }
 .figure-label { font-weight: 600; color: var(--text); }
 
-.btn { font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600; padding: 0.4rem 0.85rem; border-radius: 5px; border: 1px solid var(--border); background: var(--fig-bg); color: var(--text); cursor: pointer; transition: background 0.15s, border-color 0.15s; user-select: none; }
+.btn { font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600; padding: 0.35rem 0.75rem; border-radius: 5px; border: 1px solid var(--border); background: var(--fig-bg); color: var(--text); cursor: pointer; transition: background 0.15s, border-color 0.15s; user-select: none; }
 .btn:hover { border-color: var(--accent); background: var(--accent-light); }
-.btn.active { background: var(--accent); color: white; border-color: var(--accent); }
-.btn.danger { border-color: #fca5a5; color: #b91c1c; }
-.btn.danger:hover { background: #fee2e2; border-color: #dc2626; }
+.btn.active, .btn[aria-pressed="true"] { background: var(--accent); color: white; border-color: var(--accent); }
+.btn-row { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.6rem; align-items: center; }
+.btn-row .lbl { font-family: var(--heading-font); font-size: 0.82rem; font-weight: 600; color: var(--text-2); margin-right: 0.2rem; }
 
-.btn-row { display: flex; flex-wrap: wrap; gap: 0.45rem; margin-bottom: 0.75rem; }
-
-
-.katex-display { margin: 1.25rem 0; overflow-x: auto; overflow-y: hidden; }
+.katex-display { margin: 1.1rem 0; overflow-x: auto; overflow-y: hidden; }
 svg text { font-family: var(--heading-font); }
 
-.panel {
-  display: grid;
-  grid-template-columns: 1fr 260px;
-  gap: 1.25rem;
-  align-items: start;
-}
-@media (max-width: 760px) { .panel { grid-template-columns: 1fr; } }
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; align-items: start; }
+@media (max-width: 620px) { .two-col { grid-template-columns: 1fr; } }
+.chart { width: 100%; min-width: 0; }
+.chart svg, .chart canvas { display: block; }
+.chart-title { font-family: var(--heading-font); font-size: 0.8rem; font-weight: 600; color: var(--text-2); margin-bottom: 0.2rem; }
 
-.controls-col { display: flex; flex-direction: column; gap: 0.7rem; font-family: var(--heading-font); font-size: 0.88rem; }
-.slider-row { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 0.4rem 0.8rem; }
+.slider-row { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 0.3rem 0.7rem; font-family: var(--heading-font); margin-bottom: 0.5rem; }
 .slider-row .lbl { color: var(--text-2); font-weight: 600; font-size: 0.82rem; }
-.slider-row .val { font-family: var(--mono-font); color: var(--text); min-width: 3.5rem; text-align: right; font-weight: 600; font-size: 0.82rem; }
-.slider-row input[type="range"] { width: 100%; }
+.slider-row .val { font-family: var(--mono-font); color: var(--text); min-width: 3.2rem; text-align: right; font-weight: 600; font-size: 0.82rem; }
+.slider-row input[type="range"] { width: 100%; min-width: 0; }
+.slider-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 1.25rem; }
+@media (max-width: 620px) { .slider-grid { grid-template-columns: 1fr; } }
+
+.readout { font-family: var(--heading-font); font-size: 0.86rem; color: var(--text-2); margin-top: 0.5rem; line-height: 1.5; min-height: 1.3em; }
+.readout b { color: var(--text); font-family: var(--mono-font); font-weight: 600; }
+.figure sub, .figure sup { font-size: max(11px, 0.8em); }
 
 .canvas-wrap { position: relative; background: #fff; border: 1px solid var(--border); border-radius: 4px; }
-canvas.flow { display: block; width: 100%; image-rendering: pixelated; image-rendering: crisp-edges; cursor: crosshair; }
+canvas.flow { display: block; width: 100%; image-rendering: pixelated; image-rendering: crisp-edges; }
 
-.eq-key { font-family: var(--heading-font); font-size: 0.82rem; line-height: 1.4; color: var(--text-2); }
-@media (max-width: 560px) { .overlay-stencil { display: none; } }
-.overlay-stencil {
-  position: absolute;
-  right: 8px;
-  top: 8px;
-  background: rgba(255, 255, 255, 0.92);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 4px;
-}
+.legend-bar { margin-top: 0.4rem; display: flex; align-items: center; gap: 0.5rem; font-family: var(--heading-font); font-size: 0.75rem; color: var(--text-2); }
+.legend-bar .gradient { flex: 1; height: 8px; border-radius: 2px; background: linear-gradient(to right, #2563eb, #f8fafc, #dc2626); border: 1px solid var(--border); }
 
-.info-box {
-  padding: 0.7rem 0.9rem;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  font-family: var(--heading-font);
-  font-size: 0.85rem;
-  line-height: 1.5;
-}
-.info-box .label { font-size: 0.72rem; font-weight: 700; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.35rem; }
-.info-box .row { display: flex; justify-content: space-between; gap: 0.5rem; margin-top: 0.15rem; }
-.info-box .row .k { color: var(--text-2); }
-.info-box .row .v { font-family: var(--mono-font); font-weight: 600; color: var(--text); }
+.moment-table { width: 100%; font-family: var(--mono-font); font-size: 0.8rem; border-collapse: collapse; }
+.moment-table th, .moment-table td { padding: 0.22rem 0.4rem; text-align: right; border-bottom: 1px solid var(--border); }
+.moment-table th { color: var(--text-2); font-family: var(--heading-font); font-size: 0.78rem; font-weight: 700; }
+.moment-table td:first-child, .moment-table th:first-child { text-align: left; font-family: var(--body-font); }
+.moment-table tr.off td { color: var(--c-flow); font-weight: 600; }
 
-.select-row { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; font-size: 0.85rem; }
-.select-row select {
-  font-family: var(--heading-font); font-size: 0.85rem;
-  padding: 0.3rem 0.5rem; border: 1px solid var(--border); border-radius: 4px;
-  background: var(--fig-bg); color: var(--text);
-}
+.select-row { display: flex; align-items: center; gap: 0.5rem; font-family: var(--heading-font); font-size: 0.85rem; }
+.select-row select { font-family: var(--heading-font); font-size: 0.85rem; padding: 0.25rem 0.4rem; border: 1px solid var(--border); border-radius: 4px; background: var(--fig-bg); color: var(--text); }
 
-.radio-row { display: flex; gap: 0.4rem; }
-.radio-row label {
-  flex: 1;
-  padding: 0.35rem 0.5rem;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  text-align: center;
-  font-size: 0.78rem;
-  font-weight: 600;
-  cursor: pointer;
-  color: var(--text-2);
-  background: var(--fig-bg);
-}
-.radio-row label.active { border-color: var(--accent); background: var(--accent-light); color: var(--accent); }
-.radio-row input { display: none; }
-
-.legend-bar {
-  margin-top: 0.6rem;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-family: var(--heading-font);
-  font-size: 0.72rem;
-  color: var(--text-2);
-}
-.legend-bar .gradient {
-  flex: 1;
-  height: 10px;
-  border-radius: 2px;
-  background: linear-gradient(to right, #2563eb, #f8fafc, #dc2626);
-  border: 1px solid var(--border);
-}
-
-.weight-table {
-  width: 100%;
-  font-family: var(--mono-font);
-  font-size: 0.82rem;
-  border-collapse: collapse;
-  margin: 0.6rem 0 0.2rem;
-}
-.weight-table th, .weight-table td {
-  padding: 0.3rem 0.5rem;
-  text-align: left;
-  border-bottom: 1px solid var(--border);
-}
-.weight-table th { color: var(--text-2); font-family: var(--heading-font); font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
-.weight-table .w-rest { color: var(--c-rest); }
-.weight-table .w-axis { color: var(--c-axis); }
-.weight-table .w-diag { color: var(--c-diag); }
+.focus-ring:focus { outline: none; }
+.focus-ring:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .nav-footer { margin-top: 5rem; padding-top: 2rem; border-top: 1px solid var(--border); display: flex; justify-content: space-between; font-family: var(--heading-font); font-size: 0.9rem; }
 .nav-footer a { color: var(--accent); text-decoration: none; }
@@ -191,6 +123,7 @@ canvas.flow { display: block; width: 100%; image-rendering: pixelated; image-ren
 @media (max-width: 680px) {
   h1 { font-size: 1.75rem; }
   .article { padding: 1.5rem 1rem 4rem; }
+  .figure { padding: 0.9rem; }
 }
 </style>
 <link rel="stylesheet" href="lib/theme.css">
@@ -199,30 +132,22 @@ canvas.flow { display: block; width: 100%; image-rendering: pixelated; image-ren
   :root {
     --c-rest: #9aa0b4;
     --c-axis: #5b8def;
-    --c-diag: #a07cf5;
-    --c-wall: #dfe3ec;
-    --c-pos: #f05252;
-    --c-neg: #5b8def;
-    --c-neutral: #1f2029;
+    --c-diag: #2cc2b3;
+    --c-q9: #2fbf8a;
+    --c-q5: #f05252;
+    --c-q8: #e8a33d;
+    --c-custom: #a4a4ba;
     --c-a1: #5b8def;
     --c-a2: #f05252;
     --c-flow: #f97a3c;
     --c-broken: #f0609f;
   }
-}
-</style>
-<script src="lib/theme.js"></script>
-<style>
-/* dark twins */
-@media (prefers-color-scheme: dark) {
   .legend-bar .gradient { background: linear-gradient(to right, #5b8def, #1c1d25, #f05252); }
-  .overlay-stencil { background: rgba(28, 29, 37, 0.92); }
   a:hover { color: #7aa2f7; }
-  .btn.danger { border-color: #7a3434; color: #f26b6b; }
-  .btn.danger:hover { background: #3a1d22; border-color: #f05252; }
   .canvas-wrap { background: #1c1d25; }
 }
 </style>
+<script src="lib/theme.js"></script>
 </head>
 <body>
 <div class="article">
@@ -231,185 +156,164 @@ canvas.flow { display: block; width: 100%; image-rendering: pixelated; image-ren
 
 <div class="header">
   <h1>Lattice Boltzmann &amp; the D2Q9 Stencil</h1>
-  <p class="subtitle">Part 5 of 6. Lattice Boltzmann gives the square lattice a second speed and weights chosen to make its rank-4 tensor isotropic. That is enough to recover Navier–Stokes and grow a Kármán vortex street.</p>
+  <p class="subtitle">Part 5 of 6. Nine velocities on a square lattice, weighted so the fluid they make looks the same in every direction and in every moving frame, to the order that matters.</p>
 </div>
 
-<p><a href="04-hpp-vs-fhp.html">Part 4</a> ended with HPP failing because the four axis velocities of the square lattice cannot build an isotropic rank-4 tensor. That does not rule out square lattices for fluids. McNamara &amp; Zanetti (1988), refined by Qian, d'Humières &amp; Lallemand (1992), showed that the square lattice works once you enlarge the velocity set and drop boolean occupation. The result is lattice Boltzmann.</p>
+<p><a href="04-hpp-vs-fhp.html">Part 4</a> ended with HPP failing because four axis velocities cannot build an isotropic rank-4 tensor. Lattice Boltzmann keeps the square lattice with real-valued populations <i>f<sub>i</sub></i> on nine velocities (McNamara and Zanetti 1988; Qian, d'Humières and Lallemand 1992), weighted so the fluid respects two continuum symmetries: rotations and Galilean boosts.</p>
 
-<p>The method keeps the lattice structure of HPP and FHP (discrete positions, discrete <span class="t-flow">velocities</span>, unit timestep) and changes two things. Particle <em>counts</em> become <em>densities</em>: a continuous <i>f<sub>i</sub></i>(<b>x</b>, <i>t</i>) in each velocity channel, the expected number of particles per cell moving along <b>c</b><sub><i>i</i></sub>. And the exclusion-principle collision rules, which forced HPP and FHP to use booleans, become a linearised relaxation toward local equilibrium. The algorithm that remains is two nested loops over nine floating-point channels with one line of collision arithmetic.</p>
+<h2>What do the weights have to satisfy?</h2>
 
-<h2>The D2Q9 velocity set</h2>
-
-<p>The square lattice has a natural set of nine velocities: the zero vector (a rest population), four axis neighbours at speed 1, and four diagonal neighbours at speed √2, indexed <i>i</i> ∈ {0, 1, …, 8}. In "D2Q9", <i>D</i> is the dimension and <i>Q</i> the number of velocities.</p>
+<p>The nine velocities form three orbits of the <span class="t-point-group">point group <i>D</i><sub>4</sub></span>, so there are three weights, one fixed by normalisation. The rank-4 moment Σ<i>w<sub>i</sub></i>(<b>c</b><sub><i>i</i></sub>·<b>n</b>)<sup>4</sup> must not depend on the direction <b>n</b>, and must equal the Maxwellian's 3<i>c<sub>s</sub></i><sup>4</sup>, where <i>c<sub>s</sub></i><sup>2</sup> = Σ<i>w<sub>i</sub>c<sub>ix</sub></i><sup>2</sup>.</p>
 
 <div id="math-d2q9"></div>
 
-<p>The three speed classes (rest, one vector; axis, four vectors; diagonal, four vectors) are orbits under the <span class="t-point-group">point group <i>D</i><sub>4</sub></span> of the square lattice, which is why they have to share weights inside each class. Three free weights meet the Gauss–Hermite quadrature conditions, and the solution is unique.</p>
+<div class="figure" id="fig-weights">
+  <div class="btn-row" id="w-presets" role="group" aria-label="Weight presets">
+    <span class="lbl">preset</span>
+    <button class="btn" data-p="q5">axes only (D2Q5)</button>
+    <button class="btn" data-p="q8">eight moving</button>
+    <button class="btn" data-p="q9">D2Q9</button>
+  </div>
+  <div class="two-col">
+    <div class="chart" id="w-plane"></div>
+    <div class="chart" id="w-polar"></div>
+  </div>
+  <p class="readout" id="w-read" aria-live="polite"></p>
+  <p class="figure-caption"><span class="figure-label">Figure 1.</span> On the <span class="t-point-group">purple line</span> the rank-4 moment is isotropic; on the <span class="t-flow">orange curve</span> its average over directions equals 3<i>c<sub>s</sub></i><sup>4</sup>. The polar plot is the moment over 3<i>c<sub>s</sub></i><sup>4</sup>; the Maxwellian is the dashed circle. Drag the point or use arrow keys.</p>
+</div>
 
-<p>Isotropy alone does not need nine. Weighted sums over <i>w<sub>i</sub></i> <b>c</b><sub><i>i</i></sub> are isotropic through rank 4, meaning invariant under the full <i>SO</i>(2) and not only under <i>D</i><sub>4</sub>, already for the eight moving vectors, with weight 1/5 on each axis and 1/20 on each diagonal. What forces the ninth is matching the Maxwellian: the rank-2 sum must be <i>c<sub>s</sub></i><sup>2</sup> times the identity and the rank-4 sum <i>c<sub>s</sub></i><sup>4</sup> times the isotropic tensor, with the same <i>c<sub>s</sub></i>. Eight vectors give <i>c<sub>s</sub></i><sup>2</sup> = 3/5 and a rank-4 coefficient of 1/5, not 9/25; the rest weight is the extra unknown that makes both hold, at <i>c<sub>s</sub></i><sup>2</sup> = 1/3. With only the axis vectors, as in HPP, the rank-4 moment is not even isotropic and the viscosity turns anisotropic. Larger sets (D2Q17, D2Q21 and other higher-order models) match more Hermite moments and can simulate compressible or thermal flow. Isothermal incompressible Navier–Stokes needs only nine.</p>
+<p>The axes-only set matches along the axes and has half the moment on the diagonals. The eight moving vectors are isotropic at <i>r</i> = 1/4 but too small; the rest weight supplies the size, and the two curves cross only at 4/9, 1/9, 1/36.</p>
 
-<h2>Streaming and collision</h2>
+<h2>Collide, then stream</h2>
 
-<p>Each step first <em>collides</em> at every site, pulling each channel toward a local equilibrium, then <em>streams</em> each channel's population one cell in its own direction.</p>
+<p>Each step relaxes every population toward a local equilibrium with one time <i>τ</i> (the BGK collision), then shifts it one cell along its velocity. A Chapman–Enskog expansion turns this into incompressible Navier–Stokes with the viscosity below.</p>
 
 <div id="math-collision"></div>
-<div id="math-streaming"></div>
-
-<p>This is the BGK (Bhatnagar–Gross–Krook) single-relaxation-time collision. <i>f<sub>i</sub></i><sup>eq</sup> is the value each channel would take in local thermodynamic equilibrium at the present density and <span class="t-flow">velocity</span>. <i>τ</i> is a dimensionless relaxation time: near 0.5 relaxation is fast and viscosity low, and larger values give slower relaxation and higher viscosity.</p>
-
-<p>The equilibrium is a Taylor expansion of the Maxwell–Boltzmann distribution to second order in the macroscopic velocity:</p>
-
 <div id="math-equilibrium"></div>
 
-<p>with <i>c</i><sub><i>s</i></sub><sup>2</sup> = 1/3 in lattice units: the speed of sound on the D2Q9 lattice. The constants 3, 9/2 and 3/2 come from matching the quadrature conditions above to the Maxwell–Boltzmann moments, with <i>c</i><sub><i>s</i></sub> playing the role of the thermal speed. <span class="t-conserved">Density</span> and <span class="t-flow">velocity</span> are the zeroth and first moments of the distribution:</p>
-
-<div id="math-moments"></div>
-
-<h2>Chapman–Enskog and the viscosity</h2>
-
-<p>A Chapman–Enskog expansion (take <i>ε</i> to be the Knudsen number, the ratio of the relaxation length to the scale on which the flow varies, expand <i>f<sub>i</sub></i> = <i>f<sub>i</sub></i><sup>eq</sup> + <i>ε f<sub>i</sub></i><sup>(1)</sup> + <i>ε</i><sup>2</sup> <i>f<sub>i</sub></i><sup>(2)</sup> + …, take moments) recovers the incompressible Navier–Stokes equations. The kinematic viscosity falls out of the first-order correction:</p>
-
-<div id="math-viscosity"></div>
-
-<p>and the pressure is set by the equation of state <i>p</i> = <i>c</i><sub><i>s</i></sub><sup>2</sup> <i>ρ</i>. So a nearest-neighbour update with a handful of floating-point multiplies per cell behaves, at macroscopic scales, like an incompressible Navier–Stokes solver. The anisotropy of HPP is absent because the D2Q9 weights were chosen to remove it.</p>
-
-<h2>The equilibrium distribution</h2>
-
-<p>With <b>u</b> = <b>0</b> the equilibrium peaks on the rest channel (<i>w</i><sub>0</sub> = 4/9, the largest single weight, though the eight moving channels together hold 5/9). Push <b>u</b> in some direction and channels aligned with it gain, anti-aligned channels lose, and the rest channel drops a little.</p>
+<p>Figure 2 sums the equilibrium's moments. Through rank 2 they match the Maxwellian. At rank 3 they cannot, because <i>c<sub>x</sub></i><sup>3</sup> = <i>c<sub>x</sub></i> when every component is −1, 0 or 1.</p>
 
 <div class="figure" id="fig-equilibrium">
-  <div class="panel">
+  <div class="two-col">
+    <div class="chart" id="eq-svg"></div>
     <div>
-      <div id="eq-svg"></div>
-      <table class="weight-table">
-        <thead><tr><th>class</th><th>count</th><th><i>w</i></th><th>speed</th></tr></thead>
-        <tbody>
-          <tr><td class="w-rest">rest</td><td>1</td><td>4/9 ≈ 0.4444</td><td>0</td></tr>
-          <tr><td class="w-axis">axis</td><td>4</td><td>1/9 ≈ 0.1111</td><td>1</td></tr>
-          <tr><td class="w-diag">diagonal</td><td>4</td><td>1/36 ≈ 0.0278</td><td>√2</td></tr>
-        </tbody>
-      </table>
-    </div>
-    <div class="controls-col">
       <div class="slider-row">
         <div class="lbl"><i>u<sub>x</sub></i></div>
-        <input type="range" id="eq-ux" min="-0.2" max="0.2" step="0.01" value="0.12">
-        <div class="val" id="eq-ux-val">0.12</div>
+        <input type="range" id="eq-ux" min="-0.2" max="0.2" step="0.01" value="0.15" aria-label="u x">
+        <div class="val" id="eq-ux-val">0.15</div>
       </div>
       <div class="slider-row">
         <div class="lbl"><i>u<sub>y</sub></i></div>
-        <input type="range" id="eq-uy" min="-0.2" max="0.2" step="0.01" value="0.00">
-        <div class="val" id="eq-uy-val">0.00</div>
+        <input type="range" id="eq-uy" min="-0.2" max="0.2" step="0.01" value="0.08" aria-label="u y">
+        <div class="val" id="eq-uy-val">0.08</div>
       </div>
-      <div class="btn-row">
-        <button class="btn" id="eq-zero">u = 0</button>
-        <button class="btn" id="eq-diag">diagonal</button>
-      </div>
-      <div class="info-box">
-        <div class="label">Moments</div>
-        <div class="row"><span class="k">Σ <i>f<sub>i</sub></i><sup>eq</sup></span><span class="v" id="eq-rho">1.000</span></div>
-        <div class="row"><span class="k">Σ <i>f<sub>i</sub></i><sup>eq</sup> <b>c</b><sub><i>i</i></sub></span><span class="v" id="eq-mom">(0.00, 0.00)</span></div>
-      </div>
-      <div class="eq-key">
-        Blue bars are axis channels, purple are diagonals, grey is the rest. The outline shows the isotropic equilibrium at <b>u</b> = <b>0</b>. Filled bars show the current drifted equilibrium.
-      </div>
+      <table class="moment-table" aria-label="Moments of the equilibrium">
+        <thead><tr><th>moment</th><th>lattice</th><th>Maxwellian</th><th>diff</th></tr></thead>
+        <tbody id="eq-table"></tbody>
+      </table>
     </div>
   </div>
-  <p class="figure-caption"><span class="figure-label">Figure 1.</span> D2Q9 equilibrium distribution <i>f<sub>i</sub></i><sup>eq</sup>(<i>ρ</i> = 1, <b>u</b>). At rest, the weights <i>w<sub>i</sub></i> appear unmodified. With <b>u</b> ≠ <b>0</b> each channel picks up a linear Doppler term 3(<b>c</b><sub><i>i</i></sub> · <b>u</b>) plus quadratic corrections. The zeroth moment stays at <i>ρ</i> and the first moment tracks <i>ρ</i><b>u</b> exactly, the two invariants BGK preserves.</p>
+  <p class="figure-caption"><span class="figure-label">Figure 2.</span> <i>f<sub>i</sub></i><sup>eq</sup>(<i>ρ</i> = 1, <b>u</b>) for the <span style="color:var(--c-rest);font-weight:600">rest</span>, <span style="color:var(--c-axis);font-weight:600">axis</span> and <span style="color:var(--c-diag);font-weight:600">diagonal</span> channels; ticks mark the weights at <b>u</b> = 0. The rank-3 rows miss by <i>ρu<sub>x</sub></i><sup>3</sup> and <i>ρu<sub>x</sub>u<sub>y</sub></i><sup>2</sup>.</p>
 </div>
 
-<h2>Boundary conditions and bounce-back</h2>
+<h2>Is the viscosity the same in every direction?</h2>
 
-<p>Walls and obstacles are boolean flags on lattice sites. At a solid site, populations arriving from outside are <em>reflected</em>: the channel pointing into the wall is swapped with the channel pointing out. Each reflection flips <b>c</b><sub><i>i</i></sub> to −<b>c</b><sub><i>i</i></sub>, which at O(<i>u</i>) gives zero mean velocity at the wall, so this <em>bounce-back</em> rule approximates a no-slip boundary.</p>
+<p>Figure 3 lays a small shear wave on a periodic 32 × 32 lattice at seven orientations, fits the exponential decay of each amplitude and divides the rate by <i>k</i><sup>2</sup>. The curves are the Chapman–Enskog prediction for general weights, <i>ν</i>(<i>θ</i>) = (<i>τ</i> − ½)(<i>w<sub>a</sub></i> sin<sup>2</sup>2<i>θ</i> + 4<i>w<sub>d</sub></i> cos<sup>2</sup>2<i>θ</i>)/<i>c<sub>s</sub></i><sup>2</sup>.</p>
 
-<p>Bounce-back makes awkward geometries easy. A circular cylinder on a Cartesian grid becomes a staircase, and bounce-back applied site by site gives a no-slip surface that is circular to within one lattice spacing. At the moderate Reynolds numbers of a Kármán street, that is enough.</p>
+<div class="figure" id="fig-visc">
+  <div class="btn-row" id="v-cmp" role="group" aria-label="Stencil compared with D2Q9">
+    <span class="lbl">compare D2Q9 with</span>
+    <button class="btn" data-c="q5">axes only</button>
+    <button class="btn" data-c="q8">eight moving</button>
+    <button class="btn" data-c="custom">Figure 1's point</button>
+  </div>
+  <div class="slider-row" style="max-width: 360px;">
+    <div class="lbl"><i>τ</i></div>
+    <input type="range" id="v-tau" min="0.55" max="1.5" step="0.05" value="0.8" aria-label="relaxation time tau">
+    <div class="val" id="v-tau-val">0.80</div>
+  </div>
+  <div class="two-col">
+    <div class="chart"><div class="chart-title">measured viscosity by wave direction</div><div id="v-angle"></div></div>
+    <div class="chart"><div class="chart-title" id="v-decay-title">amplitude decay</div><div id="v-decay"></div></div>
+  </div>
+  <div class="btn-row" id="v-angles" role="radiogroup" aria-label="Wave direction" style="margin-top:0.4rem"></div>
+  <p class="readout" id="v-read" aria-live="polite"></p>
+  <p class="figure-caption"><span class="figure-label">Figure 3.</span> Points measured, curves predicted; the second chart is the selected direction's decay with its fit. With axes only, a wave along an axis never decays, as in HPP.</p>
+</div>
 
-<h2>The Kármán street</h2>
+<h2>Does the wave move with the fluid?</h2>
 
-<p>Flow past a cylinder has one of the best-known regime diagrams in fluid mechanics. Below <i>Re</i> ≈ 5 the <span class="t-flow">flow</span> is attached and laminar. Above it a pair of steady recirculation bubbles forms behind the cylinder. Past <i>Re</i> ≈ 47 the pair becomes unstable to an antisymmetric perturbation, the bubbles detach alternately, and a <em>von Kármán vortex street</em> of alternating clockwise and counter-clockwise vortices sheds downstream. The shedding frequency is set by the Strouhal number <i>St</i> = <i>f D</i> / <i>U</i>, which sits near 0.2 for a wide range of Reynolds numbers.</p>
+<p>The eight-moving set passes that test. Figure 4 adds a uniform flow <i>U</i> along <i>x</i> to the shear wave, on a 32-cell periodic row,: a Galilean-invariant fluid carries the pattern at exactly <i>U</i>.</p>
 
-<p>All of this comes out of the D2Q9 BGK update below, about forty lines of inner-loop arithmetic with no special treatment of vortices and no adaptive mesh.</p>
+<div class="figure" id="fig-boost">
+  <div class="btn-row" id="b-cmp" role="group" aria-label="Stencil compared with D2Q9">
+    <span class="lbl">compare D2Q9 with</span>
+    <button class="btn" data-c="q5">axes only</button>
+    <button class="btn" data-c="q8">eight moving</button>
+    <button class="btn" data-c="custom">Figure 1's point</button>
+  </div>
+  <div class="slider-row" style="max-width: 360px;">
+    <div class="lbl">boost <i>U</i></div>
+    <input type="range" id="b-u" min="0.02" max="0.24" step="0.02" value="0.1" aria-label="boost velocity U">
+    <div class="val" id="b-u-val">0.10</div>
+  </div>
+  <div class="two-col">
+    <div class="chart"><div class="chart-title">wave <i>u<sub>y</sub></i>, position (up) against step (across)</div><div id="b-st"></div></div>
+    <div class="chart"><div class="chart-title">measured drift speed / <i>U</i>, and viscosity</div><div id="b-curves"></div></div>
+  </div>
+  <p class="readout" id="b-read" aria-live="polite"></p>
+  <p class="figure-caption"><span class="figure-label">Figure 4.</span> Heatmaps: the wave over 300 steps, columns rescaled; dashed, a crest moving at <i>U</i>. Lines: drift speed over <i>U</i> and shear viscosity, <i>τ</i> = 0.8.</p>
+</div>
+
+<p>The eight-moving set carries the wave at 5/9 of <i>U</i>, the radius of its circle in Figure 1. The axes-only set has no channel that moves <i>y</i>-momentum along <i>x</i>, so the wave stays put. D2Q9 drifts at exactly <i>U</i>, but its viscosity in the moving frame falls as <i>U</i> grows: the cubic error of Figure 2, and the reason runs are kept at low Mach number.</p>
+
+<h2>Flow past a cylinder</h2>
+
+<p>Walls are bounce-back: a population entering a solid site returns the way it came, so the wall velocity is zero. Figure 5 runs a 300 × 90 channel with a cylinder of diameter 22. Everything is mirror-symmetric about the centreline except a seeded random perturbation of 1% of <i>U</i> in the initial velocity.</p>
 
 <div class="figure" id="fig-lbm">
-  <div class="panel">
-    <div>
-      <div class="canvas-wrap" id="flow-wrap">
-        <canvas class="flow" id="flow-canvas" width="300" height="90" role="img" aria-label="Lattice-Boltzmann flow past an obstacle on a 300 by 90 grid, coloured by vorticity (blue negative, red positive) or by speed."></canvas>
-        <div class="overlay-stencil" id="stencil-overlay"></div>
-      </div>
-      <div class="legend-bar">
-        <span>vorticity −</span>
-        <div class="gradient"></div>
-        <span>+</span>
-      </div>
-      <div class="slider-row" style="margin-top: 0.75rem;">
-        <div class="lbl">speed</div>
-        <input type="range" id="speed-slider" min="0.05" max="1" step="0.05" value="0.25">
-        <div class="val" id="speed-val">0.25×</div>
-      </div>
-      <div class="btn-row" style="margin-top: 0.5rem;">
-        <button class="btn" id="lbm-play">Pause</button>
-        <button class="btn" id="lbm-step">Step</button>
-        <button class="btn danger" id="lbm-reset">Reset</button>
-      </div>
-    </div>
-    <div class="controls-col">
-      <div class="slider-row">
-        <div class="lbl">Reynolds</div>
-        <input type="range" id="re-slider" min="20" max="220" step="5" value="120">
-        <div class="val" id="re-val">120</div>
-      </div>
-      <div class="slider-row">
-        <div class="lbl">inflow <i>U</i></div>
-        <input type="range" id="u-slider" min="0.03" max="0.12" step="0.005" value="0.08">
-        <div class="val" id="u-val">0.080</div>
-      </div>
-      <div class="select-row">
-        <span class="lbl">Obstacle</span>
-        <select id="obs-select">
-          <option value="cylinder" selected>cylinder</option>
-          <option value="square">square</option>
-          <option value="wing">wing</option>
-          <option value="pair">tandem pair</option>
-        </select>
-      </div>
-      <div class="select-row">
-        <span class="lbl">Render</span>
-        <div class="radio-row" id="render-row">
-          <label class="active" data-mode="curl"><input type="radio" name="render" value="curl" checked>vorticity</label>
-          <label data-mode="speed"><input type="radio" name="render" value="speed">speed</label>
-        </div>
-      </div>
-      <div class="info-box">
-        <div class="label">Live readouts</div>
-        <div class="row"><span class="k">step</span><span class="v" id="r-step">0</span></div>
-        <div class="row"><span class="k"><i>τ</i></span><span class="v" id="r-tau">…</span></div>
-        <div class="row"><span class="k"><i>ν</i></span><span class="v" id="r-nu">…</span></div>
-        <div class="row"><span class="k"><i>Re</i></span><span class="v" id="r-re">…</span></div>
-        <div class="row"><span class="k">shed freq</span><span class="v" id="r-freq">…</span></div>
-        <div class="row"><span class="k">Strouhal</span><span class="v" id="r-strouhal">…</span></div>
-        <div class="row"><span class="k">steps/sec</span><span class="v" id="r-sps">…</span></div>
-      </div>
-    </div>
+  <div class="canvas-wrap">
+    <canvas class="flow" id="flow-canvas" width="300" height="90" role="img" aria-label="Lattice Boltzmann flow past an obstacle on a 300 by 90 grid, coloured by vorticity, speed or mirror defect."></canvas>
   </div>
-  <p class="figure-caption"><span class="figure-label">Figure 2.</span> D2Q9 BGK lattice-Boltzmann flow past an obstacle on a 300 × 90 grid. The Reynolds-number slider adjusts the relaxation time <i>τ</i> to reach the target <i>Re</i> = <i>U D</i> / <i>ν</i>, with cylinder diameter <i>D</i> = 22 cells. BGK goes unstable as <i>τ</i> approaches 1/2, so <i>τ</i> is never set below 0.52; at small inflow <i>U</i> this caps the reachable Reynolds number (about 99 at <i>U</i> = 0.03), and the <i>Re</i> readout reports the value actually simulated rather than the slider's target. Top and bottom rows and the obstacle are bounce-back (no-slip); the left edge is an equilibrium inlet at velocity (<i>U</i>, 0) and the right edge a zero-gradient outflow. Vorticity uses a diverging blue-white-red colourmap. At low <i>Re</i> the wake is a steady pair of recirculation bubbles; above <i>Re</i> ≈ 47 it sheds alternating vortices at <i>St</i> ≈ 0.2. The shed-frequency readout times the upward zero crossings of <i>u<sub>y</sub></i> at a probe four radii downstream, over the last 8,192 steps.</p>
+  <div class="legend-bar"><span id="legend-lo">vorticity −</span><div class="gradient"></div><span id="legend-hi">+</span></div>
+  <div class="btn-row" style="margin-top:0.6rem">
+    <button class="btn" id="lbm-play">Pause</button>
+    <button class="btn" id="lbm-reset">Restart</button>
+    <button class="btn" id="lbm-seed">New seed</button>
+    <span class="select-row"><label for="obs-select">obstacle</label>
+      <select id="obs-select"><option value="cylinder" selected>cylinder</option><option value="square">square</option></select></span>
+    <span class="select-row"><label for="render-select">colour</label>
+      <select id="render-select"><option value="curl" selected>vorticity</option><option value="speed">speed</option><option value="mirror">mirror defect</option></select></span>
+  </div>
+  <div class="slider-grid">
+    <div class="slider-row"><div class="lbl">Reynolds</div><input type="range" id="re-slider" min="20" max="220" step="5" value="120" aria-label="Reynolds number"><div class="val" id="re-val">120</div></div>
+    <div class="slider-row"><div class="lbl">inflow <i>U</i></div><input type="range" id="u-slider" min="0.03" max="0.12" step="0.005" value="0.08" aria-label="inflow velocity"><div class="val" id="u-val">0.080</div></div>
+    <div class="slider-row"><div class="lbl">steps/frame</div><input type="range" id="speed-slider" min="1" max="16" step="1" value="8" aria-label="steps per frame"><div class="val" id="speed-val">8</div></div>
+  </div>
+  <p class="readout" id="lbm-read" aria-live="off"></p>
+  <p class="figure-caption"><span class="figure-label">Figure 5.</span> <i>τ</i> comes from <i>Re</i> = <i>UD</i>/<i>ν</i>, floored at 0.52 for stability. The inlet imposes (<i>U</i>, 0), the outlet fixes density. <i>St</i> = <i>fD</i>/<i>U</i> counts zero crossings of <i>u<sub>y</sub></i> four radii downstream.</p>
 </div>
 
-<h2>The wake and its symmetry</h2>
+<p>The cylinder fills a quarter of the channel width. The measured Strouhal number sits above the unconfined value of about 0.2, and shedding starts above the free-stream <i>Re</i> ≈ 47: at 60 the wake stays symmetric, at 70 it sheds.</p>
 
-<p>Below <i>Re</i> ≈ 47 the flow settles into a steady symmetric wake, two mirror-image recirculation bubbles with no oscillation. Past it the steady wake gives way to an oscillation. This is a <em>Hopf bifurcation</em>: a pair of complex eigenvalues of the linearised flow crosses into the unstable half-plane, and a periodic state replaces the fixed point. The flow's <span class="t-broken">Z<sub>2</sub> symmetry</span>, reflection through the centreline, does not vanish outright. No snapshot of the street is mirror-symmetric, but the street is unchanged by reflection combined with a shift of half a shedding period, so the symmetry survives as a space-time symmetry. Lattice-scale numerical noise determines which way the first vortex sheds.</p>
+<h2>How does the mirror symmetry break?</h2>
 
-<p>A square obstacle has sharper separation points and sheds at a slightly different frequency in the same Strouhal regime. A wing at zero angle of attack barely separates. A tandem pair produces the wake interference familiar from bridge aerodynamics. The speed render shows what vorticity hides: the velocity deficit behind the obstacle and the faster bypass flow on its flanks.</p>
+<p>Figure 6 tracks the wake's <span class="t-broken">mirror defect</span>, the RMS difference between the flow and its reflection through the centreline, divided by <i>U</i>. It grows exponentially, then saturates, a Hopf bifurcation seen from inside: a complex pair of eigenvalues of the symmetric wake has crossed into the unstable half-plane.</p>
 
-<p>Everything specific to D2Q9 is in the weights (4/9, 1/9, 1/36). Change them and the rank-4 moment stops being isotropic, giving anisotropic viscosity of the HPP kind. Keep them, and a local update produces Kármán streets, boundary layers and much of low-Mach incompressible flow. The moment conditions on the <span class="t-point-group"><i>D</i><sub>4</sub></span> orbits of the velocity set fix the weights uniquely.</p>
+<div class="figure" id="fig-mirror">
+  <div class="two-col">
+    <div class="chart"><div class="chart-title">mirror defect / <i>U</i>, log scale, against step</div><div id="m-growth"></div></div>
+    <div class="chart"><div class="chart-title">mismatch after a time shift, probe line</div><div id="m-lag"></div></div>
+  </div>
+  <p class="readout" id="m-read" aria-live="off"></p>
+  <p class="figure-caption"><span class="figure-label">Figure 6.</span> From the run above. Dashed: the growth fit before the defect passes 0.05. The second chart compares velocities on a vertical probe line with themselves a time shift earlier, directly (<span style="color:var(--c-custom);font-weight:600">grey</span>) or reflected (<span class="t-broken">pink</span>); unrelated fields score about 1.</p>
+</div>
 
-<h2>Strengths and limits</h2>
+<p>No snapshot of the street is symmetric, but reflection plus a shift of half a period maps it onto itself, so the <span class="t-broken">Z<sub>2</sub></span> symmetry survives as a space-time symmetry. A new seed changes only the phase of the street.</p>
 
-<p>LBM is at its best in low-Mach, nearly incompressible flow through complicated geometry, where finite-volume Navier–Stokes solvers struggle with mesh generation. It runs fast on GPUs because each site collides independently and streaming is a shift. It extends to multiphase flow, porous media, microfluidics and non-Newtonian rheology. Commercial codes such as PowerFLOW and XFlow, and research frameworks such as waLBerla, are built on it.</p>
+<h2>Where D2Q9 stops</h2>
 
-<p>In the D2Q9 form it cannot handle high-Mach compressible flow, which needs a larger velocity set (D2Q17, D2Q37) or a different closure. It also violates Galilean invariance at finite <i>u</i>: the equilibrium is Taylor-exact only to O(<i>u</i>²), and the truncation appears as a small Mach-dependent anisotropy that vanishes as <i>u</i> → 0. The error shrinks quickly as <i>Ma</i> falls, so practitioners keep <i>Ma</i> near 0.1; this page's inflow slider tops out at <i>U</i> = 0.12, or <i>Ma</i> ≈ 0.2, where the error is small but not zero.</p>
-
-<p><a href="06-ising-z2-breaking.html">Part 6</a> turns to the Ising model, where the lattice carries a global Z<sub>2</sub> symmetry that the dynamics respects and the low-temperature state does not.</p>
+<p>Practitioners keep the Mach number <i>U</i>/<i>c<sub>s</sub></i> near 0.1; the slider here reaches 0.21. Compressible and thermal flows need larger velocity sets such as D2Q17 or D2Q37. <a href="06-ising-z2-breaking.html">Part 6</a> turns to the Ising model, where a Z<sub>2</sub> symmetry breaks with no flow at all.</p>
 
 <div class="nav-footer">
   <a href="04-hpp-vs-fhp.html">← Part 4: HPP vs FHP</a>
@@ -420,731 +324,973 @@ canvas.flow { display: block; width: 100%; image-rendering: pixelated; image-ren
 </div>
 
 <script>
+// ────────────────────────────────────────── shared helpers ──
+var COL = {
+  q9: '#059669', q5: '#dc2626', q8: '#b45309', custom: '#475569',
+  iso: '#7c3aed', gal: '#ea580c', broken: '#db2777',
+  text: '#1a1a2e', text2: '#4a4a6a', grid: '#e2e2e8', axis: '#94a3b8',
+  rest: '#64748b', ax: '#2563eb', diag: '#0d9488'
+};
+function C(k) { return Theme.c(COL[k]); }
+function hexRGB(h) { h = Theme.c(h); return [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)]; }
+function styleAxis(g) {
+  g.selectAll('text').attr('font-size', 11).attr('fill', C('text2'));
+  g.selectAll('line,path').attr('stroke', C('axis'));
+}
+function onWidth(el, fn) {
+  var last = -1;
+  function go() { var w = Math.floor(el.getBoundingClientRect().width); if (w > 0 && w !== last) { last = w; fn(w); } }
+  if (typeof ResizeObserver === 'function') new ResizeObserver(go).observe(el);
+  go();
+  return function () { last = -1; go(); };
+}
+function fmt(v, d) { return (Math.abs(v) < 0.5 * Math.pow(10, -d) ? 0 : v).toFixed(d); }
+function whenNear(el, fn) {
+  if (typeof IntersectionObserver !== 'function') { fn(); return; }
+  var io = new IntersectionObserver(function (es) {
+    if (es.some(function (e) { return e.isIntersecting; })) { io.disconnect(); fn(); }
+  }, { rootMargin: '300px 0px' });
+  io.observe(el);
+}
+
 // ────────────────────────────────────────── KaTeX ──
-function math(id, tex, display) {
+function math(id, tex) {
   var el = document.getElementById(id);
-  if (el) katex.render(tex, el, { throwOnError: false, displayMode: !!display });
+  if (el) katex.render(tex, el, { throwOnError: false, displayMode: true });
 }
-
 math('math-d2q9',
-  '\\mathbf{c}_0 = (0,0), \\quad ' +
-  '\\color{#2563eb}{\\mathbf{c}_{1..4}} = (\\pm 1, 0),\\, (0, \\pm 1), \\quad ' +
-  '\\color{#dc2626}{\\mathbf{c}_{5..8}} = (\\pm 1, \\pm 1); \\qquad ' +
-  'w_0 = \\tfrac{4}{9},\\;\\; w_{1..4} = \\tfrac{1}{9},\\;\\; w_{5..8} = \\tfrac{1}{36}',
-  true);
-
+  '\\color{#64748b}{\\mathbf{c}_0} = (0,0),\\;\\; \\color{#2563eb}{\\mathbf{c}_{1..4}} = (\\pm 1, 0), (0, \\pm 1),\\;\\; ' +
+  '\\color{#0d9488}{\\mathbf{c}_{5..8}} = (\\pm 1, \\pm 1);\\qquad ' +
+  'w_0 = \\tfrac{4}{9},\\; w_{a} = \\tfrac{1}{9},\\; w_{d} = \\tfrac{1}{36}');
 math('math-collision',
-  'f_i^{*}(\\mathbf{x}, t) \\;=\\; f_i(\\mathbf{x}, t) \\;-\\; \\tfrac{1}{\\tau}\\big[\\, f_i(\\mathbf{x}, t) - f_i^{\\mathrm{eq}}(\\color{#0891b2}{\\rho}, \\color{#ea580c}{\\mathbf{u}}) \\,\\big]',
-  true);
-
-math('math-streaming',
-  'f_i(\\mathbf{x} + \\color{#ea580c}{\\mathbf{c}_i},\\; t + 1) \\;=\\; f_i^{*}(\\mathbf{x}, t)',
-  true);
-
+  'f_i(\\mathbf{x} + \\mathbf{c}_i,\\, t + 1) = f_i - \\tfrac{1}{\\tau}\\big( f_i - f_i^{\\mathrm{eq}} \\big),\\qquad ' +
+  '\\color{#0891b2}{\\rho} = \\textstyle\\sum_i f_i,\\;\\; \\color{#0891b2}{\\rho}\\color{#ea580c}{\\mathbf{u}} = \\textstyle\\sum_i f_i \\mathbf{c}_i');
 math('math-equilibrium',
-  'f_i^{\\mathrm{eq}}(\\color{#0891b2}{\\rho}, \\color{#ea580c}{\\mathbf{u}}) \\;=\\; w_i \\color{#0891b2}{\\rho} \\left[\\, 1 + \\tfrac{\\mathbf{c}_i \\cdot \\color{#ea580c}{\\mathbf{u}}}{c_s^2} + \\tfrac{(\\mathbf{c}_i \\cdot \\color{#ea580c}{\\mathbf{u}})^2}{2 c_s^4} - \\tfrac{|\\color{#ea580c}{\\mathbf{u}}|^2}{2 c_s^2} \\,\\right]',
-  true);
+  'f_i^{\\mathrm{eq}} = w_i \\color{#0891b2}{\\rho} \\Big[ 1 + \\frac{\\mathbf{c}_i \\cdot \\color{#ea580c}{\\mathbf{u}}}{c_s^2} + \\frac{(\\mathbf{c}_i \\cdot \\color{#ea580c}{\\mathbf{u}})^2}{2 c_s^4} - \\frac{|\\color{#ea580c}{\\mathbf{u}}|^2}{2 c_s^2} \\Big],\\qquad ' +
+  '\\nu = c_s^2\\big(\\tau - \\tfrac12\\big)');
 
-math('math-moments',
-  '\\color{#0891b2}{\\rho(\\mathbf{x}, t)} = \\sum_i f_i, \\qquad \\color{#0891b2}{\\rho}\\, \\color{#ea580c}{\\mathbf{u}(\\mathbf{x}, t)} = \\sum_i f_i\\, \\mathbf{c}_i',
-  true);
-
-math('math-viscosity',
-  '\\nu \\;=\\; c_s^{2}\\!\\left(\\tau - \\tfrac{1}{2}\\right), \\qquad c_s^{2} = \\tfrac{1}{3}',
-  true);
-
-// ────────────────────────────────────────── D2Q9 constants ──
-// Index order: 0 rest, 1-4 axes (E, N, W, S), 5-8 diagonals (NE, NW, SW, SE)
-var CX  = [ 0,  1,  0, -1,  0,  1, -1, -1,  1 ];
-var CY  = [ 0,  0, -1,  0,  1,  1,  1, -1, -1 ];  // screen coords: +y = down
-var W   = [ 4/9, 1/9, 1/9, 1/9, 1/9, 1/36, 1/36, 1/36, 1/36 ];
-// Opposite velocity index (for bounce-back)
-var OPP = [ 0,  3,  4,  1,  2,  7,  8,  5,  6 ];
-
-function classOf(i) { return i === 0 ? 'rest' : (i <= 4 ? 'axis' : 'diag'); }
-function colorOf(i) {
-  if (i === 0) return 'var(--c-rest)';
-  return i <= 4 ? 'var(--c-axis)' : 'var(--c-diag)';
+// ────────────────────────────────────────── weights ──
+// Physical y-up; index 0 rest, 1-4 axes (E, N, W, S), 5-8 diagonals (NE, NW, SW, SE)
+var PX = [0, 1, 0, -1, 0, 1, -1, -1, 1];
+var PY = [0, 0, 1, 0, -1, 1, 1, -1, -1];
+function wts(r, w0) {
+  var wa = (1 - w0) / (4 * (1 + r)), wd = r * wa;
+  return { r: r, w0: w0, wa: wa, wd: wd, W: [w0, wa, wa, wa, wa, wd, wd, wd, wd], cs2: 2 * wa + 4 * wd };
+}
+function m4(p, th) {
+  var c = Math.cos(th), s = Math.sin(th);
+  return 2 * p.wa * (Math.pow(c, 4) + Math.pow(s, 4)) + 2 * p.wd * (Math.pow(c + s, 4) + Math.pow(c - s, 4));
+}
+function tShear(p, th) { var s2 = Math.sin(2 * th), c2 = Math.cos(2 * th); return p.wa * s2 * s2 + 4 * p.wd * c2 * c2; }
+// Angle-averaged rank-4 moment equals 3 cs^4 on this curve
+function sizeCurve(r) { var wa = (1.5 + 6 * r) / (3 * Math.pow(2 + 4 * r, 2)); return 1 - 4 * (1 + r) * wa; }
+var PRESETS = {
+  q5: { label: 'axes only', r: 0, w0: 1 / 3 },
+  q8: { label: 'eight moving', r: 0.25, w0: 0 },
+  q9: { label: 'D2Q9', r: 0.25, w0: 4 / 9 }
+};
+var SHARED = { r: 0, w0: 1 / 3, subs: [] };
+function setShared(r, w0) {
+  SHARED.r = r; SHARED.w0 = w0;
+  SHARED.subs.forEach(function (fn) { fn(); });
+}
+function stencil(key) {
+  if (key === 'custom') return wts(SHARED.r, SHARED.w0);
+  return wts(PRESETS[key].r, PRESETS[key].w0);
+}
+function stencilName(key) {
+  if (key === 'custom') return 'Figure 1’s point (r = ' + SHARED.r.toFixed(2) + ', w₀ = ' + SHARED.w0.toFixed(2) + ')';
+  return PRESETS[key].label;
 }
 
-function feq(i, rho, ux, uy) {
-  var cu = CX[i] * ux - CY[i] * uy;   // note: CY encoded with +y down; physical y+ = up
-  var u2 = ux * ux + uy * uy;
-  return W[i] * rho * (1 + 3 * cu + 4.5 * cu * cu - 1.5 * u2);
-}
-
-// ────────────────────────────────────────── Figure 1: equilibrium viewer ──
+// ────────────────────────────────────────── Figure 1: weight plane and rank-4 polar ──
 (function () {
-  var width = 360, height = 300;
-  var svg = d3.select('#eq-svg').append('svg')
-    .attr('viewBox', '0 0 ' + width + ' ' + height)
-    .attr('width', '100%').style('max-width', width + 'px')
-    .attr('role', 'img').attr('aria-label', 'D2Q9 equilibrium populations: a bar for each of the eight moving channels and a circle for the rest channel, filled for the current velocity u and outlined for u = 0.');
+  var planeEl = document.getElementById('w-plane'), polarEl = document.getElementById('w-polar');
+  var readEl = document.getElementById('w-read');
+  var planeSvg = d3.select(planeEl).append('svg').attr('role', 'img')
+    .attr('aria-label', 'Plane of diagonal-to-axis weight ratio and rest weight, with the isotropy line, the size curve and a draggable point.');
+  var polarSvg = d3.select(polarEl).append('svg').attr('role', 'img')
+    .attr('aria-label', 'Polar plot of the rank-4 moment against direction, relative to the Maxwellian circle.');
+  var RMAX = 1, W0MAX = 0.8;
+  var xS, yS, pointG;
 
-  var cx = width / 2, cy = 150;
-  var arrowLen = 55;
-
-  // Axis guides
-  svg.append('line').attr('x1', cx - arrowLen - 20).attr('y1', cy).attr('x2', cx + arrowLen + 20).attr('y2', cy)
-    .attr('stroke', Theme.c('#ddd')).attr('stroke-dasharray', '2,3');
-  svg.append('line').attr('x1', cx).attr('y1', cy - arrowLen - 20).attr('x2', cx).attr('y2', cy + arrowLen + 20)
-    .attr('stroke', Theme.c('#ddd')).attr('stroke-dasharray', '2,3');
-
-  // One bar (rectangle) per direction, extending radially outward from centre
-  var barG = svg.append('g');
-  var labelG = svg.append('g');
-  var outlineG = svg.append('g');
-
-  // Max possible equilibrium value ~ w_i * (1 + 3*|c|*|u| + ...) ~ 0.45 for small u
-  // We scale bar length to a max ~ 80 px
-  var maxVal = 0.6;       // rest-channel circle scale
-  var barScale = 0.2;     // moving-channel bar scale (their f_eq stays below ~0.2)
-  var barMaxPx = 78;
-
-  function dirAngle(i) {
-    // Angle for drawing: using physical y up (negate CY).
-    if (i === 0) return 0;
-    return Math.atan2(-CY[i], CX[i]);  // negate CY because SVG y is inverted
+  function drawPlane(w) {
+    var h = Math.round(Math.min(300, Math.max(220, w * 0.8)));
+    var m = { l: 42, r: 12, t: 10, b: 36 };
+    planeSvg.attr('width', w).attr('height', h);
+    planeSvg.selectAll('*').remove();
+    xS = d3.scaleLinear().domain([0, RMAX]).range([m.l, w - m.r]);
+    yS = d3.scaleLinear().domain([0, W0MAX]).range([h - m.b, m.t]);
+    var gx = planeSvg.append('g').attr('transform', 'translate(0,' + (h - m.b) + ')').call(d3.axisBottom(xS).ticks(5));
+    var gy = planeSvg.append('g').attr('transform', 'translate(' + m.l + ',0)').call(d3.axisLeft(yS).ticks(5));
+    styleAxis(gx); styleAxis(gy);
+    planeSvg.append('text').attr('x', (m.l + w - m.r) / 2).attr('y', h - 4).attr('text-anchor', 'middle')
+      .attr('font-size', 12).attr('fill', C('text2')).text('r = w_d / w_a');
+    planeSvg.append('text').attr('transform', 'translate(12,' + ((h - m.b + m.t) / 2) + ') rotate(-90)')
+      .attr('text-anchor', 'middle').attr('font-size', 12).attr('fill', C('text2')).text('rest weight w₀');
+    // isotropy line
+    planeSvg.append('line').attr('x1', xS(0.25)).attr('x2', xS(0.25)).attr('y1', yS(0)).attr('y2', yS(W0MAX))
+      .attr('stroke', C('iso')).attr('stroke-width', 2);
+    planeSvg.append('text').attr('x', xS(0.25) + 5).attr('y', yS(W0MAX) + 12).attr('font-size', 11)
+      .attr('fill', C('iso')).text('isotropic');
+    // size curve
+    var pts = d3.range(0, 1.0001, 0.02).map(function (r) { return [xS(r), yS(sizeCurve(r))]; });
+    planeSvg.append('path').attr('d', d3.line()(pts)).attr('fill', 'none').attr('stroke', C('gal')).attr('stroke-width', 2);
+    planeSvg.append('text').attr('x', xS(0.98)).attr('y', yS(sizeCurve(0.98)) - 6).attr('text-anchor', 'end')
+      .attr('font-size', 11).attr('fill', C('gal')).text('size matches 3cₛ⁴');
+    // presets
+    Object.keys(PRESETS).forEach(function (k) {
+      var p = PRESETS[k];
+      planeSvg.append('circle').attr('cx', xS(p.r)).attr('cy', yS(p.w0)).attr('r', 4)
+        .attr('fill', Theme.c('#ffffff')).attr('stroke', C(k)).attr('stroke-width', 2);
+      var anchor = p.r > 0.5 ? 'end' : 'start';
+      planeSvg.append('text').attr('x', xS(p.r) + (k === 'q5' ? 7 : 7)).attr('y', yS(p.w0) + (k === 'q8' ? -7 : 4))
+        .attr('text-anchor', anchor).attr('font-size', 11).attr('fill', C(k)).text(p.label);
+    });
+    pointG = planeSvg.append('g').attr('class', 'focus-ring').attr('tabindex', 0)
+      .attr('role', 'slider').attr('aria-label', 'Weights point; arrow keys move it')
+      .style('cursor', 'grab');
+    pointG.append('circle').attr('r', 14).attr('fill', 'transparent');
+    pointG.append('circle').attr('class', 'dot').attr('r', 6.5).attr('fill', C('text')).attr('stroke', Theme.c('#ffffff')).attr('stroke-width', 1.5);
+    planeSvg.call(d3.drag().on('start drag', function (ev) {
+      var r = Math.max(0, Math.min(RMAX, xS.invert(ev.x)));
+      var w0 = Math.max(0, Math.min(W0MAX, yS.invert(ev.y)));
+      Object.keys(PRESETS).forEach(function (k) {
+        var p = PRESETS[k];
+        if (Math.abs(p.r - r) < 0.025 && Math.abs(p.w0 - w0) < 0.025) { r = p.r; w0 = p.w0; }
+      });
+      setShared(r, w0);
+    }));
+    pointG.on('keydown', function (ev) {
+      var d = ev.shiftKey ? 0.05 : 0.01, r = SHARED.r, w0 = SHARED.w0;
+      if (ev.key === 'ArrowLeft') r -= d; else if (ev.key === 'ArrowRight') r += d;
+      else if (ev.key === 'ArrowUp') w0 += d; else if (ev.key === 'ArrowDown') w0 -= d;
+      else return;
+      ev.preventDefault();
+      setShared(Math.max(0, Math.min(RMAX, Math.round(r * 1000) / 1000)), Math.max(0, Math.min(W0MAX, Math.round(w0 * 1000) / 1000)));
+    });
+    placePoint();
+  }
+  function placePoint() {
+    if (!pointG) return;
+    pointG.attr('transform', 'translate(' + xS(SHARED.r) + ',' + yS(SHARED.w0) + ')')
+      .attr('aria-valuetext', 'r ' + SHARED.r.toFixed(2) + ', rest weight ' + SHARED.w0.toFixed(2));
   }
 
-  function drawBars(rho, ux, uy) {
-    barG.selectAll('*').remove();
-    labelG.selectAll('*').remove();
-    outlineG.selectAll('*').remove();
+  var polarW = 300;
+  function drawPolar(w) { polarW = w; renderPolar(); }
+  function renderPolar() {
+    var w = polarW, size = Math.min(w, 300);
+    polarSvg.attr('width', w).attr('height', size);
+    polarSvg.selectAll('*').remove();
+    var p = wts(SHARED.r, SHARED.w0), t3 = 3 * p.cs2 * p.cs2;
+    var ratios = d3.range(0, 361, 2).map(function (d) { return m4(p, d * Math.PI / 180) / t3; });
+    var rmax = Math.max(1.2, d3.max(ratios) * 1.05);
+    var cx = w / 2, cy = size / 2, R = size / 2 - 18;
+    var sc = function (v) { return v / rmax * R; };
+    [0.5, 1].forEach(function (v) {
+      polarSvg.append('circle').attr('cx', cx).attr('cy', cy).attr('r', sc(v)).attr('fill', 'none')
+        .attr('stroke', v === 1 ? C('text2') : C('grid')).attr('stroke-dasharray', v === 1 ? '4,3' : null);
+    });
+    polarSvg.append('line').attr('x1', cx - R).attr('x2', cx + R).attr('y1', cy).attr('y2', cy).attr('stroke', C('grid'));
+    polarSvg.append('line').attr('x1', cx).attr('x2', cx).attr('y1', cy - R).attr('y2', cy + R).attr('stroke', C('grid'));
+    var q = Math.SQRT1_2 * R;
+    polarSvg.append('line').attr('x1', cx - q).attr('x2', cx + q).attr('y1', cy + q).attr('y2', cy - q).attr('stroke', C('grid'));
+    polarSvg.append('line').attr('x1', cx - q).attr('x2', cx + q).attr('y1', cy - q).attr('y2', cy + q).attr('stroke', C('grid'));
+    var pts = ratios.map(function (v, i) { var a = i * 2 * Math.PI / 180; return [cx + sc(v) * Math.cos(a), cy - sc(v) * Math.sin(a)]; });
+    polarSvg.append('path').attr('d', d3.line()(pts) + 'Z').attr('fill', C('iso')).attr('fill-opacity', 0.12)
+      .attr('stroke', C('iso')).attr('stroke-width', 2);
+    polarSvg.append('text').attr('x', cx + sc(1) + 3).attr('y', cy - 4).attr('font-size', 11).attr('fill', C('text2')).text('1');
+    polarSvg.append('text').attr('x', cx + R - 2).attr('y', cy + 14).attr('text-anchor', 'end').attr('font-size', 11).attr('fill', C('text2')).text('axis');
+    polarSvg.append('text').attr('x', cx + q + 2).attr('y', cy - q - 2).attr('font-size', 11).attr('fill', C('text2')).text('diagonal');
+    var ax = m4(p, 0) / t3, dg = m4(p, Math.PI / 4) / t3;
+    readEl.innerHTML = 'w₀ = <b>' + p.w0.toFixed(3) + '</b>, w<sub>a</sub> = <b>' + p.wa.toFixed(3) + '</b>, w<sub>d</sub> = <b>' + p.wd.toFixed(3) +
+      '</b>, c<sub>s</sub>² = <b>' + p.cs2.toFixed(3) + '</b>. Rank 4 over 3c<sub>s</sub>⁴: <b>' + ax.toFixed(3) + '</b> along an axis, <b>' +
+      dg.toFixed(3) + '</b> along a diagonal' + (Math.abs(ax - dg) < 5e-4 ? (Math.abs(ax - 1) < 5e-3 ? ', isotropic and the Maxwellian size.' : ', isotropic but the wrong size.') : ', not isotropic.');
+  }
 
-    // Rest channel: draw as a filled circle in centre whose radius encodes f_0^eq
-    var f0 = feq(0, rho, ux, uy);
-    var r0 = (f0 / maxVal) * 24;
-    // Baseline outline at u=0
-    var f0_base = W[0];
-    var r0_base = (f0_base / maxVal) * 24;
-    outlineG.append('circle').attr('cx', cx).attr('cy', cy).attr('r', r0_base)
-      .attr('fill', 'none').attr('stroke', 'var(--c-rest)').attr('stroke-width', 1).attr('stroke-dasharray', '2,2');
-    barG.append('circle').attr('cx', cx).attr('cy', cy).attr('r', r0)
-      .attr('fill', 'var(--c-rest)').attr('fill-opacity', 0.45)
-      .attr('stroke', 'var(--c-rest)').attr('stroke-width', 1.5);
+  document.querySelectorAll('#w-presets .btn').forEach(function (b) {
+    b.addEventListener('click', function () { var p = PRESETS[b.getAttribute('data-p')]; setShared(p.r, p.w0); });
+  });
+  function syncButtons() {
+    document.querySelectorAll('#w-presets .btn').forEach(function (b) {
+      var p = PRESETS[b.getAttribute('data-p')];
+      b.setAttribute('aria-pressed', (Math.abs(p.r - SHARED.r) < 1e-9 && Math.abs(p.w0 - SHARED.w0) < 1e-9) ? 'true' : 'false');
+    });
+  }
+  SHARED.subs.push(function () { placePoint(); renderPolar(); syncButtons(); });
+  onWidth(planeEl, drawPlane);
+  onWidth(polarEl, drawPolar);
+  syncButtons();
+})();
 
-    // Moving channels: draw bars radially from the unit circle at radius arrowLen*|c|/sqrt(2)
-    // and of length proportional to f_i^eq
+// ────────────────────────────────────────── Figure 2: equilibrium and its moments ──
+var W9 = [4 / 9, 1 / 9, 1 / 9, 1 / 9, 1 / 9, 1 / 36, 1 / 36, 1 / 36, 1 / 36];
+function feq9(i, rho, ux, uy) {
+  var cu = PX[i] * ux + PY[i] * uy, u2 = ux * ux + uy * uy;
+  return W9[i] * rho * (1 + 3 * cu + 4.5 * cu * cu - 1.5 * u2);
+}
+(function () {
+  var el = document.getElementById('eq-svg');
+  var svg = d3.select(el).append('svg').attr('role', 'img')
+    .attr('aria-label', 'D2Q9 equilibrium populations: a bar per moving channel and a disc for the rest channel.');
+  var uxS = document.getElementById('eq-ux'), uyS = document.getElementById('eq-uy');
+  var width = 300;
+  function colorOf(i) { return i === 0 ? C('rest') : (i <= 4 ? C('ax') : C('diag')); }
+  function draw() {
+    var ux = +uxS.value, uy = +uyS.value;
+    document.getElementById('eq-ux-val').textContent = ux.toFixed(2);
+    document.getElementById('eq-uy-val').textContent = uy.toFixed(2);
+    var s = Math.min(width, 320);
+    svg.attr('width', width).attr('height', s);
+    svg.selectAll('*').remove();
+    var cx = width / 2, cy = s / 2, inner = 20, maxPx = s / 2 - inner - 22, barScale = 0.2;
+    var r0 = function (v) { return Math.sqrt(v / 0.6) * 20; };
+    svg.append('circle').attr('cx', cx).attr('cy', cy).attr('r', r0(W9[0])).attr('fill', 'none')
+      .attr('stroke', colorOf(0)).attr('stroke-dasharray', '2,2');
+    svg.append('circle').attr('cx', cx).attr('cy', cy).attr('r', r0(feq9(0, 1, ux, uy)))
+      .attr('fill', colorOf(0)).attr('fill-opacity', 0.45).attr('stroke', colorOf(0)).attr('stroke-width', 1.5);
     for (var i = 1; i < 9; i++) {
-      var a = dirAngle(i);
-      var len = Math.min(feq(i, rho, ux, uy) / barScale, 1) * barMaxPx;
-      var baseLen = (W[i] / barScale) * barMaxPx;
-      var dx = Math.cos(a), dy = -Math.sin(a);  // svg y flip
-      var x0 = cx + dx * 22, y0 = cy + dy * 22;
-      // Baseline outline (unit u=0)
-      var xb = x0 + dx * baseLen, yb = y0 + dy * baseLen;
-      outlineG.append('line').attr('x1', x0).attr('y1', y0).attr('x2', xb).attr('y2', yb)
-        .attr('stroke', colorOf(i)).attr('stroke-width', 2).attr('stroke-opacity', 0.3);
-      outlineG.append('circle').attr('cx', xb).attr('cy', yb).attr('r', 2.5)
-        .attr('fill', 'none').attr('stroke', colorOf(i)).attr('stroke-width', 1).attr('stroke-opacity', 0.5);
-      // Filled bar for current u
-      var x1 = x0 + dx * len, y1 = y0 + dy * len;
-      barG.append('line').attr('x1', x0).attr('y1', y0).attr('x2', x1).attr('y2', y1)
-        .attr('stroke', colorOf(i)).attr('stroke-width', 5).attr('stroke-linecap', 'round');
-      barG.append('circle').attr('cx', x1).attr('cy', y1).attr('r', 3.5).attr('fill', colorOf(i));
-      // Label at outside
-      var lx = x0 + dx * (barMaxPx + 16), ly = y0 + dy * (barMaxPx + 16);
-      labelG.append('text').attr('x', lx).attr('y', ly + 3)
-        .attr('text-anchor', 'middle').attr('font-size', 10).attr('fill', 'var(--text-2)')
-        .attr('font-family', 'var(--mono-font)')
-        .text('c' + i);
+      var a = Math.atan2(PY[i], PX[i]), dx = Math.cos(a), dy = -Math.sin(a);
+      var x0 = cx + dx * inner, y0 = cy + dy * inner;
+      var len = Math.min(feq9(i, 1, ux, uy) / barScale, 1) * maxPx, base = W9[i] / barScale * maxPx;
+      svg.append('line').attr('x1', x0).attr('y1', y0).attr('x2', x0 + dx * len).attr('y2', y0 + dy * len)
+        .attr('stroke', colorOf(i)).attr('stroke-width', 6).attr('stroke-linecap', 'round');
+      svg.append('line').attr('x1', x0 + dx * base - dy * 7).attr('y1', y0 + dy * base + dx * 7)
+        .attr('x2', x0 + dx * base + dy * 7).attr('y2', y0 + dy * base - dx * 7)
+        .attr('stroke', C('text')).attr('stroke-width', 1.2);
+      var lr = inner + Math.max(len, base) + 16, lx = cx + dx * lr, ly = cy + dy * lr;
+      svg.append('text').attr('x', lx).attr('y', ly + 4).attr('text-anchor', 'middle').attr('font-size', 11)
+        .attr('fill', C('text2')).text(feq9(i, 1, ux, uy).toFixed(3));
     }
-
-    // Current u arrow
-    if (Math.hypot(ux, uy) > 0.01) {
-      var uscale = 400;
-      barG.append('line').attr('x1', cx).attr('y1', cy)
-        .attr('x2', cx + ux * uscale).attr('y2', cy - uy * uscale)
-        .attr('stroke', Theme.c('#111')).attr('stroke-width', 2)
-        .attr('marker-end', 'url(#u-arr)');
-      barG.append('text').attr('x', cx + ux * uscale + 10).attr('y', cy - uy * uscale - 4)
-        .attr('font-size', 11).attr('font-weight', 700).text('u');
+    if (Math.hypot(ux, uy) > 0.005) {
+      var us = maxPx * 2.2;
+      svg.append('line').attr('x1', cx).attr('y1', cy).attr('x2', cx + ux * us).attr('y2', cy - uy * us)
+        .attr('stroke', C('gal')).attr('stroke-width', 2.5);
+      svg.append('text').attr('x', cx + ux * us + (ux >= 0 ? 6 : -14)).attr('y', cy - uy * us - 5)
+        .attr('font-size', 12).attr('font-weight', 700).attr('fill', C('gal')).text('u');
     }
+    // moments of the nine populations
+    var M = { r: 0, mx: 0, my: 0, pxx: 0, pxy: 0, pyy: 0, qxxx: 0, qxyy: 0 };
+    for (var k = 0; k < 9; k++) {
+      var f = feq9(k, 1, ux, uy), X = PX[k], Y = PY[k];
+      M.r += f; M.mx += f * X; M.my += f * Y;
+      M.pxx += f * X * X; M.pxy += f * X * Y; M.pyy += f * Y * Y;
+      M.qxxx += f * X * X * X; M.qxyy += f * X * Y * Y;
+    }
+    var cs2 = 1 / 3;
+    var rows = [
+      ['Σ f', M.r, 1],
+      ['Σ f c<sub>x</sub>', M.mx, ux],
+      ['Σ f c<sub>y</sub>', M.my, uy],
+      ['Σ f c<sub>x</sub>²', M.pxx, cs2 + ux * ux],
+      ['Σ f c<sub>x</sub>c<sub>y</sub>', M.pxy, ux * uy],
+      ['Σ f c<sub>y</sub>²', M.pyy, cs2 + uy * uy],
+      ['Σ f c<sub>x</sub>³', M.qxxx, 3 * cs2 * ux + ux * ux * ux],
+      ['Σ f c<sub>x</sub>c<sub>y</sub>²', M.qxyy, cs2 * ux + ux * uy * uy]
+    ];
+    document.getElementById('eq-table').innerHTML = rows.map(function (row) {
+      var d = row[1] - row[2];
+      return '<tr' + (Math.abs(d) > 5e-7 ? ' class="off"' : '') + '><td>' + row[0] + '</td><td>' + fmt(row[1], 5) + '</td><td>' +
+        fmt(row[2], 5) + '</td><td>' + fmt(d, 5) + '</td></tr>';
+    }).join('');
   }
+  uxS.addEventListener('input', draw);
+  uyS.addEventListener('input', draw);
+  onWidth(el, function (w) { width = w; draw(); });
+})();
 
-  // Defs for u arrow
-  var defs = svg.append('defs');
-  defs.append('marker').attr('id', 'u-arr')
-    .attr('viewBox', '0 -4 8 8').attr('refX', 6).attr('refY', 0)
-    .attr('markerWidth', 5).attr('markerHeight', 5).attr('orient', 'auto')
-    .append('path').attr('d', 'M0,-4L8,0L0,4').attr('fill', Theme.c('#111'));
-
-  var uxSlider = document.getElementById('eq-ux');
-  var uySlider = document.getElementById('eq-uy');
-  var uxVal = document.getElementById('eq-ux-val');
-  var uyVal = document.getElementById('eq-uy-val');
-  var rhoEl = document.getElementById('eq-rho');
-  var momEl = document.getElementById('eq-mom');
-
-  function refresh() {
-    var ux = +uxSlider.value, uy = +uySlider.value;
-    uxVal.textContent = ux.toFixed(2);
-    uyVal.textContent = uy.toFixed(2);
-
-    var sum = 0, mx = 0, my = 0;
+// ────────────────────────────────────────── lattice kernels for Figures 3 and 4 ──
+// Shear wave on an N x N periodic lattice, wave vector (a, b) 2pi/N, velocity perpendicular.
+// Returns the amplitude of the wave at every step.
+function shearRun(p, tau, a, b, N, steps) {
+  var Cn = N * N, W = p.W, cs2 = p.cs2, i1 = 1 / cs2, i2 = 1 / (2 * cs2 * cs2), i3 = 1 / (2 * cs2), om = 1 / tau;
+  var f = new Float64Array(9 * Cn), g = new Float64Array(9 * Cn), dest = new Int32Array(9 * Cn);
+  var kx = 2 * Math.PI * a / N, ky = 2 * Math.PI * b / N, kk = Math.hypot(kx, ky), ex = -ky / kk, ey = kx / kk, A = 1e-3;
+  var sn = new Float64Array(Cn), cn = new Float64Array(Cn);
+  for (var y = 0; y < N; y++) for (var x = 0; x < N; x++) {
+    var c = y * N + x, ph = kx * x + ky * y;
+    sn[c] = Math.sin(ph); cn[c] = Math.cos(ph);
     for (var i = 0; i < 9; i++) {
-      var f = feq(i, 1, ux, uy);
-      sum += f;
-      mx += f * CX[i];
-      my += f * (-CY[i]);  // physical y flip
+      dest[i * Cn + c] = i * Cn + ((y + PY[i] + N) % N) * N + ((x + PX[i] + N) % N);
+      var vx = A * sn[c] * ex, vy = A * sn[c] * ey, cu = PX[i] * vx + PY[i] * vy;
+      f[i * Cn + c] = W[i] * (1 + cu * i1 + cu * cu * i2 - (vx * vx + vy * vy) * i3);
     }
-    rhoEl.textContent = sum.toFixed(3);
-    momEl.textContent = '(' + mx.toFixed(3) + ', ' + my.toFixed(3) + ')';
+  }
+  var amps = new Float64Array(steps + 1);
+  for (var t = 0; t <= steps; t++) {
+    var re = 0, im = 0;
+    for (var c2 = 0; c2 < Cn; c2++) {
+      var r = 0, mx = 0, my = 0, j;
+      for (j = 0; j < 9; j++) { var v = f[j * Cn + c2]; r += v; mx += v * PX[j]; my += v * PY[j]; }
+      var ux = mx / r, uy = my / r, up = ux * ex + uy * ey, u2 = (ux * ux + uy * uy) * i3;
+      re += up * sn[c2]; im += up * cn[c2];
+      for (j = 0; j < 9; j++) {
+        var cu2 = PX[j] * ux + PY[j] * uy, fv = f[j * Cn + c2];
+        g[dest[j * Cn + c2]] = fv - om * (fv - W[j] * r * (1 + cu2 * i1 + cu2 * cu2 * i2 - u2));
+      }
+    }
+    amps[t] = Math.hypot(re, im) * 2 / Cn;
+    var tmp = f; f = g; g = tmp;
+  }
+  return { amps: amps, k2: kk * kk };
+}
+function fitLog(amps, t0, t1) {
+  var n = 0, sx = 0, sy = 0, sxx = 0, sxy = 0;
+  for (var t = t0; t <= t1; t++) { var y = Math.log(amps[t]); n++; sx += t; sy += y; sxx += t * t; sxy += t * y; }
+  var slope = (n * sxy - sx * sy) / (n * sxx - sx * sx);
+  return { slope: slope, icpt: (sy - slope * sx) / n };
+}
+// Uniform flow U along x plus a shear wave u_y = A sin(kx) on an N-cell periodic row.
+// Fields depend on x only, so streaming in y is the identity. Returns drift speed and viscosity.
+function boostRun(p, tau, U, N, steps, keepField) {
+  var W = p.W, cs2 = p.cs2, i1 = 1 / cs2, i2 = 1 / (2 * cs2 * cs2), i3 = 1 / (2 * cs2), om = 1 / tau, k = 2 * Math.PI / N, A = 1e-3;
+  var f = new Float64Array(9 * N), g = new Float64Array(9 * N), x, i;
+  for (x = 0; x < N; x++) for (i = 0; i < 9; i++) {
+    var vy = A * Math.sin(k * x), cu = PX[i] * U + PY[i] * vy;
+    f[i * N + x] = W[i] * (1 + cu * i1 + cu * cu * i2 - (U * U + vy * vy) * i3);
+  }
+  var ph = new Float64Array(steps + 1), am = new Float64Array(steps + 1), field = keepField ? new Float32Array((steps + 1) * N) : null;
+  var bad = false;
+  for (var t = 0; t <= steps; t++) {
+    var re = 0, im = 0;
+    for (x = 0; x < N; x++) {
+      var r = 0, mx = 0, my = 0;
+      for (i = 0; i < 9; i++) { var v = f[i * N + x]; r += v; mx += v * PX[i]; my += v * PY[i]; }
+      var ux = mx / r, uy = my / r, u2 = (ux * ux + uy * uy) * i3;
+      if (field) field[t * N + x] = uy;
+      re += uy * Math.sin(k * x); im += uy * Math.cos(k * x);
+      for (i = 0; i < 9; i++) {
+        var c2 = PX[i] * ux + PY[i] * uy, fv = f[i * N + x];
+        g[i * N + (x + PX[i] + N) % N] = fv - om * (fv - W[i] * r * (1 + c2 * i1 + c2 * c2 * i2 - u2));
+      }
+    }
+    // u_y ~ a sin(k(x - vt)) gives re + i im proportional to exp(-i k v t) (times N/2 a)
+    ph[t] = Math.atan2(-im, re);
+    am[t] = Math.hypot(re, im) * 2 / N;
+    if (!(am[t] < 1)) bad = true;
+    var tmp = f; f = g; g = tmp;
+  }
+  for (t = 1; t <= steps; t++) {
+    while (ph[t] - ph[t - 1] > Math.PI) ph[t] -= 2 * Math.PI;
+    while (ph[t] - ph[t - 1] < -Math.PI) ph[t] += 2 * Math.PI;
+  }
+  var n = 0, sx = 0, sy = 0, sxx = 0, sxy = 0;
+  for (t = 20; t <= steps; t++) { n++; sx += t; sy += ph[t]; sxx += t * t; sxy += t * ph[t]; }
+  var slope = (n * sxy - sx * sy) / (n * sxx - sx * sx);
+  var decay = am[steps] > 0 ? -fitLog(am, 20, steps).slope : NaN;
+  return { v: slope / k, nu: decay / (k * k), field: field, bad: bad || am[steps] > 2 * A };
+}
 
-    drawBars(1, ux, uy);
+// ────────────────────────────────────────── Figure 3: viscosity against direction ──
+(function () {
+  var fig = document.getElementById('fig-visc');
+  var angEl = document.getElementById('v-angle'), decEl = document.getElementById('v-decay');
+  var tauS = document.getElementById('v-tau'), readEl = document.getElementById('v-read');
+  var DIRS = [[1, 0], [3, 1], [2, 1], [1, 1], [1, 2], [1, 3], [0, 1]];
+  var N = 32, STEPS = 160;
+  var state = { cmp: 'q5', sel: 0, tau: 0.8, res: null, job: 0 };
+  var angSvg = d3.select(angEl).append('svg').attr('role', 'img').attr('aria-label', 'Measured viscosity against wave direction for D2Q9 and a comparison stencil, with predicted curves.');
+  var decSvg = d3.select(decEl).append('svg').attr('role', 'img').attr('aria-label', 'Log amplitude of the selected shear wave against step, for both stencils.');
+  var wA = 300, wD = 300;
+  function thetaOf(d) { return Math.atan2(d[1], d[0]); }
+
+  var angRow = document.getElementById('v-angles');
+  DIRS.forEach(function (d, i) {
+    var b = document.createElement('button');
+    b.className = 'btn'; b.setAttribute('role', 'radio'); b.setAttribute('data-i', i);
+    b.textContent = (thetaOf(d) * 180 / Math.PI).toFixed(1).replace('.0', '') + '°';
+    b.addEventListener('click', function () { select(i); });
+    b.addEventListener('keydown', function (ev) {
+      var j = i;
+      if (ev.key === 'ArrowRight' || ev.key === 'ArrowDown') j = (i + 1) % DIRS.length;
+      else if (ev.key === 'ArrowLeft' || ev.key === 'ArrowUp') j = (i + DIRS.length - 1) % DIRS.length;
+      else return;
+      ev.preventDefault(); select(j); angRow.querySelectorAll('button')[j].focus();
+    });
+    angRow.appendChild(b);
+  });
+  function select(i) { state.sel = i; syncAngles(); drawAll(); }
+  function syncAngles() {
+    angRow.querySelectorAll('button').forEach(function (b, j) {
+      b.setAttribute('aria-checked', j === state.sel ? 'true' : 'false');
+      b.setAttribute('aria-pressed', j === state.sel ? 'true' : 'false');
+      b.tabIndex = j === state.sel ? 0 : -1;
+    });
   }
 
-  uxSlider.addEventListener('input', refresh);
-  uySlider.addEventListener('input', refresh);
-  document.getElementById('eq-zero').addEventListener('click', function () {
-    uxSlider.value = 0; uySlider.value = 0; refresh();
-  });
-  document.getElementById('eq-diag').addEventListener('click', function () {
-    uxSlider.value = 0.12; uySlider.value = 0.12; refresh();
-  });
-
-  refresh();
-})();
-
-// ────────────────────────────────────────── Stencil overlay (used in fig 2) ──
-(function () {
-  var W0 = 80, H0 = 80;
-  var svg = d3.select('#stencil-overlay').append('svg')
-    .attr('viewBox', '0 0 ' + W0 + ' ' + H0).attr('width', W0).attr('height', H0)
-    .attr('aria-hidden', 'true');
-  var cx = W0 / 2, cy = H0 / 2;
-  var r = 26;
-  var defs = svg.append('defs');
-  defs.append('marker').attr('id', 'stc-arr').attr('viewBox', '0 -3 6 6').attr('refX', 5).attr('refY', 0)
-    .attr('markerWidth', 4).attr('markerHeight', 4).attr('orient', 'auto')
-    .append('path').attr('d', 'M0,-3L6,0L0,3').attr('fill', 'var(--c-axis)');
-  defs.append('marker').attr('id', 'stc-arr-d').attr('viewBox', '0 -3 6 6').attr('refX', 5).attr('refY', 0)
-    .attr('markerWidth', 4).attr('markerHeight', 4).attr('orient', 'auto')
-    .append('path').attr('d', 'M0,-3L6,0L0,3').attr('fill', 'var(--c-diag)');
-
-  // Rest dot
-  svg.append('circle').attr('cx', cx).attr('cy', cy).attr('r', 3).attr('fill', 'var(--c-rest)');
-  // 8 arrows
-  for (var i = 1; i < 9; i++) {
-    var vx = CX[i], vy = CY[i];
-    var mag = Math.hypot(vx, vy);
-    var len = (i <= 4) ? r : r * 0.9;   // slightly shorter diagonals visually
-    var x1 = cx + vx * len, y1 = cy + vy * len;
-    svg.append('line').attr('x1', cx).attr('y1', cy).attr('x2', x1).attr('y2', y1)
-      .attr('stroke', i <= 4 ? 'var(--c-axis)' : 'var(--c-diag)')
-      .attr('stroke-width', 1.4)
-      .attr('marker-end', i <= 4 ? 'url(#stc-arr)' : 'url(#stc-arr-d)');
+  function measure(p, d, tau) {
+    var R = shearRun(p, tau, d[0], d[1], N, STEPS), a = R.amps, end = STEPS;
+    for (var t = 10; t <= STEPS; t++) if (a[t] < a[0] * 1e-4) { end = t; break; }
+    var fit = fitLog(a, 10, end);
+    return { amps: a, nu: -fit.slope / R.k2, fit: fit, end: end, theory: (tau - 0.5) * tShear(p, thetaOf(d)) / p.cs2 };
   }
-  svg.append('text').attr('x', 4).attr('y', 12).attr('font-size', 9).attr('font-weight', 700)
-    .attr('fill', 'var(--text-2)').text('D2Q9');
+  function run() {
+    var job = ++state.job, tau = state.tau, keys = ['q9', state.cmp];
+    var ps = keys.map(stencil), out = { q9: [], cmp: [], p: ps };
+    var n = 0;
+    readEl.textContent = 'Measuring…';
+    function next() {
+      if (job !== state.job) return;
+      var s = n < DIRS.length ? 0 : 1, di = n % DIRS.length;
+      (s === 0 ? out.q9 : out.cmp).push(measure(ps[s], DIRS[di], tau));
+      n++;
+      if (n < 2 * DIRS.length) setTimeout(next, 0);
+      else { state.res = out; drawAll(); }
+    }
+    setTimeout(next, 0);
+  }
+
+  function drawAll() { drawAngle(); drawDecay(); readout(); }
+  function drawAngle() {
+    var w = wA, h = Math.round(Math.min(250, Math.max(200, w * 0.7))), m = { l: 48, r: 10, t: 10, b: 32 };
+    angSvg.attr('width', w).attr('height', h); angSvg.selectAll('*').remove();
+    var res = state.res; if (!res) return;
+    var ps = res.p, nuMax = 0;
+    d3.range(0, 91, 2).forEach(function (deg) { ps.forEach(function (p) { nuMax = Math.max(nuMax, (state.tau - 0.5) * tShear(p, deg * Math.PI / 180) / p.cs2); }); });
+    res.q9.concat(res.cmp).forEach(function (r) { nuMax = Math.max(nuMax, r.nu); });
+    var x = d3.scaleLinear().domain([0, 90]).range([m.l, w - m.r]);
+    var y = d3.scaleLinear().domain([0, nuMax * 1.12 || 0.1]).range([h - m.b, m.t]).nice();
+    var gx = angSvg.append('g').attr('transform', 'translate(0,' + (h - m.b) + ')').call(d3.axisBottom(x).tickValues([0, 45, 90]).tickFormat(function (d) { return d + '°'; }));
+    var gy = angSvg.append('g').attr('transform', 'translate(' + m.l + ',0)').call(d3.axisLeft(y).ticks(4));
+    styleAxis(gx); styleAxis(gy);
+    angSvg.append('text').attr('transform', 'translate(11,' + ((h - m.b + m.t) / 2) + ') rotate(-90)').attr('text-anchor', 'middle')
+      .attr('font-size', 11).attr('fill', C('text2')).text('ν');
+    var selTheta = thetaOf(DIRS[state.sel]) * 180 / Math.PI;
+    angSvg.append('line').attr('x1', x(selTheta)).attr('x2', x(selTheta)).attr('y1', m.t).attr('y2', h - m.b).attr('stroke', C('grid')).attr('stroke-width', 6);
+    [['q9', ps[0], res.q9], [state.cmp, ps[1], res.cmp]].forEach(function (s) {
+      var col = C(s[0]);
+      var line = d3.range(0, 90.01, 1).map(function (deg) { return [x(deg), y((state.tau - 0.5) * tShear(s[1], deg * Math.PI / 180) / s[1].cs2)]; });
+      angSvg.append('path').attr('d', d3.line()(line)).attr('fill', 'none').attr('stroke', col).attr('stroke-width', 1.5).attr('stroke-opacity', 0.7);
+      s[2].forEach(function (r, i) {
+        angSvg.append('circle').attr('cx', x(thetaOf(DIRS[i]) * 180 / Math.PI)).attr('cy', y(r.nu)).attr('r', s[0] === 'q9' ? 4.5 : 3.5)
+          .attr('fill', s[0] === 'q9' ? 'none' : col).attr('stroke', col).attr('stroke-width', 2)
+          .style('cursor', 'pointer').on('click', function () { select(i); });
+      });
+    });
+  }
+  function drawDecay() {
+    var w = wD, h = Math.round(Math.min(250, Math.max(200, w * 0.7))), m = { l: 48, r: 10, t: 10, b: 32 };
+    decSvg.attr('width', w).attr('height', h); decSvg.selectAll('*').remove();
+    var res = state.res; if (!res) return;
+    var a = res.q9[state.sel], b = res.cmp[state.sel];
+    var x = d3.scaleLinear().domain([0, STEPS]).range([m.l, w - m.r]);
+    var lo = Math.min(a.amps[a.end], b.amps[b.end]), y = d3.scaleLog().domain([Math.max(lo * 0.8, 1e-8), 1.3e-3]).range([h - m.b, m.t]);
+    var gx = decSvg.append('g').attr('transform', 'translate(0,' + (h - m.b) + ')').call(d3.axisBottom(x).ticks(4));
+    var gy = decSvg.append('g').attr('transform', 'translate(' + m.l + ',0)').call(d3.axisLeft(y).ticks(3, '.0e'));
+    styleAxis(gx); styleAxis(gy);
+    decSvg.append('text').attr('x', w - m.r).attr('y', h - m.b - 6).attr('text-anchor', 'end').attr('font-size', 11).attr('fill', C('text2')).text('step');
+    [['q9', a], [state.cmp, b]].forEach(function (s) {
+      var r = s[1], pts = [];
+      for (var t = 0; t <= r.end; t += 2) pts.push([x(t), y(Math.max(r.amps[t], 1e-8))]);
+      decSvg.append('path').attr('d', d3.line()(pts)).attr('fill', 'none').attr('stroke', C(s[0])).attr('stroke-width', s[0] === 'q9' ? 4 : 2).attr('stroke-opacity', s[0] === 'q9' ? 0.45 : 1);
+      decSvg.append('line').attr('x1', x(10)).attr('x2', x(r.end)).attr('y1', y(Math.exp(r.fit.icpt + r.fit.slope * 10))).attr('y2', y(Math.max(Math.exp(r.fit.icpt + r.fit.slope * r.end), 1e-8)))
+        .attr('stroke', C('text')).attr('stroke-dasharray', '3,3').attr('stroke-width', 1);
+    });
+    document.getElementById('v-decay-title').textContent = 'amplitude decay at ' + (thetaOf(DIRS[state.sel]) * 180 / Math.PI).toFixed(1).replace('.0', '') + '° (fit dashed)';
+  }
+  function readout() {
+    var res = state.res; if (!res) return;
+    var a = res.q9[state.sel], b = res.cmp[state.sel];
+    function spread(arr) { var v = arr.map(function (r) { return r.nu; }); return [d3.min(v), d3.max(v)]; }
+    var sa = spread(res.q9), sb = spread(res.cmp);
+    readEl.innerHTML = 'At ' + (thetaOf(DIRS[state.sel]) * 180 / Math.PI).toFixed(1).replace('.0', '') + '°: D2Q9 ν = <b>' + a.nu.toFixed(4) + '</b> (predicted ' + a.theory.toFixed(4) +
+      '), ' + stencilName(state.cmp) + ' ν = <b>' + fmt(b.nu, 4) + '</b> (predicted ' + fmt(b.theory, 4) + '). Over all seven directions D2Q9 ranges ' +
+      sa[0].toFixed(4) + ' to ' + sa[1].toFixed(4) + ', the other ' + fmt(sb[0], 4) + ' to ' + fmt(sb[1], 4) + '.';
+  }
+
+  document.querySelectorAll('#v-cmp .btn').forEach(function (b) {
+    b.addEventListener('click', function () { state.cmp = b.getAttribute('data-c'); syncCmp(); run(); });
+  });
+  function syncCmp() { document.querySelectorAll('#v-cmp .btn').forEach(function (b) { b.setAttribute('aria-pressed', b.getAttribute('data-c') === state.cmp ? 'true' : 'false'); }); }
+  var tauTimer = null;
+  tauS.addEventListener('input', function () {
+    state.tau = +tauS.value; document.getElementById('v-tau-val').textContent = state.tau.toFixed(2);
+    clearTimeout(tauTimer); tauTimer = setTimeout(run, 150);
+  });
+  var customTimer = null;
+  SHARED.subs.push(function () { if (state.cmp === 'custom' && state.res) { clearTimeout(customTimer); customTimer = setTimeout(run, 250); } });
+  syncCmp(); syncAngles();
+  onWidth(angEl, function (w) { wA = w; drawAngle(); });
+  onWidth(decEl, function (w) { wD = w; drawDecay(); });
+  whenNear(fig, run);
 })();
 
-// ────────────────────────────────────────── Figure 2: LBM simulator ──
+// ────────────────────────────────────────── Figure 4: Galilean boost ──
 (function () {
-  // Grid parameters — 300x90 keeps us well within real-time budget
-  var NX = 300, NY = 90;
-  var CELL = NX * NY;
-  var CS2 = 1 / 3;
+  var fig = document.getElementById('fig-boost');
+  var stEl = document.getElementById('b-st'), cvEl = document.getElementById('b-curves');
+  var uS = document.getElementById('b-u'), readEl = document.getElementById('b-read');
+  var N = 32, STEPS = 300, TAU = 0.8, US = d3.range(0.02, 0.2401, 0.02);
+  var state = { cmp: 'q8', U: 0.1, curves: null, fields: null };
+  var stCanvas = document.createElement('canvas'); stEl.appendChild(stCanvas);
+  stCanvas.setAttribute('role', 'img'); stCanvas.setAttribute('aria-label', 'Space-time diagrams of the boosted shear wave for D2Q9 and the comparison stencil.');
+  var cvSvg = d3.select(cvEl).append('svg').attr('role', 'img').attr('aria-label', 'Measured drift speed over U and viscosity against U.');
+  var wS = 300, wC = 300;
 
-  // 9 distribution arrays, single precision
-  var f     = new Float32Array(9 * CELL);
-  var fTmp  = new Float32Array(9 * CELL);
-  var rho   = new Float32Array(CELL);
-  var ux    = new Float32Array(CELL);
-  var uy    = new Float32Array(CELL);
-  var solid = new Uint8Array(CELL);
+  function computeCurves() {
+    var ps = [stencil('q9'), stencil(state.cmp)];
+    state.curves = ps.map(function (p) {
+      return US.map(function (U) { var r = boostRun(p, TAU, U, N, STEPS, false); return { U: U, drift: r.v / U, nu: r.nu, bad: r.bad }; });
+    });
+    state.ps = ps;
+  }
+  function computeFields() {
+    state.fields = [stencil('q9'), stencil(state.cmp)].map(function (p) { return boostRun(p, TAU, state.U, N, STEPS, true); });
+  }
+  function drawST() {
+    var w = wS, gap = 8, lab = 16, hEach = Math.round(Math.min(110, Math.max(80, w * 0.3)));
+    var h = 2 * hEach + gap + 2 * lab, dpr = window.devicePixelRatio || 1;
+    stCanvas.width = Math.round(w * dpr); stCanvas.height = Math.round(h * dpr);
+    stCanvas.style.width = w + 'px'; stCanvas.style.height = h + 'px';
+    var ctx = stCanvas.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h);
+    if (!state.fields) return;
+    var neg = hexRGB('#2563eb'), pos = hexRGB('#dc2626'), mid = hexRGB('#f8fafc');
+    var off = document.createElement('canvas'); off.width = STEPS + 1; off.height = N;
+    var octx = off.getContext('2d');
+    ctx.font = '11px "Source Sans 3", sans-serif';
+    [['q9', state.fields[0]], [state.cmp, state.fields[1]]].forEach(function (s, row) {
+      var F = s[1].field, img = octx.createImageData(STEPS + 1, N);
+      for (var t = 0; t <= STEPS; t++) {
+        var mx = 0, x;
+        for (x = 0; x < N; x++) mx = Math.max(mx, Math.abs(F[t * N + x]));
+        for (x = 0; x < N; x++) {
+          var v = mx > 0 ? F[t * N + x] / mx : 0, e = v >= 0 ? pos : neg, a = Math.abs(v);
+          var o = ((N - 1 - x) * (STEPS + 1) + t) * 4;
+          img.data[o] = mid[0] + a * (e[0] - mid[0]); img.data[o + 1] = mid[1] + a * (e[1] - mid[1]);
+          img.data[o + 2] = mid[2] + a * (e[2] - mid[2]); img.data[o + 3] = 255;
+        }
+      }
+      octx.putImageData(img, 0, 0);
+      var y0 = row * (hEach + gap + lab) + lab;
+      ctx.fillStyle = C(s[0]);
+      ctx.fillText(row === 0 ? 'D2Q9' : stencilName(state.cmp), 0, y0 - 4);
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(off, 0, y0, w, hEach);
+      // where a crest carried at U would be: x = N/4 + U t (mod N)
+      ctx.save(); ctx.beginPath(); ctx.rect(0, y0, w, hEach); ctx.clip();
+      ctx.strokeStyle = C('text'); ctx.setLineDash([4, 3]); ctx.lineWidth = 1.2; ctx.beginPath();
+      for (var wrap = -1; wrap <= Math.ceil(state.U * STEPS / N) + 1; wrap++) {
+        var xa = N / 4 - wrap * N, xb = xa + state.U * STEPS;
+        ctx.moveTo(0, y0 + hEach * (1 - (xa + 0.5) / N)); ctx.lineTo(w, y0 + hEach * (1 - (xb + 0.5) / N));
+      }
+      ctx.stroke(); ctx.restore();
+    });
+  }
+  function drawCurves() {
+    var w = wC, hTop = 130, hBot = 110, m = { l: 48, r: 10, t: 8, b: 30 }, gap = 26, h = m.t + hTop + gap + hBot + m.b;
+    cvSvg.attr('width', w).attr('height', h); cvSvg.selectAll('*').remove();
+    if (!state.curves) return;
+    var x = d3.scaleLinear().domain([0, 0.25]).range([m.l, w - m.r]);
+    var all = state.curves[0].concat(state.curves[1]).filter(function (d) { return !d.bad; });
+    var yD = d3.scaleLinear().domain([Math.min(0, d3.min(all, function (d) { return d.drift; })) - 0.05, Math.max(1.1, d3.max(all, function (d) { return d.drift; }) + 0.05)]).range([m.t + hTop, m.t]);
+    var yN = d3.scaleLinear().domain([0, Math.max(0.12, d3.max(all, function (d) { return d.nu; }) * 1.1)]).range([m.t + hTop + gap + hBot, m.t + hTop + gap]);
+    var g1 = cvSvg.append('g').attr('transform', 'translate(' + m.l + ',0)').call(d3.axisLeft(yD).ticks(3));
+    var g2 = cvSvg.append('g').attr('transform', 'translate(' + m.l + ',0)').call(d3.axisLeft(yN).ticks(3));
+    var g3 = cvSvg.append('g').attr('transform', 'translate(0,' + (m.t + hTop + gap + hBot) + ')').call(d3.axisBottom(x).ticks(5));
+    styleAxis(g1); styleAxis(g2); styleAxis(g3);
+    cvSvg.append('line').attr('x1', m.l).attr('x2', w - m.r).attr('y1', yD(1)).attr('y2', yD(1)).attr('stroke', C('text2')).attr('stroke-dasharray', '4,3');
+    cvSvg.append('text').attr('x', w - m.r).attr('y', yD(1) - 4).attr('text-anchor', 'end').attr('font-size', 11).attr('fill', C('text2')).text('Galilean: 1');
+    cvSvg.append('text').attr('x', m.l + 4).attr('y', m.t + hTop + gap + 10).attr('font-size', 11).attr('fill', C('text2')).text('ν');
+    cvSvg.append('text').attr('x', w - m.r).attr('y', h - 2).attr('text-anchor', 'end').attr('font-size', 11).attr('fill', C('text2')).text('U');
+    cvSvg.append('line').attr('x1', x(state.U)).attr('x2', x(state.U)).attr('y1', m.t).attr('y2', m.t + hTop + gap + hBot).attr('stroke', C('grid')).attr('stroke-width', 5);
+    [['q9', state.curves[0]], [state.cmp, state.curves[1]]].forEach(function (s) {
+      var ok = s[1].filter(function (d) { return !d.bad; }), col = C(s[0]);
+      [[yD, 'drift'], [yN, 'nu']].forEach(function (ax) {
+        cvSvg.append('path').attr('d', d3.line().x(function (d) { return x(d.U); }).y(function (d) { return ax[0](d[ax[1]]); })(ok))
+          .attr('fill', 'none').attr('stroke', col).attr('stroke-width', s[0] === 'q9' ? 3.5 : 2).attr('stroke-opacity', s[0] === 'q9' ? 0.55 : 1);
+        ok.forEach(function (d) { cvSvg.append('circle').attr('cx', x(d.U)).attr('cy', ax[0](d[ax[1]])).attr('r', 2.5).attr('fill', col); });
+      });
+    });
+  }
+  function readout() {
+    if (!state.curves) return;
+    var i = Math.round((state.U - 0.02) / 0.02), a = state.curves[0][i], b = state.curves[1][i], nu0 = state.curves[0][0].nu;
+    var restNu = (TAU - 0.5) / 3;
+    readEl.innerHTML = 'At U = ' + state.U.toFixed(2) + ': D2Q9 carries the wave at <b>' + a.drift.toFixed(3) + '</b> U with ν = <b>' + a.nu.toFixed(4) +
+      '</b>, ' + (100 * (1 - a.nu / restNu)).toFixed(1) + '% below c<sub>s</sub>²(τ − ½) = ' + restNu.toFixed(4) + '; ' + stencilName(state.cmp) +
+      (b.bad ? ' goes unstable.' : ' carries it at <b>' + fmt(b.drift, 3) + '</b> U with ν = <b>' + fmt(b.nu, 4) + '</b>.');
+  }
+  function all() { computeCurves(); computeFields(); drawST(); drawCurves(); readout(); }
+  document.querySelectorAll('#b-cmp .btn').forEach(function (b) {
+    b.addEventListener('click', function () { state.cmp = b.getAttribute('data-c'); syncCmp(); all(); });
+  });
+  function syncCmp() { document.querySelectorAll('#b-cmp .btn').forEach(function (b) { b.setAttribute('aria-pressed', b.getAttribute('data-c') === state.cmp ? 'true' : 'false'); }); }
+  uS.addEventListener('input', function () {
+    state.U = +uS.value; document.getElementById('b-u-val').textContent = state.U.toFixed(2);
+    if (!state.curves) return;
+    computeFields(); drawST(); drawCurves(); readout();
+  });
+  var customTimer = null;
+  SHARED.subs.push(function () { if (state.cmp === 'custom' && state.curves) { clearTimeout(customTimer); customTimer = setTimeout(all, 200); } });
+  syncCmp();
+  onWidth(stEl, function (w) { wS = w; drawST(); });
+  onWidth(cvEl, function (w) { wC = w; drawCurves(); });
+  whenNear(fig, all);
+})();
 
-  // Canvas
-  var canvas = document.getElementById('flow-canvas');
-  canvas.width = NX;
-  canvas.height = NY;
-  // Make the on-screen size roughly 2x by CSS so pixelated scaling is visible
-  canvas.style.width = '100%';
-  canvas.style.imageRendering = 'pixelated';
-  canvas.style.maxWidth = (NX * 2) + 'px';
-  var ctx = canvas.getContext('2d');
-  var img = ctx.createImageData(NX, NY);
+// ────────────────────────────────────────── Figures 5 and 6: flow past an obstacle ──
+(function () {
+  var NX = 300, NY = 90, CELL = NX * NY;
+  // Screen coordinates: +y is down. Physical u_y is up, so c_y(phys) = -CY.
+  var CX = [0, 1, 0, -1, 0, 1, -1, -1, 1];
+  var CY = [0, 0, -1, 0, 1, 1, 1, -1, -1];
+  var W = W9;
+  var f = new Float32Array(9 * CELL), fTmp = new Float32Array(9 * CELL);
+  var ux = new Float32Array(CELL), uy = new Float32Array(CELL), solid = new Uint8Array(CELL);
+  var canvas = document.getElementById('flow-canvas'), ctx = canvas.getContext('2d'), img = ctx.createImageData(NX, NY);
+  var ui = { U: 0.08, Re: 120, obstacle: 'cylinder', mode: 'curl', running: true, spf: 8, tau: 0.6, seed: 1, steps: 0 };
+  var geo;
+  var CY0 = (NY - 1) / 2;   // centreline between rows 44 and 45: walls at rows 0 and 89 are mirror images
 
-  function IDX(x, y) { return y * NX + x; }
-  function FIDX(i, x, y) { return i * CELL + y * NX + x; }
-
-  // ────── UI state ──────
-  var uiState = {
-    U: 0.08,
-    Re: 120,
-    obstacle: 'cylinder',
-    mode: 'curl',
-    running: true,
-    steps: 0,
-    tau: 0.6,
-    speed: 0.25
-  };
-
-  // ────── Obstacle initialisation ──────
+  function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; var t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
   function buildObstacle(kind) {
     solid.fill(0);
-    // Top/bottom walls
-    for (var x = 0; x < NX; x++) {
-      solid[IDX(x, 0)] = 1;
-      solid[IDX(x, NY - 1)] = 1;
+    for (var x = 0; x < NX; x++) { solid[x] = 1; solid[(NY - 1) * NX + x] = 1; }
+    var cx0 = Math.floor(NX * 0.22), R = Math.floor(NY * 0.13);
+    for (var y = 0; y < NY; y++) for (var x2 = 0; x2 < NX; x2++) {
+      var dx = x2 - cx0, dy = y - CY0;
+      if (kind === 'cylinder' ? dx * dx + dy * dy <= R * R : (Math.abs(dx) <= R - 0.5 && Math.abs(dy) <= R - 0.5)) solid[y * NX + x2] = 1;
     }
-    var cx0 = Math.floor(NX * 0.22);
-    var cy0 = Math.floor(NY / 2);
-    var radius = Math.floor(NY * 0.13);
-
-    if (kind === 'cylinder') {
-      for (var yy = 0; yy < NY; yy++) {
-        for (var xx = 0; xx < NX; xx++) {
-          var dx = xx - cx0, dy = yy - cy0;
-          if (dx * dx + dy * dy <= radius * radius) solid[IDX(xx, yy)] = 1;
-        }
-      }
-    } else if (kind === 'square') {
-      var hs = radius;
-      for (var yy2 = cy0 - hs; yy2 <= cy0 + hs; yy2++) {
-        for (var xx2 = cx0 - hs; xx2 <= cx0 + hs; xx2++) {
-          if (xx2 >= 0 && xx2 < NX && yy2 >= 0 && yy2 < NY) solid[IDX(xx2, yy2)] = 1;
-        }
-      }
-    } else if (kind === 'wing') {
-      // Ellipse elongated along x, slightly cambered
-      var rx = radius * 2.2, ry = radius * 0.6;
-      var camber = 2;
-      for (var yy3 = 0; yy3 < NY; yy3++) {
-        for (var xx3 = 0; xx3 < NX; xx3++) {
-          var dxx = xx3 - cx0, dyy = yy3 - cy0 + camber;
-          if ((dxx * dxx) / (rx * rx) + (dyy * dyy) / (ry * ry) <= 1) solid[IDX(xx3, yy3)] = 1;
-        }
-      }
-    } else if (kind === 'pair') {
-      for (var yy4 = 0; yy4 < NY; yy4++) {
-        for (var xx4 = 0; xx4 < NX; xx4++) {
-          var dxA = xx4 - cx0, dyA = yy4 - cy0;
-          var dxB = xx4 - (cx0 + 4 * radius), dyB = yy4 - cy0;
-          if (dxA * dxA + dyA * dyA <= (radius * 0.8) * (radius * 0.8) ||
-              dxB * dxB + dyB * dyB <= (radius * 0.8) * (radius * 0.8)) {
-            solid[IDX(xx4, yy4)] = 1;
-          }
-        }
-      }
-    }
-    return { cx: cx0, cy: cy0, radius: radius };
+    return { cx: cx0, R: R, D: 2 * R };
+  }
+  function feqL(i, r, vx, vy) {
+    var cu = CX[i] * vx - CY[i] * vy, u2 = vx * vx + vy * vy;
+    return W[i] * r * (1 + 3 * cu + 4.5 * cu * cu - 1.5 * u2);
+  }
+  function tauFromRe(Re, U) {
+    var nu = U * geo.D / Re, tau = 3 * nu + 0.5;
+    return Math.min(1.8, Math.max(0.52, tau));
   }
 
-  var obstacleInfo = buildObstacle(uiState.obstacle);
-
-  // ────── Initial condition ──────
-  function initField(U) {
-    for (var y = 0; y < NY; y++) {
-      for (var x = 0; x < NX; x++) {
-        var c = IDX(x, y);
-        rho[c] = 1;
-        ux[c] = U;
-        uy[c] = 0;
-        for (var i = 0; i < 9; i++) {
-          f[FIDX(i, x, y)] = feq(i, 1, U, 0);
-        }
-      }
+  // diagnostics
+  var probeX, hist = [], asym = [], growth = null, LB = 2048, SAMPLE = 4;
+  var lineUx = new Float32Array(LB * NY), lineUy = new Float32Array(LB * NY), nLine = 0;
+  function initField() {
+    var rng = mulberry32(ui.seed * 2654435761 >>> 0 || 1);
+    for (var c = 0; c < CELL; c++) {
+      var py = 0.01 * ui.U * (2 * rng() - 1);
+      for (var i = 0; i < 9; i++) f[i * CELL + c] = feqL(i, 1, ui.U, py);
+      ux[c] = ui.U; uy[c] = py;
     }
-    uiState.steps = 0;
-    probeHistory.length = 0;
-  }
-
-  // ────── One time step ──────
-  // Conventions: CX, CY are screen coords (+y down). Physical uy is y-up, and
-  // the sign flip enters feqLocal as (-CY[i]) * vy.
-  function feqLocal(i, rr, vx, vy) {
-    var cu = CX[i] * vx + (-CY[i]) * vy;  // physical y-up convention
-    var u2 = vx * vx + vy * vy;
-    return W[i] * rr * (1 + 3 * cu + 4.5 * cu * cu - 1.5 * u2);
+    ui.steps = 0; hist.length = 0; asym.length = 0; growth = null; nLine = 0; frozen = false; lagCache = null;
+    probeX = Math.min(NX - 5, geo.cx + 4 * geo.R);
   }
 
   function step() {
-    var tau = uiState.tau;
-    var omega = 1 / tau;
-    var U = uiState.U;
-
-    // 1. Collide — compute moments and relax f -> fTmp in-place (we write into f directly)
-    for (var y = 1; y < NY - 1; y++) {
+    var om = 1 / ui.tau, U = ui.U, y, x, c, i;
+    for (y = 1; y < NY - 1; y++) {
       var yN = y * NX;
-      for (var x = 0; x < NX; x++) {
-        var c = yN + x;
+      for (x = 0; x < NX; x++) {
+        c = yN + x;
         if (solid[c]) continue;
-        var f0 = f[c];
-        var f1 = f[CELL + c];
-        var f2 = f[2 * CELL + c];
-        var f3 = f[3 * CELL + c];
-        var f4 = f[4 * CELL + c];
-        var f5 = f[5 * CELL + c];
-        var f6 = f[6 * CELL + c];
-        var f7 = f[7 * CELL + c];
-        var f8 = f[8 * CELL + c];
+        var f0 = f[c], f1 = f[CELL + c], f2 = f[2 * CELL + c], f3 = f[3 * CELL + c], f4 = f[4 * CELL + c];
+        var f5 = f[5 * CELL + c], f6 = f[6 * CELL + c], f7 = f[7 * CELL + c], f8 = f[8 * CELL + c];
         var rr = f0 + f1 + f2 + f3 + f4 + f5 + f6 + f7 + f8;
-        // Momentum in physical y-up coordinates: c_y^phys = -CY (screen uses y-down).
-        // CX: [0, 1, 0, -1, 0, 1, -1, -1, 1]
-        // -CY: [0, 0, 1, 0, -1, -1, -1, 1, 1]
-        var mx = f1 - f3 + f5 - f6 - f7 + f8;
-        var my = f2 - f4 - f5 - f6 + f7 + f8;
-        var vx = mx / rr;
-        var vy = my / rr;
-        rho[c] = rr;
-        ux[c] = vx;
-        uy[c] = vy;
-
-        // BGK relax each channel toward f_i^eq(rho, u). Unrolled for speed.
-        var u2 = 1 - 1.5 * (vx * vx + vy * vy);
-        var cu;
-        cu = 0;         f[c]            = f0 - omega * (f0 - W[0] * rr * u2);
-        cu = vx;        f[CELL + c]     = f1 - omega * (f1 - W[1] * rr * (u2 + 3 * cu + 4.5 * cu * cu));
-        cu = vy;        f[2 * CELL + c] = f2 - omega * (f2 - W[2] * rr * (u2 + 3 * cu + 4.5 * cu * cu));
-        cu = -vx;       f[3 * CELL + c] = f3 - omega * (f3 - W[3] * rr * (u2 + 3 * cu + 4.5 * cu * cu));
-        cu = -vy;       f[4 * CELL + c] = f4 - omega * (f4 - W[4] * rr * (u2 + 3 * cu + 4.5 * cu * cu));
-        cu = vx - vy;   f[5 * CELL + c] = f5 - omega * (f5 - W[5] * rr * (u2 + 3 * cu + 4.5 * cu * cu));
-        cu = -vx - vy;  f[6 * CELL + c] = f6 - omega * (f6 - W[6] * rr * (u2 + 3 * cu + 4.5 * cu * cu));
-        cu = -vx + vy;  f[7 * CELL + c] = f7 - omega * (f7 - W[7] * rr * (u2 + 3 * cu + 4.5 * cu * cu));
-        cu = vx + vy;   f[8 * CELL + c] = f8 - omega * (f8 - W[8] * rr * (u2 + 3 * cu + 4.5 * cu * cu));
+        var vx = (f1 - f3 + f5 - f6 - f7 + f8) / rr, vy = (f2 - f4 - f5 - f6 + f7 + f8) / rr;
+        ux[c] = vx; uy[c] = vy;
+        var u2 = 1 - 1.5 * (vx * vx + vy * vy), cu;
+        f[c] = f0 - om * (f0 - W[0] * rr * u2);
+        cu = vx;       f[CELL + c]     = f1 - om * (f1 - W[1] * rr * (u2 + 3 * cu + 4.5 * cu * cu));
+        cu = vy;       f[2 * CELL + c] = f2 - om * (f2 - W[2] * rr * (u2 + 3 * cu + 4.5 * cu * cu));
+        cu = -vx;      f[3 * CELL + c] = f3 - om * (f3 - W[3] * rr * (u2 + 3 * cu + 4.5 * cu * cu));
+        cu = -vy;      f[4 * CELL + c] = f4 - om * (f4 - W[4] * rr * (u2 + 3 * cu + 4.5 * cu * cu));
+        cu = vx - vy;  f[5 * CELL + c] = f5 - om * (f5 - W[5] * rr * (u2 + 3 * cu + 4.5 * cu * cu));
+        cu = -vx - vy; f[6 * CELL + c] = f6 - om * (f6 - W[6] * rr * (u2 + 3 * cu + 4.5 * cu * cu));
+        cu = -vx + vy; f[7 * CELL + c] = f7 - om * (f7 - W[7] * rr * (u2 + 3 * cu + 4.5 * cu * cu));
+        cu = vx + vy;  f[8 * CELL + c] = f8 - om * (f8 - W[8] * rr * (u2 + 3 * cu + 4.5 * cu * cu));
       }
     }
-
-    // 2. Stream — f_i arrives at (x + CX[i], y + CY[i]) in screen coords.
-    for (var i = 0; i < 9; i++) {
-      var base = i * CELL;
-      var cx_i = CX[i], cy_i = CY[i];
-      for (var yy = 0; yy < NY; yy++) {
-        var yNew = yy + cy_i;
-        if (yNew < 0 || yNew >= NY) continue;  // skip — top/bottom are walls
-        var rowOld = yy * NX;
-        var rowNew = yNew * NX;
-        for (var xx = 0; xx < NX; xx++) {
-          var xNew = xx + cx_i;
-          if (xNew < 0 || xNew >= NX) continue;
-          fTmp[base + rowNew + xNew] = f[base + rowOld + xx];
-        }
+    // stream
+    for (i = 0; i < 9; i++) {
+      var base = i * CELL, cxi = CX[i], cyi = CY[i], xs = Math.max(0, -cxi), xe = Math.min(NX, NX - cxi);
+      for (y = 0; y < NY; y++) {
+        var yn = y + cyi;
+        if (yn < 0 || yn >= NY) continue;
+        var ro = base + y * NX, rn = base + yn * NX + cxi;
+        for (x = xs; x < xe; x++) fTmp[rn + x] = f[ro + x];
       }
     }
-
-    // 3. Halfway bounce-back on solids: swap opposite channels in place.
-    // Next streaming step will send the reflected populations back out.
-    for (var yy2 = 0; yy2 < NY; yy2++) {
-      for (var xx2 = 0; xx2 < NX; xx2++) {
-        var cc = yy2 * NX + xx2;
-        if (!solid[cc]) continue;
-        // Swap opposite pairs in fTmp at solid site (so next streaming sends
-        // the bounce-back). Pairs: (1,3), (2,4), (5,7), (6,8).
-        var a, b, t;
-        a = CELL + cc;     b = 3 * CELL + cc; t = fTmp[a]; fTmp[a] = fTmp[b]; fTmp[b] = t;
-        a = 2 * CELL + cc; b = 4 * CELL + cc; t = fTmp[a]; fTmp[a] = fTmp[b]; fTmp[b] = t;
-        a = 5 * CELL + cc; b = 7 * CELL + cc; t = fTmp[a]; fTmp[a] = fTmp[b]; fTmp[b] = t;
-        a = 6 * CELL + cc; b = 8 * CELL + cc; t = fTmp[a]; fTmp[a] = fTmp[b]; fTmp[b] = t;
-      }
+    // halfway bounce-back at solid sites
+    for (c = 0; c < CELL; c++) {
+      if (!solid[c]) continue;
+      var a, b, t;
+      a = CELL + c;     b = 3 * CELL + c; t = fTmp[a]; fTmp[a] = fTmp[b]; fTmp[b] = t;
+      a = 2 * CELL + c; b = 4 * CELL + c; t = fTmp[a]; fTmp[a] = fTmp[b]; fTmp[b] = t;
+      a = 5 * CELL + c; b = 7 * CELL + c; t = fTmp[a]; fTmp[a] = fTmp[b]; fTmp[b] = t;
+      a = 6 * CELL + c; b = 8 * CELL + c; t = fTmp[a]; fTmp[a] = fTmp[b]; fTmp[b] = t;
     }
-
-    // 4. Inlet (left column): set to equilibrium at (U, 0)
-    for (var yy3 = 1; yy3 < NY - 1; yy3++) {
-      var cin = yy3 * NX;
-      for (var ii = 0; ii < 9; ii++) {
-        fTmp[ii * CELL + cin] = feqLocal(ii, 1, U, 0);
-      }
+    // inlet: equilibrium at velocity (U, 0) with the density of the neighbouring column
+    for (y = 1; y < NY - 1; y++) {
+      var ci = y * NX, r1 = 0;
+      for (i = 0; i < 9; i++) r1 += fTmp[i * CELL + ci + 1];
+      for (i = 0; i < 9; i++) fTmp[i * CELL + ci] = feqL(i, r1, U, 0);
     }
-
-    // 5. Outlet (right column): zero-gradient (copy from x = NX - 2)
-    for (var yy4 = 1; yy4 < NY - 1; yy4++) {
-      var cOut = yy4 * NX + (NX - 1);
-      var cPrev = yy4 * NX + (NX - 2);
-      for (var iii = 0; iii < 9; iii++) {
-        fTmp[iii * CELL + cOut] = fTmp[iii * CELL + cPrev];
-      }
+    // outlet: equilibrium at density 1 with the velocity of the neighbouring column
+    for (y = 1; y < NY - 1; y++) {
+      var co = y * NX + NX - 1;
+      for (i = 0; i < 9; i++) fTmp[i * CELL + co] = feqL(i, 1, ux[co - 1], uy[co - 1]);
     }
-
-    // Swap buffers
     var tmp = f; f = fTmp; fTmp = tmp;
-
-    uiState.steps++;
-    recordProbe();
+    ui.steps++;
+    record();
   }
 
-  // ────── Shed-frequency probe: zero-crossings of u_y downstream ──────
-  var probeHistory = [];
-  var probeX, probeY;
-  function setProbePoint() {
-    probeX = Math.min(NX - 5, obstacleInfo.cx + obstacleInfo.radius * 4);
-    probeY = obstacleInfo.cy;
-  }
-  setProbePoint();
-
-  function recordProbe() {
-    if (uiState.steps % 2 !== 0) return;   // decimate
-    var c = IDX(probeX, probeY);
-    // Note uy[c] is only refreshed on collide; acceptable
-    probeHistory.push(uy[c]);
-    if (probeHistory.length > 4096) probeHistory.shift();
-  }
-
-  function estimateFreq() {
-    // Period from upward zero crossings of the de-meaned probe signal: count the
-    // whole cycles between the first and last upward crossing and divide by the
-    // number of steps they span. Resolution improves as more cycles accumulate.
-    var n = probeHistory.length;
-    if (n < 200) return null;
-    var mean = 0;
-    for (var i = 0; i < n; i++) mean += probeHistory[i];
-    mean /= n;
-    var amp = 0;
-    for (var k = 0; k < n; k++) {
-      var v = probeHistory[k] - mean;
-      if (Math.abs(v) > amp) amp = Math.abs(v);
-    }
-    if (amp < 0.002) return null;
-    var first = -1, last = -1, ups = 0;
-    for (var j = 1; j < n; j++) {
-      var p0 = probeHistory[j - 1] - mean, p1 = probeHistory[j] - mean;
-      if (p0 < 0 && p1 >= 0) {
-        var tj = (j - 1) + p0 / (p0 - p1);   // linear interpolation of the crossing
-        if (first < 0) first = tj;
-        last = tj;
-        ups++;
+  function mirrorDefect() {
+    var s = 0, n = 0;
+    for (var y = 1; y <= 44; y++) {
+      var ym = NY - 1 - y;
+      for (var x = geo.cx + geo.R + 1; x < NX - 10; x++) {
+        var a = y * NX + x, b = ym * NX + x;
+        if (solid[a]) continue;
+        var d1 = ux[a] - ux[b], d2 = uy[a] + uy[b];
+        s += d1 * d1 + d2 * d2; n++;
       }
+    }
+    return Math.sqrt(s / n) / ui.U;
+  }
+  function record() {
+    if (ui.steps % 2 === 0) {
+      hist.push(0.5 * (uy[44 * NX + probeX] + uy[45 * NX + probeX]));
+      if (hist.length > 4096) hist.shift();
+    }
+    if (ui.steps % 50 === 0) {
+      asym.push([ui.steps, mirrorDefect()]);
+      if (asym.length > 1600) asym.splice(0, asym.length - 1600);
+      fitGrowth();
+    }
+    if (ui.steps % SAMPLE === 0) {
+      var o = (nLine % LB) * NY;
+      for (var y = 0; y < NY; y++) { lineUx[o + y] = ux[y * NX + probeX]; lineUy[o + y] = uy[y * NX + probeX]; }
+      nLine++;
+    }
+  }
+  // Growth rate: slope of log(defect) over the last 3,000 steps while the defect is below 0.05,
+  // skipping the first 1,500 steps of start-up transient; frozen once the defect passes 0.05.
+  var frozen = false;
+  function fitGrowth() {
+    var last = asym[asym.length - 1];
+    if (frozen) return;
+    if (last[1] > 0.05) { frozen = true; return; }
+    if (last[0] < 2500) { growth = null; return; }
+    var from = Math.max(1500, last[0] - 3000), n = 0, sx = 0, sy = 0, sxx = 0, sxy = 0;
+    for (var i = asym.length - 1; i >= 0 && asym[i][0] >= from; i--) {
+      var t = asym[i][0], v = Math.log(asym[i][1]); n++; sx += t; sy += v; sxx += t * t; sxy += t * v;
+    }
+    var sl = (n * sxy - sx * sy) / (n * sxx - sx * sx);
+    growth = { sigma: sl, icpt: (sy - sl * sx) / n, t0: from, t1: last[0] };
+  }
+  function estimateFreq() {
+    var n = hist.length;
+    if (n < 400) return null;
+    var mean = 0, amp = 0, i;
+    for (i = 0; i < n; i++) mean += hist[i];
+    mean /= n;
+    for (i = 0; i < n; i++) amp = Math.max(amp, Math.abs(hist[i] - mean));
+    if (amp < 0.02 * ui.U) return null;
+    var first = -1, last = -1, ups = 0;
+    for (i = 1; i < n; i++) {
+      var p0 = hist[i - 1] - mean, p1 = hist[i] - mean;
+      if (p0 < 0 && p1 >= 0) { var tj = (i - 1) + p0 / (p0 - p1); if (first < 0) first = tj; last = tj; ups++; }
     }
     if (ups < 3) return null;
-    // One sample per 2 steps (see recordProbe).
-    return (ups - 1) / ((last - first) * 2);
+    return { f: (ups - 1) / ((last - first) * 2), n: ups - 1 };
   }
 
-  // ────── Rendering ──────
-  // Diverging map: paper-coloured at zero, red for positive, blue for negative.
-  // In dark mode the zero colour is the dark figure background.
-  var CM_MID = Theme.dark ? [28, 29, 37] : [248, 250, 252];
-  var CM_POS = Theme.dark ? [240, 82, 82] : [220, 38, 38];
-  var CM_NEG = Theme.dark ? [91, 141, 239] : [37, 99, 235];
-  var SOLID_RGB = Theme.dark ? [150, 156, 176] : [30, 41, 59];
-  function colorMap(v) {
-    // v in [-1, 1]; returns [r, g, b]
-    var t = Math.max(-1, Math.min(1, v));
-    var end = t >= 0 ? CM_POS : CM_NEG, s = Math.abs(t);
-    return [
-      Math.round(CM_MID[0] + s * (end[0] - CM_MID[0])),
-      Math.round(CM_MID[1] + s * (end[1] - CM_MID[1])),
-      Math.round(CM_MID[2] + s * (end[2] - CM_MID[2]))
-    ];
-  }
-
-  var CURL_SCALE = 18;   // visual scale for vorticity
-  var SPEED_SCALE = 8;   // visual scale for speed
-
+  // rendering
+  var CM_MID = hexRGB('#f8fafc'), CM_POS = hexRGB('#dc2626'), CM_NEG = hexRGB('#2563eb'), SOLID = hexRGB('#1e293b');
   function render() {
-    var data = img.data;
-    var mode = uiState.mode;
-    var U = uiState.U;
-
-    for (var y = 0; y < NY; y++) {
-      for (var x = 0; x < NX; x++) {
-        var c = IDX(x, y);
-        var idxPx = (y * NX + x) * 4;
-
-        if (solid[c]) {
-          data[idxPx] = SOLID_RGB[0];
-          data[idxPx + 1] = SOLID_RGB[1];
-          data[idxPx + 2] = SOLID_RGB[2];
-          data[idxPx + 3] = 255;
-          continue;
-        }
-
-        var val;
-        if (mode === 'curl') {
-          // Central difference of u for vorticity: dUy/dx - dUx/dy
-          var xp = Math.min(NX - 1, x + 1), xm = Math.max(0, x - 1);
-          var yp = Math.min(NY - 1, y + 1), ym = Math.max(0, y - 1);
-          var uyP = solid[IDX(xp, y)] ? 0 : uy[IDX(xp, y)];
-          var uyM = solid[IDX(xm, y)] ? 0 : uy[IDX(xm, y)];
-          var uxP = solid[IDX(x, yp)] ? 0 : ux[IDX(x, yp)];
-          var uxM = solid[IDX(x, ym)] ? 0 : ux[IDX(x, ym)];
-          // yp is screen-y+1, i.e. physical-y-1, so (uxP-uxM)/2 = -du_x/dy_phys.
-          // curl = du_y/dx - du_x/dy_phys = 0.5*(uyP-uyM) + 0.5*(uxP-uxM).
-          var curl = 0.5 * (uyP - uyM) + 0.5 * (uxP - uxM);
-          val = curl * CURL_SCALE;
-        } else {
-          // Speed magnitude relative to inflow
-          var s = Math.hypot(ux[c], uy[c]) / (U + 1e-9);
-          val = (s - 1) * 0.6;   // centre around inflow speed
-        }
-
-        var col = colorMap(val);
-        data[idxPx] = col[0];
-        data[idxPx + 1] = col[1];
-        data[idxPx + 2] = col[2];
-        data[idxPx + 3] = 255;
+    var d = img.data, mode = ui.mode, U = ui.U;
+    for (var y = 0; y < NY; y++) for (var x = 0; x < NX; x++) {
+      var c = y * NX + x, o = c * 4;
+      if (solid[c]) { d[o] = SOLID[0]; d[o + 1] = SOLID[1]; d[o + 2] = SOLID[2]; d[o + 3] = 255; continue; }
+      var v;
+      if (mode === 'curl') {
+        var xp = Math.min(NX - 1, x + 1), xm = Math.max(0, x - 1), yp = Math.min(NY - 1, y + 1), ym = Math.max(0, y - 1);
+        var uyP = solid[y * NX + xp] ? 0 : uy[y * NX + xp], uyM = solid[y * NX + xm] ? 0 : uy[y * NX + xm];
+        var uxP = solid[yp * NX + x] ? 0 : ux[yp * NX + x], uxM = solid[ym * NX + x] ? 0 : ux[ym * NX + x];
+        v = (0.5 * (uyP - uyM) + 0.5 * (uxP - uxM)) * 18;
+      } else if (mode === 'speed') {
+        v = (Math.hypot(ux[c], uy[c]) / (U + 1e-9) - 1) * 0.6;
+      } else {
+        var cm = (NY - 1 - y) * NX + x;
+        v = (ux[c] - ux[cm]) / (U + 1e-9) * 1.5;
       }
+      v = Math.max(-1, Math.min(1, v));
+      var e = v >= 0 ? CM_POS : CM_NEG, s = Math.abs(v);
+      d[o] = CM_MID[0] + s * (e[0] - CM_MID[0]); d[o + 1] = CM_MID[1] + s * (e[1] - CM_MID[1]);
+      d[o + 2] = CM_MID[2] + s * (e[2] - CM_MID[2]); d[o + 3] = 255;
     }
     ctx.putImageData(img, 0, 0);
   }
 
-  // ────── Re <-> tau mapping ──────
-  function tauFromRe(Re, U) {
-    // D = 2 * radius, nu = U * D / Re, tau = 3 * nu + 0.5
-    var D = 2 * obstacleInfo.radius;
-    var nu = U * D / Re;
-    var tau = 3 * nu + 0.5;
-    // Clamp for numerical stability — BGK is conditionally stable for tau in roughly (0.51, 2.0)
-    if (tau < 0.52) tau = 0.52;
-    if (tau > 1.8) tau = 1.8;
-    return tau;
+  // controls
+  var readEl = document.getElementById('lbm-read'), playBtn = document.getElementById('lbm-play');
+  function sync() {
+    ui.tau = tauFromRe(ui.Re, ui.U);
+    document.getElementById('re-val').textContent = ui.Re;
+    document.getElementById('u-val').textContent = ui.U.toFixed(3);
   }
-
-  // ────── Control wiring ──────
-  var playBtn = document.getElementById('lbm-play');
-  var stepBtn = document.getElementById('lbm-step');
-  var resetBtn = document.getElementById('lbm-reset');
-  var reSlider = document.getElementById('re-slider');
-  var uSlider = document.getElementById('u-slider');
-  var speedSlider = document.getElementById('speed-slider');
-  var speedVal = document.getElementById('speed-val');
-  var obsSelect = document.getElementById('obs-select');
-  var renderRow = document.getElementById('render-row');
-
-  var reVal = document.getElementById('re-val');
-  var uVal = document.getElementById('u-val');
-  var rStep = document.getElementById('r-step');
-  var rTau = document.getElementById('r-tau');
-  var rNu = document.getElementById('r-nu');
-  var rRe = document.getElementById('r-re');
-  var rFreq = document.getElementById('r-freq');
-  var rStr = document.getElementById('r-strouhal');
-  var rSps = document.getElementById('r-sps');
-
-  function syncReadouts() {
-    reVal.textContent = uiState.Re.toFixed(0);
-    uVal.textContent = uiState.U.toFixed(3);
-    var tau = tauFromRe(uiState.Re, uiState.U);
-    uiState.tau = tau;
-    var nu = CS2 * (tau - 0.5);
-    rTau.textContent = tau.toFixed(3);
-    rNu.textContent = nu.toFixed(4);
-    var D = 2 * obstacleInfo.radius;
-    var ReActual = uiState.U * D / nu;
-    rRe.textContent = ReActual.toFixed(0);
+  function readout() {
+    var nu = (ui.tau - 0.5) / 3, fr = estimateFreq();
+    readEl.innerHTML = 'step <b>' + ui.steps + '</b> · seed <b>' + ui.seed + '</b> · τ = <b>' + ui.tau.toFixed(3) + '</b> · ν = <b>' + nu.toFixed(4) +
+      '</b> · Re = <b>' + (ui.U * geo.D / nu).toFixed(0) + '</b> · ' +
+      (fr ? 'St = <b>' + (fr.f * geo.D / ui.U).toFixed(3) + '</b> from ' + fr.n + ' periods' : 'no shedding yet');
   }
-
-  reSlider.addEventListener('input', function () { uiState.Re = +reSlider.value; syncReadouts(); });
-  uSlider.addEventListener('input', function () { uiState.U = +uSlider.value; syncReadouts(); });
-  speedSlider.addEventListener('input', function () {
-    uiState.speed = +speedSlider.value;
-    speedVal.textContent = uiState.speed.toFixed(2) + '×';
-  });
-  obsSelect.addEventListener('change', function () {
-    uiState.obstacle = obsSelect.value;
-    obstacleInfo = buildObstacle(uiState.obstacle);
-    setProbePoint();
-    initField(uiState.U);
-    syncReadouts();
-  });
-
-  renderRow.querySelectorAll('label').forEach(function (lbl) {
-    lbl.addEventListener('click', function () {
-      renderRow.querySelectorAll('label').forEach(function (l) { l.classList.remove('active'); });
-      lbl.classList.add('active');
-      uiState.mode = lbl.getAttribute('data-mode');
-    });
-  });
-
-  playBtn.addEventListener('click', function () {
-    uiState.running = !uiState.running;
-    playBtn.textContent = uiState.running ? 'Pause' : 'Play';
-  });
-  stepBtn.addEventListener('click', function () {
-    for (var k = 0; k < 5; k++) step();
+  function restart() { sync(); initField(); render(); readout(); drawMirror(); }
+  document.getElementById('re-slider').addEventListener('input', function (e) { ui.Re = +e.target.value; restart(); });
+  document.getElementById('u-slider').addEventListener('input', function (e) { ui.U = +e.target.value; restart(); });
+  document.getElementById('speed-slider').addEventListener('input', function (e) { ui.spf = +e.target.value; document.getElementById('speed-val').textContent = ui.spf; });
+  document.getElementById('obs-select').addEventListener('change', function (e) { ui.obstacle = e.target.value; geo = buildObstacle(ui.obstacle); restart(); });
+  document.getElementById('render-select').addEventListener('change', function (e) {
+    ui.mode = e.target.value;
+    document.getElementById('legend-lo').textContent = ui.mode === 'curl' ? 'vorticity −' : ui.mode === 'speed' ? 'slower than U' : 'uₓ below its mirror image';
+    document.getElementById('legend-hi').textContent = ui.mode === 'curl' ? '+' : ui.mode === 'speed' ? 'faster' : 'above';
     render();
   });
-  resetBtn.addEventListener('click', function () {
-    initField(uiState.U);
-    render();
-  });
+  playBtn.addEventListener('click', function () { ui.running = !ui.running; playBtn.textContent = ui.running ? 'Pause' : 'Play'; });
+  document.getElementById('lbm-reset').addEventListener('click', restart);
+  document.getElementById('lbm-seed').addEventListener('click', function () { ui.seed++; restart(); });
 
-  // Click the canvas to add/remove obstacle cells (lets the user build custom shapes)
-  canvas.addEventListener('click', function (ev) {
-    var rect = canvas.getBoundingClientRect();
-    var px = Math.floor((ev.clientX - rect.left) / rect.width * NX);
-    var py = Math.floor((ev.clientY - rect.top) / rect.height * NY);
-    if (py <= 1 || py >= NY - 2) return;
-    var r = 3;
-    for (var dy = -r; dy <= r; dy++) {
-      for (var dx = -r; dx <= r; dx++) {
-        if (dx * dx + dy * dy > r * r) continue;
-        var xn = px + dx, yn = py + dy;
-        if (xn < 0 || xn >= NX || yn < 0 || yn >= NY) continue;
-        solid[IDX(xn, yn)] = 1;
-      }
-    }
-  });
-
-  // ────── Main loop ──────
-  initField(uiState.U);
-  syncReadouts();
-  render();
-
-  var stepsSinceSample = 0;
-  var lastSampleTime = performance.now();
-  var inView = true;
-  var stepAccum = 0;
-  var readoutFrames = 0;
-
-  function loop() {
-    if (uiState.running && inView) {
-      // speed = 1.0 corresponds to 6 steps/frame (~360 steps/s at 60 Hz).
-      // speed = 0.05 corresponds to 0.3 steps/frame (~18 steps/s); sub-integer rates
-      // accumulate across frames so the UI stays smooth at low speeds.
-      stepAccum += 6 * uiState.speed;
-      var count = Math.floor(stepAccum);
-      stepAccum -= count;
-      for (var k = 0; k < count; k++) step();
-      stepsSinceSample += count;
-      if (count > 0) {
-        render();
-        rStep.textContent = uiState.steps;
-      }
-      // Update shed-frequency readouts every 10 frames (a frame counter, so the
-      // cadence does not depend on how many steps each frame advances)
-      if (count > 0 && (++readoutFrames % 10) === 0) {
-        var freq = estimateFreq();
-        if (freq !== null) {
-          rFreq.textContent = freq.toFixed(4);
-          // Strouhal = f D / U
-          var D = 2 * obstacleInfo.radius;
-          var st = freq * D / uiState.U;
-          rStr.textContent = st.toFixed(3);
-        } else {
-          rFreq.textContent = '…';
-          rStr.textContent = '…';
+  // ── Figure 6 drawing ──
+  var gEl = document.getElementById('m-growth'), lEl = document.getElementById('m-lag'), mRead = document.getElementById('m-read');
+  var gSvg = d3.select(gEl).append('svg').attr('role', 'img').attr('aria-label', 'Mirror defect of the wake on a log scale against step, with the fitted growth rate.');
+  var lSvg = d3.select(lEl).append('svg').attr('role', 'img').attr('aria-label', 'Mismatch of the probe-line velocities after a time shift, with and without reflection.');
+  var wG = 300, wL = 300, lagCache = null;
+  function lagCurves() {
+    var fr = estimateFreq();
+    if (!fr) return null;
+    var P = Math.round(1 / (fr.f * SAMPLE));       // period in samples
+    var need = Math.ceil(2.3 * P);
+    if (P < 8 || need > LB || nLine < need) return { waiting: true, P: P };
+    var newest = nLine - 1, win = P, maxLag = Math.round(1.25 * P), stepL = Math.max(1, Math.round(P / 60));
+    var mx = new Float64Array(NY), my = new Float64Array(NY), y, t, o;
+    // time mean over exactly two periods, so the oscillation averages out
+    for (t = newest - 2 * P + 1; t <= newest; t++) { o = (t % LB) * NY; for (y = 1; y < NY - 1; y++) { mx[y] += lineUx[o + y]; my[y] += lineUy[o + y]; } }
+    for (y = 1; y < NY - 1; y++) { mx[y] /= 2 * P; my[y] /= 2 * P; }
+    var norm = 0;
+    for (t = newest - win + 1; t <= newest; t++) { o = (t % LB) * NY; for (y = 1; y < NY - 1; y++) { var a1 = lineUx[o + y] - mx[y], a2 = lineUy[o + y] - my[y]; norm += a1 * a1 + a2 * a2; } }
+    norm *= 2;
+    var mirror = [], plain = [];
+    for (var L = 0; L <= maxLag; L += stepL) {
+      var sm = 0, sp = 0;
+      for (t = newest - win + 1; t <= newest; t++) {
+        var oa = (t % LB) * NY, ob = ((t - L) % LB) * NY;
+        for (y = 1; y < NY - 1; y++) {
+          var ym = NY - 1 - y;
+          var ax = lineUx[oa + y] - mx[y], ay = lineUy[oa + y] - my[y];
+          var bx = lineUx[ob + y] - mx[y], by = lineUy[ob + y] - my[y];
+          var cx = lineUx[ob + ym] - mx[ym], cy = lineUy[ob + ym] - my[ym];
+          sp += (ax - bx) * (ax - bx) + (ay - by) * (ay - by);
+          sm += (ax - cx) * (ax - cx) + (ay + cy) * (ay + cy);
         }
-        var now = performance.now();
-        var dt = now - lastSampleTime;
-        if (dt > 0) rSps.textContent = Math.round(stepsSinceSample * 1000 / dt);
-        stepsSinceSample = 0;
-        lastSampleTime = now;
       }
+      mirror.push([L / P, Math.sqrt(sm / norm)]); plain.push([L / P, Math.sqrt(sp / norm)]);
+    }
+    // refine a minimum to a fraction of a sample by interpolating the older field in time
+    function mis(Lf, refl) {
+      var L0 = Math.floor(Lf), ph = Lf - L0, s = 0;
+      for (var t = newest - win + 1; t <= newest; t++) {
+        var oa = (t % LB) * NY, o0 = ((t - L0) % LB) * NY, o1 = ((t - L0 - 1) % LB) * NY;
+        for (var y = 1; y < NY - 1; y++) {
+          var yy = refl ? NY - 1 - y : y, sg = refl ? -1 : 1;
+          var bx = (1 - ph) * lineUx[o0 + yy] + ph * lineUx[o1 + yy] - mx[yy];
+          var by = (1 - ph) * lineUy[o0 + yy] + ph * lineUy[o1 + yy] - my[yy];
+          var ax = lineUx[oa + y] - mx[y], ay = lineUy[oa + y] - my[y];
+          s += (ax - bx) * (ax - bx) + (ay - sg * by) * (ay - sg * by);
+        }
+      }
+      return Math.sqrt(s / norm);
+    }
+    function refine(curve, lo, hi, refl) {
+      var best = null;
+      curve.forEach(function (d) { if (d[0] >= lo && d[0] <= hi && (!best || d[1] < best[1])) best = d; });
+      var a = best[0] * P - stepL, b = best[0] * P + stepL;
+      for (var it = 0; it < 30; it++) {
+        var m1 = a + (b - a) * 0.382, m2 = a + (b - a) * 0.618;
+        if (mis(m1, refl) < mis(m2, refl)) b = m2; else a = m1;
+      }
+      var L = Math.max(0, (a + b) / 2);
+      return [L / P, mis(L, refl)];
+    }
+    return { mirror: mirror, plain: plain, P: P, half: refine(mirror, 0.3, 0.7, true), full: refine(plain, 0.8, 1.2, false) };
+  }
+  function drawMirror() {
+    // left: growth
+    var w = wG, h = Math.round(Math.min(230, Math.max(190, w * 0.62))), m = { l: 48, r: 10, t: 8, b: 30 };
+    gSvg.attr('width', w).attr('height', h); gSvg.selectAll('*').remove();
+    var tMax = Math.max(8000, ui.steps);
+    var x = d3.scaleLinear().domain([0, tMax]).range([m.l, w - m.r]);
+    var y = d3.scaleLog().domain([1e-5, 2]).range([h - m.b, m.t]).clamp(true);
+    var gx = gSvg.append('g').attr('transform', 'translate(0,' + (h - m.b) + ')').call(d3.axisBottom(x).ticks(4, 's'));
+    var gy = gSvg.append('g').attr('transform', 'translate(' + m.l + ',0)').call(d3.axisLeft(y).tickValues([1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1]).tickFormat(d3.format('.0e')));
+    styleAxis(gx); styleAxis(gy);
+    gSvg.append('text').attr('x', w - m.r).attr('y', h - m.b - 6).attr('text-anchor', 'end').attr('font-size', 11).attr('fill', C('text2')).text('step');
+    if (asym.length > 1) {
+      gSvg.append('path').attr('d', d3.line().x(function (d) { return x(d[0]); }).y(function (d) { return y(Math.max(d[1], 1e-6)); })(asym))
+        .attr('fill', 'none').attr('stroke', C('broken')).attr('stroke-width', 2);
+    }
+    if (growth) {
+      gSvg.append('line').attr('x1', x(growth.t0)).attr('x2', x(growth.t1))
+        .attr('y1', y(Math.exp(growth.icpt + growth.sigma * growth.t0))).attr('y2', y(Math.exp(growth.icpt + growth.sigma * growth.t1)))
+        .attr('stroke', C('text')).attr('stroke-dasharray', '4,3').attr('stroke-width', 1.5);
+    }
+    // right: lag curves
+    var w2 = wL, h2 = h, x2 = d3.scaleLinear().domain([0, 1.25]).range([m.l, w2 - m.r]), y2 = d3.scaleLinear().domain([0, 1.6]).range([h2 - m.b, m.t]);
+    lSvg.attr('width', w2).attr('height', h2); lSvg.selectAll('*').remove();
+    var hx = lSvg.append('g').attr('transform', 'translate(0,' + (h2 - m.b) + ')').call(d3.axisBottom(x2).tickValues([0, 0.5, 1]).tickFormat(function (d) { return d === 0 ? '0' : d === 0.5 ? '½ period' : '1 period'; }));
+    var hy = lSvg.append('g').attr('transform', 'translate(' + m.l + ',0)').call(d3.axisLeft(y2).ticks(4));
+    styleAxis(hx); styleAxis(hy);
+    [0.5, 1].forEach(function (v) { lSvg.append('line').attr('x1', x2(v)).attr('x2', x2(v)).attr('y1', m.t).attr('y2', h2 - m.b).attr('stroke', C('grid')); });
+    var lc = lagCache;
+    if (!lc || lc.waiting) {
+      lSvg.append('text').attr('x', (m.l + w2 - m.r) / 2).attr('y', h2 / 2).attr('text-anchor', 'middle').attr('font-size', 12).attr('fill', C('text2'))
+        .text(lc ? 'collecting two periods…' : 'waiting for shedding');
+    } else {
+      [['custom', lc.plain], ['broken', lc.mirror]].forEach(function (s) {
+        lSvg.append('path').attr('d', d3.line().x(function (d) { return x2(d[0]); }).y(function (d) { return y2(Math.min(1.6, d[1])); })(s[1]))
+          .attr('fill', 'none').attr('stroke', C(s[0])).attr('stroke-width', 2);
+      });
+      [['broken', lc.half], ['custom', lc.full]].forEach(function (s) {
+        lSvg.append('circle').attr('cx', x2(s[1][0])).attr('cy', y2(s[1][1])).attr('r', 4).attr('fill', C(s[0]));
+      });
+    }
+    // readout
+    var parts = [];
+    if (growth) parts.push((frozen ? 'Growth rate over the linear stretch ' : 'Current rate ') + 'σ = <b>' + growth.sigma.toExponential(2) + '</b> per step' +
+      (growth.sigma > 0 ? ' (e-folds every <b>' + Math.round(1 / growth.sigma) + '</b> steps)' : ' (decaying: the symmetric wake is stable)'));
+    else parts.push('Fitting starts at step 2,500.');
+    if (asym.length) parts.push('defect now <b>' + asym[asym.length - 1][1].toFixed(3) + '</b>');
+    if (lc && !lc.waiting) {
+      parts.push('reflection alone <b>' + lc.mirror[0][1].toFixed(2) + '</b>; reflection plus a shift of <b>' + lc.half[0].toFixed(3) + '</b> period <b>' + lc.half[1].toFixed(3) +
+        '</b>; a shift of <b>' + lc.full[0].toFixed(3) + '</b> period without reflection <b>' + lc.full[1].toFixed(3) + '</b>');
+    }
+    mRead.innerHTML = parts.join('; ') + '.';
+  }
+
+  // main loop: runs while Figure 5 or Figure 6 is on screen
+  geo = buildObstacle(ui.obstacle);
+  sync(); initField(); render(); readout();
+  var visible = { lbm: false, mir: false }, frames = 0;
+  if (window.Motion && Motion.reduced()) { ui.running = false; playBtn.textContent = 'Play'; }
+  function loop() {
+    if (ui.running && (visible.lbm || visible.mir)) {
+      for (var k = 0; k < ui.spf; k++) step();
+      frames++;
+      if (visible.lbm) render();
+      if (frames % 10 === 0) readout();
+      if (frames % 45 === 0) { lagCache = lagCurves(); }
+      if (frames % 15 === 0 && visible.mir) drawMirror();
     }
     requestAnimationFrame(loop);
   }
+  if (window.Motion && Motion.onVisible) {
+    Motion.onVisible(document.getElementById('fig-lbm'), function (v) { visible.lbm = v; });
+    Motion.onVisible(document.getElementById('fig-mirror'), function (v) { visible.mir = v; if (v) drawMirror(); });
+  } else { visible.lbm = true; }
+  onWidth(gEl, function (w) { wG = w; drawMirror(); });
+  onWidth(lEl, function (w) { wL = w; drawMirror(); });
   requestAnimationFrame(loop);
-
-  // The loop only steps while the figure is on screen, so it pauses off screen
-  // and resumes on return; with reduced motion it waits for Play.
-  var figLbm = document.getElementById('fig-lbm');
-  if (window.Motion && Motion.reduced()) { uiState.running = false; playBtn.textContent = 'Play'; }
-  if (figLbm && typeof IntersectionObserver === 'function') {
-    inView = false;
-    var io = new IntersectionObserver(function (entries) {
-      entries.forEach(function (e) { inView = e.isIntersecting; });
-    }, { threshold: 0.05 });
-    io.observe(figLbm);
-  }
-
-  // ResizeObserver: canvas has fixed internal pixel dims (300x90) and scales via CSS. On container
-  // resize, re-render so the pixelated scaling stays sharp.
-  if (typeof ResizeObserver === 'function') {
-    var ro = new ResizeObserver(function () { render(); });
-    ro.observe(canvas.parentElement);
-  }
 })();
 </script>
 
