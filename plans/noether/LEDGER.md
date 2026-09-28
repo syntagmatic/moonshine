@@ -50,3 +50,26 @@ flagged in `plans/FACT-CHECK.md` and settled on 2026-09-27.
 | 12 | Fig 3: for Z/n acting by (ζx, ζ^k y) the invariants are spanned by monomials with a + kb ≡ 0 mod n, and every minimal generator has a, b ≤ n | derived | Diagonal action sends each monomial to a multiple of itself. x^n and y^n are invariant, so a monomial with a > n (or b > n) factors off x^n (y^n). Page finds generators by brute force over that box and shows max degree ≤ n | none |
 | 12 | Fig 4: (x² − y, xy − 1) has reduced lex basis {x − y², y³ − 1} and graded basis {x² − y, xy − 1, y² − x}; both leave 3 standard monomials | computed | Exact BigInt-rational Buchberger in the page, matched in node. By hand: y(x² − y) − x(xy − 1) = x − y², and (xy − 1) − y(x − y²) = y³ − 1 | none |
 | 12 | Fig 5: y³ − 1 is in (x² − y, xy − 1) but has remainder y³ − 1 on division by the two generators | derived | y³ − 1 = (xy − 1) − y(x − y²) with x − y² = y(x² − y) − x(xy − 1); no leading term of x² − y or xy − 1 (lex) divides y³ | none |
+
+### 05 enrichment
+
+| page | claim | verdict | source or derivation | fix |
+|---|---|---|---|---|
+| 05 | Noether, Invariante Variationsprobleme, Nachr. Ges. Wiss. Göttingen, Math.-Phys. Kl. (1918) 235-257 | fine (from memory) | Standard citation (e.g. Tavel's translation, Transport Theory and Stat. Phys. 1 (1971) 183); cited from memory, not re-read. Kept from the previous page | none |
+| 05 | Steps (2)-(4) give δL = d/dt(∂L/∂q̇ X) on any solution for any generator; Fig 1 gap on the true path is finite-difference error | derived, computed | Chain rule plus Euler-Lagrange; the page differences a path sampled at h = 0.001, so the gap is O(h²): 3.4e-7 (X = 1), 6.4e-7 (X = θ), versus 0.184 on the bent path at a = 0.3; node run agrees (8e-8 on 0.1 s samples) | none |
+| 05 | Fig 3: at κ = 0 the total momentum drift is rounding because the spring forces cancel at every RK4 stage | derived, computed | Each stage adds k e − k e = 0 to m₁v₁ + m₂v₂, so any Runge-Kutta scheme keeps it to rounding; node and page give 1.7e-15 (dt 0.005), 5.4e-15 (dt 0.0025) | none |
+| 05 | Fig 3: drift grows in proportion to κ at small κ | derived, computed | dP/dt = −κ q₁, so ΔP ≈ −κ ∫ q₁ dt to first order; page fits slope 0.993 over κ ≤ 0.01; halving the step changes drifts by < 1e-10 relative | none |
+| 05 | Fig 4: only translation and boost on the free particle conserve Q; the drift equals ∫(δL − Ḟ) dt | derived, computed | e.g. pendulum X = 1 from θ = π/3 at rest: Q = θ̇ ranges over 2·√(2(1 − cos 60°)) = 2.00, as shown; free particle X = q: Q = q q̇ = 0.5 + t, range 6.00. Trapezoid prediction matches Q to ~1e-5 | none |
+| 05 | Fig 5: vertical shift under gravity gives Q = mẏ + mgt with F = −mgt | derived | δL = −mgε = d/dt(−mgε t); velocity Verlet is exact for a constant force, so the page's spread (~1e-14) is rounding | none |
+
+### 09 enrichment
+
+| page | claim | verdict | source or derivation | fix |
+|---|---|---|---|---|
+| 09 | Fig 1: 7 by 5 open lattice, tree gauge zeroes 34 links (sites − 1) and the remaining 24 are fixed by the 24 plaquettes | derived, computed | 58 links = 30 horizontal + 28 vertical; 35 − 1 = 34 tree links; 58 − 34 = 24 = 6·4 plaquettes. In tree gauge each plaquette gives θ_top = θ_bottom − F, fixing row by row from the zeroed bottom row. Page reports 34 of 34 zeroed and invariant energies changing by ~1e-14 | none |
+| 09 | Fig 2: ∂_ν∂_μF^{μν} vanishes to rounding for any A on the grid; the symmetric S gives no identity | derived, computed | Forward differences build F, backward differences build j and ∂·j; difference operators commute, so the discrete identity is exact. Page: max ∂·j 2.8e-14 vs max j 28 (seed 7); for S, 308 vs 69 | none |
+| 09 | Toy L = ½m₁(ẋ₁ − a)² + ½m₂(ẋ₂ − a)² − V(x₂ − x₁) has local symmetry x_i → x_i + ε(t), a → a + ε̇ and identity E₁ + E₂ − Ė_a ≡ 0; adding ½μa² turns the sum into μȧ | derived, computed | E_i = −∂V/∂x_i − ṗ_i, E_a = −(p₁ + p₂) − μa; ΣE_i = −d/dt(p₁ + p₂) = Ė_a + μȧ. Page: 2.2e-14 without μ, and with μ = 2 the sum matches μȧ to 3e-5 (finite differences) | none |
+| 09 | Fig 4: solutions for different a(t) with the same data at t = 0 differ in x₁ but not in x₂ − x₁ | derived, computed | ẍ₂ − ẍ₁ = −k s (1/m₁ + 1/m₂) is independent of a; page: x₁(8) spreads over 16.0, separation over 1.9e-14 | none |
+| 09 | Of the ten Einstein equations effectively six are independent; the four G^{0ν} equations are constraints | fine | Existing row above (Carroll §4.2); wording kept | none |
+| 09 | FRW with p = wρ: comoving energy ρa³ ∝ a^{−3w}, and its change equals −∫p d(a³) | derived, computed | ρ̇ = −3H(1 + w)ρ gives ρ ∝ a^{−3(1+w)}; d(ρa³) = −p d(a³) is the same equation. Page integrates Friedmann plus continuity by RK4 and measures slopes −3w to 4 decimals, first-law gap ≤ 1e-6 relative | none |
+| 09 | Klein published his exchange of letters with Hilbert on energy in 1918 | fine (from memory) | F. Klein, "Zu Hilberts erster Note über die Grundlagen der Physik", Nachr. Ges. Wiss. Göttingen (1918) 469-482, which prints the letters; cited from memory, not re-read. Kept from the previous page | none |
