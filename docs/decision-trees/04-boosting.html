@@ -4,9 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Boosting · Decision Trees</title>
+<script src="../lib/motion.js"></script>
 <script src="../vendor/js/d3.v7.min.js"></script>
 <link href="../vendor/fonts/sans-serif-mono/fonts.css" rel="stylesheet">
-<script src="../lib/motion.js"></script>
+<link rel="stylesheet" href="../vendor/katex@0.16.11/katex.min.css">
+<script src="../vendor/katex@0.16.11/katex.min.js"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
@@ -31,6 +33,8 @@
   --c-xgb: #2563eb;
   --c-lgb: #ea580c;
   --c-cat: #7c3aed;
+  --c-bias: #b45309;
+  --c-var: #0891b2;
 }
 .t-pred { color: var(--c-pred); font-weight: 600; }
 .t-truth { color: var(--c-truth); font-weight: 600; }
@@ -39,6 +43,8 @@
 .t-xgb { color: var(--c-xgb); font-weight: 600; }
 .t-lgb { color: var(--c-lgb); font-weight: 600; }
 .t-cat { color: var(--c-cat); font-weight: 600; }
+.t-bias { color: var(--c-bias); font-weight: 600; }
+.t-var { color: var(--c-var); font-weight: 600; }
 
 body { font-family: var(--body-font); font-size: var(--body-size); line-height: var(--line-height); color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased; }
 .article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
@@ -49,6 +55,7 @@ p { margin: 0 0 1rem; }
 a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
 a:hover { color: #1d4ed8; }
 code { font-family: var(--mono-font); font-size: 0.9em; background: #f1f1f5; padding: 0.15em 0.4em; border-radius: 3px; }
+.eq { margin: 0.5rem 0 1.25rem; overflow-x: auto; overflow-y: hidden; }
 
 .back-link { font-family: var(--heading-font); font-size: 0.85rem; display: inline-block; margin-bottom: 1rem; color: var(--text-2); text-decoration: none; }
 .back-link:hover { color: var(--accent); }
@@ -56,49 +63,36 @@ code { font-family: var(--mono-font); font-size: 0.9em; background: #f1f1f5; pad
 .header { padding: 3rem 0 2rem; border-bottom: 1px solid var(--border); margin-bottom: 2.5rem; }
 .header .subtitle { font-family: var(--heading-font); font-size: 1.15rem; color: var(--text-2); max-width: 620px; }
 
-.figure { margin: 2rem 0; padding: 1.5rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.figure { margin: 2rem 0; padding: 1.25rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
 .figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; line-height: 1.45; }
 .figure-label { font-weight: 600; color: var(--text); }
+.chart { width: 100%; min-width: 0; }
+.chart svg { display: block; }
+.readout { font-family: var(--heading-font); font-size: 0.86rem; color: var(--text); margin-top: 0.6rem; line-height: 1.45; }
+.readout .num { font-family: var(--mono-font); font-weight: 600; }
 
 .btn { font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600; padding: 0.4rem 0.85rem; border-radius: 5px; border: 1px solid var(--border); background: var(--fig-bg); color: var(--text); cursor: pointer; user-select: none; transition: background 0.15s, border-color 0.15s; }
 .btn:hover { border-color: var(--accent); background: var(--accent-light); }
-.btn.active { background: var(--accent); color: white; border-color: var(--accent); }
-.btn-row { display: flex; flex-wrap: wrap; gap: 0.45rem; }
-
+.btn.active, .btn[aria-pressed="true"] { background: var(--accent); color: white; border-color: var(--accent); }
+.btn-row { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
+.btn .sw { display: inline-block; width: 0.8em; height: 0.8em; border-radius: 2px; margin-right: 0.35em; vertical-align: -0.05em; }
 
 svg text { font-family: var(--heading-font); }
 
-.panel { display: grid; grid-template-columns: 1fr 260px; gap: 1.5rem; align-items: start; }
-@media (max-width: 680px) { .panel { grid-template-columns: 1fr; } }
-.controls-col { display: flex; flex-direction: column; gap: 0.85rem; font-family: var(--heading-font); font-size: 0.9rem; }
-.slider-row { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 0.5rem 1rem; }
-.slider-row .lbl { color: var(--text-2); font-weight: 600; font-size: 0.82rem; }
-.slider-row .val { font-family: var(--mono-font); color: var(--text); min-width: 3rem; text-align: right; font-weight: 600; }
-.slider-row input[type="range"] { width: 100%; }
+.controls { display: flex; flex-wrap: wrap; gap: 0.6rem 1.25rem; align-items: center; margin-top: 0.75rem; font-family: var(--heading-font); font-size: 0.88rem; }
+.slider { display: flex; align-items: center; gap: 0.5rem; }
+.slider .lbl { color: var(--text-2); font-weight: 600; font-size: 0.82rem; }
+.slider .val { font-family: var(--mono-font); font-weight: 600; min-width: 2.6rem; text-align: right; }
+.slider input[type="range"] { width: 120px; }
+.tex-line { font-size: 0.95rem; min-height: 1.6em; }
 
-.growth-toggle { display: flex; gap: 0.3rem; }
-.growth-toggle .btn { flex: 1; padding: 0.4rem 0.3rem; font-size: 0.74rem; }
-.growth-toggle .btn.level.active { background: var(--c-xgb); border-color: var(--c-xgb); }
-.growth-toggle .btn.leaf.active { background: var(--c-lgb); border-color: var(--c-lgb); }
-
-.stat-box { padding: 0.8rem 1rem; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; font-family: var(--heading-font); font-size: 0.86rem; line-height: 1.55; }
-.stat-box .label { font-size: 0.72rem; font-weight: 700; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.3rem; }
-.stat-box .row { display: flex; justify-content: space-between; gap: 0.5rem; margin-top: 0.15rem; }
-.stat-box .row .k { color: var(--text-2); }
-.stat-box .row .v { font-family: var(--mono-font); font-weight: 600; color: var(--text); }
-
-.dual-panel { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
-@media (max-width: 680px) { .dual-panel { grid-template-columns: 1fr; } }
-.viz-label { font-family: var(--heading-font); font-size: 0.75rem; font-weight: 700; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.35rem; }
-
-
-.nav-footer { margin-top: 5rem; padding-top: 2rem; border-top: 1px solid var(--border); display: flex; justify-content: space-between; font-family: var(--heading-font); font-size: 0.9rem; }
+.nav-footer { margin-top: 5rem; padding-top: 2rem; border-top: 1px solid var(--border); display: flex; justify-content: space-between; gap: 1rem; font-family: var(--heading-font); font-size: 0.9rem; }
 .nav-footer a { color: var(--accent); text-decoration: none; }
 .nav-footer a:hover { text-decoration: underline; }
 .nav-footer .spacer { flex: 1; }
 
 @media (prefers-reduced-motion: reduce) { html:not([data-motion="full"]) * { transition-duration: 0s !important; animation-duration: 0s !important; } }
-@media (max-width: 680px) { h1 { font-size: 1.75rem; } .article { padding: 1.5rem 1rem 4rem; } }
+@media (max-width: 680px) { h1 { font-size: 1.75rem; } .article { padding: 1.5rem 1rem 4rem; } .figure { padding: 0.9rem; } .slider input[type="range"] { width: 100px; } }
 
 /* Dark mode: same hues, lighter shades */
 @media (prefers-color-scheme: dark) {
@@ -107,11 +101,12 @@ svg text { font-family: var(--heading-font); }
     --accent: #60a5fa; --accent-light: #1e3a5f;
     --bg: #14141c; --fig-bg: #1c1c28; --border: #34344a;
     --c-data: #94a3b8; --c-pred: #60a5fa; --c-truth: #34d399; --c-resid: #f87171; --c-new: #a78bfa; --c-xgb: #60a5fa; --c-lgb: #fb923c; --c-cat: #a78bfa;
+    --c-bias: #f59e0b; --c-var: #22d3ee;
   }
   html { color-scheme: dark; }
   a:hover { color: #93c5fd; }
   code { background: #262636; }
-  .btn.active, button[aria-pressed="true"] { color: #14141c; }
+  .btn.active, .btn[aria-pressed="true"] { color: #14141c; }
 }
 </style>
 </head>
@@ -122,88 +117,109 @@ svg text { font-family: var(--heading-font); }
 
 <div class="header">
   <h1>Boosting</h1>
-  <p class="subtitle">Chapter 4 of 6. Boosting trains trees in sequence, each fit to the errors of the ensemble built so far. On tabular data it is usually more accurate than averaging independent trees.</p>
+  <p class="subtitle">Chapter 4 of 6. Trees trained in sequence, each fit to the errors of the ones before it.</p>
 </div>
 
-<p>Chapter 3 averaged trees grown independently. In boosting the first tree does its best, the second fits what the first got wrong, and so on. A chain of small trees can predict better than a forest of independent ones because the remaining errors are often small structured patterns that a tiny tree captures easily.</p>
+<p>Chapter 3 averaged independent trees. Boosting adds them in sequence, each fit to what the others still get wrong.</p>
 
-<h2>The algorithm</h2>
+<h2>One tree per round, fit to what is left</h2>
 
-<p>To predict y from features x, the simplest version is:</p>
+<p>Start from the mean label. Each round fits a small tree <span class="tex" data-tex="h_m"></span> to the residuals and adds a fraction ν of it:</p>
 
-<ol style="margin-left: 1.5rem; margin-bottom: 1rem;">
-  <li>Start with a flat baseline prediction, the mean of all training labels.</li>
-  <li>Compute residuals: each row's (true label − current prediction).</li>
-  <li>Fit a small tree to predict the residuals from the features.</li>
-  <li>Add a fraction of this tree's predictions to the baseline.</li>
-  <li>Repeat.</li>
-</ol>
+<div class="eq tex" data-display="1" data-tex="F_m(x) = F_{m-1}(x) + \nu\, h_m(x), \qquad h_m \approx \arg\min_h \sum_i \bigl(\color{#dc2626}{y_i - F_{m-1}(x_i)} - h(x_i)\bigr)^2"></div>
 
-<p>The fraction in step 4 is the <em>learning rate</em> ν. At ν = 1.0 each tree adds at full strength; a typical value is much smaller, around 0.1. A lower rate needs more trees and generalizes better, so the usual practice is a small learning rate, many trees, and early stopping.</p>
-
-<h2>Adding trees by hand</h2>
-
-<p>Figure 1 runs the loop by hand, one tree per click.</p>
-
-<div class="figure">
-  <div id="main" class="panel">
-    <div>
-      <div class="dual-panel">
-        <div>
-          <div class="viz-label">Prediction so far</div>
-          <div id="m-pred"></div>
-        </div>
-        <div>
-          <div class="viz-label">What's left to predict</div>
-          <div id="m-resid"></div>
-        </div>
-      </div>
-    </div>
-    <div class="controls-col">
-      <div style="font-weight: 700; font-size: 0.85rem;">Growth strategy</div>
-      <div class="growth-toggle" id="m-growth">
-        <button class="btn level active" data-g="level">Level-wise (XGBoost)</button>
-        <button class="btn leaf" data-g="leaf">Leaf-wise (LightGBM)</button>
-      </div>
-      <div class="slider-row">
-        <div class="lbl">learning rate</div>
-        <input type="range" id="m-lr" min="5" max="100" step="5" value="30">
-        <div class="val" id="m-lr-val">0.30</div>
-      </div>
-      <div class="slider-row">
-        <div class="lbl">tree leaves</div>
-        <input type="range" id="m-leaves" min="2" max="16" step="1" value="5">
-        <div class="val" id="m-leaves-val">5</div>
-      </div>
-      <div class="btn-row">
-        <button class="btn" id="m-step">Add a tree</button>
-        <button class="btn" id="m-skip">+10</button>
-        <button class="btn" id="m-reset">Reset</button>
-      </div>
-      <div class="stat-box">
-        <div class="label">Status</div>
-        <div class="row"><span class="k">trees</span><span class="v" id="m-count">0</span></div>
-        <div class="row"><span class="k">train MSE</span><span class="v" id="m-tr">&nbsp;</span></div>
-        <div class="row"><span class="k">test MSE</span><span class="v" id="m-te">&nbsp;</span></div>
-      </div>
+<div class="figure" id="f1">
+  <div class="chart" id="f1-chart"></div>
+  <div class="controls">
+    <div class="slider"><label class="lbl" for="f1-lr">learning rate ν</label><input type="range" id="f1-lr" min="5" max="100" step="5" value="30"><span class="val" id="f1-lr-val">0.30</span></div>
+    <div class="slider"><label class="lbl" for="f1-leaves">leaves per tree</label><input type="range" id="f1-leaves" min="2" max="12" step="1" value="4"><span class="val" id="f1-leaves-val">4</span></div>
+    <div class="btn-row">
+      <button class="btn" id="f1-step">Add a tree</button>
+      <button class="btn" id="f1-skip">+10</button>
+      <button class="btn" id="f1-reset">Reset</button>
     </div>
   </div>
-  <p class="figure-caption"><span class="figure-label">Figure 1.</span> Left: the <span class="t-pred">current prediction</span> against the <span class="t-truth">true function</span>. Right: the <span class="t-resid">residuals</span>, with the <span class="t-new">next tree</span> previewed. "Add a tree" commits the preview. The growth toggle changes how each tree is built: <span class="t-xgb">level-wise</span> (XGBoost) grows balanced layers, while <span class="t-lgb">leaf-wise</span> (LightGBM) always expands the leaf that most reduces the loss, which converges faster and gives more lopsided trees. "Tree leaves" caps the leaf count per tree, the same under both strategies; only the shape changes.</p>
+  <p class="readout" id="f1-read" aria-live="polite"></p>
+  <p class="figure-caption"><span class="figure-label">Figure 1.</span> Sixty seeded synthetic points from a sine curve with uniform noise. Left: the <span class="t-pred">prediction</span> against the <span class="t-truth">true curve</span>. Right: the <span class="t-resid">residuals</span> and the <span class="t-new">next tree</span>, fit to them but not yet added. After a few trees the residuals stop tracing a wave and the trees start fitting noise. Changing ν or the leaf count replays the same number of rounds. Try ν = 1 with 12 leaves: test error is lowest after one tree and climbs as training error falls to zero. Test error is against the true curve on a 300-point grid.</p>
 </div>
 
-<p>Try 12 leaves and a learning rate of 1.0. After one tree the training fit is near-perfect, and test error climbs with every tree after that. This is chapter 2's overfitting, sped up by the high learning rate.</p>
+<h2>How big should each step be?</h2>
 
-<h2>Bias and variance</h2>
+<div class="figure" id="f2">
+  <div class="chart" id="f2-chart"></div>
+  <div class="controls">
+    <div class="btn-row" id="f2-lrs" role="group" aria-label="Highlight a learning rate"></div>
+    <div class="slider"><label class="lbl" for="f2-leaves">leaves per tree</label><input type="range" id="f2-leaves" min="2" max="12" step="1" value="4"><span class="val" id="f2-leaves-val">4</span></div>
+  </div>
+  <p class="readout" id="f2-read" aria-live="polite"></p>
+  <p class="figure-caption"><span class="figure-label">Figure 2.</span> Figure 1's data boosted for 300 rounds at four learning rates, both axes logarithmic. Solid: test error against the true curve. Dashed: training error for the highlighted rate. Dots: each rate's lowest test error. In practice the stopping point comes from held-out data.</p>
+</div>
 
-<p>Bagging averages high-variance, low-bias trees to remove variance. Boosting adds up small weak learners, each capturing part of the pattern, into one expressive model, so it reduces bias. On tabular data boosting is usually more accurate, because real-world errors come more often from bias than from variance.</p>
+<p>The smaller rates reach about the same lowest error, later but for longer, so stopping late costs less. At ν = 1 the minimum is higher and comes within two trees. Hence the usual recipe: small rate, many trees, early stopping.</p>
 
-<h2>Other loss functions</h2>
+<h2>Which leaf gets the next split?</h2>
 
-<p>Everything so far used squared error. Boosting works with any differentiable loss, because the "residual" is really the negative gradient of the loss: log-loss for classification, Huber for robust regression, Poisson for counts. The algorithm stays the same and only the residual formula changes. This general form is usually credited to Friedman (1999), but it was in the air: Breiman had read boosting as optimization in his arcing papers, Friedman, Hastie and Tibshirani (1998) recast AdaBoost as a stagewise additive model, and Mason, Baxter, Bartlett and Frean (1999) framed boosting as gradient descent in function space. Before that, boosting variants looked like separate methods.</p>
+<p>Under a cap on leaves, XGBoost's default grows level by level; LightGBM splits whichever leaf cuts the loss most.</p>
 
-<h2>Modern implementations</h2>
+<div class="figure" id="f3">
+  <div class="chart" id="f3-chart"></div>
+  <div class="controls">
+    <div class="slider"><label class="lbl" for="f3-k">leaf budget</label><input type="range" id="f3-k" min="2" max="12" step="1" value="8"><span class="val" id="f3-k-val">8</span></div>
+  </div>
+  <p class="readout" id="f3-read" aria-live="polite"></p>
+  <p class="figure-caption"><span class="figure-label">Figure 3.</span> The first tree of Figure 1, fit to the residuals from the mean, grown two ways under one leaf budget. Circled numbers give the split order and mark the thresholds in the strip above; each leaf shows how many of the 60 points it holds.</p>
+</div>
 
-<p>The basic algorithm is unchanged since 1999. The widely used libraries differ in how they make it fast and keep it from memorizing the data. <a href="https://arxiv.org/abs/1603.02754">XGBoost</a> scores splits with a second-order approximation of the loss (curvature as well as slope), puts an explicit penalty on leaf values, and learns a default direction for rows with missing values. <a href="https://papers.nips.cc/paper/6907-lightgbm-a-highly-efficient-gradient-boosting-decision-tree">LightGBM</a> bins each feature into a few hundred buckets so that split search works on histograms, and grows each tree leaf by leaf instead of level by level. <a href="https://arxiv.org/abs/1706.09516">CatBoost</a> targets categorical features: it encodes categories using only the rows that come before each row in a random ordering, and applies the same ordering idea to boosting itself, so that no row's residual is computed by a model that was fit to that row. It also grows oblivious trees, which use the same split at every node of a level.</p>
+<p>Leaf-wise usually captures a bit more by going deeper, which LightGBM's documentation warns can overfit small data.</p>
+
+<h2>Does boosting remove bias or variance?</h2>
+
+<p>Bagging averages deep, low-bias trees to cut their variance. Boosting starts from a flat line, all bias, and adds small trees until the bias is gone, paying in variance.</p>
+
+<div class="figure" id="f4">
+  <div class="chart" id="f4-chart"></div>
+  <div class="controls">
+    <div class="slider"><label class="lbl" for="f4-t">trees</label><input type="range" id="f4-t" min="0" max="100" step="1" value="74"><span class="val" id="f4-t-val">50</span></div>
+    <div class="btn-row" id="f4-leaves" role="group" aria-label="Leaves per boosted tree">
+      <button class="btn" data-k="2" aria-pressed="true">stumps</button>
+      <button class="btn" data-k="4" aria-pressed="false">4 leaves</button>
+      <button class="btn" data-k="8" aria-pressed="false">8 leaves</button>
+    </div>
+  </div>
+  <p class="readout" id="f4-read" aria-live="polite"></p>
+  <p class="figure-caption"><span class="figure-label">Figure 4.</span> Forty seeded training sets of 60 points from Figure 1's curve and noise. <span class="t-bias">Bias²</span>: squared gap between the average of the 40 fits and the true curve. <span class="t-var">Variance</span>: spread of the 40 fits around their average. Both are averaged over x; the thin line is their sum. Left: bagging, each tree grown to single-point leaves on a bootstrap sample. Right: boosting at ν = 0.1. Logarithmic vertical axis.</p>
+</div>
+
+<p>That boosting wins on tabular data because real errors are mostly bias is folk wisdom, not a result. This toy problem shows the mechanism, not the winner.</p>
+
+<h2>Residuals are gradients</h2>
+
+<p>For squared loss <span class="tex" data-tex="L = \tfrac12 (y - F)^2"></span>, the residual is the negative gradient of the loss with respect to the prediction. Any differentiable loss works the same way: fit each tree to the pseudo-residuals</p>
+
+<div class="eq tex" data-display="1" data-tex="\color{#dc2626}{r_i} = -\,\frac{\partial L(y_i, F)}{\partial F}\Big|_{F = F_{m-1}(x_i)}"></div>
+
+<p>then give each leaf the constant that minimizes the loss on its points (mean for squared, median for absolute). Each round is a gradient step in function space.</p>
+
+<div class="figure" id="f5">
+  <div class="chart" id="f5-chart"></div>
+  <div class="controls">
+    <div class="btn-row" id="f5-loss" role="group" aria-label="Loss function">
+      <button class="btn" data-l="squared" aria-pressed="true">squared</button>
+      <button class="btn" data-l="absolute" aria-pressed="false">absolute</button>
+      <button class="btn" data-l="huber" aria-pressed="false">Huber</button>
+    </div>
+    <div class="slider"><label class="lbl" for="f5-m">rounds</label><input type="range" id="f5-m" min="0" max="200" step="1" value="40"><span class="val" id="f5-m-val">40</span></div>
+  </div>
+  <div class="tex-line" id="f5-tex"></div>
+  <p class="readout" id="f5-read" aria-live="polite"></p>
+  <p class="figure-caption"><span class="figure-label">Figure 5.</span> New seeded data: smaller noise, six points pushed up by 0.9 to 1.4 (ringed). 4-leaf trees, ν = 0.1. Top: the <span class="t-pred">fit</span> and the <span class="t-truth">true curve</span>. Bottom: the <span class="t-resid">pseudo-residuals</span> the next tree will fit. Squared loss lets the outliers pull hardest; absolute loss gives every point a pull of ±1; Huber caps it at δ. Run Huber to 200 rounds: once the other residuals fall below δ, trees isolate the outliers in their own leaves and the fit chases them after all.</p>
+</div>
+
+<p>Friedman (1999) usually gets the credit, but Breiman's arcing papers, Friedman, Hastie and Tibshirani (1998) and Mason, Baxter, Bartlett and Frean (1999) reached boosting as optimization at about the same time.</p>
+
+<h2>What the libraries add</h2>
+
+<p><a href="https://arxiv.org/abs/1603.02754">XGBoost</a> scores splits with a second-order expansion of the loss, penalizes leaf count and leaf values, and learns where missing values go. <a href="https://papers.nips.cc/paper/6907-lightgbm-a-highly-efficient-gradient-boosting-decision-tree">LightGBM</a> runs split search on binned histograms. <a href="https://arxiv.org/abs/1706.09516">CatBoost</a> computes each row's category encodings and residuals only from rows before it in a random order, and grows oblivious trees, one split per level.</p>
 
 <p>Chapter 5 turns to reading what a model of a thousand trees has learned.</p>
 
@@ -216,175 +232,502 @@ svg text { font-family: var(--heading-font); }
 </div>
 
 <script>
-function prng(seed) { var s = seed >>> 0; return function () { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
-function mean(arr) { return arr.reduce(function (a, b) { return a + b; }, 0) / arr.length; }
-
-// Build a small regression tree with specified growth strategy and max leaves.
-function buildTreeLimited(pts, maxLeaves, growth) {
-  // Represent as root + recursive splits. We'll build iteratively.
-  function bestSplit(ptsList) {
-    var sorted = ptsList.slice().sort(function (a, b) { return a.x - b.x; });
-    var n = sorted.length;
-    if (n < 2) return null;
-    var totSum = 0, totSumSq = 0;
-    sorted.forEach(function (p) { totSum += p.y; totSumSq += p.y * p.y; });
-    var totalSS = totSumSq - totSum * totSum / n;
-    var runSum = 0, runSumSq = 0;
-    var best = null;
-    for (var i = 1; i < n; i++) {
-      runSum += sorted[i - 1].y;
-      runSumSq += sorted[i - 1].y * sorted[i - 1].y;
-      if (sorted[i].x - sorted[i - 1].x < 1e-9) continue;
-      var nL = i, nR = n - i;
-      var sumR = totSum - runSum, sumSqR = totSumSq - runSumSq;
-      var ssL = runSumSq - runSum * runSum / nL;
-      var ssR = sumSqR - sumR * sumR / nR;
-      var gain = totalSS - (ssL + ssR);
-      if (!best || gain > best.gain) best = { gain: gain, threshold: (sorted[i].x + sorted[i - 1].x) / 2, left: sorted.slice(0, i), right: sorted.slice(i) };
+// BoostCore: pure helpers for every figure (seeded data, split search, trees, boosting).
+var BoostCore = (function () {
+  function prng(seed) { var s = seed >>> 0; return function () { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
+  function mean(a) { var s = 0; for (var i = 0; i < a.length; i++) s += a[i]; return s / a.length; }
+  function median(a) { var b = a.slice().sort(function (p, q) { return p - q; }); var n = b.length; return n % 2 ? b[(n - 1) / 2] : (b[n / 2 - 1] + b[n / 2]) / 2; }
+  function trueFn(x) { return 0.5 + 0.4 * Math.sin(x * Math.PI * 1.8); }
+  function makeData(seed, n, noise) {
+    var r = prng(seed), out = [];
+    for (var i = 0; i < n; i++) { var x = r(); var y = trueFn(x) + (r() - 0.5) * noise * 2; out.push({ x: x, y: y }); }
+    return out;
+  }
+  // Figure 5's data: smaller noise, every tenth point pushed up by 0.9 to 1.4.
+  function makeOutlierData(seed) {
+    var r = prng(seed), out = [];
+    for (var i = 0; i < 60; i++) {
+      var x = r(), y = trueFn(x) + (r() - 0.5) * 0.2, o = false;
+      if (i % 10 === 3) { y += 0.9 + 0.5 * r(); o = true; }
+      out.push({ x: x, y: y, out: o });
+    }
+    return out;
+  }
+  // Best single split of idx by squared-error reduction.
+  function bestSplit(idx, xs, ys) {
+    var s = idx.slice().sort(function (a, b) { return xs[a] - xs[b]; });
+    var n = s.length; if (n < 2) return null;
+    var tot = 0, tot2 = 0, i;
+    for (i = 0; i < n; i++) { tot += ys[s[i]]; tot2 += ys[s[i]] * ys[s[i]]; }
+    var sse = tot2 - tot * tot / n, rs = 0, rs2 = 0, best = null;
+    for (i = 1; i < n; i++) {
+      rs += ys[s[i - 1]]; rs2 += ys[s[i - 1]] * ys[s[i - 1]];
+      if (xs[s[i]] - xs[s[i - 1]] < 1e-12) continue;
+      var nR = n - i, sR = tot - rs, s2R = tot2 - rs2;
+      var gain = sse - ((rs2 - rs * rs / i) + (s2R - sR * sR / nR));
+      if (!best || gain > best.gain) best = { gain: gain, thr: (xs[s[i]] + xs[s[i - 1]]) / 2, L: s.slice(0, i), R: s.slice(i) };
     }
     return best;
   }
-
-  var root = { pts: pts, prediction: mean(pts.map(function (p) { return p.y; })), depth: 0 };
-  var leaves = [root];
-  while (leaves.length < maxLeaves) {
-    var candidates = leaves.map(function (lf) {
-      var b = bestSplit(lf.pts);
-      return b ? { leaf: lf, split: b } : null;
-    }).filter(function (c) { return c && c.split.gain > 1e-9; });
-    if (candidates.length === 0) break;
-    var chosen;
-    if (growth === 'level') {
-      var minDepth = Math.min.apply(null, candidates.map(function (c) { return c.leaf.depth; }));
-      var atMinDepth = candidates.filter(function (c) { return c.leaf.depth === minDepth; });
-      chosen = atMinDepth.reduce(function (b, c) { return !b || c.split.gain > b.split.gain ? c : b; }, null);
-    } else {
-      chosen = candidates.reduce(function (b, c) { return !b || c.split.gain > b.split.gain ? c : b; }, null);
+  // Regression tree capped at maxLeaves. 'level': split the shallowest splittable leaves
+  // first; 'leaf': split whichever leaf gives the largest loss reduction.
+  function buildTree(xs, ys, idx, maxLeaves, growth) {
+    function leafOf(ix, depth) { var v = 0; for (var i = 0; i < ix.length; i++) v += ys[ix[i]]; return { idx: ix, value: v / ix.length, depth: depth }; }
+    var root = leafOf(idx, 0), leaves = [root], order = [];
+    while (leaves.length < maxLeaves) {
+      var cands = [];
+      for (var i = 0; i < leaves.length; i++) {
+        var lf = leaves[i];
+        if (lf.cand === undefined) lf.cand = bestSplit(lf.idx, xs, ys);
+        if (lf.cand && lf.cand.gain > 1e-12) cands.push(lf);
+      }
+      if (!cands.length) break;
+      var pool = cands;
+      if (growth === 'level') {
+        var md = Infinity; cands.forEach(function (c) { if (c.depth < md) md = c.depth; });
+        pool = cands.filter(function (c) { return c.depth === md; });
+      }
+      var ch = pool[0]; pool.forEach(function (c) { if (c.cand.gain > ch.cand.gain) ch = c; });
+      ch.thr = ch.cand.thr; ch.gain = ch.cand.gain;
+      ch.left = leafOf(ch.cand.L, ch.depth + 1); ch.right = leafOf(ch.cand.R, ch.depth + 1);
+      ch.cand = null;
+      order.push(ch);
+      leaves.splice(leaves.indexOf(ch), 1, ch.left, ch.right);
     }
-    chosen.leaf.threshold = chosen.split.threshold;
-    chosen.leaf.left = { pts: chosen.split.left, prediction: mean(chosen.split.left.map(function (p) { return p.y; })), depth: chosen.leaf.depth + 1 };
-    chosen.leaf.right = { pts: chosen.split.right, prediction: mean(chosen.split.right.map(function (p) { return p.y; })), depth: chosen.leaf.depth + 1 };
-    // Replace the leaf with its children.
-    var idx = leaves.indexOf(chosen.leaf);
-    leaves.splice(idx, 1, chosen.leaf.left, chosen.leaf.right);
+    return { root: root, leaves: leaves, order: order };
   }
-  return root;
-}
-function predictTree(tree, x) {
-  if (!tree.left) return tree.prediction;
-  return x <= tree.threshold ? predictTree(tree.left, x) : predictTree(tree.right, x);
-}
+  function predict(node, x) { while (node.left) node = x <= node.thr ? node.left : node.right; return node.value; }
 
-function trueFn(x) { return 0.5 + 0.4 * Math.sin(x * Math.PI * 1.8); }
-function makeData(seed, n, noise) {
-  var r = prng(seed);
-  var out = [];
-  for (var i = 0; i < n; i++) {
-    var x = r();
-    var y = trueFn(x) + (r() - 0.5) * noise * 2;
-    out.push({ x: x, y: y });
+  var HUBER_D = 0.15;
+  function clip(r) { return Math.max(-HUBER_D, Math.min(HUBER_D, r)); }
+  var LOSSES = {
+    squared: { g: function (r) { return r; }, leaf: function (rs) { return mean(rs); } },
+    absolute: { g: function (r) { return r > 0 ? 1 : r < 0 ? -1 : 0; }, leaf: function (rs) { return median(rs); } },
+    huber: {
+      g: clip,
+      leaf: function (rs) { // exact minimiser of sum Huber(r - c): bisection on the monotone derivative
+        var lo = Math.min.apply(null, rs), hi = Math.max.apply(null, rs);
+        for (var k = 0; k < 60; k++) { var c = (lo + hi) / 2, d = 0; for (var i = 0; i < rs.length; i++) d += clip(rs[i] - c); if (d > 0) lo = c; else hi = c; }
+        return (lo + hi) / 2;
+      }
+    }
+  };
+  // Gradient boosting: each tree fit to pseudo-residuals, then (for non-squared losses)
+  // each leaf re-valued by the loss's own minimiser on its points.
+  function boost(train, opt) {
+    var loss = LOSSES[opt.loss || 'squared'];
+    var n = train.length, xs = train.map(function (p) { return p.x; }), ys = train.map(function (p) { return p.y; });
+    var idx = [], i; for (i = 0; i < n; i++) idx.push(i);
+    var f0 = loss.leaf(ys), F = ys.map(function () { return f0; }), trees = [];
+    for (var m = 0; m < opt.M; m++) {
+      var g = ys.map(function (y, j) { return loss.g(y - F[j]); });
+      var t = buildTree(xs, g, idx, opt.leaves, opt.growth || 'level');
+      if (loss !== LOSSES.squared) t.leaves.forEach(function (lf) { lf.value = loss.leaf(lf.idx.map(function (j) { return ys[j] - F[j]; })); });
+      for (i = 0; i < n; i++) F[i] += opt.lr * predict(t.root, xs[i]);
+      trees.push(t);
+    }
+    return { f0: f0, trees: trees, lr: opt.lr, F: F, xs: xs, ys: ys, idx: idx, loss: loss };
   }
-  return out;
-}
-
-(function () {
-  var state = { lr: 0.3, leaves: 5, growth: 'level', trees: [] };
-  var train = makeData(7, 60, 0.3);
-  var test = makeData(31, 300, 0);
-  var initialPred = mean(train.map(function (p) { return p.y; }));
-
-  var W = 340, H = 230, padL = 28, padR = 10, padT = 14, padB = 22;
-  function mkChart(elId) {
-    var svg = d3.select('#' + elId).append('svg')
-      .attr('viewBox', '0 0 ' + W + ' ' + H)
-      .attr('width', '100%').style('max-width', W + 'px')
-      .attr('role', 'img');
-    svg.append('line').attr('x1', padL).attr('y1', H - padB).attr('x2', W - padR).attr('y2', H - padB).attr('stroke', 'var(--border)');
-    svg.append('line').attr('x1', padL).attr('y1', padT).attr('x2', padL).attr('y2', H - padB).attr('stroke', 'var(--border)');
-    return svg;
-  }
-  var svgPred = mkChart('m-pred');
-  var svgResid = mkChart('m-resid');
-
-  function X(x) { return padL + x * (W - padL - padR); }
-  function Yp(y) { return H - padB - (y - (-0.1)) / 1.2 * (H - padT - padB); }
-  function Yr(y) { return H - padB - (y - (-0.7)) / 1.4 * (H - padT - padB); }
-
-  var truthPath = '';
-  for (var i = 0; i <= 200; i++) { var x = i / 200; truthPath += (i === 0 ? 'M' : 'L') + X(x) + ',' + Yp(trueFn(x)); }
-  svgPred.append('path').attr('d', truthPath).attr('fill', 'none').attr('stroke', 'var(--c-truth)').attr('stroke-width', 1.5).attr('stroke-dasharray', '4 3').attr('opacity', 0.8);
-
-  svgResid.append('line').attr('x1', padL).attr('x2', W - padR).attr('y1', Yr(0)).attr('y2', Yr(0))
-    .attr('stroke', 'var(--c-truth)').attr('stroke-width', 1).attr('stroke-dasharray', '3 3').attr('opacity', 0.6);
-
-  var dataLayerP = svgPred.append('g');
-  var dataLayerR = svgResid.append('g');
-  var predLayer = svgPred.append('g');
-  var residTreeLayer = svgResid.append('g');
-
-  function currentPred(x) {
-    var y = initialPred;
-    state.trees.forEach(function (t) { y += state.lr * predictTree(t, x); });
+  function predictEnsemble(model, x, upto) {
+    var y = model.f0, k = upto === undefined ? model.trees.length : upto;
+    for (var i = 0; i < k; i++) y += model.lr * predict(model.trees[i].root, x);
     return y;
   }
-  function currentResidual(p) { return p.y - currentPred(p.x); }
+  function grid(n) { var g = []; for (var i = 0; i < n; i++) g.push((i + 0.5) / n); return g; }
+  return { prng: prng, mean: mean, median: median, trueFn: trueFn, makeData: makeData, makeOutlierData: makeOutlierData,
+    bestSplit: bestSplit, buildTree: buildTree, predict: predict, LOSSES: LOSSES, HUBER_D: HUBER_D,
+    boost: boost, predictEnsemble: predictEnsemble, grid: grid };
+})();
 
-  function render() {
-    dataLayerP.selectAll('*').remove();
-    dataLayerR.selectAll('*').remove();
-    predLayer.selectAll('*').remove();
-    residTreeLayer.selectAll('*').remove();
+(function () {
+  var C = BoostCore;
+  var DARK = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  var COL = DARK ? {
+    text: '#e6e6ee', text2: '#a3a3b8', border: '#34344a', grid: '#26263a', bg: '#1c1c28',
+    data: '#94a3b8', pred: '#60a5fa', truth: '#34d399', resid: '#f87171', next: '#a78bfa',
+    xgb: '#60a5fa', lgb: '#fb923c', bias: '#f59e0b', vari: '#22d3ee',
+    ramp: ['#35589e', '#4a86e0', '#8ab8fb', '#dbe8fe']
+  } : {
+    text: '#1a1a2e', text2: '#4a4a6a', border: '#e2e2e8', grid: '#efeff4', bg: '#ffffff',
+    data: '#64748b', pred: '#2563eb', truth: '#059669', resid: '#dc2626', next: '#7c3aed',
+    xgb: '#2563eb', lgb: '#ea580c', bias: '#b45309', vari: '#0891b2',
+    ramp: ['#9ec5fb', '#5b95f0', '#2563eb', '#172f7a']
+  };
+  var FS = 11;
+  function fmt(v, d) { return v.toFixed(d === undefined ? 4 : d); }
+  function num(v, d) { return '<span class="num">' + fmt(v, d) + '</span>'; }
 
-    train.forEach(function (p) {
-      dataLayerP.append('circle').attr('cx', X(p.x)).attr('cy', Yp(p.y)).attr('r', 2).attr('fill', 'var(--c-data)').attr('opacity', 0.7);
-    });
-    var path = '';
-    for (var i = 0; i <= 200; i++) { var x = i / 200; path += (i === 0 ? 'M' : 'L') + X(x) + ',' + Yp(currentPred(x)); }
-    predLayer.append('path').attr('d', path).attr('fill', 'none').attr('stroke', 'var(--c-pred)').attr('stroke-width', 2.5);
-
-    train.forEach(function (p) {
-      var r = currentResidual(p);
-      dataLayerR.append('circle').attr('cx', X(p.x)).attr('cy', Yr(r)).attr('r', 2.2).attr('fill', 'var(--c-resid)').attr('opacity', 0.75);
-    });
-    var resPoints = train.map(function (p) { return { x: p.x, y: currentResidual(p) }; });
-    var nextTree = buildTreeLimited(resPoints, state.leaves, state.growth);
-    var nextPath = '';
-    for (var i = 0; i <= 200; i++) { var x = i / 200; nextPath += (i === 0 ? 'M' : 'L') + X(x) + ',' + Yr(predictTree(nextTree, x)); }
-    residTreeLayer.append('path').attr('d', nextPath).attr('fill', 'none').attr('stroke', 'var(--c-new)').attr('stroke-width', 2).attr('opacity', 0.85);
-    residTreeLayer.append('text').attr('x', W - padR - 4).attr('y', padT + 10).attr('text-anchor', 'end').attr('font-size', 10).attr('font-weight', 700).attr('fill', 'var(--c-new)').text('next tree (preview)');
-
-    var mseTr = 0; train.forEach(function (p) { var d = currentPred(p.x) - p.y; mseTr += d * d; });
-    var mseTe = 0; test.forEach(function (p) { var d = currentPred(p.x) - p.y; mseTe += d * d; });
-    document.getElementById('m-count').textContent = state.trees.length;
-    document.getElementById('m-tr').textContent = (mseTr / train.length).toFixed(4);
-    document.getElementById('m-te').textContent = (mseTe / test.length).toFixed(4);
-
-    state._next = nextTree;
-    svgPred.attr('aria-label', 'Boosted prediction after ' + state.trees.length + ' trees (solid blue) against the dashed true sine curve and 60 training points. Train MSE ' +
-      (mseTr / train.length).toFixed(4) + '.');
-    svgResid.attr('aria-label', 'Residuals of the current prediction (red points) around zero, with the next ' + state.leaves + '-leaf ' +
-      (state.growth === 'level' ? 'level-wise' : 'leaf-wise') + ' tree previewed as a purple staircase.');
-  }
-
-  function addTree() {
-    if (!state._next) render();
-    state.trees.push(state._next);
-    state._next = null;
-    render();
-  }
-
-  d3.select('#m-lr').on('input', function () { state.lr = (+this.value) / 100; document.getElementById('m-lr-val').textContent = state.lr.toFixed(2); render(); });
-  d3.select('#m-leaves').on('input', function () { state.leaves = +this.value; document.getElementById('m-leaves-val').textContent = state.leaves; render(); });
-  d3.selectAll('#m-growth button').on('click', function () {
-    state.growth = this.getAttribute('data-g');
-    d3.selectAll('#m-growth button').classed('active', function () { return this.getAttribute('data-g') === state.growth; });
-    render();
+  // KaTeX: static equations. In dark mode swap the baked-in hex for the dark shades.
+  function tex(src) { return DARK ? src.replace(/#dc2626/g, COL.resid) : src; }
+  if (window.katex) document.querySelectorAll('.tex').forEach(function (el) {
+    katex.render(tex(el.getAttribute('data-tex')), el, { displayMode: el.getAttribute('data-display') === '1', throwOnError: false });
   });
-  d3.select('#m-step').on('click', addTree);
-  d3.select('#m-skip').on('click', function () { for (var i = 0; i < 10; i++) addTree(); });
-  d3.select('#m-reset').on('click', function () { state.trees = []; render(); });
 
-  render();
+  // Redraw a chart at its container's pixel width (observes the CSS-sized wrapper).
+  function responsive(el, draw) {
+    var last = -1;
+    function run(force) { var w = Math.floor(el.clientWidth); if (w > 0 && (force || w !== last)) { last = w; draw(w); } }
+    if (window.ResizeObserver) new ResizeObserver(function () { run(false); }).observe(el);
+    run(true);
+    return function () { run(true); };
+  }
+  function svgIn(el, w, h, label) {
+    d3.select(el).selectAll('svg').remove();
+    return d3.select(el).append('svg').attr('width', w).attr('height', h).attr('viewBox', '0 0 ' + w + ' ' + h).attr('role', 'img').attr('aria-label', label);
+  }
+  function axisStyle(g) {
+    g.selectAll('text').attr('font-size', FS).attr('fill', COL.text2);
+    g.selectAll('line,path').attr('stroke', COL.border);
+  }
+  function panelTitle(svg, x, y, txt, color) {
+    svg.append('text').attr('x', x).attr('y', y).attr('font-size', FS).attr('font-weight', 700).attr('fill', color || COL.text2).text(txt);
+  }
+  function linePath(xs, fx, sx, sy) { return d3.line().x(function (x) { return sx(x); }).y(function (x) { return sy(fx(x)); })(xs); }
+  function stepPath(tree, sx, sy) {
+    // Piecewise-constant tree prediction drawn as exact steps between thresholds.
+    var cuts = [];
+    (function walk(n) { if (n.left) { cuts.push(n.thr); walk(n.left); walk(n.right); } })(tree.root);
+    cuts.sort(function (a, b) { return a - b; });
+    var edges = [0].concat(cuts, [1]), d = '';
+    for (var i = 0; i < edges.length - 1; i++) {
+      var v = C.predict(tree.root, (edges[i] + edges[i + 1]) / 2);
+      d += (i === 0 ? 'M' : 'L') + sx(edges[i]) + ',' + sy(v) + 'L' + sx(edges[i + 1]) + ',' + sy(v);
+    }
+    return d;
+  }
+
+  var TRAIN = C.makeData(40, 60, 0.3);
+  var TEST_X = C.grid(300);
+  var LINE_X = C.grid(240).concat([0, 1]).sort(function (a, b) { return a - b; });
+  function testMSE(fx) { var s = 0; TEST_X.forEach(function (x) { var d = fx(x) - C.trueFn(x); s += d * d; }); return s / TEST_X.length; }
+
+  // ---------- Figure 1: residual stepper ----------
+  (function () {
+    var el = document.getElementById('f1-chart');
+    var st = { k: 3, lr: 0.3, leaves: 4 };
+    var model, next, resid;
+    function compute() {
+      model = C.boost(TRAIN, { lr: st.lr, leaves: st.leaves, M: st.k });
+      resid = TRAIN.map(function (p, i) { return p.y - model.F[i]; });
+      next = C.buildTree(model.xs, resid, model.idx, st.leaves, 'level');
+    }
+    function draw(w) {
+      var side = w >= 560, gap = 20, pw = side ? (w - gap) / 2 : w, ph = 190;
+      var H = side ? ph + 18 : 2 * ph + 36;
+      var trMSE = C.mean(TRAIN.map(function (p, i) { var d = model.F[i] - p.y; return d * d; }));
+      var teMSE = testMSE(function (x) { return C.predictEnsemble(model, x); });
+      var svg = svgIn(el, w, H, 'Left: boosted prediction after ' + st.k + ' trees against the true sine curve. Right: residuals with the next ' + st.leaves + '-leaf tree previewed.');
+      var m = { l: 34, r: 6, t: 18, b: 20 };
+      function panel(ox, oy, title, domain) {
+        var g = svg.append('g').attr('transform', 'translate(' + ox + ',' + oy + ')');
+        var sx = d3.scaleLinear().domain([0, 1]).range([m.l, pw - m.r]);
+        var sy = d3.scaleLinear().domain(domain).range([ph - m.b, m.t]);
+        g.append('g').attr('transform', 'translate(0,' + (ph - m.b) + ')').call(d3.axisBottom(sx).ticks(4).tickSize(3)).call(axisStyle);
+        g.append('g').attr('transform', 'translate(' + m.l + ',0)').call(d3.axisLeft(sy).ticks(4).tickSize(3)).call(axisStyle);
+        g.append('text').attr('x', m.l).attr('y', 11).attr('font-size', FS).attr('font-weight', 700).attr('fill', COL.text2).text(title);
+        return { g: g, sx: sx, sy: sy };
+      }
+      var A = panel(0, 0, 'Prediction after ' + st.k + (st.k === 1 ? ' tree' : ' trees'), [-0.15, 1.15]);
+      A.g.append('path').attr('d', linePath(LINE_X, C.trueFn, A.sx, A.sy)).attr('fill', 'none').attr('stroke', COL.truth).attr('stroke-width', 1.5).attr('stroke-dasharray', '4 3');
+      TRAIN.forEach(function (p) { A.g.append('circle').attr('cx', A.sx(p.x)).attr('cy', A.sy(p.y)).attr('r', 2.4).attr('fill', COL.data).attr('opacity', 0.75); });
+      A.g.append('path').attr('d', linePath(LINE_X, function (x) { return C.predictEnsemble(model, x); }, A.sx, A.sy)).attr('fill', 'none').attr('stroke', COL.pred).attr('stroke-width', 2.4);
+      var B = panel(side ? pw + gap : 0, side ? 0 : ph + 18, 'Residuals and the next tree', [-0.75, 0.75]);
+      B.g.append('line').attr('x1', B.sx(0)).attr('x2', B.sx(1)).attr('y1', B.sy(0)).attr('y2', B.sy(0)).attr('stroke', COL.text2).attr('stroke-dasharray', '2 3').attr('opacity', 0.6);
+      TRAIN.forEach(function (p, i) {
+        B.g.append('line').attr('x1', B.sx(p.x)).attr('x2', B.sx(p.x)).attr('y1', B.sy(0)).attr('y2', B.sy(resid[i])).attr('stroke', COL.resid).attr('opacity', 0.25);
+        B.g.append('circle').attr('cx', B.sx(p.x)).attr('cy', B.sy(resid[i])).attr('r', 2.4).attr('fill', COL.resid).attr('opacity', 0.8);
+      });
+      B.g.append('path').attr('d', stepPath(next, B.sx, B.sy)).attr('fill', 'none').attr('stroke', COL.next).attr('stroke-width', 2.2);
+      document.getElementById('f1-read').innerHTML = st.k + (st.k === 1 ? ' tree' : ' trees') + ' at ν = ' + fmt(st.lr, 2) + ': training error ' + num(trMSE) + ', test error ' + num(teMSE) + ' (mean squared).';
+    }
+    compute();
+    var redraw = responsive(el, draw);
+    function update() { compute(); redraw(); }
+    d3.select('#f1-lr').on('input', function () { st.lr = +this.value / 100; d3.select('#f1-lr-val').text(fmt(st.lr, 2)); update(); });
+    d3.select('#f1-leaves').on('input', function () { st.leaves = +this.value; d3.select('#f1-leaves-val').text(st.leaves); update(); });
+    d3.select('#f1-step').on('click', function () { st.k += 1; update(); });
+    d3.select('#f1-skip').on('click', function () { st.k += 10; update(); });
+    d3.select('#f1-reset').on('click', function () { st.k = 0; update(); });
+  })();
+
+  // ---------- Figure 2: learning-rate sweep ----------
+  (function () {
+    var el = document.getElementById('f2-chart');
+    var LRS = [0.05, 0.1, 0.3, 1], M = 300;
+    var st = { leaves: 4, sel: 1 };
+    var curves;
+    function compute() {
+      var ys = TRAIN.map(function (p) { return p.y; });
+      curves = LRS.map(function (lr) {
+        var model = C.boost(TRAIN, { lr: lr, leaves: st.leaves, M: M });
+        var Fg = TEST_X.map(function () { return model.f0; });
+        var Ft = TRAIN.map(function () { return model.f0; });
+        var te = [], tr = [];
+        model.trees.forEach(function (t) {
+          var s = 0, i;
+          for (i = 0; i < TEST_X.length; i++) { Fg[i] += lr * C.predict(t.root, TEST_X[i]); var d = Fg[i] - C.trueFn(TEST_X[i]); s += d * d; }
+          te.push(s / TEST_X.length);
+          s = 0;
+          for (i = 0; i < Ft.length; i++) { Ft[i] += lr * C.predict(t.root, TRAIN[i].x); var e = Ft[i] - ys[i]; s += e * e; }
+          tr.push(s / Ft.length);
+        });
+        var mi = 0; te.forEach(function (v, i) { if (v < te[mi]) mi = i; });
+        var lo = mi, hi = mi;
+        while (lo > 0 && te[lo - 1] <= 1.1 * te[mi]) lo--;
+        while (hi < M - 1 && te[hi + 1] <= 1.1 * te[mi]) hi++;
+        return { lr: lr, te: te, tr: tr, best: mi, lo: lo, hi: hi };
+      });
+    }
+    var btns = d3.select('#f2-lrs').selectAll('button').data(LRS).enter().append('button').attr('class', 'btn')
+      .html(function (lr, i) { return '<span class="sw" style="background:' + COL.ramp[i] + '"></span>ν = ' + lr; })
+      .on('click', function (e, lr) { st.sel = LRS.indexOf(lr); redraw(); });
+    function draw(w) {
+      var H = 250, m = { l: 44, r: 10, t: 12, b: 32 };
+      btns.attr('aria-pressed', function (lr, i) { return i === st.sel ? 'true' : 'false'; });
+      var c = curves[st.sel];
+      var svg = svgIn(el, w, H, 'Test error against number of trees for four learning rates; highlighted ν = ' + c.lr + ' reaches its lowest test error at ' + (c.best + 1) + ' trees.');
+      var sx = d3.scaleLog().domain([1, M]).range([m.l, w - m.r]);
+      var all = [];
+      curves.forEach(function (cv) { all = all.concat(cv.te); });
+      all = all.concat(c.tr.filter(function (v) { return v > 1e-4; }));
+      var sy = d3.scaleLog().domain([Math.max(3e-4, d3.min(all) * 0.8), d3.max(all) * 1.3]).range([H - m.b, m.t]);
+      var yt = [0.001, 0.003, 0.01, 0.03, 0.1, 0.3].filter(function (v) { return v >= sy.domain()[0] && v <= sy.domain()[1]; });
+      svg.append('g').attr('transform', 'translate(0,' + (H - m.b) + ')').call(d3.axisBottom(sx).tickValues([1, 3, 10, 30, 100, 300]).tickFormat(d3.format('d')).tickSize(3)).call(axisStyle);
+      svg.append('g').attr('transform', 'translate(' + m.l + ',0)').call(d3.axisLeft(sy).tickValues(yt).tickFormat(d3.format('~g')).tickSize(3)).call(axisStyle);
+      svg.append('text').attr('x', w - m.r).attr('y', H - 4).attr('text-anchor', 'end').attr('font-size', FS).attr('fill', COL.text2).text('trees');
+      svg.append('text').attr('x', m.l + 4).attr('y', m.t + 8).attr('font-size', FS).attr('fill', COL.text2).text('mean squared error');
+      var ln = d3.line().x(function (v, i) { return sx(i + 1); }).y(function (v) { return sy(Math.max(v, sy.domain()[0])); });
+      svg.append('path').attr('d', ln(c.tr)).attr('fill', 'none').attr('stroke', COL.ramp[st.sel]).attr('stroke-width', 1.4).attr('stroke-dasharray', '4 3');
+      curves.forEach(function (cv, i) {
+        svg.append('path').attr('d', ln(cv.te)).attr('fill', 'none').attr('stroke', COL.ramp[i]).attr('stroke-width', i === st.sel ? 2.8 : 1.5).attr('opacity', i === st.sel ? 1 : 0.85);
+      });
+      curves.forEach(function (cv, i) {
+        svg.append('circle').attr('cx', sx(cv.best + 1)).attr('cy', sy(cv.te[cv.best])).attr('r', i === st.sel ? 5 : 3.5).attr('fill', COL.ramp[i]).attr('stroke', COL.bg).attr('stroke-width', 1.5);
+      });
+      document.getElementById('f2-read').innerHTML = 'ν = ' + c.lr + ': lowest test error ' + num(c.te[c.best]) + ' at ' + (c.best + 1) + (c.best ? ' trees' : ' tree') +
+        (c.lo === c.hi ? ', and no other tree within 10% of it' : ', within 10% of that from tree ' + (c.lo + 1) + ' to ' + (c.hi + 1)) + '; after 300 trees, test ' + num(c.te[M - 1]) + ' and training ' + num(c.tr[M - 1]) + '.';
+    }
+    compute();
+    var redraw = responsive(el, draw);
+    d3.select('#f2-leaves').on('input', function () { st.leaves = +this.value; d3.select('#f2-leaves-val').text(st.leaves); compute(); redraw(); });
+  })();
+
+  // ---------- Figure 3: level-wise versus leaf-wise ----------
+  (function () {
+    var el = document.getElementById('f3-chart');
+    var xs = TRAIN.map(function (p) { return p.x; }), ys = TRAIN.map(function (p) { return p.y; });
+    var mu = C.mean(ys), r = ys.map(function (y) { return y - mu; }), idx = xs.map(function (x, i) { return i; });
+    var sse0 = r.reduce(function (a, b) { return a + b * b; }, 0);
+    var st = { k: 8 }, trees;
+    function compute() {
+      trees = ['level', 'leaf'].map(function (g) {
+        var t = C.buildTree(xs, r, idx, st.k, g);
+        t.growth = g;
+        t.captured = t.order.reduce(function (s, n) { return s + n.gain; }, 0) / sse0;
+        t.depth = d3.max(t.leaves, function (l) { return l.depth; });
+        t.order.forEach(function (n, i) { n.rank = i + 1; });
+        return t;
+      });
+    }
+    function draw(w) {
+      var side = w >= 560, gap = 22, pw = side ? (w - gap) / 2 : w;
+      var stripH = 106, treeH = 150, colH = 18 + stripH + treeH;
+      var H = side ? colH : 2 * colH + 16;
+      var svg = svgIn(el, w, H, 'Two regression trees with ' + st.k + ' leaves fit to the same residuals: level-wise depth ' + trees[0].depth + ', leaf-wise depth ' + trees[1].depth + '.');
+      trees.forEach(function (t, ti) {
+        var col = t.growth === 'level' ? COL.xgb : COL.lgb;
+        var g = svg.append('g').attr('transform', 'translate(' + (side ? ti * (pw + gap) : 0) + ',' + (side ? 0 : ti * (colH + 16)) + ')');
+        g.append('text').attr('x', 0).attr('y', 12).attr('font-size', FS + 1).attr('font-weight', 700).attr('fill', col)
+          .text(t.growth === 'level' ? 'Level-wise (XGBoost default)' : 'Leaf-wise (LightGBM default)');
+        // Strip: residuals, the tree's steps, and numbered thresholds.
+        var sx = d3.scaleLinear().domain([0, 1]).range([8, pw - 8]);
+        var sy = d3.scaleLinear().domain([-0.75, 0.75]).range([18 + stripH - 6, 18 + 26]);
+        g.append('line').attr('x1', sx(0)).attr('x2', sx(1)).attr('y1', sy(0)).attr('y2', sy(0)).attr('stroke', COL.border);
+        // Threshold labels: two rows, so close thresholds don't overprint.
+        var rowEnd = [-Infinity, -Infinity];
+        t.order.slice().sort(function (p, q) { return p.thr - q.thr; }).forEach(function (n) {
+          var x = sx(n.thr), row = x - rowEnd[0] >= 12 ? 0 : x - rowEnd[1] >= 12 ? 1 : 0;
+          rowEnd[row] = x;
+          g.append('line').attr('x1', x).attr('x2', x).attr('y1', 18 + 14 + row * 10).attr('y2', 18 + stripH - 4).attr('stroke', col).attr('stroke-dasharray', '2 2').attr('opacity', 0.6);
+          g.append('text').attr('x', x).attr('y', 18 + 11 + row * 11).attr('text-anchor', 'middle').attr('font-size', FS).attr('font-weight', 700).attr('fill', col).text(n.rank);
+        });
+        r.forEach(function (v, i) { g.append('circle').attr('cx', sx(xs[i])).attr('cy', sy(v)).attr('r', 2).attr('fill', COL.resid).attr('opacity', 0.55); });
+        g.append('path').attr('d', stepPath(t, sx, sy)).attr('fill', 'none').attr('stroke', col).attr('stroke-width', 2);
+        // Tree diagram.
+        var root = d3.hierarchy(t.root, function (n) { return n.left ? [n.left, n.right] : null; });
+        var ty = 18 + stripH + 14, tH = treeH - 34;
+        d3.tree().size([pw - 24, tH])(root);
+        var depth = Math.max(1, t.depth), dy = tH / depth;
+        var tg = g.append('g').attr('transform', 'translate(12,' + ty + ')');
+        root.links().forEach(function (lk) {
+          tg.append('line').attr('x1', lk.source.x).attr('y1', lk.source.depth * dy).attr('x2', lk.target.x).attr('y2', lk.target.depth * dy).attr('stroke', COL.border).attr('stroke-width', 1.5);
+        });
+        root.descendants().forEach(function (d) {
+          var y = d.depth * dy;
+          if (d.children) {
+            tg.append('circle').attr('cx', d.x).attr('cy', y).attr('r', 8.5).attr('fill', col);
+            tg.append('text').attr('x', d.x).attr('y', y + 4).attr('text-anchor', 'middle').attr('font-size', FS).attr('font-weight', 700).attr('fill', COL.bg).text(d.data.rank);
+          } else {
+            tg.append('rect').attr('x', d.x - 5).attr('y', y - 5).attr('width', 10).attr('height', 10).attr('fill', 'none').attr('stroke', col).attr('stroke-width', 1.5);
+            tg.append('text').attr('x', d.x).attr('y', y + 18).attr('text-anchor', 'middle').attr('font-size', FS).attr('fill', COL.text2).text(d.data.idx.length);
+          }
+        });
+      });
+      var a = trees[0], b = trees[1];
+      document.getElementById('f3-read').innerHTML = 'With ' + st.k + ' leaves, level-wise captures ' + num(100 * a.captured, 1) + '% of the residual sum of squares at depth ' + a.depth +
+        '; leaf-wise captures ' + num(100 * b.captured, 1) + '% at depth ' + b.depth + '.';
+    }
+    compute();
+    var redraw = responsive(el, draw);
+    d3.select('#f3-k').on('input', function () { st.k = +this.value; d3.select('#f3-k-val').text(st.k); compute(); redraw(); });
+  })();
+
+  // ---------- Figure 4: bias and variance, bagging versus boosting ----------
+  (function () {
+    var el = document.getElementById('f4-chart');
+    var R = 40, M = 200, G = C.grid(100), LR = 0.1;
+    var st = { k: 2, T: 50 }, cache = {}, bag = null;
+    var sets = []; for (var r = 0; r < R; r++) sets.push(C.makeData(1 + r, 60, 0.3));
+    function Acc() { var a = []; for (var m = 0; m < M; m++) a.push({ s1: new Float64Array(G.length), s2: new Float64Array(G.length) }); return a; }
+    function add(acc, m, preds) { var A = acc[m]; for (var i = 0; i < preds.length; i++) { A.s1[i] += preds[i]; A.s2[i] += preds[i] * preds[i]; } }
+    function finish(acc) {
+      return acc.map(function (A) {
+        var b = 0, v = 0;
+        for (var i = 0; i < G.length; i++) { var mu = A.s1[i] / R; b += (mu - C.trueFn(G[i])) * (mu - C.trueFn(G[i])); v += Math.max(0, A.s2[i] / R - mu * mu); }
+        return { bias: b / G.length, vari: v / G.length };
+      });
+    }
+    function computeBag() {
+      var acc = Acc();
+      sets.forEach(function (d, ri) {
+        var xs = d.map(function (p) { return p.x; }), ys = d.map(function (p) { return p.y; });
+        var rng = C.prng(1000 + ri), S = new Float64Array(G.length);
+        for (var m = 0; m < M; m++) {
+          var idx = []; for (var q = 0; q < 60; q++) idx.push(Math.floor(rng() * 60));
+          var t = C.buildTree(xs, ys, idx, Infinity, 'leaf');
+          var pr = new Float64Array(G.length);
+          for (var i = 0; i < G.length; i++) { S[i] += C.predict(t.root, G[i]); pr[i] = S[i] / (m + 1); }
+          add(acc, m, pr);
+        }
+      });
+      return finish(acc);
+    }
+    function computeBoost(k) {
+      var acc = Acc();
+      sets.forEach(function (d) {
+        var model = C.boost(d, { lr: LR, leaves: k, M: M });
+        var F = new Float64Array(G.length).fill(model.f0);
+        model.trees.forEach(function (t, m) { for (var i = 0; i < G.length; i++) F[i] += LR * C.predict(t.root, G[i]); add(acc, m, F); });
+      });
+      return finish(acc);
+    }
+    function tFromSlider(v) { return Math.max(1, Math.round(Math.pow(M, v / 100))); }
+    function draw(w) {
+      if (!bag) bag = computeBag();
+      if (!cache[st.k]) cache[st.k] = computeBoost(st.k);
+      var bo = cache[st.k];
+      var side = w >= 520, gap = 18, pw = side ? (w - gap) / 2 : w, ph = 200;
+      var H = side ? ph : 2 * ph + 12;
+      var svg = svgIn(el, w, H, 'Bias squared and variance against number of trees for bagging and boosting.');
+      var sy = d3.scaleLog().domain([2e-4, 0.12]).range([ph - 30, 18]);
+      [['Bagging, deep trees', bag], ['Boosting, ' + (st.k === 2 ? 'stumps' : st.k + '-leaf trees') + ', ν = 0.1', bo]].forEach(function (pn, pi) {
+        var g = svg.append('g').attr('transform', 'translate(' + (side ? pi * (pw + gap) : 0) + ',' + (side ? 0 : pi * (ph + 12)) + ')');
+        var sx = d3.scaleLog().domain([1, M]).range([40, pw - 8]);
+        g.append('g').attr('transform', 'translate(0,' + (ph - 30) + ')').call(d3.axisBottom(sx).tickValues([1, 3, 10, 30, 100, 200]).tickFormat(d3.format('d')).tickSize(3)).call(axisStyle);
+        g.append('g').attr('transform', 'translate(40,0)').call(d3.axisLeft(sy).tickValues([0.001, 0.01, 0.1]).tickFormat(d3.format('~g')).tickSize(3)).call(axisStyle);
+        g.append('text').attr('x', 40).attr('y', 11).attr('font-size', FS).attr('font-weight', 700).attr('fill', COL.text2).text(pn[0]);
+        g.append('text').attr('x', pw - 8).attr('y', ph - 4).attr('text-anchor', 'end').attr('font-size', FS).attr('fill', COL.text2).text('trees');
+        var data = pn[1];
+        function ln(f) { return d3.line().x(function (d, i) { return sx(i + 1); }).y(function (d) { return sy(Math.min(0.12, Math.max(2e-4, f(d)))); })(data); }
+        g.append('path').attr('d', ln(function (d) { return d.bias + d.vari; })).attr('fill', 'none').attr('stroke', COL.text2).attr('stroke-width', 1).attr('opacity', 0.7);
+        g.append('path').attr('d', ln(function (d) { return d.bias; })).attr('fill', 'none').attr('stroke', COL.bias).attr('stroke-width', 2.2);
+        g.append('path').attr('d', ln(function (d) { return d.vari; })).attr('fill', 'none').attr('stroke', COL.vari).attr('stroke-width', 2.2);
+        var last = data[M - 1];
+        var yb = sy(Math.max(2e-4, last.bias)) - 5, yv = sy(Math.max(2e-4, last.vari)) - 5;
+        if (Math.abs(yb - yv) < 13) { var mid = (yb + yv) / 2, up = yb < yv ? -1 : 1; yb = mid + up * 7; yv = mid - up * 7; }
+        g.append('text').attr('x', sx(M) - 2).attr('y', yb).attr('text-anchor', 'end').attr('font-size', FS).attr('font-weight', 700).attr('fill', COL.bias).text('bias²');
+        g.append('text').attr('x', sx(M) - 2).attr('y', yv).attr('text-anchor', 'end').attr('font-size', FS).attr('font-weight', 700).attr('fill', COL.vari).text('variance');
+        g.append('line').attr('x1', sx(st.T)).attr('x2', sx(st.T)).attr('y1', 16).attr('y2', ph - 30).attr('stroke', COL.text).attr('stroke-dasharray', '3 3').attr('opacity', 0.6);
+        var p = data[st.T - 1];
+        g.append('circle').attr('cx', sx(st.T)).attr('cy', sy(Math.max(2e-4, p.bias))).attr('r', 3.5).attr('fill', COL.bias);
+        g.append('circle').attr('cx', sx(st.T)).attr('cy', sy(Math.max(2e-4, p.vari))).attr('r', 3.5).attr('fill', COL.vari);
+      });
+      var a = bag[st.T - 1], b = bo[st.T - 1];
+      var bestB = 0; bo.forEach(function (d, i) { if (d.bias + d.vari < bo[bestB].bias + bo[bestB].vari) bestB = i; });
+      document.getElementById('f4-read').innerHTML = 'At ' + st.T + (st.T === 1 ? ' tree' : ' trees') + ', bagging has bias² ' + num(a.bias) + ' and variance ' + num(a.vari) +
+        '; boosting has bias² ' + num(b.bias) + ' and variance ' + num(b.vari) + '. Boosting’s total is lowest at ' + (bestB + 1) + ' trees (' + num(bo[bestB].bias + bo[bestB].vari) + ').';
+    }
+    var redraw = null;
+    function start() { if (!redraw) redraw = responsive(el, draw); }
+    setTimeout(start, 30);
+    d3.select('#f4-t').on('input', function () { st.T = tFromSlider(+this.value); d3.select('#f4-t-val').text(st.T); if (redraw) redraw(); });
+    d3.selectAll('#f4-leaves button').on('click', function () {
+      st.k = +this.getAttribute('data-k');
+      d3.selectAll('#f4-leaves button').attr('aria-pressed', function () { return +this.getAttribute('data-k') === st.k ? 'true' : 'false'; });
+      if (redraw) redraw(); else start();
+    });
+  })();
+
+  // ---------- Figure 5: pseudo-residuals under three losses ----------
+  (function () {
+    var el = document.getElementById('f5-chart');
+    var data = C.makeOutlierData(44), M = 200;
+    var models = {};
+    ['squared', 'absolute', 'huber'].forEach(function (l) { models[l] = C.boost(data, { lr: 0.1, leaves: 4, M: M, loss: l }); });
+    var st = { loss: 'squared', m: 40 };
+    var TEX = {
+      squared: '\\color{' + COL.resid + '}{r_i} = y_i - F(x_i)',
+      absolute: '\\color{' + COL.resid + '}{r_i} = \\operatorname{sign}\\bigl(y_i - F(x_i)\\bigr)',
+      huber: '\\color{' + COL.resid + '}{r_i} = \\operatorname{clip}\\bigl(y_i - F(x_i),\\, -\\delta,\\, \\delta\\bigr),\\ \\ \\delta = ' + C.HUBER_D
+    };
+    var texPending = false;
+    function renderTex() {
+      if (texPending || !window.katex) return; texPending = true;
+      requestAnimationFrame(function () { texPending = false; katex.render(TEX[st.loss], document.getElementById('f5-tex'), { throwOnError: false }); });
+    }
+    function draw(w) {
+      var model = models[st.loss];
+      var F = data.map(function (p) { return C.predictEnsemble(model, p.x, st.m); });
+      var g = data.map(function (p, i) { return model.loss.g(p.y - F[i]); });
+      var h1 = 200, h2 = 130, gap = 12, H = h1 + gap + h2, ml = 38, mr = 8;
+      var svg = svgIn(el, w, H, 'Top: ' + st.loss + '-loss boosted fit after ' + st.m + ' rounds on data with six outliers. Bottom: pseudo-residuals for the next tree.');
+      var sx = d3.scaleLinear().domain([0, 1]).range([ml, w - mr]);
+      var sy = d3.scaleLinear().domain([-0.1, d3.max(data, function (p) { return p.y; }) + 0.1]).range([h1 - 20, 20]);
+      svg.append('g').attr('transform', 'translate(0,' + (h1 - 20) + ')').call(d3.axisBottom(sx).ticks(4).tickSize(3)).call(axisStyle);
+      svg.append('g').attr('transform', 'translate(' + ml + ',0)').call(d3.axisLeft(sy).ticks(4).tickSize(3)).call(axisStyle);
+      panelTitle(svg, ml, 11, 'Fit after ' + st.m + ' rounds, ' + (st.loss === 'huber' ? 'Huber' : st.loss) + ' loss');
+      svg.append('path').attr('d', linePath(LINE_X, C.trueFn, sx, sy)).attr('fill', 'none').attr('stroke', COL.truth).attr('stroke-width', 1.5).attr('stroke-dasharray', '4 3');
+      data.forEach(function (p) {
+        svg.append('circle').attr('cx', sx(p.x)).attr('cy', sy(p.y)).attr('r', 2.4).attr('fill', COL.data).attr('opacity', 0.8);
+        if (p.out) svg.append('circle').attr('cx', sx(p.x)).attr('cy', sy(p.y)).attr('r', 5.5).attr('fill', 'none').attr('stroke', COL.data).attr('stroke-width', 1.2);
+      });
+      svg.append('path').attr('d', linePath(LINE_X, function (x) { return C.predictEnsemble(model, x, st.m); }, sx, sy)).attr('fill', 'none').attr('stroke', COL.pred).attr('stroke-width', 2.4);
+      // Lollipop of pseudo-residuals.
+      var gmax = d3.max(g, function (v) { return Math.abs(v); }) || 1;
+      var oy = h1 + gap;
+      var gy = d3.scaleLinear().domain([-gmax * 1.08, gmax * 1.08]).range([oy + h2 - 6, oy + 18]);
+      svg.append('g').attr('transform', 'translate(' + ml + ',0)').call(d3.axisLeft(gy).ticks(3).tickSize(3)).call(axisStyle);
+      panelTitle(svg, ml, oy + 10, 'Pseudo-residuals for the next tree');
+      svg.append('line').attr('x1', sx(0)).attr('x2', sx(1)).attr('y1', gy(0)).attr('y2', gy(0)).attr('stroke', COL.text2).attr('opacity', 0.5);
+      data.forEach(function (p, i) {
+        svg.append('line').attr('x1', sx(p.x)).attr('x2', sx(p.x)).attr('y1', gy(0)).attr('y2', gy(g[i])).attr('stroke', COL.resid).attr('stroke-width', p.out ? 2 : 1.2).attr('opacity', p.out ? 0.95 : 0.55);
+        svg.append('circle').attr('cx', sx(p.x)).attr('cy', gy(g[i])).attr('r', p.out ? 3.6 : 2.2).attr('fill', p.out ? COL.bg : COL.resid).attr('stroke', COL.resid).attr('stroke-width', p.out ? 1.6 : 0);
+      });
+      var errs = ['squared', 'absolute', 'huber'].map(function (l) { return testMSE(function (x) { return C.predictEnsemble(models[l], x, st.m); }); });
+      var outPull = 0, allPull = 0;
+      data.forEach(function (p, i) { allPull += Math.abs(g[i]); if (p.out) outPull += Math.abs(g[i]); });
+      document.getElementById('f5-read').innerHTML = 'The six outliers carry ' + num(allPull ? 100 * outPull / allPull : 0, 0) + '% of the total pull on the next tree. After ' + st.m +
+        ' rounds, test error against the true curve: squared ' + num(errs[0]) + ', absolute ' + num(errs[1]) + ', Huber ' + num(errs[2]) + '.';
+    }
+    var redraw = responsive(el, draw);
+    renderTex();
+    d3.selectAll('#f5-loss button').on('click', function () {
+      st.loss = this.getAttribute('data-l');
+      d3.selectAll('#f5-loss button').attr('aria-pressed', function () { return this.getAttribute('data-l') === st.loss ? 'true' : 'false'; });
+      renderTex(); redraw();
+    });
+    d3.select('#f5-m').on('input', function () { st.m = +this.value; d3.select('#f5-m-val').text(st.m); redraw(); });
+  })();
 })();
 
 if (window.Motion) window.Motion.mountBanner();
