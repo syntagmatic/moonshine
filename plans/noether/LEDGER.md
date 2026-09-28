@@ -106,3 +106,27 @@ flagged in `plans/FACT-CHECK.md` and settled on 2026-09-27.
 | 13 | For large s the number of standard monomials of degree ≤ s (graded order) is a polynomial in s of degree dim A | fine (from memory) | Affine Hilbert polynomial; Cox, Little, O'Shea, Ideals, Varieties, and Algorithms, ch. 9 §3; cited from memory. Page values: line s + 1, plane (s+1)(s+2)/2, elliptic curve 3s, hyperbola 2s + 1, cone (s+1)², each with d matching the known dimension | none |
 | 13 | Fig 5: generic fiber sizes 2 (elliptic over k[x], hyperbola over k[x + y], cone over k[x, y]) and 3 (curve over k[x]) | computed | Page adds the subring's linear equations at five seeded random rational base points, runs exact Buchberger and counts standard monomials of the zero-dimensional quotient; matched in node | none |
 | 13 | Fig 2 census on the 41×41 grid over [-2, 2]²: real fiber 2 / 1 / 0 at 800 / 81 / 800 samples | computed | 20 nonzero values per sign on each axis: 2·20·20 = 800 per sign class, 41 + 41 - 1 = 81 on the axes | none |
+
+### 10 enrichment
+
+| page | claim | verdict | source or derivation | fix |
+|---|---|---|---|---|
+| 10 | Old Fig 4 listed 𝔭𝔮 among the non-principal ideals | wrong, fixed | 𝔭𝔮 has index 6 and contains 1 + √−5 (norm 6), so 𝔭𝔮 = (1 + √−5); the page's own prose said so | Figure replaced by the computed prime census; every principal/non-principal label now comes from a search for an element of norm equal to the index |
+| 10 | Fig 3: 21 has 3 factorizations into irreducibles, 42 has 9, all of equal length | computed, checked independently | Page: exhaustive divisor search on norms. Independent count: (42) = 𝔭²𝔮𝔮̄𝔯𝔯̄ with all six primes non-principal, and irreducibles are principal products of two of them, so factorizations are pairings of the multiset: 3 (𝔭 with 𝔭) + 6 (𝔭's with two distinct others) = 9; for 21, the 3 pairings of {𝔮, 𝔮̄, 𝔯, 𝔯̄} | none |
+| 10 | Carlitz 1960: in a ring of integers, all factorizations of an element have the same length exactly when the class number is at most 2 | fine (from memory) | L. Carlitz, "A characterization of algebraic number fields with class number two", Proc. Amer. Math. Soc. 11 (1960) 391-392; cited from memory, not rechecked against the paper | none |
+| 10 | p = a² + 5b² exactly when p ≡ 1, 9 (mod 20) | fine (from memory), computed | D. Cox, Primes of the Form x² + ny², introduction (cited from memory). Fig 4 computes it for every prime below 200 by direct search | none |
+| 10 | Minkowski bound (2/π)√20 ≈ 2.85, leaving (1) and 𝔭 as class representatives | derived | M = (n!/nⁿ)(4/π)^{r₂}√|D| with n = 2, r₂ = 1, D = −20: (1/2)(4/π)√20 = 2.847; ideals of norm ≤ 2 are (1) and 𝔭 (2 ramifies) | none |
+| 10 | Fig 4 census over primes < 200: non-principal × non-principal principal 91/91, principal × non-principal non-principal 117/117, principal × principal 45/45 | computed | 13 non-principal (2 and 3, 7 mod 20) and 9 principal (5 and 1, 9 mod 20) split or ramified primes; pairs with repetition: 13·14/2 = 91, 13·9 = 117, 9·10/2 = 45 | none |
+| 10 | Class number of ℤ[√−d] equals the number of reduced primitive forms of discriminant −4d; h = 1 only at d = 1, 2 among squarefree d ≤ 100, d ≡ 1, 2 mod 4 | fine (from memory), computed | Form/ideal class correspondence: Cox, Primes of the Form x² + ny², Thm 7.7 (from memory). Node run matches standard values recalled from memory, h(−20) = 2, h(−56) = 4, h(−104) = 6; the h = 1 list agrees with Heegner-Baker-Stark (only d = 1, 2 have ring of integers ℤ[√−d]) | none |
+| 10 | 2x² + 2xy + 3y² = N(2x + (1+√−5)y)/2 | derived | (2x + y)² + 5y² = 4x² + 4xy + 6y² | none |
+
+### 11 enrichment
+
+| page | claim | verdict | source or derivation | fix |
+|---|---|---|---|---|
+| 11 | A chain from (n) in ℤ has at most Ω(n) strict steps | derived, computed | Each strict step (m) ⊊ (m') has m' a proper divisor of m, removing at least one prime factor. Fig 1 computes the longest path in the divisor diagram by dynamic programming and shows it (60 → 4, 360 → 6, 64 → 6) | none |
+| 11 | Fig 2 Euclid step counts: gcd(f, x² + 1) takes 3 division steps, gcd(x² − x, x + 1) takes 2 | computed, checked by hand | f mod (x² + 1) = 2x + 2; (x² + 1) mod (2x + 2) = 2; then 0. x² − x = (x + 1)(x − 2) + 2; then 0 | none |
+| 11 | Once a monomial ideal in k[x, y] contains a pure power of each variable, the number of monomials outside bounds the remaining strict steps; before that, (x) ⊊ (x, yᵏ) ⊊ ... ⊊ (x, y) is arbitrarily long | derived | Each strict step adds at least one new monomial to the ideal. Default (x⁴, x²y, y³) leaves 1, y, y², x, xy, xy², x², x³ outside: 8 | none |
+| 11 | In the ring of all algebraic integers (2) ⊊ (2^{1/2}) ⊊ (2^{1/4}) ⊊ ... | derived | Quotient 2^{1/2^{k+1}} is a root of the monic x^{2^{k+1}} − 2; its inverse has minimal polynomial x^{2^{k+1}} − 1/2 (Eisenstein makes x^N − 2 irreducible), not integral | none |
+| 11 | In the ring of integers of ℚ(2^{1/n}), (2) = 𝔓ⁿ with 𝔓 = (2^{1/n}), so exactly n + 1 ideals contain (2) | derived (standard) | x^n − 2 is Eisenstein at 2, so 2 is totally ramified; (2^{1/n}) has norm 2 and lies in 𝔓, hence equals it; ideals containing 𝔓ⁿ are 𝔓^j (e.g. Neukirch, Algebraic Number Theory, I §8, from memory) | none |
+| 11 | Fig 4 streams (seed 1, 300 draws): x, y stream stops after 7 strict steps at draw 64 with union (x³, x²y, xy², y³); x₁, x₂, ... stream reaches 89 steps | computed | Page and a node rerun of the same seeded generator agree | none |
