@@ -74,6 +74,10 @@ series' `LEDGER.md`. What follows is what those checks left for a human.
 
 - 03: Aitchison is credited with powering "in that paper and his 1986
   book"; the 1982 paper's power-transformation section wasn't seen.
+- 11: the Du Bois BSA formula (0.007184 W^0.425 H^0.725) was taken via
+  Wikipedia's citation; check it against Du Bois and Du Bois 1916, Arch
+  Intern Med 17:863. The Grimes 2008 claim (clinical "nomograms" are mostly
+  points charts) rests on the abstract only.
 
 ### decision-trees
 
@@ -107,8 +111,6 @@ series' `LEDGER.md`. What follows is what those checks left for a human.
 
 Not claims, but found during checks and not yet fixed.
 
-- mathematical-diagrams 05: about 37 math ids are duplicated (same bug as
-  03 had), so a formula written twice may render only its first copy.
 - japan-earthquakes 02: at desktop width the "Suruga Trough" label overlaps
   "Osaka"; the Japan Trench fix raised boundary labels above the dots, which
   may make it more visible. 02 wasn't screenshotted at phone width.
