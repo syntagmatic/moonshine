@@ -121,3 +121,16 @@ All numbers are computed in the page with COH over ℤ/2 (cohomology.ring, cup.t
 | 03 | Cup pairing G has full rank on closed surfaces (T², K: 2; RP²: 1) and is 0 on S¹ ∨ S¹ ∨ S² | checked | Poincaré duality over ℤ/2 for closed manifolds; ranks computed by Gaussian elimination in the page | none |
 | 03 | Reversing the vertex order turns the Alexander–Whitney cochain α ⌣ β into β ⌣ α (original order); the two differ by δc | checked | reversed σ = [v2, v1, v0]: front [v2, v1], back [v1, v0], value α[v1v2]β[v0v1] = (β ⌣ α)(σ). Page: reverse differs from identity on 2 triangles, c = {13, 14, 24} solves δc = difference; shuffles and swaps checked the same way | none |
 | 03 | H*(OP²; ℤ) = ℤ[α]/(α³), \|α\| = 8, OP² = F₄/Spin(9) of real dimension 16 | standard | Borel; standard | none |
+
+### 02 (enrichment, 2026-09-27)
+
+All numbers are computed in the page from the lib's triangulations (COH.tri torus7, klein, rp2, s2): ℤ/2 ranks via TDA.homology.gaussianElimZ2 and COH.cohomology/coboundary; integer invariant factors by an inline Smith normal form on signed coboundaries. Checked in node and headless Chromium.
+
+| page | claim | verdict | source or derivation | fix |
+|---|---|---|---|---|
+| 02 | Figure 1: for any vertex function f every triangle meets δf in 0 or 2 edges (so δδf = 0); f = {0} gives 6 edges, 6 triangles with count 2; f = {1, 3} gives 10 edges, 10 triangles with 2 and 4 with 0; f constant gives δf = 0 | checked | A triangle's three vertices split into f = 1 and f = 0 as 3/0, 2/1 or 1/2, crossing 0 or 2 edges; counts read in headless run | none |
+| 02 | Mod-2 ranks: torus δ₀ 6, δ₁ 13 of 21 columns (8 free); Klein 8, 17 of 27; ℝP² 5, 9 of 15; S² 3, 3 of 6; Betti (1,2,1), (1,2,1), (1,1,1), (1,0,1) | checked | node + page; agrees with tests/cohomology.html | none |
+| 02 | Old surface drawings (torus as hexagon + centre with all 21 edges as chords, Klein as 9 interior points) did not show the triangulations | wrong, fixed | torus now a 7-rhombus strip with label a + 3b mod 7; Klein the 4×4 grid with lib gluing; ℝP² the hemi-icosahedron star; every drawn triangle/edge mapped back to a lib index (all 14/18/10/4 triangles and 21/27/15/6 edges covered) | redrawn |
+| 02 | Every edge of each of the four surfaces lies in exactly two triangles, so coboundaries are even on triangles and one triangle is a nonexact 2-cocycle; parity agrees with COH.coboundary.isExact | checked | computed per edge in the page; isExact verified on the default and after edge moves | none |
+| 02 | Smith normal form over ℤ: δ₀ diagonal all 1 (rank n₀ − 1); δ₁ torus 13 ones, S² 3 ones, ℝP² 9 ones + one 2 (full rank 10), Klein 17 ones + one 2 (full rank 18). So H*(ℤ): S² (ℤ,0,ℤ), ℝP² (ℤ,0,ℤ/2), T² (ℤ,ℤ²,ℤ), K (ℤ,ℤ,ℤ/2); over ℚ and ℤ/3: ℝP² (1,0,0), K (1,1,0) | checked | inline SNF, δδ = 0 over ℤ verified; matches standard values (Hatcher §3.1) | none |
+| 02 | The Klein bottle's second ℤ/2 in H¹(K; ℤ/2) comes from torsion in H₁(K; ℤ) = ℤ ⊕ ℤ/2 (UCT: Hom(H₁, ℤ/2) = (ℤ/2)²) | standard | universal coefficient theorem | none |
