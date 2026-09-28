@@ -15,6 +15,7 @@ article ships.
 | `docs/astronomy/shared/data/m67.csv` | ESA Gaia archive TAP, `gaiadr3.gaia_source` within 0.5 deg of (132.846, 11.814), proper motion within 0.8 mas/yr of (-10.97, -2.94); no parallax cut. Lindegren et al. 2021 zero point subtracted, coefficients from the `gaiadr3_zeropoint` 0.1.0 wheel on PyPI. 1,338 rows, fetched 2026-09-27. | same script |
 | `docs/astronomy/shared/data/cepheids.csv` | OGLE Collection of Variable Stars, `ogle4/OCVS/{lmc,smc}/cep/cepF.dat` (Soszynski et al. 2015, Acta Astron. 65, 297). Single-mode F Cepheids with both I and V: 2,314 LMC, 2,637 SMC. Fetched 2026-09-27. | `scripts/astronomy/fetch-cepheids.py` |
 | `docs/astronomy/shared/data/cepheid-lc.csv` | Same archive, `phot/I/` for OGLE-LMC-CEP-3126, -0800, -0068 (484, 771, 642 epochs). | same script |
+| `docs/astronomy/shared/data/pantheon.csv` | Pantheon+ data release, `Pantheon+_Data/4_DISTANCES_AND_COVAR/Pantheon+SH0ES.dat` (GitHub PantheonPlusSH0ES/DataRelease). 1,701 light curves (Scolnic et al. 2022 count 1,550 distinct SNe; the file has 1,543 distinct CIDs); 77 calibrator light curves (43 SNe), 277 Hubble-flow light curves (238 SNe). Fetched 2026-09-27. | `scripts/astronomy/fetch-pantheon.py` |
 | `docs/astronomy/shared/data/bprp-teff.csv` | E. Mamajek, "A Modern Mean Dwarf Stellar Color and Effective Temperature Sequence", version 2022.04.16 (Pecaut & Mamajek 2013, ApJS 208, 9). Rows B9V to M9.5V with tabulated Bp-Rp (63 rows). | same script |
 
 Spot-check: source_ids 143207476804948736 and 143455554116023040 re-queried
@@ -115,6 +116,39 @@ cluster field, so under 1% of the sample is field stars.
 | Eclipsing-binary sizes come from eclipses plus orbital velocities | D | Standard double-lined eclipsing binary method; the abstract names the systems as eclipsing binaries |
 | SH0ES anchors: Gaia parallaxes of MW Cepheids, NGC 4258 masers, LMC DEBs; Cepheids in hosts of 42 SNe Ia at z < 0.01 (a few tens of Mpc) | S, D | Riess et al. 2022 (ApJL 934, L7), abstract, arXiv:2112.04510; cz < 3000 km/s / 73 = 41 Mpc. "Masers in its nucleus": general knowledge, the abstract says only "masers in N4258" |
 | 30-day Cepheid at W = 24.5: M_W = -7.48, mu = 31.98, 24.9 Mpc; with 10 Cepheids +/-1.6% | C | Figure readout |
+
+### Section 4, Supernovae and the Hubble constant (figures 7, 8)
+
+| Claim | Kind | How we know |
+|---|---|---|
+| Cepheids reach several tens of Mpc | C | Largest Pantheon+ CEPH_DIST 34.526 = 80 Mpc (SN 2007A host) |
+| Type Ia = thermonuclear explosion of a white dwarf; can rival its galaxy's light | S, D | Maoz, Mannucci & Nelemans 2014 (ARA&A 52, 107), abstract, arXiv:1312.0628: "runaway thermonuclear explosion of a degenerate carbon-oxygen stellar core, most likely a white dwarf". M_B -19.25 vs a Milky Way-like galaxy's ~ -20 supports "rival", not "outshine" |
+| Peak M_B about -19.3; billions of Suns | C, D | Page: -19.252 (inverse-variance mean of m_b_corr - CEPH_DIST over 77 light curves); Sun M_B ~ 5.44 gives 10^(24.7/2.5) = 7.6e9 |
+| Most distant supernova in the sample at z = 2.26 | C | max zHD = 2.26137 |
+| Raw scatter ~0.26 mag (12%); stretch alone 0.22, colour alone 0.17, both 0.13 (6%) | C | Python check and figure readout on the 238 Hubble-flow SNe, one light curve each, mu from flat LCDM (Om = 0.3) second-order d_L |
+| Best fit alpha = 0.131, beta = 2.55 (simple least squares, no bias corrections) | C | Same; Pantheon+'s own m_b_corr gives 0.136 mag scatter on the same SNe |
+| Slower light curves are brighter (Phillips 1993); Tripp (1998) linear standardisation | S | Pantheon+ README names m_b_corr "Tripp1998 corrected"; Phillips 1993 (ApJ 413, L105) is general knowledge, not re-read |
+| Redder supernovae fainter, partly dust and partly intrinsic | S, C | Brout & Scolnic 2021 (ApJ 909, 26), abstract, arXiv:2004.10206: intrinsic colours plus extrinsic dust-like colours; the positive beta in the figure shows the fainter-when-redder trend |
+| q0 = -0.55, j0 = 1 for a flat universe with Om = 0.3 | D | q0 = Om/2 - OL = 0.15 - 0.7; j0 = 1 for flat LCDM |
+| H0 = 10^((M_B + 5 a_B + 25)/5), a_B = log10(c z f(z)) - 0.2 m | D | From m = M + 5 log10(d_L/Mpc) + 25 and d_L = c z f(z)/H0 |
+| Page H0 = 73.25 +/- 0.77 (stat) from 43 calibrators and 238 Hubble-flow SNe | C | Page and Python agree |
+| SH0ES 73.04 +/- 1.04; 42 SNe Ia; anchors Gaia parallaxes, NGC 4258 masers, LMC DEBs | S | Riess et al. 2022, abstract |
+| Local Distance Network 73.50 +/- 0.81, 7.1 sigma from flat LCDM with Planck+SPT+ACT | S | arXiv:2510.23823 abstract (2025) |
+| CCHP 70.39 +/- 1.22 (stat) +/- 1.33 (sys) +/- 0.70 (sigma_SN), TRGB | S | Freedman et al. 2024, arXiv:2408.06153 abstract |
+| Planck 67.4 +/- 0.5 assuming base LCDM | S | Planck 2018 VI (A&A 641, A6), abstract |
+| JWST rejects unrecognised crowding of Cepheid photometry as the cause at 8 sigma | S | Riess et al. 2024, arXiv:2401.04773, title and abstract |
+| Matching Planck needs +0.18 mag, every Cepheid distance ~9% larger | C | 5 log10(73.25/67.4) = 0.181; 10^(0.181/5) = 1.087 |
+| A 0.1 mag zero-point shift moves H0 by ~5% | D | 10^(0.1/5) = 1.047 |
+
+### Section 5, The ladder itself (figure 9)
+
+| Claim | Kind | How we know |
+|---|---|---|
+| Parallax bar: 3.5 pc (61 Cyg) to 835 pc (M67); 10% reach for bright stars ~4.8 kpc | C | 1000/286 pc; M67 mean parallax; 1000/(10 x median error 0.021 mas) |
+| EB anchors: LMC 49.59 kpc (1.1%), SMC 62.44 kpc | S | Pietrzynski 2019; Graczyk 2020 |
+| Cepheid bar: LMC to SMC (Cepheid distance), and SN hosts 6.8 to 80 Mpc | C | Figure 5 offset; CEPH_DIST range |
+| SN bar: calibrators, Hubble flow 78 to 685 Mpc, all Pantheon+ to 17 Gpc (luminosity distance, model-dependent beyond z 0.15) | C | MU_SH0ES ranges |
+| M_B to 1.0% from calibrator scatter; H0 1.1% stat, ~1.5% with the LMC anchor alone | C | sd/sqrt(43) = 0.021 mag; readout |
 
 ## Series-level facts (from PROMPT.md, to check when each article is written)
 
