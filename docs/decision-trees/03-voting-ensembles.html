@@ -4,9 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Voting Ensembles · Decision Trees</title>
+<script src="../lib/motion.js"></script>
 <script src="../vendor/js/d3.v7.min.js"></script>
 <link href="../vendor/fonts/sans-serif-mono/fonts.css" rel="stylesheet">
-<script src="../lib/motion.js"></script>
+<link href="../vendor/katex@0.16.11/katex.min.css" rel="stylesheet">
+<script src="../vendor/katex@0.16.11/katex.min.js"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
@@ -32,6 +34,8 @@
 .t-single { color: var(--c-single); font-weight: 600; }
 .t-avg { color: var(--c-avg); font-weight: 600; }
 .t-truth { color: var(--c-truth); font-weight: 600; }
+.t-oob { color: var(--c-oob); font-weight: 600; }
+.t-data { color: var(--c-data); font-weight: 600; }
 
 body { font-family: var(--body-font); font-size: var(--body-size); line-height: var(--line-height); color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased; }
 .article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1.25rem 6rem; }
@@ -49,38 +53,42 @@ code { font-family: var(--mono-font); font-size: 0.9em; background: #f1f1f5; pad
 .header { padding: 3rem 0 2rem; border-bottom: 1px solid var(--border); margin-bottom: 2.5rem; }
 .header .subtitle { font-family: var(--heading-font); font-size: 1.15rem; color: var(--text-2); max-width: 620px; }
 
-.figure { margin: 2rem 0; padding: 1.5rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.figure { margin: 2rem 0; padding: 1.25rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
 .figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; line-height: 1.45; }
 .figure-label { font-weight: 600; color: var(--text); }
 
-.btn { font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600; padding: 0.4rem 0.85rem; border-radius: 5px; border: 1px solid var(--border); background: var(--fig-bg); color: var(--text); cursor: pointer; user-select: none; transition: background 0.15s, border-color 0.15s; }
+.btn { font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600; padding: 0.35rem 0.75rem; border-radius: 5px; border: 1px solid var(--border); background: var(--fig-bg); color: var(--text); cursor: pointer; user-select: none; transition: background 0.15s, border-color 0.15s; }
 .btn:hover { border-color: var(--accent); background: var(--accent-light); }
-.btn.active { background: var(--accent); color: white; border-color: var(--accent); }
-
+.btn.active, .btn[aria-pressed="true"] { background: var(--accent); color: white; border-color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 svg text { font-family: var(--heading-font); }
+svg { display: block; overflow: visible; }
 
-.panel { display: grid; grid-template-columns: 1fr 260px; gap: 1.5rem; align-items: start; }
-@media (max-width: 680px) { .panel { grid-template-columns: 1fr; } }
-.controls-col { display: flex; flex-direction: column; gap: 0.85rem; font-family: var(--heading-font); font-size: 0.9rem; }
-.slider-row { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 0.5rem 1rem; }
-.slider-row .lbl { color: var(--text-2); font-weight: 600; font-size: 0.82rem; }
-.slider-row .val { font-family: var(--mono-font); color: var(--text); min-width: 3rem; text-align: right; font-weight: 600; }
-.slider-row input[type="range"] { width: 100%; }
+.ctl-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem; font-family: var(--heading-font); font-size: 0.85rem; margin-bottom: 0.75rem; }
+.ctl-row .group { display: flex; gap: 0.35rem; align-items: center; }
+.slider { display: flex; align-items: center; gap: 0.5rem; }
+.slider .lbl { color: var(--text-2); font-weight: 600; font-size: 0.82rem; white-space: nowrap; }
+.slider .val { font-family: var(--mono-font); font-weight: 600; min-width: 2.2rem; text-align: right; }
+.slider input[type="range"] { width: 120px; }
+.two-up { display: flex; flex-wrap: wrap; gap: 0.5rem 1.25rem; }
+.two-up > div { min-width: 0; }
+.readout { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text); line-height: 1.45; margin-top: 0.5rem; min-height: 2.5em; }
+.readout .num { font-family: var(--mono-font); font-size: 0.95em; }
+.tex-live { min-height: 2.6rem; font-size: 0.95rem; overflow-x: auto; overflow-y: hidden; }
+.tex-display { text-align: center; margin: 0.5rem 0 1.25rem; overflow-x: auto; overflow-y: hidden; }
+.pending { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); }
+.pick { cursor: pointer; }
+.pick:focus { outline: none; }
+.pick:focus-visible { stroke: var(--accent); stroke-width: 3; }
 
-.stat-box { padding: 0.8rem 1rem; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; font-family: var(--heading-font); font-size: 0.86rem; line-height: 1.55; }
-.stat-box .label { font-size: 0.72rem; font-weight: 700; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.3rem; }
-.stat-box .row { display: flex; justify-content: space-between; gap: 0.5rem; margin-top: 0.15rem; }
-.stat-box .row .k { color: var(--text-2); }
-.stat-box .row .v { font-family: var(--mono-font); font-weight: 600; color: var(--text); }
-
-.nav-footer { margin-top: 5rem; padding-top: 2rem; border-top: 1px solid var(--border); display: flex; justify-content: space-between; font-family: var(--heading-font); font-size: 0.9rem; }
+.nav-footer { margin-top: 5rem; padding-top: 2rem; border-top: 1px solid var(--border); display: flex; justify-content: space-between; gap: 1rem; font-family: var(--heading-font); font-size: 0.9rem; }
 .nav-footer a { color: var(--accent); text-decoration: none; }
 .nav-footer a:hover { text-decoration: underline; }
 .nav-footer .spacer { flex: 1; }
 
 @media (prefers-reduced-motion: reduce) { html:not([data-motion="full"]) * { transition-duration: 0s !important; animation-duration: 0s !important; } }
-@media (max-width: 680px) { h1 { font-size: 1.75rem; } .article { padding: 1.5rem 1rem 4rem; } }
+@media (max-width: 680px) { h1 { font-size: 1.75rem; } .article { padding: 1.5rem 1rem 4rem; } .figure { padding: 0.9rem; } .slider input[type="range"] { width: 96px; } }
 
 /* Dark mode: same hues, lighter shades */
 @media (prefers-color-scheme: dark) {
@@ -93,7 +101,7 @@ svg text { font-family: var(--heading-font); }
   html { color-scheme: dark; }
   a:hover { color: #93c5fd; }
   code { background: #262636; }
-  .btn.active, button[aria-pressed="true"] { color: #14141c; }
+  .btn.active, .btn[aria-pressed="true"] { color: #14141c; }
 }
 </style>
 </head>
@@ -104,109 +112,136 @@ svg text { font-family: var(--heading-font); }
 
 <div class="header">
   <h1>Voting Ensembles</h1>
-  <p class="subtitle">Chapter 3 of 6. Averaging many trees trained on resampled data cancels most of a single tree's instability, down to a floor set by how correlated the trees are. Random feature subsets lower that floor.</p>
+  <p class="subtitle">Chapter 3 of 6. Averaging trees trained on resampled data cancels most of their jitter, down to a floor set by how correlated the trees are.</p>
 </div>
 
-<p>Chapter 2 ended with the idea of combining many trees. The reason to combine them is that trees are unstable: removing a few rows can produce a structurally different tree, however the splits are scored or α is tuned. Bagging trains many trees, each on a slightly different version of the data, and averages them so that most of the variation cancels. This chapter asks how far that averaging can go.</p>
+<p>Drop a few rows and a tree's splits can move. Bagging trains many trees, each on a resampled copy of the data, and averages them.</p>
 
-<h2>Bootstrap samples</h2>
+<h2>What does a bootstrap sample leave out?</h2>
 
-<p>Each version is a <em>bootstrap sample</em>: draw rows with replacement until you have the original count. Some rows appear twice and some not at all. The trees diverge only because they saw different samples, and averaging cancels the divergence.</p>
-
-<p>Every bootstrap leaves out about a third of the data. Passing those rows through the trees that didn't see them gives a free validation set, the <em>out-of-bag</em> estimate.</p>
-
-<h2>Correlation between trees</h2>
-
-<p>If one feature is far more predictive than the others, every tree picks it for the root split. The trees end up highly correlated, and past a certain number of trees bagging stops improving.</p>
-
-<p>Suppose each tree's prediction at some point has variance &sigma;&sup2; around its mean, and any two trees have correlation &rho;. The variance of the average of B trees is then</p>
-
-<p style="text-align: center; font-family: var(--mono-font); font-size: 0.95rem;">Var(average) = &rho;&sigma;&sup2; + (1 &minus; &rho;) &sigma;&sup2; / B</p>
-
-<p>The second term shrinks as trees are added. The first does not depend on B at all. With &rho; = 0.5, no number of trees gets the variance below half of a single tree's (<a href="https://hastie.su.domains/ElemStatLearn/">Hastie, Tibshirani and Friedman</a>, equation 15.1). Figure 1 checks the formula by simulation: it averages B correlated noisy predictors 2000 times and measures the variance of the result.</p>
+<p>Each copy is a <em>bootstrap sample</em>: n rows drawn with replacement from n. A given row is missed with probability (1 &minus; 1/n)<sup>n</sup>, so every tree has roughly a third of the data it never saw.</p>
 
 <div class="figure">
-  <div id="corr-wrap" class="panel">
-    <div><div id="corr-viz"></div></div>
-    <div class="controls-col">
-      <div class="slider-row">
-        <div class="lbl">correlation (&rho;)</div>
-        <input type="range" id="corr-rho" min="0" max="90" step="5" value="50">
-        <div class="val" id="corr-rho-val">0.50</div>
-      </div>
-      <button class="btn" id="corr-resim">Re-simulate</button>
-      <div id="corr-read" style="font-size: 0.8rem; color: var(--text-2); line-height: 1.4;"></div>
+  <div class="ctl-row">
+    <div class="group">
+      <button class="btn" id="bs-one">Draw another</button>
+      <button class="btn" id="bs-many">Draw 100 more</button>
     </div>
   </div>
-  <p class="figure-caption"><span class="figure-label">Figure 1.</span> Variance of an average of B predictors, each with variance 1 and pairwise correlation &rho;. Dots are measured from 2000 simulated draws; the solid line is the formula; the dashed line is what independent predictors would give; the horizontal line is the floor &rho;&sigma;&sup2;.</p>
+  <div class="two-up">
+    <div id="bs-strip" style="flex: 3 1 280px;"></div>
+    <div id="bs-hist" style="flex: 2 1 190px;"></div>
+  </div>
+  <div class="readout" id="bs-read" aria-live="polite"></div>
+  <p class="figure-caption"><span class="figure-label">Figure 1.</span> Seeded simulated bootstrap draws of 30 row indices. Strip: the latest sample, one dot per time a row was drawn, with <span class="t-oob">orange rings</span> on the rows it left out. Bars: across all samples so far, the share of rows drawn 0, 1, 2, ... times; the ticks are the binomial probabilities. The figure opens with 40 draws already made.</p>
 </div>
 
-<p>Lowering the floor requires lowering &rho;. Random forests do this by considering a random subset of features at every node. The dominant feature is unavailable at most nodes, so the trees diverge structurally and correlation drops. Breiman recommended <code>√p</code> features per split for classification and <code>p/3</code> for regression.</p>
+<h2>How far can averaging go?</h2>
 
-<h2>Extra-Trees</h2>
+<p>Suppose each tree's prediction at a point has variance &sigma;&sup2; and any two trees have correlation &rho;. The average of B trees then has variance (<a href="https://hastie.su.domains/ElemStatLearn/">Hastie, Tibshirani and Friedman</a>, eq. 15.1)</p>
 
-<p>Extra-Trees go one step further and pick a random threshold per feature instead of the best one. Each tree is worse, but the forest is more decorrelated and often beats a standard random forest on noisy problems. In an ensemble, diversity between trees can matter more than the quality of any one of them.</p>
+<div class="tex-display" id="tex-var"></div>
 
-<h2>Tree count, feature subsets and thresholds</h2>
-
-<p>Figure 2 puts tree count, features per split and threshold randomness on one regression problem.</p>
+<p>The first term does not shrink with B.</p>
 
 <div class="figure">
-  <div id="main" class="panel">
-    <div>
-      <div id="m-viz"></div>
+  <div class="ctl-row">
+    <div class="slider">
+      <label class="lbl" for="corr-rho">correlation &rho;</label>
+      <input type="range" id="corr-rho" min="0" max="90" step="5" value="50">
+      <span class="val" id="corr-rho-val">0.50</span>
     </div>
-    <div class="controls-col">
-      <div class="slider-row">
-        <div class="lbl">trees (B)</div>
-        <input type="range" id="m-B" min="1" max="80" step="1" value="20">
-        <div class="val" id="m-B-val">20</div>
-      </div>
-      <div class="slider-row">
-        <div class="lbl">features per split (m)</div>
-        <input type="range" id="m-m" min="1" max="4" step="1" value="4">
-        <div class="val" id="m-m-val">4</div>
-      </div>
-      <div style="font-size: 0.72rem; color: var(--text-2); margin-top: -0.5rem;">4 = plain bagging · lower = random forest</div>
-      <div class="slider-row">
-        <div class="lbl">threshold randomness</div>
-        <input type="range" id="m-rand" min="0" max="100" step="5" value="0">
-        <div class="val" id="m-rand-val">0%</div>
-      </div>
-      <div style="font-size: 0.72rem; color: var(--text-2); margin-top: -0.5rem;">0% = greedy · 100% = Extra-Trees</div>
-      <div class="slider-row">
-        <div class="lbl">noise</div>
-        <input type="range" id="m-noise" min="10" max="80" step="5" value="35">
-        <div class="val" id="m-noise-val">0.35</div>
-      </div>
-      <div style="display: flex; gap: 0.4rem;">
-        <button class="btn" id="m-reroll">Re-sample</button>
-        <button class="btn active" id="m-show" aria-pressed="true">Show trees</button>
-      </div>
-      <div class="stat-box">
-        <div class="label">Test RMSE</div>
-        <div class="row"><span class="k"><span class="t-single">single tree</span></span><span class="v" id="m-err-single">&nbsp;</span></div>
-        <div class="row"><span class="k"><span class="t-avg">ensemble</span></span><span class="v" id="m-err-ens">&nbsp;</span></div>
-      </div>
-      <div class="stat-box">
-        <div class="label">Tree-to-tree similarity</div>
-        <div class="row"><span class="k">correlation</span><span class="v" id="m-corr">&nbsp;</span></div>
-        <div class="row"><span class="k">OOB fraction</span><span class="v" id="m-oob">&nbsp;</span></div>
-      </div>
-    </div>
+    <button class="btn" id="corr-resim">Re-simulate</button>
   </div>
-  <p class="figure-caption"><span class="figure-label">Figure 2.</span> <span class="t-single">Faint purple lines</span> are individual trees and the <span class="t-avg">thick blue line</span> is their average. More trees smooth the average. Fewer features per split make the trees diverge, which lowers their correlation and usually lowers the ensemble's error. Threshold randomness makes each tree less greedy still; some datasets improve and others don't. The noise slider resets the data. Plain bagging is m = 4 with 0% randomness, a standard random forest is m = 2 with 0%, and Extra-Trees, whose regression default looks at every feature, is m = 4 with 100% (Extra-Trees also skip the bootstrap, which this figure keeps). m = 1 with 100% is what Geurts and colleagues call totally randomized trees.</p>
+  <div id="corr-viz"></div>
+  <div class="tex-live" id="corr-tex" aria-hidden="true"></div>
+  <div class="readout" id="corr-read" aria-live="polite"></div>
+  <p class="figure-caption"><span class="figure-label">Figure 2.</span> Variance of an average of B simulated predictors with variance 1 and pairwise correlation &rho;. <span class="t-avg">Dots</span> are measured from 2000 seeded draws per B, so they wander a few percent off the line; the <span class="t-avg">solid line</span> is the formula; the dashed line is what independent predictors would give; the <span class="t-single">purple line</span> is the floor &rho;&sigma;&sup2;.</p>
 </div>
 
-<h2>Tree depth in bagging</h2>
+<h2>What do random features and thresholds change?</h2>
 
-<p>A single tree is usually pruned, but bagged trees are grown fully. Averaging removes variance and does nothing for bias, so each tree should be deep and expressive (low bias, high variance). A pruned tree carries extra bias that averaging cannot fix. Random forests in scikit-learn have no max depth by default. XGBoost uses shallow trees because its trees are added rather than averaged, which is the subject of the next chapter.</p>
+<p>Trees grown on overlapping samples of the same data make similar splits, so &rho; sits well above zero. A random forest lowers it by letting each node consider only m of the p features. Extra-Trees (<a href="https://doi.org/10.1007/s10994-006-6226-1">Geurts, Ernst and Wehenkel, 2006</a>) also draw each candidate threshold at random instead of searching for the best one.</p>
 
-<h2>Random forests in practice</h2>
+<div class="figure">
+  <div class="ctl-row">
+    <div class="slider">
+      <label class="lbl" for="m-B">trees B</label>
+      <input type="range" id="m-B" min="1" max="80" step="1" value="20">
+      <span class="val" id="m-B-val">20</span>
+    </div>
+    <div class="slider">
+      <label class="lbl" for="m-m">features per split m</label>
+      <input type="range" id="m-m" min="1" max="4" step="1" value="4">
+      <span class="val" id="m-m-val">4</span>
+    </div>
+    <div class="group" role="group" aria-label="threshold choice">
+      <button class="btn" id="m-best" aria-pressed="true">best threshold</button>
+      <button class="btn" id="m-rand" aria-pressed="false">random threshold</button>
+    </div>
+    <button class="btn" id="m-reroll">New training set</button>
+  </div>
+  <div id="m-viz"></div>
+  <div class="readout" id="m-read" aria-live="polite"></div>
+  <p class="figure-caption"><span class="figure-label">Figure 3.</span> Seeded simulated data: 70 rows, four features, y is the <span class="t-truth">dashed green curve</span> of feature 0 plus uniform noise of &plusmn;0.35. Feature 1 is a noisy function of feature 0; features 2 and 3 are pure noise. <span class="t-single">Faint purple</span>: individual fully grown trees, each on its own bootstrap sample; <span class="t-avg">thick blue</span>: their average, drawn along feature 0 with the other features at typical values. m = 4 with the best threshold is plain bagging, lower m is a random forest, and m = 4 with random thresholds is the Extra-Trees regression default (real Extra-Trees also skip the bootstrap, which this figure keeps). m = 1 with random thresholds is what Geurts and colleagues call totally randomized trees.</p>
+</div>
 
-<p>Random forests are still the first thing many data scientists try. They need little tuning and no preprocessing for mixed data types, give feature importance and out-of-bag error for free, and are competitive with careful deep learning on tabular data. The main cost is inference speed: 500 trees means 500 lookups per row.</p>
+<h2>What does a lower &rho; cost?</h2>
 
-<p>Next, a different way to combine trees: grow them in sequence so each one corrects the mistakes of the ones before.</p>
+<p>Fewer features per split lower &rho; but make each tree worse. Figure 4 measures both.</p>
+
+<div class="figure">
+  <div class="ctl-row">
+    <div class="slider">
+      <label class="lbl" for="d-B">forest size B</label>
+      <input type="range" id="d-B" min="1" max="200" step="1" value="50">
+      <span class="val" id="d-B-val">50</span>
+    </div>
+  </div>
+  <div class="two-up">
+    <div id="d-rho" style="flex: 2 1 200px;"></div>
+    <div id="d-err" style="flex: 3 1 260px;"></div>
+  </div>
+  <div class="readout" id="d-read" aria-live="polite"></div>
+  <p class="figure-caption"><span class="figure-label">Figure 4.</span> The Figure 3 problem, measured. For each m and threshold rule, 30 seeded training sets each grow 20 fully grown trees, predicting at 100 test points. Line chart: &rho;, the correlation between two trees from the same training set (solid dots: best threshold; hollow: random). Bars: expected squared error of a B-tree forest against the true curve, as <span class="t-data">bias&sup2;</span> plus <span class="t-single">variance &rho;&sigma;&sup2; + (1 &minus; &rho;)&sigma;&sup2;/B</span>; in each pair the left bar uses the best threshold and the right a random one. Label noise is not counted.</p>
+</div>
+
+<p>At B = 1 the ranking flips: randomness only hurts a lone tree. The textbook regression default, &lfloor;p/3&rfloor; = 1 feature here, gives the worst of the four m values; scikit-learn's forest regressor has defaulted to all features, plain bagging, since version 1.1.</p>
+
+<h2>How deep should bagged trees grow?</h2>
+
+<p>Averaging removes variance and leaves bias alone, so bagged trees are usually grown to full depth; scikit-learn's forests set no depth limit by default.</p>
+
+<div class="figure">
+  <div class="ctl-row">
+    <div class="group" role="group" aria-label="label noise">
+      <button class="btn" id="dp-hi" aria-pressed="true">noise &plusmn;0.35</button>
+      <button class="btn" id="dp-lo" aria-pressed="false">noise &plusmn;0.10</button>
+    </div>
+  </div>
+  <div id="dp-viz"></div>
+  <div class="readout" id="dp-read" aria-live="polite"></div>
+  <p class="figure-caption"><span class="figure-label">Figure 5.</span> Squared error against the true curve by maximum depth, for <span class="t-single">a single tree</span> on the whole training set and <span class="t-avg">a forest of 30 bagged trees</span> (m = 4), both averaged over 10 seeded simulated training sets of the Figure 3 problem. Rings mark each curve's minimum.</p>
+</div>
+
+<p>Depth that ruins a single tree barely moves the forest, though with noisy labels shallower trees still help a little (<a href="https://hastie.su.domains/ElemStatLearn/">Hastie and colleagues</a>, section 15.3.4). With less noise the difference all but vanishes.</p>
+
+<h2>Is out-of-bag error an honest test?</h2>
+
+<p>The rows a tree never saw are a free validation set. Predict each row with only the trees that left it out, and the error of those predictions is the <em>out-of-bag</em> estimate.</p>
+
+<div class="figure">
+  <div class="two-up">
+    <div id="oob-curve" style="flex: 3 1 280px;"></div>
+    <div id="oob-scatter" style="flex: 2 1 200px;"></div>
+  </div>
+  <div class="readout" id="oob-read" aria-live="polite"></div>
+  <p class="figure-caption"><span class="figure-label">Figure 6.</span> Curves: for one seeded training set of the Figure 3 problem, <span class="t-oob">out-of-bag RMSE</span> and <span class="t-avg">RMSE on 500 fresh test rows</span> as bagged trees are added. Both are measured against noisy labels, so neither can drop below the noise's standard deviation (dashed). Scatter: the two numbers at B = 100 for 40 training sets; click a dot, or focus one and use the arrow keys, to show its curves.</p>
+</div>
+
+<p>With few trees the out-of-bag curve runs high, since each row is predicted by only about a third of them. By a hundred trees the two agree to within the spread between training sets.</p>
+
+<p>Next: trees grown in sequence, each correcting the ones before.</p>
 
 <div class="nav-footer">
   <a href="02-geometry-and-pruning.html">← Chapter 2: Geometry and Pruning</a>
@@ -217,281 +252,163 @@ svg text { font-family: var(--heading-font); }
 </div>
 
 <script>
+// ─────────────────────────────────────────────── shared helpers ──
 function prng(seed) { var s = seed >>> 0; return function () { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; }; }
-function mean(arr) { return arr.reduce(function (a, b) { return a + b; }, 0) / arr.length; }
-
-// Build a regression tree with per-split feature subsampling and optional random thresholds.
-// pts have .features = [x1, x2, ...] and .y.
-function buildTree(pts, depth, maxDepth, m, randomness, r, P) {
-  if (depth >= maxDepth || pts.length < 3) {
-    return { leaf: true, prediction: mean(pts.map(function (p) { return p.y; })) };
-  }
-  // Sample m features.
-  var perm = [];
-  for (var j = 0; j < P; j++) perm.push(j);
-  for (var k = perm.length - 1; k > 0; k--) {
-    var s = Math.floor(r() * (k + 1));
-    var tmp = perm[k]; perm[k] = perm[s]; perm[s] = tmp;
-  }
-  var feats = perm.slice(0, m);
-  var n = pts.length;
-  var best = null;
-
-  feats.forEach(function (f) {
-    var sorted = pts.slice().sort(function (a, b) { return a.features[f] - b.features[f]; });
-    if (sorted[0].features[f] === sorted[n - 1].features[f]) return;
-    var thr;
-    if (r() < randomness) {
-      // Random threshold in range.
-      thr = sorted[0].features[f] + r() * (sorted[n - 1].features[f] - sorted[0].features[f]);
-    } else {
-      // Greedy threshold search on this feature.
-      var totSum = 0, totSumSq = 0;
-      sorted.forEach(function (p) { totSum += p.y; totSumSq += p.y * p.y; });
-      var totalSS = totSumSq - totSum * totSum / n;
-      var runSum = 0, runSumSq = 0;
-      var bestF = null;
-      for (var i = 1; i < n; i++) {
-        runSum += sorted[i - 1].y;
-        runSumSq += sorted[i - 1].y * sorted[i - 1].y;
-        if (sorted[i].features[f] - sorted[i - 1].features[f] < 1e-9) continue;
-        var nL = i, nR = n - i;
-        var sumR = totSum - runSum, sumSqR = totSumSq - runSumSq;
-        var ssL = runSumSq - runSum * runSum / nL;
-        var ssR = sumSqR - sumR * sumR / nR;
-        var gain = totalSS - (ssL + ssR);
-        if (!bestF || gain > bestF.gain) bestF = { gain: gain, threshold: (sorted[i].features[f] + sorted[i - 1].features[f]) / 2 };
-      }
-      if (!bestF) return;
-      thr = bestF.threshold;
-    }
-    var left = sorted.filter(function (p) { return p.features[f] <= thr; });
-    var right = sorted.filter(function (p) { return p.features[f] > thr; });
-    if (left.length === 0 || right.length === 0) return;
-    // Evaluate actual gain (even when threshold was random) for selection across features.
-    var lM = mean(left.map(function (p) { return p.y; }));
-    var rM = mean(right.map(function (p) { return p.y; }));
-    var totSum = 0, totSumSq = 0;
-    sorted.forEach(function (p) { totSum += p.y; totSumSq += p.y * p.y; });
-    var totalSS = totSumSq - totSum * totSum / n;
-    var ssL = left.reduce(function (s, p) { return s + (p.y - lM) * (p.y - lM); }, 0);
-    var ssR = right.reduce(function (s, p) { return s + (p.y - rM) * (p.y - rM); }, 0);
-    var g = totalSS - (ssL + ssR);
-    if (!best || g > best.gain) best = { feature: f, threshold: thr, gain: g, left: left, right: right };
-  });
-  if (!best) return { leaf: true, prediction: mean(pts.map(function (p) { return p.y; })) };
-  return {
-    leaf: false, feature: best.feature, threshold: best.threshold,
-    left: buildTree(best.left, depth + 1, maxDepth, m, randomness, r, P),
-    right: buildTree(best.right, depth + 1, maxDepth, m, randomness, r, P)
-  };
-}
-
-function predictTree(tree, features) {
-  if (tree.leaf) return tree.prediction;
-  return features[tree.feature] <= tree.threshold ? predictTree(tree.left, features) : predictTree(tree.right, features);
-}
-
+function mean(arr) { var s = 0; for (var i = 0; i < arr.length; i++) s += arr[i]; return s / arr.length; }
 function trueFn(x) { return 0.5 + 0.4 * Math.sin(x * Math.PI * 1.8); }
+function feat1Mean(x) { return 0.5 + 0.2 * Math.sin(x * Math.PI * 3); }
+var P = 4, N = 70, NOISE = 0.35;
 
+// Training rows: x on a jittered grid, four features, y = trueFn(x) + uniform(-noise, noise).
+function makeData(seed, noise) {
+  var r = prng(seed), out = [];
+  for (var i = 0; i < N; i++) {
+    var x = Math.max(0, Math.min(1, i / (N - 1) + (r() - 0.5) * 0.005));
+    var f = [x, feat1Mean(x) + (r() - 0.5) * 0.3, r(), r()];
+    out.push({ features: f, y: trueFn(x) + (r() - 0.5) * noise * 2 });
+  }
+  return out;
+}
+function makeTest(seed, n, noise) {
+  var r = prng(seed), out = [];
+  for (var i = 0; i < n; i++) {
+    var x = r();
+    var f = [x, feat1Mean(x) + (r() - 0.5) * 0.3, r(), r()];
+    var t = trueFn(x);
+    out.push({ features: f, truth: t, y: t + (r() - 0.5) * noise * 2 });
+  }
+  return out;
+}
+
+// Regression tree. Each node tries m random features; with random = true each tried
+// feature gets one uniform random threshold (Extra-Trees) instead of the best one.
+function buildTree(pts, depth, maxDepth, m, random, r) {
+  var n = pts.length;
+  var leafV = function () { var s = 0; for (var i = 0; i < n; i++) s += pts[i].y; return s / n; };
+  if (depth >= maxDepth || n < 3) return { leaf: true, v: leafV() };
+  var perm = [0, 1, 2, 3];
+  for (var k = P - 1; k > 0; k--) { var s = Math.floor(r() * (k + 1)); var t = perm[k]; perm[k] = perm[s]; perm[s] = t; }
+  var best = null;
+  for (var fi = 0; fi < m; fi++) {
+    var f = perm[fi];
+    var sorted = pts.slice().sort(function (a, b) { return a.features[f] - b.features[f]; });
+    var lo = sorted[0].features[f], hi = sorted[n - 1].features[f];
+    if (hi - lo < 1e-12) continue;
+    var tot = 0, tot2 = 0, i;
+    for (i = 0; i < n; i++) { tot += sorted[i].y; tot2 += sorted[i].y * sorted[i].y; }
+    var cand = random ? lo + r() * (hi - lo) : null;
+    var run = 0, run2 = 0;
+    for (i = 1; i < n; i++) {
+      run += sorted[i - 1].y; run2 += sorted[i - 1].y * sorted[i - 1].y;
+      var a = sorted[i - 1].features[f], b = sorted[i].features[f];
+      if (b - a < 1e-12) continue;
+      var thr = (a + b) / 2;
+      if (random) { if (!(cand > a && cand <= b)) continue; thr = cand; }
+      var nL = i, nR = n - i, sR = tot - run, s2R = tot2 - run2;
+      var sse = (run2 - run * run / nL) + (s2R - sR * sR / nR);
+      if (!best || sse < best.sse) best = { f: f, thr: thr, sse: sse };
+    }
+  }
+  if (!best) return { leaf: true, v: leafV() };
+  var L = [], R = [];
+  pts.forEach(function (p) { (p.features[best.f] <= best.thr ? L : R).push(p); });
+  return { leaf: false, f: best.f, thr: best.thr,
+    left: buildTree(L, depth + 1, maxDepth, m, random, r), right: buildTree(R, depth + 1, maxDepth, m, random, r) };
+}
+function predict(t, x) { while (!t.leaf) t = x[t.f] <= t.thr ? t.left : t.right; return t.v; }
+function bootstrap(n, r) { var idx = new Array(n); for (var i = 0; i < n; i++) idx[i] = Math.floor(r() * n); return idx; }
+
+function isDark() { return window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches; }
+function fmt(v, d) { return v.toFixed(d === undefined ? 3 : d); }
+
+// Redraw a chart at its container's pixel width (keeps SVG text at its real size).
+function sized(id, draw) {
+  var el = document.getElementById(id), last = 0;
+  function go(force) { var w = Math.floor(el.getBoundingClientRect().width); if (w > 0 && (force || w !== last)) { last = w; draw(d3.select(el), w); } }
+  var t; new ResizeObserver(function () { clearTimeout(t); t = setTimeout(function () { go(false); }, 60); }).observe(el);
+  go(true);
+  return function () { go(true); };
+}
+function axisStyle(g) { g.selectAll('text').attr('font-size', 11).attr('fill', 'var(--text-2)'); g.selectAll('path,line').attr('stroke', 'var(--border)'); }
+
+// Run heavy simulations in small slices so the page stays responsive.
+var jobQueue = [];
+function enqueue(fn) { jobQueue.push(fn); if (jobQueue.length === 1) setTimeout(pump, 0); }
+function pump() { var t0 = performance.now(); while (jobQueue.length && performance.now() - t0 < 30) { if (jobQueue[0]() !== false) jobQueue.shift(); } if (jobQueue.length) setTimeout(pump, 0); }
+
+// ───────────────────────────────────────── Fig 1: bootstrap sample ──
 (function () {
-  // Dataset has 4 features. Only feature 0 (x) carries real signal; features 1,2,3 are mostly noise
-  // but feature 1 has a weak correlation to y.
-  var P = 4;
-  var N = 70;
-  var state = { B: 20, m: 4, rand: 0, noise: 0.35, seed: 1, showTrees: true };
-
-  function makeData() {
-    var r = prng(state.seed);
-    var out = [];
-    for (var i = 0; i < N; i++) {
-      var x = i / (N - 1) + (r() - 0.5) * 0.005;
-      x = Math.max(0, Math.min(1, x));
-      var feats = [x, 0.5 + 0.2 * Math.sin(x * Math.PI * 3) + (r() - 0.5) * 0.3, r(), r()];
-      var y = trueFn(x) + (r() - 0.5) * state.noise * 2;
-      out.push({ features: feats, y: y });
-    }
-    return out;
+  var n = 30, r = prng(95028), counts = [], hist = [0, 0, 0, 0, 0, 0], drawsN = 0, leftOut = 0;
+  function drawOne() {
+    var c = new Array(n).fill(0);
+    bootstrap(n, r).forEach(function (i) { c[i]++; });
+    counts = c; drawsN++;
+    c.forEach(function (v) { hist[Math.min(v, 5)]++; if (!v) leftOut++; });
   }
-  function makeTestData() {
-    var r = prng(state.seed + 4444);
-    var out = [];
-    for (var i = 0; i < 200; i++) {
-      var x = r();
-      var feats = [x, 0.5 + 0.2 * Math.sin(x * Math.PI * 3) + (r() - 0.5) * 0.3, r(), r()];
-      out.push({ features: feats, y: trueFn(x) });
-    }
-    return out;
-  }
+  for (var k = 0; k < 40; k++) drawOne();
+  function choose(a, b) { var v = 1; for (var i = 1; i <= b; i++) v = v * (a - b + i) / i; return v; }
+  var pmf = [0, 1, 2, 3, 4].map(function (k) { return choose(n, k) * Math.pow(1 / n, k) * Math.pow(1 - 1 / n, n - k); });
+  pmf.push(1 - d3.sum(pmf));
 
-  var MAX_B = 80;
-  var data, testData, forest;
-  function rebuildForest() {
-    data = makeData();
-    testData = makeTestData();
-    forest = [];
-    var r = prng(state.seed + 999 + state.m * 13 + Math.round(state.rand * 100) * 7);
-    for (var b = 0; b < MAX_B; b++) {
-      var sample = [];
-      var seen = {};
-      for (var i = 0; i < data.length; i++) {
-        var idx = Math.floor(r() * data.length);
-        sample.push(data[idx]);
-        seen[idx] = true;
-      }
-      var tree = buildTree(sample, 0, 10, state.m, state.rand, r, P);
-      tree._oobFrac = 1 - Object.keys(seen).length / data.length;
-      forest.push(tree);
-    }
-  }
-  rebuildForest();
-
-  var W = 440, H = 320, padL = 32, padR = 12, padT = 16, padB = 34;
-  var svg = d3.select('#m-viz').append('svg')
-    .attr('viewBox', '0 0 ' + W + ' ' + H)
-    .attr('width', '100%').style('max-width', W + 'px')
-    .attr('role', 'img');
-
-  function X(x) { return padL + x * (W - padL - padR); }
-  function Y(y) { return H - padB - (y - (-0.15)) / 1.3 * (H - padT - padB); }
-
-  svg.append('line').attr('x1', padL).attr('y1', H - padB).attr('x2', W - padR).attr('y2', H - padB).attr('stroke', 'var(--border)');
-  svg.append('line').attr('x1', padL).attr('y1', padT).attr('x2', padL).attr('y2', H - padB).attr('stroke', 'var(--border)');
-  [0, 0.25, 0.5, 0.75, 1].forEach(function (t) {
-    svg.append('text').attr('x', X(t)).attr('y', H - padB + 14).attr('text-anchor', 'middle')
-      .attr('font-size', 10).attr('fill', 'var(--text-2)').text(t);
-  });
-  svg.append('text').attr('x', (padL + W - padR) / 2).attr('y', H - 4).attr('text-anchor', 'middle').attr('font-size', 11).attr('fill', 'var(--text-2)').text('feature 0 (the informative one)');
-
-  // True function (once)
-  var truthPath = '';
-  for (var i = 0; i <= 200; i++) { var x = i / 200; truthPath += (i === 0 ? 'M' : 'L') + X(x) + ',' + Y(trueFn(x)); }
-  svg.append('path').attr('d', truthPath).attr('fill', 'none')
-    .attr('stroke', 'var(--c-truth)').attr('stroke-width', 1.5).attr('stroke-dasharray', '4 3').attr('opacity', 0.8);
-
-  var dataLayer = svg.append('g');
-  var treeLayer = svg.append('g');
-  var avgLayer = svg.append('g');
-
-  function render() {
-    dataLayer.selectAll('*').remove();
-    treeLayer.selectAll('*').remove();
-    avgLayer.selectAll('*').remove();
-
-    data.forEach(function (p) {
-      dataLayer.append('circle').attr('cx', X(p.features[0])).attr('cy', Y(p.y)).attr('r', 1.8)
-        .attr('fill', 'var(--c-data)').attr('opacity', 0.55);
+  var redrawStrip = sized('bs-strip', function (el, W) {
+    el.selectAll('*').remove();
+    var H = 170, m = { t: 10, r: 6, b: 32, l: 26 };
+    var svg = el.append('svg').attr('width', W).attr('height', H).attr('role', 'img');
+    var x = d3.scaleBand().domain(d3.range(n)).range([m.l, W - m.r]).padding(0.1);
+    var maxC = 6, y = d3.scaleLinear().domain([0, maxC]).range([H - m.b, m.t]);
+    var rad = Math.max(2, Math.min(x.bandwidth() / 2 - 0.5, (y(0) - y(1)) / 2 - 1));
+    svg.append('g').attr('transform', 'translate(' + m.l + ',0)').call(d3.axisLeft(y).ticks(3).tickSize(3)).call(axisStyle);
+    svg.append('g').attr('transform', 'translate(0,' + (H - m.b) + ')')
+      .call(d3.axisBottom(x).tickValues([0, 9, 19, 29]).tickFormat(function (d) { return d + 1; }).tickSize(3)).call(axisStyle);
+    svg.append('text').attr('x', (m.l + W - m.r) / 2).attr('y', H - 3).attr('text-anchor', 'middle').attr('font-size', 11).attr('fill', 'var(--text-2)').text('row of the original data (times drawn, stacked)');
+    counts.forEach(function (c, i) {
+      var cx = x(i) + x.bandwidth() / 2;
+      if (!c) { svg.append('circle').attr('cx', cx).attr('cy', y(0.5)).attr('r', rad).attr('fill', 'none').attr('stroke', 'var(--c-oob)').attr('stroke-width', 1.8); return; }
+      for (var j = 0; j < c; j++) svg.append('circle').attr('cx', cx).attr('cy', y(j + 0.5)).attr('r', rad).attr('fill', 'var(--c-data)');
     });
+    var out = counts.filter(function (v) { return !v; }).length;
+    svg.attr('aria-label', 'Latest bootstrap sample of 30 rows: ' + out + ' rows left out, the most-drawn row drawn ' + d3.max(counts) + ' times.');
+  });
 
-    var xs = [];
-    for (var i = 0; i <= 180; i++) xs.push(i / 180);
-    if (state.showTrees) {
-      for (var b = 0; b < state.B; b++) {
-        var path = '';
-        xs.forEach(function (x, k) {
-          var features = [x, 0.5, 0.5, 0.5];
-          var y = predictTree(forest[b], features);
-          path += (k === 0 ? 'M' : 'L') + X(x) + ',' + Y(y);
-        });
-        treeLayer.append('path').attr('d', path).attr('fill', 'none')
-          .attr('stroke', 'var(--c-single)').attr('stroke-width', 0.7)
-          .attr('opacity', Math.max(0.1, 0.35 - state.B * 0.002));
-      }
-    }
-
-    var avgPath = '';
-    xs.forEach(function (x, k) {
-      var features = [x, 0.5, 0.5, 0.5];
-      var sum = 0;
-      for (var b = 0; b < state.B; b++) sum += predictTree(forest[b], features);
-      var y = sum / state.B;
-      avgPath += (k === 0 ? 'M' : 'L') + X(x) + ',' + Y(y);
+  var redrawHist = sized('bs-hist', function (el, W) {
+    el.selectAll('*').remove();
+    var H = 170, m = { t: 10, r: 6, b: 32, l: 34 };
+    var svg = el.append('svg').attr('width', W).attr('height', H).attr('role', 'img');
+    var labels = ['0', '1', '2', '3', '4', '5+'];
+    var x = d3.scaleBand().domain(labels).range([m.l, W - m.r]).padding(0.25);
+    var y = d3.scaleLinear().domain([0, 0.45]).range([H - m.b, m.t]);
+    svg.append('g').attr('transform', 'translate(' + m.l + ',0)').call(d3.axisLeft(y).ticks(3, '%').tickSize(3)).call(axisStyle);
+    svg.append('g').attr('transform', 'translate(0,' + (H - m.b) + ')').call(d3.axisBottom(x).tickSize(0)).call(axisStyle);
+    svg.append('text').attr('x', (m.l + W - m.r) / 2).attr('y', H - 3).attr('text-anchor', 'middle').attr('font-size', 11).attr('fill', 'var(--text-2)').text('times a row is drawn');
+    var total = drawsN * n;
+    labels.forEach(function (lab, k) {
+      var f = hist[k] / total;
+      svg.append('rect').attr('x', x(lab)).attr('width', x.bandwidth()).attr('y', y(f)).attr('height', y(0) - y(f))
+        .attr('fill', k === 0 ? 'var(--c-oob)' : 'var(--c-data)').attr('opacity', 0.8);
+      svg.append('line').attr('x1', x(lab) - 3).attr('x2', x(lab) + x.bandwidth() + 3).attr('y1', y(pmf[k])).attr('y2', y(pmf[k]))
+        .attr('stroke', 'var(--text)').attr('stroke-width', 2);
     });
-    avgLayer.append('path').attr('d', avgPath).attr('fill', 'none')
-      .attr('stroke', 'var(--c-avg)').attr('stroke-width', 2.5);
-    svg.attr('aria-label', 'Noisy points around a dashed true function of feature 0. ' +
-      (state.showTrees ? state.B + ' individual tree predictions are drawn as faint purple staircases; ' : '') +
-      'the thick blue line is the average of ' + state.B + ' trees using ' + state.m + ' features per split.');
+    svg.attr('aria-label', 'Share of rows drawn 0 to 5 or more times over ' + drawsN + ' samples, with binomial ticks. Left out: ' + fmt(100 * hist[0] / total, 1) + '% against ' + fmt(100 * pmf[0], 1) + '% expected.');
+  });
 
-    // Stats
-    var singleErr = 0, ensErr = 0;
-    var testF = testData;
-    testF.forEach(function (p) {
-      var singlePred = predictTree(forest[0], p.features);
-      singleErr += (singlePred - p.y) * (singlePred - p.y);
-      var sum = 0;
-      for (var b = 0; b < state.B; b++) sum += predictTree(forest[b], p.features);
-      var avg = sum / state.B;
-      ensErr += (avg - p.y) * (avg - p.y);
-    });
-    singleErr = Math.sqrt(singleErr / testF.length);
-    ensErr = Math.sqrt(ensErr / testF.length);
-    document.getElementById('m-err-single').textContent = singleErr.toFixed(3);
-    document.getElementById('m-err-ens').textContent = ensErr.toFixed(3);
-
-    // Correlation between trees: simple metric — average pairwise Pearson correlation of predictions on test data.
-    if (state.B >= 2) {
-      var preds = [];
-      for (var b = 0; b < state.B; b++) preds.push(testF.map(function (p) { return predictTree(forest[b], p.features); }));
-      var total = 0, pairs = 0, sampleN = Math.min(state.B, 15);
-      for (var i = 0; i < sampleN; i++) {
-        for (var j = i + 1; j < sampleN; j++) {
-          var m1 = mean(preds[i]), m2 = mean(preds[j]);
-          var cov = 0, v1 = 0, v2 = 0;
-          for (var k = 0; k < preds[i].length; k++) {
-            cov += (preds[i][k] - m1) * (preds[j][k] - m2);
-            v1 += (preds[i][k] - m1) * (preds[i][k] - m1);
-            v2 += (preds[j][k] - m2) * (preds[j][k] - m2);
-          }
-          var corr = v1 > 0 && v2 > 0 ? cov / Math.sqrt(v1 * v2) : 0;
-          total += corr;
-          pairs++;
-        }
-      }
-      var avgCorr = pairs > 0 ? total / pairs : 0;
-      document.getElementById('m-corr').textContent = avgCorr.toFixed(3);
-    } else {
-      document.getElementById('m-corr').textContent = 'n/a';
-    }
-
-    var avgOob = 0;
-    for (var b = 0; b < state.B; b++) avgOob += forest[b]._oobFrac;
-    avgOob /= state.B;
-    document.getElementById('m-oob').textContent = (avgOob * 100).toFixed(1) + '%';
+  function read() {
+    var out = counts.filter(function (v) { return !v; }).length;
+    document.getElementById('bs-read').innerHTML = 'This sample leaves out <span class="num">' + out + '</span> of 30 rows. Over all <span class="num">' + drawsN +
+      '</span> samples, <span class="num">' + fmt(100 * leftOut / (drawsN * n), 1) + '%</span> of rows were left out; (1 &minus; 1/30)<sup>30</sup> = <span class="num">' +
+      fmt(100 * pmf[0], 1) + '%</span>, which tends to 1/e &asymp; <span class="num">' + fmt(100 / Math.E, 1) + '%</span> as n grows.';
   }
-
-  d3.select('#m-B').on('input', function () { state.B = +this.value; document.getElementById('m-B-val').textContent = state.B; render(); });
-  d3.select('#m-m').on('input', function () { state.m = +this.value; document.getElementById('m-m-val').textContent = state.m; rebuildForest(); render(); });
-  d3.select('#m-rand').on('input', function () {
-    state.rand = (+this.value) / 100;
-    document.getElementById('m-rand-val').textContent = (+this.value) + '%';
-    rebuildForest(); render();
-  });
-  d3.select('#m-noise').on('input', function () {
-    state.noise = (+this.value) / 100;
-    document.getElementById('m-noise-val').textContent = state.noise.toFixed(2);
-    rebuildForest(); render();
-  });
-  d3.select('#m-reroll').on('click', function () { state.seed = (state.seed + 31337) >>> 0; rebuildForest(); render(); });
-  d3.select('#m-show').on('click', function () {
-    state.showTrees = !state.showTrees;
-    d3.select('#m-show').classed('active', state.showTrees).attr('aria-pressed', state.showTrees ? 'true' : 'false');
-    render();
-  });
-
-  render();
+  read();
+  document.getElementById('bs-one').addEventListener('click', function () { drawOne(); redrawStrip(); redrawHist(); read(); });
+  document.getElementById('bs-many').addEventListener('click', function () { for (var i = 0; i < 100; i++) drawOne(); redrawStrip(); redrawHist(); read(); });
 })();
 
-// ────────────────────────────────────────── Fig 2: the correlation ceiling ──
-// Average B predictors whose errors have variance 1 and pairwise correlation rho.
-// Dots: empirical variance of the average over 2000 simulated draws.
-// Line: rho + (1 - rho) / B.
+// ─────────────────────────────────────────── Fig 2: the correlation floor ──
+// Average B predictors with variance 1 and pairwise correlation rho: shared + own Gaussian parts.
 (function () {
-  var el = d3.select('#corr-viz');
   var slider = document.getElementById('corr-rho');
   var BS = [1, 2, 3, 5, 8, 12, 20, 30, 50, 80, 120];
-  var DRAWS = 2000;
-  var seed = 3;
+  var DRAWS = 2000, seed = 4;
+  katex.render('\\operatorname{Var}\\Big(\\tfrac{1}{B}\\textstyle\\sum_{b=1}^{B} T_b\\Big) = \\rho\\sigma^2 + \\dfrac{1-\\rho}{B}\\,\\sigma^2', document.getElementById('tex-var'), { throwOnError: false, displayMode: true });
   function rng(s) { return function () { s = (s + 0x6D2B79F5) >>> 0; var t = s; t = Math.imul(t ^ t >>> 15, 1 | t); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
   function simulate(rho) {
     var r = rng(seed), gauss = function () { var u = 0; while (!u) u = r(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * r()); };
@@ -503,46 +420,400 @@ function trueFn(x) { return 0.5 + 0.4 * Math.sin(x * Math.PI * 1.8); }
         for (var i = 0; i < B; i++) sum += a * shared + b * gauss();
         var avg = sum / B; s += avg; s2 += avg * avg;
       }
-      var m = s / DRAWS;
-      return { B: B, v: s2 / DRAWS - m * m };
+      var mu = s / DRAWS;
+      return { B: B, v: s2 / DRAWS - mu * mu };
     });
   }
-  function render() {
-    var rho = +slider.value / 100;
-    document.getElementById('corr-rho-val').textContent = rho.toFixed(2);
-    var emp = simulate(rho);
+  var rho = +slider.value / 100, emp = simulate(rho);
+  var texRaf = null;
+  function renderTex() {
+    if (texRaf) return;
+    texRaf = requestAnimationFrame(function () {
+      texRaf = null;
+      var c = isDark() ? '#a78bfa' : '#7c3aed';
+      var rs = '\\color{' + c + '}{' + fmt(rho, 2) + '}';
+      katex.render(rs + ' + \\frac{1-' + rs + '}{120} = ' + fmt(rho + (1 - rho) / 120), document.getElementById('corr-tex'), { throwOnError: false, displayMode: true });
+    });
+  }
+  var redraw = sized('corr-viz', function (el, W) {
     el.selectAll('*').remove();
-    var W = Math.min(el.node().getBoundingClientRect().width, 520), H = 250, m = { t: 12, r: 70, b: 34, l: 46 };
+    var H = 230, m = { t: 12, r: 58, b: 34, l: 44 };
     var svg = el.append('svg').attr('width', W).attr('height', H).attr('role', 'img')
-      .attr('aria-label', 'Variance of an average of B correlated predictors, for B from 1 to 120 on a log axis, at correlation ' + rho.toFixed(2) +
-        '. Simulated dots follow the formula curve down to the floor at ' + rho.toFixed(2) + ', while the dashed independent curve falls toward zero.');
+      .attr('aria-label', 'Variance of an average of B correlated predictors, B from 1 to 120 on a log axis, at correlation ' + fmt(rho, 2) +
+        '. Simulated dots follow the formula down to the floor at ' + fmt(rho, 2) + '; the independent curve falls toward zero.');
     var x = d3.scaleLog().domain([1, 120]).range([m.l, W - m.r]);
     var y = d3.scaleLinear().domain([0, 1.05]).range([H - m.b, m.t]);
-    svg.append('g').attr('transform', 'translate(0,' + (H - m.b) + ')').call(d3.axisBottom(x).tickValues([1, 2, 5, 10, 20, 50, 100]).tickFormat(d3.format('d'))).selectAll('text').attr('font-size', 9);
-    svg.append('g').attr('transform', 'translate(' + m.l + ',0)').call(d3.axisLeft(y).ticks(5)).selectAll('text').attr('font-size', 9);
-    svg.append('text').attr('x', (m.l + W - m.r) / 2).attr('y', H - 4).attr('text-anchor', 'middle').attr('font-size', 10).attr('fill', 'var(--text-2)').text('number of trees averaged (B)');
-    svg.append('text').attr('transform', 'translate(12,' + (H - m.b + m.t) / 2 + ') rotate(-90)').attr('text-anchor', 'middle').attr('font-size', 10).attr('fill', 'var(--text-2)').text('variance of the average (σ² = 1)');
+    svg.append('g').attr('transform', 'translate(0,' + (H - m.b) + ')').call(d3.axisBottom(x).tickValues(W < 360 ? [1, 10, 100] : [1, 2, 5, 10, 20, 50, 100]).tickFormat(d3.format('d'))).call(axisStyle);
+    svg.append('g').attr('transform', 'translate(' + m.l + ',0)').call(d3.axisLeft(y).ticks(5)).call(axisStyle);
+    svg.append('text').attr('x', (m.l + W - m.r) / 2).attr('y', H - 3).attr('text-anchor', 'middle').attr('font-size', 11).attr('fill', 'var(--text-2)').text('trees averaged, B');
+    svg.append('text').attr('transform', 'translate(11,' + (H - m.b + m.t) / 2 + ') rotate(-90)').attr('text-anchor', 'middle').attr('font-size', 11).attr('fill', 'var(--text-2)').text('variance (σ² = 1)');
     var grid = d3.range(0, 101).map(function (i) { return Math.pow(120, i / 100); });
     var line = d3.line().x(function (d) { return x(d[0]); }).y(function (d) { return y(d[1]); });
     svg.append('path').datum(grid.map(function (B) { return [B, 1 / B]; })).attr('d', line)
-      .attr('fill', 'none').attr('stroke', 'var(--text-2)').attr('stroke-opacity', 0.55).attr('stroke-dasharray', '4 3');
-    svg.append('text').attr('x', x(120) + 4).attr('y', y(1 / 120) + 3).attr('font-size', 9).attr('fill', 'var(--text-2)').text('ρ = 0');
-    svg.append('line').attr('x1', m.l).attr('x2', W - m.r).attr('y1', y(rho)).attr('y2', y(rho))
-      .attr('stroke', 'var(--c-single)').attr('stroke-opacity', 0.45);
-    svg.append('text').attr('x', x(120) + 4).attr('y', y(rho) + 3).attr('font-size', 9).attr('fill', 'var(--c-single)').text('floor ρσ²');
-    svg.append('path').attr('class', 'corr-formula').datum(grid.map(function (B) { return [B, rho + (1 - rho) / B]; })).attr('d', line)
+      .attr('fill', 'none').attr('stroke', 'var(--text-2)').attr('stroke-opacity', 0.6).attr('stroke-dasharray', '4 3');
+    svg.append('text').attr('x', x(120) + 4).attr('y', y(1 / 120) + 4).attr('font-size', 11).attr('fill', 'var(--text-2)').text('ρ = 0');
+    svg.append('line').attr('x1', m.l).attr('x2', W - m.r).attr('y1', y(rho)).attr('y2', y(rho)).attr('stroke', 'var(--c-single)').attr('stroke-opacity', 0.6);
+    svg.append('text').attr('x', x(120) + 4).attr('y', y(rho) + 14).attr('font-size', 11).attr('fill', 'var(--c-single)').text('floor');
+    svg.append('path').datum(grid.map(function (B) { return [B, rho + (1 - rho) / B]; })).attr('d', line)
       .attr('fill', 'none').attr('stroke', 'var(--c-avg)').attr('stroke-width', 2);
-    svg.selectAll('circle.emp').data(emp).join('circle').attr('class', 'emp')
-      .attr('cx', function (d) { return x(d.B); }).attr('cy', function (d) { return y(d.v); }).attr('r', 3.5)
-      .attr('fill', 'var(--fig-bg)').attr('stroke', 'var(--c-avg)').attr('stroke-width', 1.5);
+    emp.forEach(function (d) {
+      svg.append('circle').attr('cx', x(d.B)).attr('cy', y(d.v)).attr('r', 3.5).attr('fill', 'var(--fig-bg)').attr('stroke', 'var(--c-avg)').attr('stroke-width', 1.5);
+    });
+  });
+  function update() {
+    rho = +slider.value / 100;
+    document.getElementById('corr-rho-val').textContent = fmt(rho, 2);
+    emp = simulate(rho);
+    redraw(); renderTex();
     var last = emp[emp.length - 1];
-    document.getElementById('corr-read').textContent = 'With ρ = ' + rho.toFixed(2) + ', averaging 120 trees leaves a variance of ' + last.v.toFixed(3) +
-      ' in simulation (formula: ' + (rho + (1 - rho) / 120).toFixed(3) + '), against ' + (1 / 120).toFixed(3) + ' if the trees were uncorrelated.';
+    document.getElementById('corr-read').innerHTML = 'At B = 120 the formula above gives <span class="num">' + fmt(rho + (1 - rho) / 120) + '</span>; the simulation measures <span class="num">' + fmt(last.v) +
+      '</span>, against <span class="num">' + fmt(1 / 120) + '</span> if the predictors were independent.';
   }
-  slider.addEventListener('input', render);
-  document.getElementById('corr-resim').addEventListener('click', function () { seed++; render(); });
-  render();
-  var t; new ResizeObserver(function () { clearTimeout(t); t = setTimeout(render, 80); }).observe(document.getElementById('corr-wrap'));
+  slider.addEventListener('input', update);
+  document.getElementById('corr-resim').addEventListener('click', function () { seed++; update(); });
+  update();
+})();
+
+// ─────────────────────────────────────── Fig 3: a forest on one dataset ──
+(function () {
+  var state = { B: 20, m: 4, random: false, seed: 1 };
+  var MAX_B = 80, data, testData, forest;
+  function rebuild() {
+    data = makeData(state.seed, NOISE);
+    testData = makeTest(state.seed + 4444, 200, NOISE);
+    forest = [];
+    var r = prng(state.seed + 999 + state.m * 13 + (state.random ? 7 : 0));
+    for (var b = 0; b < MAX_B; b++) forest.push(buildTree(bootstrap(N, r).map(function (i) { return data[i]; }), 0, 20, state.m, state.random, r));
+  }
+  rebuild();
+  var xs = d3.range(0, 181).map(function (i) { return i / 180; });
+  function atX(x) { return [x, feat1Mean(x), 0.5, 0.5]; }
+
+  var redraw = sized('m-viz', function (el, W) {
+    el.selectAll('*').remove();
+    var H = Math.round(Math.min(300, Math.max(220, W * 0.55))), m = { t: 10, r: 8, b: 34, l: 34 };
+    var svg = el.append('svg').attr('width', W).attr('height', H).attr('role', 'img');
+    var X = d3.scaleLinear().domain([0, 1]).range([m.l, W - m.r]);
+    var Y = d3.scaleLinear().domain([-0.2, 1.2]).range([H - m.b, m.t]);
+    svg.append('g').attr('transform', 'translate(0,' + (H - m.b) + ')').call(d3.axisBottom(X).ticks(4)).call(axisStyle);
+    svg.append('g').attr('transform', 'translate(' + m.l + ',0)').call(d3.axisLeft(Y).ticks(4)).call(axisStyle);
+    svg.append('text').attr('x', (m.l + W - m.r) / 2).attr('y', H - 3).attr('text-anchor', 'middle').attr('font-size', 11).attr('fill', 'var(--text-2)').text('feature 0 (the informative one)');
+    data.forEach(function (p) { svg.append('circle').attr('cx', X(p.features[0])).attr('cy', Y(p.y)).attr('r', 2).attr('fill', 'var(--c-data)').attr('opacity', 0.6); });
+    var line = d3.line().x(function (d) { return X(d[0]); }).y(function (d) { return Y(d[1]); }).curve(d3.curveStepAfter);
+    for (var b = 0; b < state.B; b++) {
+      svg.append('path').datum(xs.map(function (x) { return [x, predict(forest[b], atX(x))]; })).attr('d', line).attr('fill', 'none')
+        .attr('stroke', 'var(--c-single)').attr('stroke-width', 0.8).attr('opacity', Math.max(0.12, 0.4 - state.B * 0.004));
+    }
+    svg.append('path').datum(xs.map(function (x) { return [x, trueFn(x)]; })).attr('d', d3.line().x(function (d) { return X(d[0]); }).y(function (d) { return Y(d[1]); }))
+      .attr('fill', 'none').attr('stroke', 'var(--c-truth)').attr('stroke-width', 1.8).attr('stroke-dasharray', '5 3');
+    svg.append('path').datum(xs.map(function (x) { var s = 0; for (var b = 0; b < state.B; b++) s += predict(forest[b], atX(x)); return [x, s / state.B]; }))
+      .attr('d', d3.line().x(function (d) { return X(d[0]); }).y(function (d) { return Y(d[1]); })).attr('fill', 'none').attr('stroke', 'var(--c-avg)').attr('stroke-width', 2.5);
+    svg.attr('aria-label', 'Noisy points around a dashed true curve of feature 0; ' + state.B + ' faint tree predictions and their thick average, m = ' + state.m + ', ' + (state.random ? 'random' : 'best') + ' thresholds.');
+  });
+  function update() {
+    redraw();
+    var e1 = 0, eB = 0, eAll = 0;
+    testData.forEach(function (p) {
+      var s = 0, v1 = 0;
+      for (var b = 0; b < state.B; b++) { var v = predict(forest[b], p.features); s += v; v1 += (v - p.truth) * (v - p.truth); }
+      eAll += v1 / state.B;
+      e1 += Math.pow(predict(forest[0], p.features) - p.truth, 2);
+      eB += Math.pow(s / state.B - p.truth, 2);
+    });
+    var nT = testData.length;
+    document.getElementById('m-read').innerHTML = 'RMSE against the true curve on 200 test points: a typical single tree <span class="num">' + fmt(Math.sqrt(eAll / nT)) +
+      '</span>, the average of ' + state.B + ' <span class="num">' + fmt(Math.sqrt(eB / nT)) + '</span>.';
+  }
+  function setMode(rand) {
+    state.random = rand;
+    document.getElementById('m-best').setAttribute('aria-pressed', rand ? 'false' : 'true');
+    document.getElementById('m-rand').setAttribute('aria-pressed', rand ? 'true' : 'false');
+    rebuild(); update();
+  }
+  document.getElementById('m-B').addEventListener('input', function () { state.B = +this.value; document.getElementById('m-B-val').textContent = state.B; update(); });
+  document.getElementById('m-m').addEventListener('input', function () { state.m = +this.value; document.getElementById('m-m-val').textContent = state.m; rebuild(); update(); });
+  document.getElementById('m-best').addEventListener('click', function () { setMode(false); });
+  document.getElementById('m-rand').addEventListener('click', function () { setMode(true); });
+  document.getElementById('m-reroll').addEventListener('click', function () { state.seed = (state.seed + 31337) >>> 0; rebuild(); update(); });
+  update();
+})();
+
+// ───────────────────────────── Fig 4: rho, sigma^2 and bias^2 measured ──
+// For each setting: T training sets x K trees, predictions at 100 test points.
+// sigma^2: total variance of one tree's prediction; rho*sigma^2 = Var_Z(E[tree | Z]),
+// estimated as the between-set variance of tree means minus within-set variance / K.
+(function () {
+  var T = 30, K = 20, test = makeTest(7, 100, NOISE);
+  var settings = [];
+  [1, 2, 3, 4].forEach(function (m) { [false, true].forEach(function (rand) { settings.push({ m: m, random: rand, key: m + (rand ? 'r' : 'b') }); }); });
+  var res = {}, done = 0, B = 50;
+  settings.forEach(function (st) {
+    var z = 0, all = [];
+    enqueue(function () {
+      var data = makeData(100 + z, NOISE), r = prng(9000 + z * 31 + st.m * 7 + (st.random ? 5 : 0)), P2 = [];
+      for (var k = 0; k < K; k++) {
+        var tr = buildTree(bootstrap(N, r).map(function (i) { return data[i]; }), 0, 20, st.m, st.random, r);
+        P2.push(test.map(function (p) { return predict(tr, p.features); }));
+      }
+      all.push(P2);
+      if (++z < T) return false;
+      var s2 = 0, cv = 0, b2 = 0;
+      test.forEach(function (p, j) {
+        var flat = [], means = [], within = 0;
+        all.forEach(function (Pz) {
+          var col = Pz.map(function (row) { return row[j]; }), mc = mean(col);
+          means.push(mc); flat = flat.concat(col);
+          within += d3.sum(col, function (v) { return (v - mc) * (v - mc); }) / (K - 1);
+        });
+        within /= T;
+        var mu = mean(flat), mm = mean(means);
+        s2 += mean(flat.map(function (v) { return (v - mu) * (v - mu); }));
+        cv += d3.sum(means, function (v) { return (v - mm) * (v - mm); }) / (T - 1) - within / K;
+        b2 += (mu - p.truth) * (mu - p.truth);
+      });
+      var nT = test.length;
+      res[st.key] = { m: st.m, random: st.random, s2: s2 / nT, rho: (cv / nT) / (s2 / nT), b2: b2 / nT };
+      done++; redrawRho(); redrawErr(); read();
+    });
+  });
+  function varB(d) { return d.rho * d.s2 + (1 - d.rho) * d.s2 / B; }
+  function pendingNote(el, W, H) { el.append('div').attr('class', 'pending').style('height', H + 'px').text('Growing ' + (T * K * 8) + ' trees... ' + done + ' of 8 settings done.'); }
+
+  var redrawRho = sized('d-rho', function (el, W) {
+    el.selectAll('*').remove();
+    var H = 200, m = { t: 12, r: 10, b: 34, l: 40 };
+    var svg = el.append('svg').attr('width', W).attr('height', H).attr('role', 'img');
+    var x = d3.scalePoint().domain([1, 2, 3, 4]).range([m.l + 12, W - m.r - 12]);
+    var y = d3.scaleLinear().domain([0, 0.3]).range([H - m.b, m.t]);
+    svg.append('g').attr('transform', 'translate(0,' + (H - m.b) + ')').call(d3.axisBottom(x).tickSize(3)).call(axisStyle);
+    svg.append('g').attr('transform', 'translate(' + m.l + ',0)').call(d3.axisLeft(y).ticks(3)).call(axisStyle);
+    svg.append('text').attr('x', (m.l + W - m.r) / 2).attr('y', H - 3).attr('text-anchor', 'middle').attr('font-size', 11).attr('fill', 'var(--text-2)').text('features per split, m');
+    svg.append('text').attr('x', m.l + 10).attr('y', m.t + 4).attr('font-size', 11).attr('fill', 'var(--text-2)').text('ρ between trees');
+    var desc = [];
+    [false, true].forEach(function (rand) {
+      var pts = [1, 2, 3, 4].map(function (mm) { return res[mm + (rand ? 'r' : 'b')]; }).filter(Boolean);
+      svg.append('path').datum(pts).attr('d', d3.line().x(function (d) { return x(d.m); }).y(function (d) { return y(d.rho); }))
+        .attr('fill', 'none').attr('stroke', 'var(--c-single)').attr('stroke-width', 1.8).attr('stroke-dasharray', rand ? '4 3' : null);
+      pts.forEach(function (d) {
+        svg.append('circle').attr('cx', x(d.m)).attr('cy', y(d.rho)).attr('r', 4).attr('fill', rand ? 'var(--fig-bg)' : 'var(--c-single)').attr('stroke', 'var(--c-single)').attr('stroke-width', 1.8);
+        desc.push('m ' + d.m + (rand ? ' random' : ' best') + ' ' + fmt(d.rho, 2));
+      });
+    });
+    svg.attr('aria-label', 'Measured correlation between trees by m: ' + (desc.join('; ') || 'computing'));
+  });
+
+  var redrawErr = sized('d-err', function (el, W) {
+    el.selectAll('*').remove();
+    var H = 200, m = { t: 12, r: 8, b: 34, l: 46 };
+    if (done < 8) { pendingNote(el, W, H); return; }
+    var svg = el.append('svg').attr('width', W).attr('height', H).attr('role', 'img');
+    var x = d3.scaleBand().domain([1, 2, 3, 4]).range([m.l, W - m.r]).paddingInner(0.3).paddingOuter(0.1);
+    var tot = settings.map(function (st) { var d = res[st.key]; return d.b2 + varB(d); });
+    var y = d3.scaleLinear().domain([0, d3.max(tot) * 1.3]).nice().range([H - m.b, m.t]);
+    svg.append('g').attr('transform', 'translate(0,' + (H - m.b) + ')').call(d3.axisBottom(x).tickSize(0)).call(axisStyle);
+    svg.append('g').attr('transform', 'translate(' + m.l + ',0)').call(d3.axisLeft(y).ticks(4, '.3f')).call(axisStyle);
+    svg.append('text').attr('x', (m.l + W - m.r) / 2).attr('y', H - 3).attr('text-anchor', 'middle').attr('font-size', 11).attr('fill', 'var(--text-2)').text('features per split, m');
+    svg.append('text').attr('x', m.l + 6).attr('y', m.t + 4).attr('font-size', 11).attr('fill', 'var(--text-2)').text('forest error, B = ' + B);
+    var bw = x.bandwidth() / 2 - 1, iMin = tot.indexOf(d3.min(tot)), desc = [];
+    settings.forEach(function (st, i) {
+      var d = res[st.key], v = varB(d), x0 = x(st.m) + (st.random ? bw + 2 : 0);
+      svg.append('rect').attr('x', x0).attr('width', bw).attr('y', y(d.b2)).attr('height', y(0) - y(d.b2)).attr('fill', 'var(--c-data)');
+      svg.append('rect').attr('x', x0).attr('width', bw).attr('y', y(d.b2 + v)).attr('height', y(d.b2) - y(d.b2 + v))
+        .attr('fill', st.random ? 'var(--fig-bg)' : 'var(--c-single)').attr('stroke', 'var(--c-single)').attr('stroke-width', 1.2).attr('opacity', st.random ? 1 : 0.75);
+      if (i === iMin) svg.append('path').attr('d', d3.symbol(d3.symbolTriangle, 40)()).attr('transform', 'translate(' + (x0 + bw / 2) + ',' + (y(d.b2 + v) - 8) + ') rotate(180)').attr('fill', 'var(--text)');
+      desc.push('m ' + st.m + (st.random ? ' random ' : ' best ') + fmt(d.b2 + v, 4));
+    });
+    svg.attr('aria-label', 'Expected squared error of a ' + B + '-tree forest by m and threshold rule: ' + desc.join('; ') + '. Triangle marks the lowest.');
+  });
+
+  function read() {
+    var el = document.getElementById('d-read');
+    if (done < 8) { el.textContent = ''; return; }
+    var rows = settings.map(function (st) { var d = res[st.key]; return { st: st, d: d, e: d.b2 + varB(d) }; });
+    var bestRow = rows.reduce(function (a, b) { return b.e < a.e ? b : a; });
+    var bag = res['4b'];
+    var name = function (st) { return 'm = ' + st.m + ' with ' + (st.random ? 'random' : 'best') + ' thresholds'; };
+    el.innerHTML = 'With B = ' + B + ', the lowest error is <span class="num">' + fmt(bestRow.e, 4) + '</span>, from ' + name(bestRow.st) + ' (&rho; = <span class="num">' + fmt(bestRow.d.rho, 2) +
+      '</span>, &sigma;&sup2; = <span class="num">' + fmt(bestRow.d.s2, 4) + '</span>)' + (bestRow.st.key === '4b' ? ', which is plain bagging.' : '. Plain bagging gives <span class="num">' + fmt(bag.b2 + varB(bag), 4) + '</span> (&rho; = <span class="num">' + fmt(bag.rho, 2) + '</span>, &sigma;&sup2; = <span class="num">' + fmt(bag.s2, 4) + '</span>).');
+  }
+  var sl = document.getElementById('d-B');
+  sl.addEventListener('input', function () { B = +sl.value; document.getElementById('d-B-val').textContent = B; redrawErr(); read(); });
+})();
+
+// ─────────────────────────────────────────── Fig 5: depth sweep ──
+(function () {
+  var T = 10, K = 30, DEPTHS = d3.range(1, 11), test = makeTest(7, 200, 0);
+  var cache = {}, noise = 0.35;
+  function compute(nz) {
+    if (cache[nz]) return;
+    var c = cache[nz] = { rows: [], done: false }, d = 1;
+    enqueue(function () {
+      var single = 0, forest = 0;
+      for (var z = 0; z < T; z++) {
+        var data = makeData(100 + z, nz), r = prng(7000 + z * 17 + d), md = d === 10 ? 99 : d;
+        var full = buildTree(data, 0, md, 4, false, prng(1));
+        single += d3.mean(test, function (p) { return Math.pow(predict(full, p.features) - p.truth, 2); });
+        var sum = new Float64Array(test.length);
+        for (var k = 0; k < K; k++) {
+          var tr = buildTree(bootstrap(N, r).map(function (i) { return data[i]; }), 0, md, 4, false, r);
+          test.forEach(function (p, j) { sum[j] += predict(tr, p.features); });
+        }
+        forest += d3.mean(test, function (p, j) { return Math.pow(sum[j] / K - p.truth, 2); });
+      }
+      c.rows.push({ d: d, single: single / T, forest: forest / T });
+      if (nz === noise) { redraw(); read(); }
+      if (++d <= 10) return false;
+      c.done = true;
+      if (nz === noise) { redraw(); read(); }
+    });
+  }
+  var redraw = sized('dp-viz', function (el, W) {
+    el.selectAll('*').remove();
+    var H = 220, m = { t: 12, r: 10, b: 34, l: 50 };
+    var c = cache[noise], rows = c ? c.rows : [];
+    var svg = el.append('svg').attr('width', W).attr('height', H).attr('role', 'img');
+    var x = d3.scaleLinear().domain([1, 10]).range([m.l, W - m.r]);
+    var ymax = noise > 0.2 ? 0.05 : 0.016;
+    var y = d3.scaleLinear().domain([0, ymax]).range([H - m.b, m.t]);
+    svg.append('g').attr('transform', 'translate(0,' + (H - m.b) + ')').call(d3.axisBottom(x).tickValues(W < 360 ? [1, 3, 5, 7, 10] : DEPTHS).tickFormat(function (d) { return d === 10 ? 'full' : d; })).call(axisStyle);
+    svg.append('g').attr('transform', 'translate(' + m.l + ',0)').call(d3.axisLeft(y).ticks(4, '.3f')).call(axisStyle);
+    svg.append('text').attr('x', (m.l + W - m.r) / 2).attr('y', H - 3).attr('text-anchor', 'middle').attr('font-size', 11).attr('fill', 'var(--text-2)').text('maximum depth');
+    svg.append('text').attr('transform', 'translate(11,' + (H - m.b + m.t) / 2 + ') rotate(-90)').attr('text-anchor', 'middle').attr('font-size', 11).attr('fill', 'var(--text-2)').text('squared error');
+    [['single', 'var(--c-single)'], ['forest', 'var(--c-avg)']].forEach(function (s) {
+      svg.append('path').datum(rows).attr('d', d3.line().x(function (d) { return x(d.d); }).y(function (d) { return y(d[s[0]]); }))
+        .attr('fill', 'none').attr('stroke', s[1]).attr('stroke-width', 2);
+      rows.forEach(function (d) { svg.append('circle').attr('cx', x(d.d)).attr('cy', y(d[s[0]])).attr('r', 2.5).attr('fill', s[1]); });
+      if (c && c.done) {
+        var mn = rows.reduce(function (a, b) { return b[s[0]] < a[s[0]] ? b : a; });
+        svg.append('circle').attr('cx', x(mn.d)).attr('cy', y(mn[s[0]])).attr('r', 7).attr('fill', 'none').attr('stroke', s[1]).attr('stroke-width', 1.5);
+        var last = rows[rows.length - 1];
+        svg.append('text').attr('x', x(10)).attr('y', y(last[s[0]]) - 8).attr('text-anchor', 'end').attr('font-size', 11).attr('fill', s[1]).text(s[0] === 'single' ? 'single tree' : 'forest of 30');
+      }
+    });
+    svg.attr('aria-label', 'Squared error by maximum depth at noise ' + noise + ' for a single tree and a 30-tree bagged forest.');
+  });
+  function read() {
+    var c = cache[noise], el = document.getElementById('dp-read');
+    if (!c || !c.done) { el.textContent = 'Growing trees...'; return; }
+    var rows = c.rows, last = rows[rows.length - 1];
+    function part(k, label) {
+      var mn = rows.reduce(function (a, b) { return b[k] < a[k] ? b : a; });
+      if (mn.d === 10) return label + ' is best fully grown (<span class="num">' + fmt(mn[k], 4) + '</span>)';
+      return label + ' is best at depth ' + mn.d + ' (<span class="num">' + fmt(mn[k], 4) + '</span>) and <span class="num">' + fmt(last[k] / mn[k], 2) + '</span> times that when fully grown';
+    }
+    el.innerHTML = part('single', 'The single tree') + '; ' + part('forest', 'the forest') + '.';
+  }
+  function setNoise(nz) {
+    noise = nz;
+    document.getElementById('dp-hi').setAttribute('aria-pressed', nz === 0.35 ? 'true' : 'false');
+    document.getElementById('dp-lo').setAttribute('aria-pressed', nz === 0.1 ? 'true' : 'false');
+    compute(nz); redraw(); read();
+  }
+  document.getElementById('dp-hi').addEventListener('click', function () { setNoise(0.35); });
+  document.getElementById('dp-lo').addEventListener('click', function () { setNoise(0.1); });
+  compute(0.35); read();
+})();
+
+// ─────────────────────────────────────────── Fig 6: out-of-bag vs test ──
+(function () {
+  var SETS = 40, BMAX = 100, runs = [], sel = 0;
+  var floor = NOISE / Math.sqrt(3);
+  for (var s0 = 0; s0 < SETS; s0++) (function (s) {
+    enqueue(function () {
+      var seed = s + 1, data = makeData(seed, NOISE), test = makeTest(seed + 4444, 500, NOISE), r = prng(seed + 999);
+      var oobSum = new Float64Array(N), oobCnt = new Int32Array(N), tSum = new Float64Array(test.length), oob = [], te = [];
+      for (var b = 1; b <= BMAX; b++) {
+        var idx = bootstrap(N, r), inb = new Uint8Array(N);
+        idx.forEach(function (i) { inb[i] = 1; });
+        var tr = buildTree(idx.map(function (i) { return data[i]; }), 0, 20, 4, false, r);
+        var se = 0, c = 0;
+        for (var i = 0; i < N; i++) {
+          if (!inb[i]) { oobSum[i] += predict(tr, data[i].features); oobCnt[i]++; }
+          if (oobCnt[i]) { se += Math.pow(oobSum[i] / oobCnt[i] - data[i].y, 2); c++; }
+        }
+        var st = 0;
+        for (var j = 0; j < test.length; j++) { tSum[j] += predict(tr, test[j].features); st += Math.pow(tSum[j] / b - test[j].y, 2); }
+        oob.push(Math.sqrt(se / c)); te.push(Math.sqrt(st / test.length));
+      }
+      runs[s] = { seed: seed, oob: oob, test: te };
+      if (s === 0 || s === SETS - 1) { redrawCurve(); redrawScatter(); read(); }
+    });
+  })(s0);
+
+  var redrawCurve = sized('oob-curve', function (el, W) {
+    el.selectAll('*').remove();
+    var H = 210, m = { t: 12, r: 10, b: 34, l: 44 };
+    var run = runs[sel];
+    if (!run) { el.append('div').attr('class', 'pending').style('height', H + 'px').text('Growing trees...'); return; }
+    var svg = el.append('svg').attr('width', W).attr('height', H).attr('role', 'img');
+    var x = d3.scaleLinear().domain([1, BMAX]).range([m.l, W - m.r]);
+    var y = d3.scaleLinear().domain([0.18, 0.4]).range([H - m.b, m.t]).clamp(true);
+    svg.append('g').attr('transform', 'translate(0,' + (H - m.b) + ')').call(d3.axisBottom(x).ticks(5)).call(axisStyle);
+    svg.append('g').attr('transform', 'translate(' + m.l + ',0)').call(d3.axisLeft(y).ticks(4)).call(axisStyle);
+    svg.append('text').attr('x', (m.l + W - m.r) / 2).attr('y', H - 3).attr('text-anchor', 'middle').attr('font-size', 11).attr('fill', 'var(--text-2)').text('trees B');
+    svg.append('text').attr('transform', 'translate(11,' + (H - m.b + m.t) / 2 + ') rotate(-90)').attr('text-anchor', 'middle').attr('font-size', 11).attr('fill', 'var(--text-2)').text('RMSE');
+    svg.append('line').attr('x1', m.l).attr('x2', W - m.r).attr('y1', y(floor)).attr('y2', y(floor)).attr('stroke', 'var(--text-2)').attr('stroke-dasharray', '4 3');
+    svg.append('text').attr('x', W - m.r).attr('y', y(floor) + 13).attr('text-anchor', 'end').attr('font-size', 11).attr('fill', 'var(--text-2)').text('noise sd ' + fmt(floor));
+    var line = d3.line().x(function (d, i) { return x(i + 1); }).y(function (d) { return y(d); });
+    svg.append('path').datum(run.test).attr('d', line).attr('fill', 'none').attr('stroke', 'var(--c-avg)').attr('stroke-width', 2);
+    svg.append('path').datum(run.oob).attr('d', line).attr('fill', 'none').attr('stroke', 'var(--c-oob)').attr('stroke-width', 2);
+    svg.append('text').attr('x', x(8)).attr('y', y(run.oob[7]) - 8).attr('font-size', 11).attr('fill', 'var(--c-oob)').text('out-of-bag');
+    svg.append('text').attr('x', x(BMAX)).attr('y', Math.min(y(run.test[BMAX - 1]), y(run.oob[BMAX - 1])) - 10).attr('text-anchor', 'end').attr('font-size', 11).attr('fill', 'var(--c-avg)').text('test');
+    svg.attr('aria-label', 'Training set ' + run.seed + ': out-of-bag and test RMSE as trees are added, ending at ' + fmt(run.oob[BMAX - 1]) + ' and ' + fmt(run.test[BMAX - 1]) + '.');
+  });
+
+  var dots = null, order = [];
+  var redrawScatter = sized('oob-scatter', function (el, W) {
+    el.selectAll('*').remove(); dots = null;
+    var H = 210, m = { t: 12, r: 10, b: 34, l: 44 };
+    if (runs.filter(Boolean).length < SETS) { el.append('div').attr('class', 'pending').style('height', H + 'px').text('Growing ' + SETS * BMAX + ' trees...'); return; }
+    var svg = el.append('svg').attr('width', W).attr('height', H).attr('role', 'group').attr('aria-label', 'Out-of-bag against test RMSE at B = 100 for 40 training sets; arrow keys move between them.');
+    var ext = [0.19, 0.28];
+    var x = d3.scaleLinear().domain(ext).range([m.l, W - m.r]), y = d3.scaleLinear().domain(ext).range([H - m.b, m.t]);
+    svg.append('g').attr('transform', 'translate(0,' + (H - m.b) + ')').call(d3.axisBottom(x).ticks(3)).call(axisStyle);
+    svg.append('g').attr('transform', 'translate(' + m.l + ',0)').call(d3.axisLeft(y).ticks(3)).call(axisStyle);
+    svg.append('line').attr('x1', x(ext[0])).attr('y1', y(ext[0])).attr('x2', x(ext[1])).attr('y2', y(ext[1])).attr('stroke', 'var(--text-2)').attr('stroke-dasharray', '4 3');
+    svg.append('text').attr('x', (m.l + W - m.r) / 2).attr('y', H - 3).attr('text-anchor', 'middle').attr('font-size', 11).attr('fill', 'var(--c-avg)').text('test RMSE');
+    svg.append('text').attr('transform', 'translate(11,' + (H - m.b + m.t) / 2 + ') rotate(-90)').attr('text-anchor', 'middle').attr('font-size', 11).attr('fill', 'var(--c-oob)').text('out-of-bag RMSE');
+    order = d3.range(SETS).sort(function (a, b) { return runs[a].test[BMAX - 1] - runs[b].test[BMAX - 1]; });
+    dots = svg.append('g').selectAll('circle').data(d3.range(SETS)).join('circle').attr('class', 'pick')
+      .attr('cx', function (i) { return x(runs[i].test[BMAX - 1]); }).attr('cy', function (i) { return y(runs[i].oob[BMAX - 1]); })
+      .attr('r', 5).attr('role', 'button')
+      .attr('aria-label', function (i) { return 'training set ' + runs[i].seed + ': out-of-bag ' + fmt(runs[i].oob[BMAX - 1]) + ', test ' + fmt(runs[i].test[BMAX - 1]); })
+      .on('click', function (ev, i) { select(i, true); })
+      .on('keydown', function (ev, i) {
+        var k = order.indexOf(i), nk = k;
+        if (ev.key === 'ArrowRight' || ev.key === 'ArrowUp') nk = Math.min(SETS - 1, k + 1);
+        else if (ev.key === 'ArrowLeft' || ev.key === 'ArrowDown') nk = Math.max(0, k - 1);
+        else if (ev.key === 'Home') nk = 0; else if (ev.key === 'End') nk = SETS - 1;
+        else return;
+        ev.preventDefault(); select(order[nk], true);
+      });
+    style();
+  });
+  function style() {
+    if (!dots) return;
+    dots.attr('tabindex', function (i) { return i === sel ? 0 : -1; })
+      .attr('fill', function (i) { return i === sel ? 'var(--c-oob)' : 'var(--c-data)'; })
+      .attr('fill-opacity', function (i) { return i === sel ? 1 : 0.55; })
+      .attr('stroke', function (i) { return i === sel ? 'var(--text)' : 'none'; }).attr('stroke-width', 1.5)
+      .attr('aria-pressed', function (i) { return i === sel ? 'true' : 'false'; });
+    dots.filter(function (i) { return i === sel; }).raise();
+  }
+  function select(i, focus) {
+    sel = i; style(); redrawCurve(); read();
+    if (focus && dots) dots.filter(function (j) { return j === i; }).node().focus();
+  }
+  function read() {
+    var el = document.getElementById('oob-read'), run = runs[sel];
+    if (!run) { el.textContent = ''; return; }
+    var txt = 'Training set ' + run.seed + ' at B = 100: out-of-bag <span class="num">' + fmt(run.oob[BMAX - 1]) + '</span>, test <span class="num">' + fmt(run.test[BMAX - 1]) + '</span>.';
+    if (runs.filter(Boolean).length === SETS) {
+      var gaps = runs.map(function (u) { return u.oob[BMAX - 1] - u.test[BMAX - 1]; }).sort(d3.ascending);
+      txt += ' Across all 40 sets, out-of-bag minus test has median <span class="num">' + fmt(d3.median(gaps)) + '</span> and runs from <span class="num">' + fmt(gaps[0]) + '</span> to <span class="num">' + fmt(gaps[SETS - 1]) + '</span>.';
+    }
+    el.innerHTML = txt;
+  }
 })();
 
 if (window.Motion) window.Motion.mountBanner();
