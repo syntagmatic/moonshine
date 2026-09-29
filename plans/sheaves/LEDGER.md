@@ -171,3 +171,12 @@ One new figure per essay after the fix pass. Check scripts named below live in t
 | 01 | σ_min(δ) = 0 exactly when h = 1 | derived | δ square: singular iff det δ = h − 1 = 0 |
 | 01 | σ_min(δ)² is the smallest eigenvalue of L = δᵀδ, the least disagreement of a unit-length assignment | derived | singular values of δ are square roots of eigenvalues of δᵀδ; Rayleigh quotient |
 | 01 | For rotation maps the Laplacian spectrum on a cycle depends on the holonomy alone | derived | orthogonal vertex gauge moves all twist to one edge and preserves the spectrum; closed form Sheaf.cycleSpectrum (essay 04 Fig 3) |
+### 04 enrichment
+
+| page | claim | kind | how we know |
+|---|---|---|---|
+| 04 | Fig 1 census: the 8192 sign patterns on the 13-edge graph fall into 64 switching classes of 128 (2^(E−V+1)) | computed, derived | enrich04/census.cjs orbits under all 2^8 switchings; the page recomputes it on load; the cycle space mod 2 has dimension 13 − 8 + 1 = 6 |
+| 04 | λ_min and the frustration index are switching invariants | derived, computed | switching conjugates L by a diagonal ±1 matrix; census.cjs max deviation 2e-15 over sampled patterns |
+| 04 | λ_min ≤ 4ℓ/n, strict on this graph for every unbalanced class | derived, computed | Rayleigh quotient at the best ±1 split: each violated edge costs 4; equality needs every vertex on the same number of violated edges, impossible for 1 ≤ ℓ ≤ 3 with n = 8; census max λ/bound 0.804 |
+| 04 | Census counts: 1, 13, 39, 11 classes at ℓ = 0..3; λ_min ranges 0.276-0.354, 0.475-0.764, 0.828-1.206; rows do not overlap; within-row spread up to 1.6× | computed | census.cjs; page census readout |
+| 04 | One enemy edge: AB or EF cheapest (0.276), chord CG dearest (0.354); two flips CD+CG 0.475 vs AC+EG 0.764 | computed | census.cjs and vec.cjs (flips from the default signs); page readouts |
