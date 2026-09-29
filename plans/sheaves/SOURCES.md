@@ -420,3 +420,22 @@ Split From Data" column of Zachary's Table 3; Mr. Hi's club = nodes 0-8, 10-13, 
 (22, 33) is 0 above and 3 below); NetworkX keeps the lower-triangle value because it adds
 rows in order. The union of nonzero entries is the standard 78-edge graph, which is what the
 page uses, unweighted.
+
+---
+
+## 4 (addendum, 2026-09-28 session 5): Bodnar et al. re-read for essay 06
+
+Read in the arXiv PDF (2202.04579, text extracted with pypdf): Secs. 2 to 6, App. B proofs of
+Props. 8 to 11, App. E, App. F. Model details the page relies on: eq. 6 layer; eq. 55 learned
+(1 + eps) "used across all of our experiments in the discrete models"; augmented normalisation
+(D + I)^{-1/2}; Phi = sigma(V[x_v || x_u]); O(d) maps from Householder reflections via Torch
+Householder; WebKB learning rate 0.02, hidden channels 8 to 32, stalk dim 1 to 5, layers 2 to 8,
+ELU. Linear separation in Def. 7 is affine (Prop. 9's proof compares sqrt weighted degrees across
+classes). Prop. 10 as printed writes y_v = +/- sqrt(sum alpha_e); with maps +/- alpha_e the
+weighted degree is sum alpha_e^2, a harmless slip. The synthetic experiment keeps the sheaf fixed
+over time and learns it from X(0).
+
+Splits verified: the ten `<name>_split_0.6_0.2_<k>.npz` files hold 48/32/20% of nodes
+(Texas 87/59/37), so the filename is misleading and NSD's 48/32/20 is right. Edge homophily of
+Texas with undirected non-loop edges is 0.061 (17 of 279); the 0.108 above counts directed lines
+with self-loops. Data file: `docs/sheaves/data/webkb.js` from `scripts/sheaves-webkb.mjs`.

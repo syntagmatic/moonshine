@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Neural sheaf diffusion · Sheaves</title>
+<script src="../lib/motion.js"></script>
+<script src="../vendor/js/d3.v7.min.js"></script>
+<link rel="stylesheet" href="../vendor/katex@0.16.11/katex.min.css">
+<script src="../vendor/katex@0.16.11/katex.min.js"></script>
+<link href="../vendor/fonts/sans-serif-mono/fonts.css" rel="stylesheet">
+<link rel="stylesheet" href="lib/theme.css">
+<script src="lib/sheaf-math.js"></script>
+<script src="lib/nsd.js"></script>
+<script src="lib/figkit.js"></script>
+<script src="data/webkb.js"></script>
+<style>
+.fig-row.flat > :first-child { flex: 0.9 1 0; }
+.fig-row.learn > :first-child { flex: 1.3 1 0; }
+.controls .check { gap: 0.35rem; }
+.panel-title { font-family: var(--heading-font); font-size: 0.8rem; font-weight: 600; color: var(--text-2); margin-bottom: 0.2rem; }
+</style>
+</head>
+<body>
+<div class="article">
+  <nav class="back-links"><a href="../index.html">moonshine</a><span class="sep">/</span><a href="index.html">Sheaves</a></nav>
+  <header class="header">
+    <div class="meta">Sheaves · Part 6</div>
+    <h1>Neural sheaf diffusion</h1>
+    <p class="subtitle">A graph neural network averages each node with its neighbours, which erases the classes on graphs where neighbours tend to differ. Give the diffusion restriction maps and it can push neighbours apart instead. Let a network learn those maps on a real benchmark, and the most useful thing it finds to do is cut the links.</p>
+  </header>
+
+  <p>A graph convolutional network updates the features on each node from the features of its neighbours. Bodnar, Di Giovanni, Chamberlain, Liò and Bronstein start from the observation that the standard update, <span class="m" data-tex="\sigma\big((I - \Delta_0) X W\big)"></span>, is one Euler step of heat diffusion with a weight matrix and a nonlinearity attached. Here <span class="m" data-tex="\Delta_0 = I - D^{-1/2} A D^{-1/2}"></span> is the normalized graph Laplacian and <span class="m" data-tex="X"></span> holds one row of features per node. Heat diffusion makes neighbours alike. That helps on <em>homophilic</em> graphs, where linked nodes tend to share a label, and it hurts on <em>heterophilic</em> ones, where they tend not to. Run it long enough and every graph suffers, since the features converge to the kernel of the Laplacian, which on a connected graph remembers one number per feature channel. This is <em>oversmoothing</em>.</p>
+  <p>Their proposal is to replace <span class="m" data-tex="\Delta_0"></span> by the normalized <a href="04-sheaf-laplacian.html">sheaf Laplacian</a> of a sheaf with <span class="m" data-tex="d"></span>-dimensional <span class="t-stalk">stalks</span>,</p>
+  <div class="tex" data-tex="\Delta_{\mathcal F} = D^{-1/2} L_{\mathcal F}\, D^{-1/2}, \qquad \dot X = -\Delta_{\mathcal F} X ,"></div>
+  <p>where <span class="m" data-tex="D"></span> is the block diagonal of <span class="m" data-tex="L_{\mathcal F}"></span>. The flow still converges to the orthogonal projection onto <span class="m" data-tex="\ker \Delta_{\mathcal F}"></span>, which is <span class="m" data-tex="H^0"></span> up to the rescaling by <span class="m" data-tex="D^{1/2}"></span>. What changes is which cochains are harmonic, and that is decided by the <span class="t-restrict">restriction maps</span>. Their Section 3 asks which classes of sheaves have limits that can separate the classes of a labelled graph by a hyperplane (their Definition 7, for almost every starting feature). This page builds two of the answers, then trains their model on a real graph.</p>
+
+  <h2>Heat diffusion flattens</h2>
+  <p>For the graph Laplacian the kernel of <span class="m" data-tex="\Delta_0"></span> on a connected graph is spanned by <span class="m" data-tex="y_v = \sqrt{d_v}"></span>, the square roots of the degrees. So every feature channel ends as a multiple of one fixed vector, <span class="m" data-tex="x(\infty) = \langle x(0), \hat y\rangle\, \hat y"></span>. Whatever the features were, the limit can separate two classes only if the degrees happen to sort them. Positive edge weights move the degrees around, and their Proposition 8 uses weights to separate two classes when every node of one class has a neighbour in its own class. Their Proposition 9 shows that nothing of this kind can work for a bipartite graph whose two sides are the two classes and have equal size. With symmetric weights each edge adds the same amount to the weighted degree of its two ends, one in each class, so the sums of <span class="m" data-tex="y_v^2"></span> over the two classes are equal, and one class cannot lie entirely below the other.</p>
+  <p>Figure 1 is such a graph: 20 nodes, 10 in each class, 28 edges, every edge between the classes. Each node starts with one feature, drawn from two overlapping bell curves centred at <span class="m" data-tex="-0.5"></span> and <span class="m" data-tex="+0.5"></span>.</p>
+
+  <div class="figure figure-wide" id="fig-flat">
+    <div class="controls">
+      <label>maps <select id="flat-mode">
+        <option value="plain">graph Laplacian (every map 1)</option>
+        <option value="flip">sign flip across classes</option>
+      </select></label>
+      <button class="btn" id="flat-run" type="button">Run the flow</button>
+      <label>time <input type="range" id="flat-t" min="0" max="1000" value="1000" aria-label="Time along the diffusion"></label>
+    </div>
+    <div class="fig-row flat">
+      <div class="fig-body" id="flat-graph"><svg role="img" aria-label="A bipartite graph of 20 nodes. Circles are class A, squares class B. A bar on each node shows its current feature."></svg></div>
+      <div class="fig-body" id="flat-trace"><svg role="img" aria-label="Each node's feature against diffusion time, with the limit at the right."></svg></div>
+    </div>
+    <p class="readout" id="flat-readout" aria-live="polite"></p>
+    <p class="figure-caption"><span class="figure-label">Figure 1.</span> Diffusion on a two-class bipartite graph, <span class="m" data-tex="\dot x = -\Delta x"></span>. Left: <span class="t-stalk">teal circles</span> are class A and <span class="t-pinned">slate squares</span> class B; each node's bar is its current feature, up for positive. Right: every node's feature against time (on a scale that stretches the first few units), and its limit in the column marked ∞. The dashed line is the threshold that sorts the most nodes at the current time. With every map 1, <span class="m" data-tex="\Delta"></span> is the normalized graph Laplacian. The sign flip sets <span class="m" data-tex="\mathcal F_{v \trianglelefteq e} = -1"></span> at the class-A end of each edge and <span class="m" data-tex="+1"></span> at the class-B end (their Proposition 10 with every <span class="m" data-tex="\alpha_e = 1"></span>).</p>
+  </div>
+
+  <p>With the graph Laplacian the traces fold together within a few time units, and in the limit each node sits at the same constant times the square root of its degree. The degrees of the two classes interleave, so the best threshold, which sorts 16 of the 20 nodes at the start, sorts only 12 in the limit. Switch to the sign flip and the same starting features split cleanly: every class-B node ends at <span class="m" data-tex="+c\sqrt{d_v}"></span> and every class-A node at <span class="m" data-tex="-c\sqrt{d_v}"></span>. The <span class="t-restrict">transport</span> across each edge, <span class="m" data-tex="\mathcal F_{v \trianglelefteq e}^{\mathsf T} \mathcal F_{u \trianglelefteq e}"></span>, is <span class="m" data-tex="-1"></span>, so a neighbour's feature arrives negated and the flow pushes the two ends of every edge toward opposite values.</p>
+  <p>Proposition 10 says this works on every connected graph with two classes, with any positive <span class="m" data-tex="\alpha_e"></span> and any mixture of within-class and between-class edges: transport <span class="m" data-tex="+1"></span> inside a class and <span class="m" data-tex="-1"></span> across. In the language of <a href="04-sheaf-laplacian.html">the signed graphs of essay 4</a>, that sheaf is balanced, since every cycle crosses between the classes an even number of times, and its one global section is the polarized one. Bodnar et al. offer it as a sheaf-theoretic reason for the negative edge weights that heterophilic GNNs had already been using. On the bipartite graph of Figure 1 there is more to see: the sign-flip sheaf is isomorphic to the constant sheaf. Negate the coordinate at every class-B vertex and every map becomes <span class="m" data-tex="\pm 1"></span> on both ends of each edge, which is the constant sheaf up to a sign per edge (row), and <span class="m" data-tex="L"></span> does not see the sign of a row. The two Laplacians have the same spectrum, and the readout's smallest nonzero eigenvalue does not change when you switch. The sheaf flow is the plain flow run on the features with class B's negated. That is exactly why the sheaf needs to know the classes to help. Choosing the right sheaf is most of the classification problem.</p>
+
+  <h2>More classes need wider stalks</h2>
+  <p>Signs are enough for two classes and no more. With one-dimensional stalks and invertible maps on a connected graph, <span class="m" data-tex="H^0"></span> is at most one-dimensional (their Lemma 6), so the limit is again <span class="m" data-tex="\langle x(0), h\rangle h"></span> for a single vector <span class="m" data-tex="h"></span>, on every channel. With three classes, some node's value of <span class="m" data-tex="h"></span> lies between two nodes of the other classes, its limit is a convex combination of theirs in every channel, and no hyperplane can cut its class off (Proposition 11). Their Lemma 6 also says that an <span class="m" data-tex="O(d)"></span> bundle, a sheaf whose maps are orthogonal, has <span class="m" data-tex="\dim H^0 \le d"></span>, with equality exactly when transport around every cycle is the identity. Proposition 13 then separates up to <span class="m" data-tex="2d"></span> classes with <span class="m" data-tex="d = 2"></span> or <span class="m" data-tex="4"></span>.</p>
+  <p>In Figure 2 the stalks are planes. Every map out of a node of class <span class="m" data-tex="c \in \{0, 1, 2\}"></span> is the rotation by <span class="m" data-tex="c\varphi"></span>, so transport from class <span class="m" data-tex="c'"></span> to class <span class="m" data-tex="c"></span> rotates by <span class="m" data-tex="(c' - c)\varphi"></span>. Transport around any cycle is the identity, <span class="m" data-tex="\dim H^0 = 2"></span> for every angle, and the harmonic cochains are <span class="m" data-tex="x_v = \sqrt{d_v}\, R(-c\varphi)\, w"></span> for a vector <span class="m" data-tex="w"></span> in the plane: each class ends on its own ray. The graph has 18 nodes, 6 per class, and 28 edges, 25 of them between classes. Each node starts at a point drawn from three overlapping clouds.</p>
+
+  <div class="figure" id="fig-rot">
+    <div class="controls">
+      <label>angle between classes φ <input type="range" id="rot-phi" min="0" max="180" step="1" value="120"><output id="rot-phi-out"></output></label>
+    </div>
+    <div class="controls">
+      <button class="btn" id="rot-run" type="button">Run the flow</button>
+      <label>time <input type="range" id="rot-t" min="0" max="1000" value="1000" aria-label="Time along the diffusion"></label>
+    </div>
+    <div class="fig-body" id="rot-body"><svg role="img" aria-label="The stalk plane. Each of 18 nodes is a point; circles, squares and triangles are the three classes. Dashed rays show where each class ends up."></svg></div>
+    <p class="readout" id="rot-readout" aria-live="polite"></p>
+    <p class="figure-caption"><span class="figure-label">Figure 2.</span> Diffusion with two-dimensional stalks and rotation maps. Every node is a point in its stalk <span class="m" data-tex="\mathbb R^2"></span>, all drawn in one plane: <span class="t-stalk">teal circles</span> for class 0, <span class="t-pinned">slate squares</span> for class 1, <span class="t-twist">plum triangles</span> for class 2, each with a faint trail back to where it started. The dashed rays are where each class goes in the limit. At <span class="m" data-tex="\varphi = 0"></span> every map is the identity and <span class="m" data-tex="\Delta"></span> is the graph Laplacian on each coordinate.</p>
+  </div>
+
+  <p>At <span class="m" data-tex="\varphi = 0"></span> all three rays coincide and every node heads for the same line through the origin, one class sandwiched between the others. Any nonzero angle separates the rays, and a line can then cut off the two outer classes. Whether the middle one can be cut off depends on the angle and on how far along its ray each node lands, which depends on its degree. For this graph and these starting points it comes free at 65°. At 120° the three classes are evenly spaced, the arrangement of their Proposition 13. At 180° classes 0 and 2 land on the same ray and cannot be told apart, which is the one-dimensional sign flip again, embedded in the plane.</p>
+
+  <h2>Learning the sheaf</h2>
+  <p>Everything so far used a sheaf built from the labels, which is exactly what a classifier does not have. The model Bodnar et al. propose learns the restriction maps from the features. Each map is a function of the two endpoint features, <span class="m" data-tex="\mathcal F_{v \trianglelefteq e} = \Phi(x_v, x_u) = \sigma(V [x_v \Vert x_u])"></span>, and it has to depend on the order of its arguments, or it could not learn asymmetric transport. The layers are discretized diffusion with weights (their eq. 6, with a learned rescaling from their Appendix E, eq. 55):</p>
+  <div class="tex" data-tex="X_{t+1} = (1 + \varepsilon_t)\, X_t - \sigma\Big( \Delta_{\mathcal F(t)} \,(I \otimes W_1^t)\, X_t\, W_2^t \Big),"></div>
+  <p>with the maps recomputed from <span class="m" data-tex="X_t"></span> at every layer, <span class="m" data-tex="W_1"></span> mixing the <span class="m" data-tex="d"></span> stalk coordinates, <span class="m" data-tex="W_2"></span> mixing the feature channels, a small neural network in front to turn the raw features into <span class="m" data-tex="X_0"></span>, and a linear layer at the end to produce class scores. They normalize by <span class="m" data-tex="(D + I)^{-1/2}"></span> rather than <span class="m" data-tex="D^{-1/2}"></span>, as GCN does, for numerical stability. The paper's three models learn diagonal maps, orthogonal maps, or general ones.</p>
+  <p>The graphs are three of their benchmarks, the WebKB graphs Texas, Cornell and Wisconsin: web pages from university computer science departments, linked by hyperlinks, each page described by which of 1703 words it contains and labelled with one of five classes. The page uses the files and the ten fixed train, validation and test splits distributed with Geom-GCN (Pei et al.), as the paper does. The splits hold 48%, 32% and 20% of the nodes. Texas has 183 pages, and 279 links once direction and 16 self-links are dropped, and only 17 of those 279 links join pages of the same class. The largest class has 101 pages.</p>
+  <p>To compare diffusion operators head to head, the page first strips each layer to the bare diffusion step, <span class="m" data-tex="X_{t+1} = X_t - \Delta_{\mathcal F} X_t"></span>: no <span class="m" data-tex="W_1"></span>, <span class="m" data-tex="W_2"></span>, <span class="m" data-tex="\sigma"></span> or <span class="m" data-tex="\varepsilon"></span>, which is the setting of the paper's synthetic experiment. Every model has the same input network, 16 hidden numbers per node, two diffusion layers, and the same training (Adam at learning rate 0.02, weight decay 0.0005, dropout 0.5, up to 300 epochs, stopping after 100 without a better validation accuracy). Only the Laplacian differs. <em>Features only</em> has no diffusion layers at all. <em>Plain diffusion</em> fixes every map to the identity. <em>Scalar maps</em> learns one number per node and edge, <span class="m" data-tex="\tanh(V[x_v \Vert x_u] + b)"></span>, the paper's diagonal model with <span class="m" data-tex="d = 1"></span>, which can learn the sign flips of Figure 1; its bias starts every map at 0.9, so it begins close to plain diffusion. <em>Rotations</em> uses planes for stalks and learns an angle <span class="m" data-tex="\pi \tanh(V[x_v \Vert x_u] + b)"></span> per node and edge, as in Figure 2. These settings were fixed by hand once, the same for all four models, and not tuned. Each score is the test accuracy at the epoch with the best validation accuracy.</p>
+
+  <div class="figure figure-wide" id="fig-bench">
+    <div class="controls">
+      <label>graph <select id="bench-graph">
+        <option value="texas">Texas</option>
+        <option value="cornell">Cornell</option>
+        <option value="wisconsin">Wisconsin</option>
+      </select></label>
+      <label class="check"><input type="checkbox" id="bench-full"> full layer (weights, activation, ε)</label>
+      <button class="btn" id="bench-run" type="button">Train again</button>
+    </div>
+    <div class="fig-body" id="bench-body"><svg role="img" aria-label="Test accuracy of four models on each of ten splits, one row per model, with the mean marked."></svg></div>
+    <p class="readout" id="bench-readout" aria-live="polite"></p>
+    <p class="figure-caption"><span class="figure-label">Figure 3.</span> The four models, trained in this page on the ten fixed splits. Each dot is one split's test accuracy and the tall tick is the mean over the splits that have finished. The dashed line is the accuracy of always guessing the largest class in the training set. Training starts when the figure scrolls into view and runs a few epochs per frame; forty runs take about half a minute. Results are kept, so switching back to a graph shows them at once, and <em>Train again</em> reruns the same seeds. On Texas one test node is 2.7 points.</p>
+  </div>
+
+  <p>On Texas, plain diffusion scores 60.3%, barely above the 58.9% of always guessing the largest class, while the features alone reach 83.0%. The links hurt: after two steps of averaging, each page's words have been mixed with those of neighbours that mostly belong to other classes. The learned scalar maps recover almost all of it, 81.6%. The rotations land in between, at 70.0%. Cornell and Wisconsin give the same order: features alone 73.8% and 84.9%, plain diffusion 46.5% and 61.6%, scalar maps 74.3% and 83.9%, rotations 56.8% and 72.9%.</p>
+  <p>Tick <em>full layer</em> and each diffusion step gets its weights, its activation and its <span class="m" data-tex="\varepsilon"></span> back. On Texas the four models then score 83.0%, 80.0%, 79.7% and 83.8%, and the spread between splits (about 4 to 7 points) is larger than the differences between models. The weights give every model, plain diffusion included, a way to route around the graph, and the page cannot tell the Laplacians apart any more. The paper reports its sheaf models first on five of its six heterophilic benchmarks, with a hyperparameter search over each model and dataset. The page runs one fixed setting of a small version of the model, so its numbers are not comparable with the paper's table and do not test that claim.</p>
+
+  <h2>What the maps learn</h2>
+  <p>A scalar sheaf that separates two classes needs negative transport on edges between them. What the scalar model actually learns is visible in its maps. Figure 4 trains the scalar and rotation models on a single split and records every learned transport as training goes.</p>
+
+  <div class="figure figure-wide" id="fig-learn">
+    <div class="controls">
+      <label>graph <select id="learn-graph">
+        <option value="texas">Texas</option>
+        <option value="cornell">Cornell</option>
+        <option value="wisconsin">Wisconsin</option>
+      </select></label>
+      <label>split <select id="learn-split"></select></label>
+      <button class="btn" id="learn-run" type="button">Train again</button>
+    </div>
+    <div class="fig-row learn">
+      <div class="fig-body" id="learn-scalar"><div class="panel-title">Scalar maps: transport during training</div><svg role="img" aria-label="Learned scalar transport on every edge against training epoch, as a median line and a band, with validation accuracy."></svg></div>
+      <div class="fig-body" id="learn-rot"><div class="panel-title">Rotations: learned angle at the end</div><svg role="img" aria-label="Histograms of learned rotation angles for edges within a class and edges between classes, one per layer."></svg></div>
+    </div>
+    <p class="readout" id="learn-readout" aria-live="polite"></p>
+    <p class="figure-caption"><span class="figure-label">Figure 4.</span> Left: the scalar model's learned transport <span class="m" data-tex="\mathcal F_{v \trianglelefteq e} \mathcal F_{u \trianglelefteq e}"></span> on every edge in both layers, as the <span class="t-restrict">median</span> and the band from the 10th to the 90th percentile, against epoch, with validation accuracy in <span class="t-pinned">slate</span> (right axis) and its best epoch marked. Right: the rotation model's learned transport angle <span class="m" data-tex="|\,\phi_u - \phi_v|"></span> after 300 epochs, per layer, as the share of <span class="t-restrict">between-class edges</span> and of <span class="t-pinned">within-class edges</span> (outlined) in each 15° bin. Both models train for the full 300 epochs here; early stopping only chooses which epoch to score.</p>
+  </div>
+
+  <p>The scalar maps never turn negative. They start near 0.8, drift for a few dozen epochs, and then collapse to zero on every edge, within- and between-class alike. On the first Texas split this happens between epochs 25 and 75, and validation accuracy climbs from 53% to 75% as it does. The same collapse happens on the first split of Cornell and of Wisconsin, and it still happens with weight decay switched off, so it is learned, not imposed by the regularizer. A zero map is a restriction map like any other (the palette of <a href="01-stalks-and-restriction-maps.html">essay 1</a> had one), and a sheaf with every map zero has <span class="m" data-tex="H^0 = C^0"></span>: every cochain is a global section, <span class="m" data-tex="\Delta_{\mathcal F} = 0"></span>, and diffusion does nothing. The best sheaf this model finds for these graphs disconnects them, and the model becomes the features-only model with extra parameters.</p>
+  <p>Rotations cannot do that, since an orthogonal map has norm 1. What they learn instead is to rotate more across class boundaries. On the first Texas split, after 300 epochs, the median between-class angle is 50° against 13° for within-class edges in the first layer, and 103° against 54° in the second, which is the behaviour the paper reports for its synthetic three-class experiment (their Appendix F). With only 17 within-class edges that comparison is thin, and it does not rescue the model: the rotations still score well below ignoring the graph. Proposition 10's sheaf needs the classes to build, and the model can only guess transport from the words at the two ends of a link. On these three graphs, the learned sheaf gets the most out of the links by cutting them.</p>
+
+  <h2>What the theory does and does not promise</h2>
+  <p>The results of Section 3 are about the limit of diffusion with a sheaf chosen knowing the answer: which hypothesis classes contain a sheaf whose harmonic space separates the classes. They say that sign flips suffice for two classes, that one-dimensional stalks cannot handle three, that orthogonal maps on planes can, and that symmetric weights cannot even handle two on a balanced bipartite graph. Those statements are exact, and Figures 1 and 2 are small instances of them. What they do not say is that a network will find such a sheaf from features, or that finding one beats not diffusing at all. On the WebKB graphs, a small model with one hand-set configuration found that the best transport was none. The last essay leaves graphs behind and goes back to where sheaves came from: holomorphic functions, their germs, and analytic continuation around a branch point.</p>
+
+  <footer>
+    <p>Part of <a href="index.html">Sheaves</a>. Previous: <a href="05-discourse-sheaves.html">Opinion dynamics on discourse sheaves</a>.</p>
+    <p>References: C. Bodnar, F. Di Giovanni, B. P. Chamberlain, P. Liò and M. M. Bronstein, Neural sheaf diffusion: a topological perspective on heterophily and oversmoothing in GNNs, <em>Advances in Neural Information Processing Systems 35</em> (NeurIPS 2022), arXiv:2202.04579: Sec. 2 (eqs. 1 to 3, the normalized sheaf Laplacian), Def. 7, Props. 8 to 11 and 13 with their proofs in App. B, Lemma 6, eqs. 5 and 6, Sec. 5 (learning Φ), Sec. 6, App. E (eq. 55, augmented normalization, hyperparameter ranges), App. F. H. Pei, B. Wei, K. C.-C. Chang, Y. Lei and B. Yang, Geom-GCN: geometric graph convolutional networks, ICLR 2020, arXiv:2002.05287. T. N. Kipf and M. Welling, Semi-supervised classification with graph convolutional networks, ICLR 2017.</p>
+    <p>Data: the WebKB graphs (from the CMU WebKB project) as the files <code>out1_node_feature_label.txt</code> and <code>out1_graph_edges.txt</code> and the ten split files distributed with Geom-GCN (github.com/bingzhewei/geom-gcn); links are treated as undirected with self-links dropped, and each page's word indicators are scaled to sum to 1. The graphs of Figures 1 and 2 and their starting features are random, from fixed seeds. Every accuracy on this page is from its own training runs.</p>
+    <p>Built with <a href="https://github.com/enjalot/moonshine">moonshine</a>.</p>
+  </footer>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  var css = function (n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); };
+  var DEG = Math.PI / 180;
+
+  document.querySelectorAll('.tex').forEach(function (el) {
+    katex.render(el.dataset.tex, el, { displayMode: true, throwOnError: false });
+  });
+  document.querySelectorAll('.m').forEach(function (el) {
+    katex.render(el.dataset.tex, el, { throwOnError: false });
+  });
+
+  function responsive(el, render) {
+    var w = 0;
+    new ResizeObserver(function () {
+      if (el.clientWidth > 0 && el.clientWidth !== w) { w = el.clientWidth; render(w); }
+    }).observe(el);
+  }
+
+  // Plays f from 0 to 1 over `ms`, only while `el` is on screen. With reduced
+  // motion it jumps to the end.
+  function player(el, ms, onFrame) {
+    var raf = null, t0 = null, visible = true, frac = 1;
+    function tick(now) {
+      if (t0 === null) t0 = now - frac * ms;
+      frac = Math.min(1, (now - t0) / ms);
+      onFrame(frac);
+      raf = frac < 1 && visible ? requestAnimationFrame(tick) : null;
+      if (raf === null && frac < 1) t0 = null;
+    }
+    Motion.onVisible(el, function (v) {
+      visible = v;
+      if (v && frac < 1 && raf === null) raf = requestAnimationFrame(tick);
+    });
+    return {
+      start: function () {
+        if (raf !== null) cancelAnimationFrame(raf);
+        raf = null; t0 = null;
+        if (Motion.reduced()) { frac = 1; onFrame(1); return; }
+        frac = 0; onFrame(0);
+        if (visible) raf = requestAnimationFrame(tick);
+      },
+      stop: function () { if (raf !== null) cancelAnimationFrame(raf); raf = null; t0 = null; }
+    };
+  }
+  function pct(x, d) { return (100 * x).toFixed(d == null ? 1 : d); }
+  function fix(x, d) { return (Math.abs(x) < 0.5 * Math.pow(10, -d) ? 0 : x).toFixed(d); }
+
+  // The toy graphs: a random spanning tree with every edge between classes,
+  // then extra edges between classes and within them, from a fixed seed.
+  function gauss(r) { return Math.sqrt(-2 * Math.log(r() + 1e-12)) * Math.cos(2 * Math.PI * r()); }
+  function toyGraph(r, n, C, cross, same) {
+    var lab = [], E = [], seen = {}, v, u, k;
+    for (v = 0; v < n; v++) lab.push(v % C);
+    function put(u, v, sameClass) {
+      var key = Math.min(u, v) + ',' + Math.max(u, v);
+      if (u !== v && !seen[key] && ((lab[u] === lab[v]) === sameClass)) { seen[key] = 1; E.push([Math.min(u, v), Math.max(u, v)]); return true; }
+      return false;
+    }
+    for (v = 1; v < n; v++) { do { u = Math.floor(r() * v); } while (lab[u] === lab[v]); put(u, v, false); }
+    for (k = 0; k < cross;) if (put(Math.floor(r() * n), Math.floor(r() * n), false)) k++;
+    for (k = 0; k < same;) if (put(Math.floor(r() * n), Math.floor(r() * n), true)) k++;
+    return { lab: lab, E: E, n: n };
+  }
+  function degrees(g) { var d = new Array(g.n).fill(0); g.E.forEach(function (e) { d[e[0]]++; d[e[1]]++; }); return d; }
+  // Time runs on a symlog scale so the first few units get room.
+  function timeScale(T) { return d3.scaleSymlog().constant(1).domain([0, T]); }
+
+  // ───────────────────────── Figure 1: flattening vs sign flips ─────────────────────────
+  (function () {
+    var r = Sheaf.mulberry32(3), g = toyGraph(r, 20, 2, 9, 0), n = g.n, lab = g.lab, deg = degrees(g);
+    var x0 = lab.map(function (l) { return (l ? 0.5 : -0.5) + 0.9 * gauss(r); });
+    var mode = 'plain', eig, lim, T, t, traces, tGrid, lam1;
+    var gBody = document.getElementById('flat-graph'), tBody = document.getElementById('flat-trace');
+    var gSvg = d3.select(gBody).select('svg'), tSvg = d3.select(tBody).select('svg');
+    var slider = document.getElementById('flat-t'), readout = document.getElementById('flat-readout');
+    var cA = css('--c-stalk'), cB = css('--c-pinned'), cM = css('--c-restrict');
+    var pos = null, gW = 300, tW = 400, H = 300;
+
+    // A fixed force layout, computed once.
+    (function () {
+      var nodes = lab.map(function (_, i) { return { id: i }; });
+      var sim = d3.forceSimulation(nodes).force('link', d3.forceLink(g.E.map(function (e) { return { source: e[0], target: e[1] }; })).distance(38))
+        .force('charge', d3.forceManyBody().strength(-160)).force('x', d3.forceX()).force('y', d3.forceY()).stop();
+      for (var i = 0; i < 400; i++) sim.tick();
+      pos = nodes.map(function (d) { return [d.x, d.y]; });
+    })();
+
+    function build() {
+      var S = mode === 'plain'
+        ? Sheaf.signedGraph(n, g.E.map(function (e) { return [e[0], e[1], 1]; }))
+        : Sheaf.create({ dims: new Array(n).fill(1), edges: g.E.map(function (e) {
+          return { u: e[0], v: e[1], Fu: [[lab[e[0]] ? 1 : -1]], Fv: [[lab[e[1]] ? 1 : -1]] };
+        }) });
+      eig = Sheaf.symEig(Sheaf.normalizedLaplacian(S));
+      lim = Array.from(Sheaf.projectKernel(eig, x0, 1e-8));
+      lam1 = eig.values.find(function (l) { return l > 1e-8; });
+      T = 7 / lam1;
+      tGrid = d3.range(0, 161).map(function (i) { return Math.expm1(i / 160 * Math.log1p(T)); });
+      traces = tGrid.map(function (tt) { return Array.from(Sheaf.heat(eig, x0, tt)); });
+    }
+    function bestThreshold(vals) {
+      var idx = vals.map(function (_, i) { return i; }).sort(function (a, b) { return vals[a] - vals[b]; });
+      var best = { acc: -1, cut: 0 };
+      for (var c = 0; c <= n; c++) {
+        var lo = c ? vals[idx[c - 1]] : vals[idx[0]] - 0.1, hi = c < n ? vals[idx[c]] : vals[idx[n - 1]] + 0.1;
+        var cut = (lo + hi) / 2, ok1 = 0, ok2 = 0;
+        vals.forEach(function (v, i) { if ((v > cut) === (lab[i] === 1)) ok1++; else ok2++; });
+        var acc = Math.max(ok1, ok2);
+        if (acc > best.acc) best = { acc: acc, cut: cut };
+      }
+      return best;
+    }
+
+    function drawGraph(x) {
+      var W = gW, pad = 22;
+      var xs = d3.extent(pos, function (p) { return p[0]; }), ys = d3.extent(pos, function (p) { return p[1]; });
+      var k = Math.min((W - 2 * pad) / (xs[1] - xs[0]), (H - 2 * pad) / (ys[1] - ys[0]));
+      var px = function (p) { return pad + (p[0] - xs[0]) * k + ((W - 2 * pad) - (xs[1] - xs[0]) * k) / 2; };
+      var py = function (p) { return pad + (p[1] - ys[0]) * k + ((H - 2 * pad) - (ys[1] - ys[0]) * k) / 2; };
+      gSvg.attr('width', W).attr('height', H);
+      var eSel = gSvg.selectAll('line.edge').data(g.E);
+      eSel.enter().append('line').attr('class', 'edge').merge(eSel)
+        .attr('x1', function (e) { return px(pos[e[0]]); }).attr('y1', function (e) { return py(pos[e[0]]); })
+        .attr('x2', function (e) { return px(pos[e[1]]); }).attr('y2', function (e) { return py(pos[e[1]]); })
+        .attr('stroke', mode === 'flip' ? cM : css('--c-faint')).attr('stroke-width', 1.3).attr('stroke-dasharray', mode === 'flip' ? '3 2' : null);
+      var bs = 16;
+      var nSel = gSvg.selectAll('g.node').data(lab);
+      var nEnter = nSel.enter().append('g').attr('class', 'node');
+      nEnter.append('rect').attr('class', 'bar');
+      nEnter.append('path').attr('class', 'glyph');
+      nSel = nEnter.merge(nSel).attr('transform', function (_, i) { return 'translate(' + px(pos[i]) + ',' + py(pos[i]) + ')'; });
+      nSel.select('path.glyph').attr('d', function (l) { return l ? 'M-6,-6H6V6H-6Z' : d3.symbol(d3.symbolCircle, 120)(); })
+        .attr('fill', css('--fig-bg')).attr('stroke', function (l) { return l ? cB : cA; }).attr('stroke-width', 2);
+      nSel.select('rect.bar').attr('x', -2.5).attr('width', 5)
+        .attr('y', function (_, i) { return x[i] > 0 ? -x[i] * bs : 0; })
+        .attr('height', function (_, i) { return Math.abs(x[i]) * bs; })
+        .attr('fill', function (l) { return l ? cB : cA; }).attr('opacity', 0.85);
+      nSel.select('path.glyph').raise();
+      nSel.each(function () { d3.select(this).select('rect.bar').raise(); });
+    }
+
+    function drawTrace(ti) {
+      var W = tW, m = { l: 34, r: 40, t: 10, b: 30 };
+      tSvg.attr('width', W).attr('height', H);
+      var ts = timeScale(T).range([m.l, W - m.r - 26]);
+      var all = traces.reduce(function (a, row) { return a.concat(row); }, []);
+      var ext = d3.extent(all.concat(lim));
+      var y = d3.scaleLinear().domain([Math.min(ext[0], -0.5), Math.max(ext[1], 0.5)]).nice().range([H - m.b, m.t]);
+      tSvg.selectAll('*').remove();
+      tSvg.append('g').attr('class', 'axis').attr('transform', 'translate(0,' + (H - m.b) + ')')
+        .call(d3.axisBottom(ts).tickValues([0, 1, 2, 5, 10, 20, 40].filter(function (v) { return v <= T; })).tickFormat(d3.format('d')));
+      tSvg.append('g').attr('class', 'axis').attr('transform', 'translate(' + m.l + ',0)').call(d3.axisLeft(y).ticks(5));
+      tSvg.append('text').attr('x', (m.l + W - m.r) / 2).attr('y', H - 2).attr('text-anchor', 'middle').text('time t');
+      var xInf = W - m.r + 8;
+      tSvg.append('text').attr('x', xInf).attr('y', H - m.b + 16).attr('text-anchor', 'middle').text('∞');
+      tSvg.append('line').attr('x1', ts(T) + 6).attr('x2', ts(T) + 6).attr('y1', m.t).attr('y2', H - m.b).attr('stroke', css('--border'));
+      var line = d3.line().x(function (d) { return ts(d[0]); }).y(function (d) { return y(d[1]); });
+      for (var v = 0; v < n; v++) {
+        var pts = tGrid.slice(0, ti + 1).map(function (tt, k) { return [tt, traces[k][v]]; });
+        tSvg.append('path').attr('d', line(pts)).attr('fill', 'none').attr('stroke', lab[v] ? cB : cA)
+          .attr('stroke-width', 1.3).attr('opacity', 0.75).attr('stroke-dasharray', lab[v] ? '4 2' : null);
+      }
+      if (ti === tGrid.length - 1) {
+        lim.forEach(function (val, v) {
+          tSvg.append('path').attr('transform', 'translate(' + xInf + ',' + y(val) + ')')
+            .attr('d', lab[v] ? 'M-4,-4H4V4H-4Z' : d3.symbol(d3.symbolCircle, 50)())
+            .attr('fill', lab[v] ? cB : cA).attr('opacity', 0.85);
+        });
+      }
+      var cur = traces[ti], bt = bestThreshold(ti === tGrid.length - 1 ? lim : cur);
+      tSvg.append('line').attr('x1', m.l).attr('x2', xInf + 8).attr('y1', y(bt.cut)).attr('y2', y(bt.cut))
+        .attr('stroke', css('--text-2')).attr('stroke-dasharray', '5 4').attr('stroke-width', 1);
+      tSvg.append('line').attr('x1', ts(tGrid[ti])).attr('x2', ts(tGrid[ti])).attr('y1', m.t).attr('y2', H - m.b)
+        .attr('stroke', css('--text-3')).attr('stroke-width', 1);
+    }
+
+    function show(frac) {
+      var ti = Math.round(frac * (tGrid.length - 1));
+      t = tGrid[ti];
+      var done = ti === tGrid.length - 1, cur = done ? lim : traces[ti];
+      drawGraph(cur);
+      drawTrace(ti);
+      slider.value = Math.round(frac * 1000);
+      var start = bestThreshold(x0).acc, now = bestThreshold(cur).acc, end = bestThreshold(lim).acc;
+      var c = Sheaf.dot(lim.map(Math.abs), lim.map(function (_, v) { return Math.sqrt(deg[v]); })) / deg.reduce(function (s, d) { return s + d; }, 0);
+      readout.innerHTML = (mode === 'plain' ? '<b>Graph Laplacian.</b> ' : '<b>Sign flip across classes.</b> ') +
+        (done ? 'In the limit' : 'At t = ' + t.toFixed(1)) + ', the best threshold sorts <b>' + now + ' of 20</b> nodes (' + start + ' at t = 0, ' + end + ' in the limit). ' +
+        'Limit: every node at ' + (mode === 'plain' ? '' : '±') + 'c√deg with c = ' + Math.abs(c).toFixed(3) + '. Smallest nonzero eigenvalue of Δ: ' + lam1.toFixed(3) + '.';
+    }
+    var play = player(document.getElementById('fig-flat'), 3500, show);
+    document.getElementById('flat-mode').addEventListener('change', function (e) { mode = e.target.value; build(); play.start(); });
+    document.getElementById('flat-run').addEventListener('click', function () { play.start(); });
+    slider.addEventListener('input', function () { play.stop(); show(+slider.value / 1000); });
+    build();
+    responsive(document.querySelector('#fig-flat .fig-row'), function () {
+      var narrow = matchMedia('(max-width: 640px)').matches;
+      gW = FigKit.width(gBody, 360, 260); tW = FigKit.width(tBody, 460, 280); H = narrow ? 240 : 290;
+      show(+slider.value / 1000);
+    });
+  })();
+
+  // ───────────────────────── Figure 2: rotations in the stalk plane ─────────────────────────
+  (function () {
+    var r = Sheaf.mulberry32(1), g = toyGraph(r, 18, 3, 8, 3), n = g.n, lab = g.lab;
+    var mu = [[0.5, 0], [-0.25, 0.43], [-0.25, -0.43]], x0 = [];
+    lab.forEach(function (l) { x0.push(mu[l][0] + 0.7 * gauss(r), mu[l][1] + 0.7 * gauss(r)); });
+    var phi = 120, eig, lim, T, tGrid, traj, h0;
+    var body = document.getElementById('rot-body'), svg = d3.select(body).select('svg');
+    var slider = document.getElementById('rot-t'), phiIn = document.getElementById('rot-phi'), phiOut = document.getElementById('rot-phi-out');
+    var readout = document.getElementById('rot-readout');
+    var col = [css('--c-stalk'), css('--c-pinned'), css('--c-twist')];
+    var shapes = [d3.symbolCircle, d3.symbolSquare, d3.symbolTriangle];
+    var W = 520, H = 400, R0 = d3.max(x0, function (v) { return Math.abs(v); }) * 1.05;
+
+    function build() {
+      var S = Sheaf.create({ dims: new Array(n).fill(2), edges: g.E.map(function (e) {
+        return { u: e[0], v: e[1], Fu: Sheaf.rot(phi * DEG * lab[e[0]]), Fv: Sheaf.rot(phi * DEG * lab[e[1]]) };
+      }) });
+      eig = Sheaf.symEig(Sheaf.normalizedLaplacian(S));
+      lim = Array.from(Sheaf.projectKernel(eig, x0, 1e-8));
+      h0 = Sheaf.kernelDim(eig, 1e-8);
+      var lam1 = eig.values.find(function (l) { return l > 1e-8; });
+      T = 7 / lam1;
+      tGrid = d3.range(0, 121).map(function (i) { return Math.expm1(i / 120 * Math.log1p(T)); });
+      traj = tGrid.map(function (tt) { return Array.from(Sheaf.heat(eig, x0, tt)); });
+      traj[traj.length - 1] = lim;
+    }
+    function pts(x) { var p = []; for (var v = 0; v < n; v++) p.push([x[2 * v], x[2 * v + 1]]); return p; }
+
+    function show(frac) {
+      var ti = Math.round(frac * (tGrid.length - 1)), cur = pts(traj[ti]);
+      slider.value = Math.round(frac * 1000);
+      svg.attr('width', W).attr('height', H).selectAll('*').remove();
+      var s = Math.min(W, H) / 2 - 16, cx = W / 2, cy = H / 2;
+      var X = function (p) { return cx + p[0] / R0 * s; }, Y = function (p) { return cy - p[1] / R0 * s; };
+      svg.append('line').attr('x1', cx - s).attr('x2', cx + s).attr('y1', cy).attr('y2', cy).attr('stroke', css('--border'));
+      svg.append('line').attr('y1', cy - s).attr('y2', cy + s).attr('x1', cx).attr('x2', cx).attr('stroke', css('--border'));
+      // Limit rays: rotate a node's limit back by its class angle to get w.
+      var lp = pts(lim), w = [0, 0];
+      lp.forEach(function (p, v) { var q = Sheaf.matVec(Sheaf.rot(phi * DEG * lab[v]), p); w[0] += q[0]; w[1] += q[1]; });
+      var wn = Math.hypot(w[0], w[1]);
+      if (wn > 1e-9) [0, 1, 2].forEach(function (c) {
+        var d = Sheaf.matVec(Sheaf.rot(-phi * DEG * c), [w[0] / wn, w[1] / wn]);
+        svg.append('line').attr('x1', cx).attr('y1', cy).attr('x2', cx + d[0] * s).attr('y2', cy - d[1] * s)
+          .attr('stroke', col[c]).attr('stroke-dasharray', '5 4').attr('stroke-width', 1.3).attr('opacity', 0.8);
+      });
+      var line = d3.line().x(X).y(Y);
+      for (var v = 0; v < n; v++) {
+        svg.append('path').attr('d', line(traj.slice(0, ti + 1).map(function (x) { return [x[2 * v], x[2 * v + 1]]; })))
+          .attr('fill', 'none').attr('stroke', col[lab[v]]).attr('opacity', 0.3).attr('stroke-width', 1.2);
+      }
+      cur.forEach(function (p, v) {
+        svg.append('path').attr('transform', 'translate(' + X(p) + ',' + Y(p) + ')').attr('d', d3.symbol(shapes[lab[v]], 70)())
+          .attr('fill', col[lab[v]]).attr('stroke', css('--fig-bg')).attr('stroke-width', 1);
+      });
+      var cut = [0, 1, 2].filter(function (c) { return Sheaf.separable2(cur, lab, c); });
+      var names = ['class 0', 'class 1', 'class 2'];
+      readout.innerHTML = '<b>φ = ' + phi + '°</b>, dim H<sup>0</sup> = ' + h0 + '. ' + (ti === tGrid.length - 1 ? 'In the limit' : 'At t = ' + tGrid[ti].toFixed(1)) +
+        ', a line can cut off ' + (cut.length === 0 ? '<b>no class</b> from the other two' : cut.length === 3 ? '<b>every class</b> from the other two' : '<b>' + cut.map(function (c) { return names[c]; }).join(' and ') + '</b> but not ' + [0, 1, 2].filter(function (c) { return cut.indexOf(c) < 0; }).map(function (c) { return names[c]; }).join(' or ')) + '.';
+    }
+    var play = player(document.getElementById('fig-rot'), 3000, show);
+    phiIn.addEventListener('input', function () { phi = +phiIn.value; phiOut.textContent = phi + '°'; build(); play.stop(); show(+slider.value / 1000); });
+    phiIn.addEventListener('change', function () { play.start(); });
+    document.getElementById('rot-run').addEventListener('click', function () { play.start(); });
+    slider.addEventListener('input', function () { play.stop(); show(+slider.value / 1000); });
+    phiOut.textContent = phi + '°';
+    build();
+    responsive(body, function () { W = FigKit.width(body, 560, 280); H = Math.min(400, W * 0.8); show(+slider.value / 1000); });
+  })();
+
+  // A cooperative scheduler: runs `work()` in slices of about 12 ms per frame
+  // until it returns false. Returns a cancel function.
+  function background(work, onSlice) {
+    var live = true;
+    function frame() {
+      if (!live) return;
+      var t0 = performance.now(), more = true;
+      while (more && performance.now() - t0 < 12) more = work();
+      if (onSlice) onSlice();
+      if (more) requestAnimationFrame(frame); else live = false;
+    }
+    requestAnimationFrame(frame);
+    return function () { live = false; };
+  }
+  var DATA = {};
+  function dataset(name) { if (!DATA[name]) DATA[name] = NSD.fromWebKB(window.WEBKB[name]); return DATA[name]; }
+  function majority(name) {
+    var raw = window.WEBKB[name], acc = 0;
+    raw.splits.forEach(function (s) {
+      var c = {}, best = null, ok = 0, tot = 0;
+      raw.labels.forEach(function (l, i) { if (s[i] === 't') c[l] = (c[l] || 0) + 1; });
+      Object.keys(c).forEach(function (k) { if (best === null || c[k] > c[best]) best = k; });
+      raw.labels.forEach(function (l, i) { if (s[i] === 's') { tot++; if (l === +best) ok++; } });
+      acc += ok / tot;
+    });
+    return acc / raw.splits.length;
+  }
+  var MODELS = [['mlp', 'features only'], ['plain', 'plain diffusion'], ['scalar', 'scalar maps'], ['rot', 'rotations']];
+
+  // ───────────────────────── Figure 3: the benchmark ─────────────────────────
+  (function () {
+    var body = document.getElementById('bench-body'), svg = d3.select(body).select('svg');
+    var gSel = document.getElementById('bench-graph'), full = document.getElementById('bench-full');
+    var readout = document.getElementById('bench-readout');
+    var results = {}, cancel = null, W = 700, status = '', visible = false, started = {};
+    function key() { return gSel.value + (full.checked ? ':full' : ':diff'); }
+
+    function draw() {
+      var res = results[key()] || {}, maj = majority(gSel.value);
+      var m = { l: 118, r: 50, t: 8, b: 34 }, rowH = 34, H = m.t + rowH * MODELS.length + m.b;
+      svg.attr('width', W).attr('height', H).selectAll('*').remove();
+      var x = d3.scaleLinear().domain([0.3, 1]).range([m.l, W - m.r]);
+      svg.append('g').attr('class', 'axis').attr('transform', 'translate(0,' + (H - m.b) + ')')
+        .call(d3.axisBottom(x).ticks(7).tickFormat(function (v) { return Math.round(v * 100) + '%'; }));
+      svg.append('text').attr('x', (m.l + W - m.r) / 2).attr('y', H - 2).attr('text-anchor', 'middle').text('test accuracy');
+      svg.append('line').attr('x1', x(maj)).attr('x2', x(maj)).attr('y1', m.t).attr('y2', H - m.b)
+        .attr('stroke', css('--text-3')).attr('stroke-dasharray', '4 4');
+      svg.append('text').attr('x', x(maj) + 4).attr('y', m.t + 10).style('font-size', '11px').text('largest class ' + pct(maj) + '%');
+      MODELS.forEach(function (mm, row) {
+        var yc = m.t + rowH * row + rowH / 2, col = row >= 2 ? css('--c-restrict') : css('--c-pinned');
+        svg.append('text').attr('x', m.l - 10).attr('y', yc + 4).attr('text-anchor', 'end').style('fill', css('--text')).text(mm[1]);
+        svg.append('line').attr('x1', m.l).attr('x2', W - m.r).attr('y1', yc).attr('y2', yc).attr('stroke', css('--border'));
+        var accs = (res[mm[0]] || []).filter(function (a) { return a != null; });
+        (res[mm[0]] || []).forEach(function (a, k) {
+          if (a == null) return;
+          svg.append('circle').attr('cx', x(a)).attr('cy', yc + ((k % 5) - 2) * 3).attr('r', 4)
+            .attr('fill', col).attr('fill-opacity', 0.55).attr('stroke', col);
+        });
+        if (accs.length) {
+          var mean = d3.mean(accs);
+          svg.append('line').attr('x1', x(mean)).attr('x2', x(mean)).attr('y1', yc - 13).attr('y2', yc + 13).attr('stroke', css('--text')).attr('stroke-width', 2.5);
+          svg.append('text').attr('x', W - m.r + 6).attr('y', yc + 4).style('fill', css('--text')).text(pct(mean) + '%');
+        }
+      });
+    }
+    function summary() {
+      var res = results[key()] || {}, parts = MODELS.map(function (mm) {
+        var a = (res[mm[0]] || []).filter(function (v) { return v != null; });
+        return a.length ? mm[1] + ' <b>' + pct(d3.mean(a)) + '%</b>' + (a.length < 10 ? ' (' + a.length + ' splits)' : '') : null;
+      }).filter(Boolean);
+      readout.innerHTML = (status ? status + ' ' : '') + (parts.length ? 'Mean test accuracy: ' + parts.join(', ') + '.' : '');
+    }
+    function train(force) {
+      if (cancel) cancel();
+      var k0 = key(), graph = gSel.value, P = NSD.presets(full.checked), data = dataset(graph);
+      if (results[k0] && !force) { status = ''; draw(); summary(); return; }
+      results[k0] = {}; MODELS.forEach(function (mm) { results[k0][mm[0]] = new Array(10).fill(null); });
+      var jobs = [];
+      for (var s = 0; s < 10; s++) MODELS.forEach(function (mm) { jobs.push({ split: s, model: mm }); });
+      var j = 0, tr = null;
+      cancel = background(function () {
+        if (j >= jobs.length) return false;
+        var job = jobs[j];
+        if (!tr) tr = NSD.trainer(P[job.model[0]], data, data.splits[job.split], job.split + 1);
+        tr.step(5);
+        status = 'Training ' + job.model[1] + ' on split ' + (job.split + 1) + ' of 10, epoch ' + tr.epoch + '.';
+        if (tr.done) { results[k0][job.model[0]][job.split] = tr.best.test; tr = null; j++; }
+        if (j >= jobs.length) { status = 'Done: 10 splits.'; return false; }
+        return true;
+      }, function () { if (key() === k0) { draw(); summary(); } });
+    }
+    gSel.addEventListener('change', function () { if (visible) train(false); else { draw(); summary(); } });
+    full.addEventListener('change', function () { if (visible) train(false); else { draw(); summary(); } });
+    document.getElementById('bench-run').addEventListener('click', function () { train(true); });
+    Motion.onVisible(document.getElementById('fig-bench'), function (v) {
+      visible = v;
+      if (v && !started[key()]) { started[key()] = 1; train(false); }
+    });
+    responsive(body, function () { W = FigKit.width(body, 760, 300); draw(); summary(); });
+  })();
+
+  // ───────────────────────── Figure 4: what the maps learn ─────────────────────────
+  (function () {
+    var sBody = document.getElementById('learn-scalar'), rBody = document.getElementById('learn-rot');
+    var sSvg = d3.select(sBody).select('svg'), rSvg = d3.select(rBody).select('svg');
+    var gSel = document.getElementById('learn-graph'), spSel = document.getElementById('learn-split');
+    var readout = document.getElementById('learn-readout');
+    var EPOCHS = 300, run = null, cancel = null, sW = 420, rW = 300, H = 260, started = false;
+    for (var k = 0; k < 10; k++) { var o = document.createElement('option'); o.value = k; o.textContent = (k + 1); spSel.appendChild(o); }
+
+    function q(a, p) { var s = a.slice().sort(function (x, y) { return x - y; }); return s[Math.min(s.length - 1, Math.floor(p * s.length))]; }
+
+    function drawScalar() {
+      var m = { l: 40, r: 40, t: 10, b: 30 };
+      sSvg.attr('width', sW).attr('height', H).selectAll('*').remove();
+      var x = d3.scaleLinear().domain([0, EPOCHS]).range([m.l, sW - m.r]);
+      var y = d3.scaleLinear().domain([-0.2, 1]).range([H - m.b, m.t]);
+      var y2 = d3.scaleLinear().domain([0, 1]).range([H - m.b, m.t]);
+      sSvg.append('g').attr('class', 'axis').attr('transform', 'translate(0,' + (H - m.b) + ')').call(d3.axisBottom(x).ticks(6));
+      sSvg.append('g').attr('class', 'axis').attr('transform', 'translate(' + m.l + ',0)').call(d3.axisLeft(y).ticks(6));
+      sSvg.append('g').attr('class', 'axis').attr('transform', 'translate(' + (sW - m.r) + ',0)').call(d3.axisRight(y2).ticks(5).tickFormat(function (v) { return Math.round(100 * v) + '%'; }));
+      sSvg.append('line').attr('x1', m.l).attr('x2', sW - m.r).attr('y1', y(0)).attr('y2', y(0)).attr('stroke', css('--text-3'));
+      sSvg.append('text').attr('x', (m.l + sW - m.r) / 2).attr('y', H - 2).attr('text-anchor', 'middle').text('epoch');
+      if (!run) return;
+      var rec = run.scalar, ochre = css('--c-restrict'), slate = css('--c-pinned');
+      sSvg.append('path').datum(rec).attr('fill', ochre).attr('opacity', 0.22)
+        .attr('d', d3.area().x(function (d) { return x(d.epoch); }).y0(function (d) { return y(d.lo); }).y1(function (d) { return y(d.hi); }));
+      sSvg.append('path').datum(rec).attr('fill', 'none').attr('stroke', ochre).attr('stroke-width', 2)
+        .attr('d', d3.line().x(function (d) { return x(d.epoch); }).y(function (d) { return y(d.med); }));
+      sSvg.append('path').datum(rec).attr('fill', 'none').attr('stroke', slate).attr('stroke-width', 1.5)
+        .attr('d', d3.line().x(function (d) { return x(d.epoch); }).y(function (d) { return y2(d.val); }));
+      if (run.scalarBest) {
+        var b = run.scalarBest;
+        sSvg.append('circle').attr('cx', x(b.epoch)).attr('cy', y2(b.val)).attr('r', 4).attr('fill', slate);
+      }
+    }
+    function drawRot() {
+      var m = { l: 34, r: 8, t: 14, b: 30 }, gap = 16, ph = (H - m.t - m.b - gap) / 2;
+      rSvg.attr('width', rW).attr('height', H).selectAll('*').remove();
+      var x = d3.scaleLinear().domain([0, 180]).range([m.l, rW - m.r]);
+      if (!run || !run.rotFinal) {
+        rSvg.append('text').attr('x', rW / 2).attr('y', H / 2).attr('text-anchor', 'middle').text(run ? 'waiting for the scalar run' : '');
+        return;
+      }
+      var raw = window.WEBKB[run.graph], same = raw.edges.map(function (e) { return raw.labels[e[0]] === raw.labels[e[1]]; });
+      run.rotFinal.forEach(function (angles, layer) {
+        var top = m.t + layer * (ph + gap), bins = d3.range(12).map(function () { return [0, 0]; }), ns = 0, nc = 0;
+        angles.forEach(function (a, k) {
+          var b = Math.min(11, Math.floor(Math.abs(a) / DEG / 15));
+          if (same[k]) { bins[b][0]++; ns++; } else { bins[b][1]++; nc++; }
+        });
+        var fr = bins.map(function (b) { return [b[0] / Math.max(1, ns), b[1] / Math.max(1, nc)]; });
+        var y = d3.scaleLinear().domain([0, d3.max(fr, function (f) { return Math.max(f[0], f[1]); })]).nice().range([top + ph, top]);
+        fr.forEach(function (f, i) {
+          rSvg.append('rect').attr('x', x(15 * i) + 1).attr('width', x(15) - x(0) - 2).attr('y', y(f[1])).attr('height', top + ph - y(f[1]))
+            .attr('fill', css('--c-restrict')).attr('opacity', 0.7);
+          rSvg.append('rect').attr('x', x(15 * i) + 3).attr('width', x(15) - x(0) - 6).attr('y', y(f[0])).attr('height', top + ph - y(f[0]))
+            .attr('fill', 'none').attr('stroke', css('--c-pinned')).attr('stroke-width', 1.5);
+        });
+        rSvg.append('g').attr('class', 'axis').attr('transform', 'translate(0,' + (top + ph) + ')')
+          .call(d3.axisBottom(x).tickValues(layer ? [0, 45, 90, 135, 180] : []).tickFormat(function (v) { return v + '°'; }));
+        rSvg.append('text').attr('x', rW - m.r).attr('y', top + 8).attr('text-anchor', 'end').text('layer ' + (layer + 1) + ' (' + nc + ' between, ' + ns + ' within)');
+      });
+    }
+    function summary() {
+      if (!run) { readout.textContent = ''; return; }
+      var bits = [];
+      if (run.phase === 'scalar') bits.push('Training the scalar model, epoch ' + run.scalar.length + ' of ' + EPOCHS + '.');
+      if (run.phase === 'rot') bits.push('Training the rotation model, epoch ' + run.rotEpoch + ' of ' + EPOCHS + '.');
+      if (run.scalarBest && run.phase !== 'scalar') {
+        var last = run.scalar[run.scalar.length - 1];
+        bits.push('Scalar maps: median transport ' + fix(last.med, 3) + ' at epoch ' + EPOCHS + ' (10th to 90th percentile ' + fix(last.lo, 3) + ' to ' + fix(last.hi, 3) + '); best validation <b>' + pct(run.scalarBest.val) + '%</b> at epoch ' + run.scalarBest.epoch + ', test ' + pct(run.scalarBest.test) + '%.');
+      }
+      if (run.rotFinal) {
+        var raw = window.WEBKB[run.graph], same = raw.edges.map(function (e) { return raw.labels[e[0]] === raw.labels[e[1]]; });
+        var med = run.rotFinal.map(function (A) {
+          var s = [], c = [];
+          A.forEach(function (a, k) { (same[k] ? s : c).push(Math.abs(a) / DEG); });
+          return 'layer ' + (A === run.rotFinal[0] ? 1 : 2) + ' median <b>' + Math.round(q(c, 0.5)) + '°</b> between classes, ' + Math.round(q(s, 0.5)) + '° within';
+        });
+        bits.push('Rotations: ' + med.join('; ') + '; best validation ' + pct(run.rotBest.val) + '% at epoch ' + run.rotBest.epoch + ', test ' + pct(run.rotBest.test) + '%.');
+      }
+      readout.innerHTML = bits.join(' ');
+    }
+    function train() {
+      if (cancel) cancel();
+      var graph = gSel.value, split = +spSel.value, data = dataset(graph), P = NSD.presets(false);
+      var cfgS = Object.assign({}, P.scalar, { patience: Infinity, epochs: EPOCHS });
+      var cfgR = Object.assign({}, P.rot, { patience: Infinity, epochs: EPOCHS });
+      run = { graph: graph, phase: 'scalar', scalar: [], rotEpoch: 0 };
+      var trS = NSD.trainer(cfgS, data, data.splits[split], split + 1), trR = null;
+      cancel = background(function () {
+        if (run.phase === 'scalar') {
+          trS.step(1);
+          var T = trS.model.transports(), all = [];
+          T.forEach(function (Tl) { Tl.forEach(function (t) { all.push(t[0]); }); });
+          var h = trS.history[trS.history.length - 1];
+          run.scalar.push({ epoch: trS.epoch, med: q(all, 0.5), lo: q(all, 0.1), hi: q(all, 0.9), val: h.val });
+          if (trS.done) { run.scalarBest = trS.best; run.phase = 'rot'; trR = NSD.trainer(cfgR, data, data.splits[split], split + 1); }
+          return true;
+        }
+        trR.step(1); run.rotEpoch = trR.epoch;
+        if (trR.done) { run.rotFinal = trR.model.transports(); run.rotBest = trR.best; run.phase = 'done'; return false; }
+        return true;
+      }, function () { drawScalar(); drawRot(); summary(); });
+    }
+    gSel.addEventListener('change', train);
+    spSel.addEventListener('change', train);
+    document.getElementById('learn-run').addEventListener('click', train);
+    Motion.onVisible(document.getElementById('fig-learn'), function (v) { if (v && !started) { started = true; train(); } });
+    responsive(document.querySelector('#fig-learn .fig-row'), function () {
+      sW = FigKit.width(sBody, 460, 280); rW = FigKit.width(rBody, 340, 260);
+      drawScalar(); drawRot(); summary();
+    });
+  })();
+})();
+</script>
+</body>
+</html>

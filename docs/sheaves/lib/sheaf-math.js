@@ -67,6 +67,10 @@
 //   Sheaf.jointFlow(S, x0, alpha, beta, T, steps, samples)  opinions and restriction
 //                                     maps flowing together (eq. 9.1), RK4; snapshots
 //                                     [{ t, x, S }]
+//   Sheaf.normalizedLaplacian(S, aug) D^{-1/2} L D^{-1/2} with D the block diagonal of L
+//                                     (plus I with aug), as in neural sheaf diffusion
+//   Sheaf.thresholdAccuracy(v, labels) best accuracy of a threshold on scalars, labels 0/1
+//   Sheaf.separable2(points, labels, k)  can a line cut class k from the rest in R^2
 (function (global) {
   'use strict';
 
@@ -534,6 +538,64 @@
       });
     });
     return K;
+  }
+
+  // Neural sheaf diffusion (Bodnar et al. 2022) normalises L by its block
+  // diagonal D: Delta = D^{-1/2} L D^{-1/2}, or (D + I)^{-1/2} L (D + I)^{-1/2}
+  // with augment. Blocks are inverted through their eigendecomposition, so
+  // they must be positive definite (every vertex touches a nonzero map).
+  function normalizedLaplacian(S, augment) {
+    var L = laplacian(S), n = S.n0, R = zeros(n, n);
+    S.dims.forEach(function (dv, v) {
+      var o = S.offV[v], B = zeros(dv, dv);
+      for (var i = 0; i < dv; i++) for (var j = 0; j < dv; j++) B[i][j] = L[o + i][o + j] + (augment && i === j ? 1 : 0);
+      var e = symEig(B);
+      for (i = 0; i < dv; i++) for (j = 0; j < dv; j++) {
+        var s = 0;
+        e.values.forEach(function (l, k) { s += e.vectors[k][i] * e.vectors[k][j] / Math.sqrt(l); });
+        R[o + i][o + j] = s;
+      }
+    });
+    var RL = zeros(n, n), out = zeros(n, n), i, j, k;
+    for (i = 0; i < n; i++) for (k = 0; k < n; k++) { if (R[i][k] === 0) continue; for (j = 0; j < n; j++) RL[i][j] += R[i][k] * L[k][j]; }
+    for (i = 0; i < n; i++) for (k = 0; k < n; k++) { if (RL[i][k] === 0) continue; for (j = 0; j < n; j++) out[i][j] += RL[i][k] * R[k][j]; }
+    return out;
+  }
+
+  // Linear separation, as Bodnar et al. use it: an affine hyperplane with one
+  // class strictly on one side. thresholdAccuracy(values, labels) is the best
+  // accuracy of a threshold rule on scalars with two labels (0, 1), either
+  // orientation. separable2(points, labels, k) says whether class k can be cut
+  // from the rest of a set of points in the plane by a line: a strict
+  // separating line exists iff one exists perpendicular to a direction just
+  // off a normal of some segment joining two points, so those directions are
+  // tried, plus a fine sweep.
+  function thresholdAccuracy(values, labels) {
+    var idx = values.map(function (_, i) { return i; }).sort(function (a, b) { return values[a] - values[b]; });
+    var n = idx.length, ones = labels.filter(function (l) { return l === 1; }).length, best = 0, below1 = 0;
+    for (var c = 0; c <= n; c++) {
+      if (c > 0) below1 += labels[idx[c - 1]] === 1 ? 1 : 0;
+      if (c > 0 && c < n && values[idx[c]] === values[idx[c - 1]]) continue;
+      var zerosBelow = c - below1, onesAbove = ones - below1;
+      best = Math.max(best, (zerosBelow + onesAbove) / n, (below1 + (n - c - onesAbove)) / n);
+    }
+    return best;
+  }
+  function separable2(points, labels, k) {
+    var dirs = [], n = points.length, i, j;
+    for (i = 0; i < 720; i++) dirs.push(Math.PI * i / 360);
+    for (i = 0; i < n; i++) for (j = i + 1; j < n; j++) {
+      var a = Math.atan2(points[j][1] - points[i][1], points[j][0] - points[i][0]) + Math.PI / 2;
+      [-1e-7, 1e-7].forEach(function (eps) { dirs.push(a + eps, a + Math.PI + eps); });
+    }
+    return dirs.some(function (a) {
+      var c = Math.cos(a), s = Math.sin(a), lo = Infinity, hi = -Infinity;
+      for (var i = 0; i < n; i++) {
+        var p = c * points[i][0] + s * points[i][1];
+        if (labels[i] === k) lo = Math.min(lo, p); else hi = Math.max(hi, p);
+      }
+      return lo > hi + 1e-12 * (1 + Math.abs(hi));
+    });
   }
 
   // Discourse sheaves (Hansen and Ghrist 2021). A vertex stalk holds a
@@ -1034,6 +1096,110 @@
     check('Example 9.5 (alpha = beta = 1): the agent at -4 ends lying (map < 0) with opinion still below -sqrt(15)',
       e95.S.edges[0].Fu[0][0] < 0 && e95.x[0] < -Math.sqrt(15) + 1e-9 && e95.S.edges[0].Fv[0][0] > 0 && energy(e95.S, e95.x) < 1e-12,
       'x = (' + e95.x[0].toFixed(3) + ', ' + e95.x[1].toFixed(3) + '), F = (' + e95.S.edges[0].Fu[0][0].toFixed(3) + ', ' + e95.S.edges[0].Fv[0][0].toFixed(3) + ')');
+
+    // Neural sheaf diffusion (Bodnar et al. 2022), Sec. 3. Random connected
+    // bipartite graphs with |A| = |B| = 6, A = even vertices.
+    var rb = mulberry32(606);
+    function bip(extra) {
+      var E = [], seen = {};
+      function put(u, v) { var k = Math.min(u, v) + ',' + Math.max(u, v); if (u !== v && !seen[k]) { seen[k] = 1; E.push([u, v]); } }
+      for (var v = 1; v < 12; v++) {
+        var u; do { u = Math.floor(rb() * v); } while (u % 2 === v % 2);
+        put(u, v);
+      }
+      for (var q = 0; q < extra; q++) { var a = 2 * Math.floor(rb() * 6), b = 2 * Math.floor(rb() * 6) + 1; put(a, b); }
+      return E;
+    }
+    var lab2 = []; for (var q2 = 0; q2 < 12; q2++) lab2.push(q2 % 2);
+    function limitOf(S, aug) {
+      var eN = symEig(normalizedLaplacian(S, aug)), x0 = [];
+      for (var i = 0; i < S.n0; i++) x0.push(rb() * 2 - 1);
+      return { eig: eN, x0: x0, lim: projectKernel(eN, x0, 1e-8) };
+    }
+
+    // Normalised constant sheaf: kernel spanned by sqrt(deg); heat flow on
+    // Delta converges to <x0, y> y.
+    var Eb = bip(4), Cb = signedGraph(12, Eb.map(function (e) { return [e[0], e[1], 1]; }));
+    var lc = limitOf(Cb), degB = new Float64Array(12);
+    Eb.forEach(function (e) { degB[e[0]]++; degB[e[1]]++; });
+    var yb = Array.from(degB, Math.sqrt), ny = Math.sqrt(dot(yb, yb)), cb = dot(yb, lc.x0) / (ny * ny);
+    var hb = heat(lc.eig, lc.x0, 400);
+    check('normalised graph Laplacian: heat flow tends to <x0, y> y with y = sqrt(deg)',
+      yb.every(function (y, v) { return close(hb[v], cb * y, 1e-8) && close(lc.lim[v], cb * y, 1e-10); }));
+
+    // Prop. 9: symmetric positive weights on a bipartite graph with |A| = |B|
+    // never sort the classes. Sum over A of y^2 equals the sum over B.
+    var sorted = 0, balance = 0;
+    for (var t9 = 0; t9 < 200; t9++) {
+      var E9 = bip(1 + Math.floor(rb() * 8));
+      var S9 = create({ dims: new Array(12).fill(1), edges: E9.map(function (e) { var w = 0.1 + 2 * rb(); return { u: e[0], v: e[1], Fu: [[w]], Fv: [[w]] }; }) });
+      var L9 = laplacian(S9), y9 = [];
+      for (var v9 = 0; v9 < 12; v9++) y9.push(Math.sqrt(L9[v9][v9]));
+      var sA = 0, sB = 0, maxA = -Infinity, minA = Infinity, maxB = -Infinity, minB = Infinity;
+      y9.forEach(function (y, v) {
+        if (v % 2 === 0) { sA += y * y; maxA = Math.max(maxA, y); minA = Math.min(minA, y); }
+        else { sB += y * y; maxB = Math.max(maxB, y); minB = Math.min(minB, y); }
+      });
+      if (maxA < minB || maxB < minA) sorted++;
+      balance = Math.max(balance, Math.abs(sA - sB));
+      var k9 = kernelDim(symEig(normalizedLaplacian(S9)), 1e-8);
+      if (k9 !== 1) sorted += 1000;
+    }
+    check('Prop. 9: symmetric weights on a bipartite graph with |A| = |B| never put all of A below all of B', sorted === 0 && balance < 1e-9,
+      '200 random weighted graphs, sum_A y^2 - sum_B y^2 at most ' + balance.toExponential(1));
+
+    // Prop. 10: F = -alpha on the A end, +alpha on the B end separates any
+    // two-class connected graph, including same-class edges.
+    var sep10 = 0;
+    for (var t10 = 0; t10 < 50; t10++) {
+      var E10 = bip(3);
+      // Add same-class edges too.
+      E10.push([0, 2], [1, 3], [4, 8]);
+      var S10 = create({ dims: new Array(12).fill(1), edges: E10.map(function (e) {
+        var a = 0.2 + rb() * 1.5;
+        return { u: e[0], v: e[1], Fu: [[e[0] % 2 === 0 ? -a : a]], Fv: [[e[1] % 2 === 0 ? -a : a]] };
+      }) });
+      var l10 = limitOf(S10);
+      if (kernelDim(l10.eig, 1e-8) === 1 && thresholdAccuracy(l10.lim, lab2) === 1) sep10++;
+    }
+    check('Prop. 10: -alpha on the class-A end, +alpha on the B end separates the classes in the limit', sep10 === 50, sep10 + ' of 50 graphs');
+
+    // Prop. 11: with one-dimensional stalks and three classes, the limit is
+    // <x0, h> h, so one class sits between the others and cannot be cut off.
+    var lab3 = []; for (var q3 = 0; q3 < 12; q3++) lab3.push(q3 % 3);
+    var E3 = [];
+    for (var v3 = 0; v3 < 12; v3++) { E3.push([v3, (v3 + 1) % 12]); if (v3 % 3 === 0) E3.push([v3, (v3 + 4) % 12]); }
+    var fail11 = 0, tried11 = 0;
+    for (var t11 = 0; t11 < 60; t11++) {
+      // A path-independent sheaf of lines: F_{v <| e} = g_v a_e with random signs
+      // and scales g_v, so dim H^0 = 1 (Lemma 6).
+      var g = []; for (var q = 0; q < 12; q++) g.push((rb() < 0.5 ? -1 : 1) * (0.3 + rb()));
+      var S11 = create({ dims: new Array(12).fill(1), edges: E3.map(function (e) { var a = 0.3 + rb(); return { u: e[0], v: e[1], Fu: [[a / g[e[0]]]], Fv: [[a / g[e[1]]]] }; }) });
+      var l11 = limitOf(S11);
+      if (kernelDim(l11.eig, 1e-8) !== 1) continue;
+      tried11++;
+      var pts = Array.from(l11.lim, function (x) { return [x, 0]; });
+      if ([0, 1, 2].every(function (k) { return separable2(pts, lab3, k); })) fail11++;
+    }
+    check('Prop. 11: one-dimensional stalks never separate three classes in the limit', fail11 === 0 && tried11 > 50, tried11 + ' sheaves with dim H^0 = 1');
+
+    // Prop. 13 construction: rotation by 2 pi c / 3 on every map out of a
+    // class-c vertex. Path-independent, dim H^0 = 2 = d (Lemma 6), and the limit
+    // puts each class on its own ray.
+    var S13 = create({ dims: new Array(12).fill(2), edges: E3.map(function (e) { return { u: e[0], v: e[1], Fu: rot(2 * Math.PI * lab3[e[0]] / 3), Fv: rot(2 * Math.PI * lab3[e[1]] / 3) }; }) });
+    var l13 = limitOf(S13), p13 = [];
+    for (var v13 = 0; v13 < 12; v13++) p13.push([l13.lim[2 * v13], l13.lim[2 * v13 + 1]]);
+    var ang13 = p13.map(function (p, v) { var r = rot(2 * Math.PI * lab3[v] / 3); return Math.atan2(r[1][0] * p[0] + r[1][1] * p[1], r[0][0] * p[0] + r[0][1] * p[1]); });
+    check('Prop. 13: rotations by 2 pi c / 3 give dim H^0 = 2 and separate three classes',
+      kernelDim(l13.eig, 1e-8) === 2 && [0, 1, 2].every(function (k) { return separable2(p13, lab3, k); }) &&
+      ang13.every(function (a) { return close(Math.cos(a - ang13[0]), 1, 1e-8); }),
+      'rotating each limit back by its class angle gives one common direction');
+    var S13b = create({ dims: new Array(12).fill(2), edges: E3.map(function (e) { return { u: e[0], v: e[1], Fu: rot(rb() * 6), Fv: rot(rb() * 6) }; }) });
+    check('Lemma 6: random rotations on a graph with cycles have dim H^0 < 2 (here 0)', kernelDim(symEig(normalizedLaplacian(S13b)), 1e-8) === 0);
+    check('augmented normalisation (D + I) keeps the kernel of L and shrinks the spectrum below 2',
+      kernelDim(symEig(normalizedLaplacian(S13, true)), 1e-8) === 2 && symEig(normalizedLaplacian(S13, true)).values[23] < 2);
+    check('threshold accuracy: 0.2, 0.9 | 0.5, 1.4 with labels 0, 1, 1, 0 is 0.75',
+      close(thresholdAccuracy([0.2, 0.5, 0.9, 1.4], [0, 1, 1, 0]), 0.75));
     return out;
   }
 
@@ -1046,6 +1212,7 @@
     explain: explain, subSheaf: subSheaf, openSet: openSet, openStar: openStar, intersect: intersect,
     sectionsOver: sectionsOver, cech: cech, consistency: consistency, fuse: fuse,
     supDistance: supDistance, lipschitz: lipschitz, positionSheaf: positionSheaf,
+    normalizedLaplacian: normalizedLaplacian, thresholdAccuracy: thresholdAccuracy, separable2: separable2,
     stubborn: stubborn, relativeH0: relativeH0, nearestSheaf: nearestSheaf, jointFlow: jointFlow, runChecks: runChecks
   };
   if (typeof module === 'object' && module.exports) module.exports = api;
