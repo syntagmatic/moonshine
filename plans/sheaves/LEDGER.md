@@ -57,7 +57,7 @@ sourced (read in the named primary source this session).
 | 03 | Sunday night radius near 0.7 C (0.68 at 03:00, 0.70 at 06:00); Monday 09:00 radius 4.30 on edge 19-21 with 21 edges >= 1 C, 26 at noon | computed | headless run, default epsilon 1 |
 | 03 | Mote 18 is silent Tue 01:30 to 05:00 (8 bins, with 7 or 8 other motes); reads 122.05 at 05:30, 122.13 at 06:00, 122.15 from 06:30 to the window's end; the all-motes radius drops to 0.54 to 0.68 C during the silence because the gap is filled | computed | node check of data/intel-lab.js with the page's fill; fix pass 2026-09-29 |
 | 03 | With mote 18 stuck, the mean (nearest section of the constant sheaf) moves by about 2 C: (122.15 - 23.0) / 51 = 1.94 | computed | Tue 21:00 readout |
-| 03 | Sun 03:00, +3 C to one mote: whole star lit (epsilon 1) for 45 of 51 motes, +2 C only 5 of 51; Mon noon +3 C: 21 of 51, 26 edges already lit | computed | node sweep over all motes with the page's fill and consistency functions |
+| 03 | RETIRED 2026-09-29 (sentence cut in the 03 enrichment): Sun 03:00, +3 C to one mote: whole star lit (epsilon 1) for 45 of 51 motes, +2 C only 5 of 51; Mon noon +3 C: 21 of 51, 26 edges already lit | computed | node sweep over all motes with the page's fill and consistency functions |
 | 03 | For readings on vertices, delta x lies in im delta, so carries no H^1 class; constant sheaf on the lab graph has dim H^1 = 106 - 51 + 1 = 56 | derived | connected graph, Euler characteristic |
 | lib | Stubborn flow (Thm 5.1): fixed vertices hold, the limit is harmonic off them, equals the harmonic extension when H^0(G, U) = 0, and a component with no stubborn vertex converges to its own mean | derived, computed | closed form y_inf = P_ker y0 - L_YY^+ L_YU u (paper's proof, im L_YU in im L_YY); `runChecks` on random sheaves with stalks 1-2 |
 | lib | H^0(G, {v}; R) = 0 for the constant sheaf on a connected graph (Example 6.3) | computed | check on the hexagon |
@@ -153,8 +153,8 @@ Corrections and new claims from the graphics audit fix pass (audit notes and the
 | 06 | Fig 3 caption: "forty runs take about half a minute" | verified | 25.4 to 38.0 s headless for Texas, Cornell, Wisconsin (diffusion) and Texas, Wisconsin (full layer) (`fix06/timing.txt`); fix pass 2026-09-29 |
 | 06 | Fig 3 means quoted in prose (Texas 83.0/60.3/81.6/70.0; Cornell 73.8/46.5/74.3/56.8; Wisconsin 84.9/61.6/83.9/72.9; Texas full 83.0/80.0/79.7/83.8) | verified after the resume change | `fix06/timing.txt`; interrupted-and-resumed Texas run gives the same means; fix pass 2026-09-29 |
 | 03 | With mote 18 withheld and gaps filled without it, the radius at Tue 05:30 is 0.67 C (was 13.83 when 18 fed mote 14's fill) | computed | data03.cjs, headless readout; fix pass 2026-09-29: compute() fix |
-| 03 | Mote 16 reads 1.05 to 1.29 C below mote 17 in the Sunday small hours; +3 C lights no edge, -3 C lights exactly 16-17 | computed | data03.cjs sweep, headless readout "0 of 106" / "1 of 106"; fix pass 2026-09-29: replaces the implied "+3 lights one edge" |
-| 03 | Sunday small hours (00:00 to 07:00) radius 0.56 to 0.76 C; +3 C lights the whole star for 45 to 47 of 51 motes at eps 1 (Sun 00:00 to 06:00) | computed | data03.cjs; fix pass 2026-09-29 |
+| 03 | RETIRED 2026-09-29 (sentence cut in the 03 enrichment): Mote 16 reads 1.05 to 1.29 C below mote 17 in the Sunday small hours; +3 C lights no edge, -3 C lights exactly 16-17 | computed | data03.cjs sweep, headless readout "0 of 106" / "1 of 106"; fix pass 2026-09-29: replaces the implied "+3 lights one edge" |
+| 03 | RETIRED 2026-09-29 (sentence cut in the 03 enrichment): Sunday small hours (00:00 to 07:00) radius 0.56 to 0.76 C; +3 C lights the whole star for 45 to 47 of 51 motes at eps 1 (Sun 00:00 to 06:00) | computed | data03.cjs; fix pass 2026-09-29 |
 | 07 | g(0.05) = e^{-20} ≈ 2.06 × 10^{-9} > 0, below the plot's resolution | computed | `Germs.flat(0.05, 0)`; readout at x = 0.05 prints 2.1e−9; fix pass 2026-09-29: (prose line 57) |
 
 ## Enrichment 2026-09-29
@@ -200,3 +200,13 @@ One new figure per essay after the fix pass. Check scripts named below live in t
 | 02 | ‖b‖² = ‖δx‖² + ‖r‖² (drawn as a right triangle) | derived | im δ ⟂ ker δᵀ; drawn triangle hyp² = legs² to 1e-16 |
 | 02 | Twisted theta: H¹ is carried by loop ADEF; AB, BC, CD have zero arrows, explained on loop ABCD with E, F copying D | computed | Sheaf.nullspace(δᵀ) = (0,0,0,½,½,½,½); Sheaf.explain(e_AB, e_BC, e_CD) gives |r| = 0 with x_E = x_F = x_D (absorb.cjs) |
 | 02 | A change some assignment explains does not move the class | derived | basis ⟂ im δ; headless "Values some assignment explains" puts the class at the origin |
+### 03 enrichment
+
+| page | claim | kind | how we know |
+|---|---|---|---|
+| 03 | With clean radius c0 and a fault δ on a mote of degree >= 2 whose neighbours all reported, thresholding at ε lights exactly its star whenever c0 < ε <= abs(δ)/2 - c0; such ε exists iff abs(δ) > 4 c0; both ends are attained (fault off the worst edge; fault at an end of it pushing toward the other) | derived | triangle inequality on edge gaps; the fill is x + δ h_v with h_v = e_v when no neighbour is silent |
+| 03 | Fig 3 trial set: Sun 00:00 to 20:30 (42 half hours), degree >= 2, mote and neighbours reporting, both signs: 3994 trials, 50 motes; c0 0.56 to 2.33 C | computed | enrich03/grid.cjs with the page's lib, data and fill; page readout "of 3994 trials" |
+| 03 | Every Fig 3 cell inside the wedge is at 100% and none outside is (210 cells in, 0 of 1390 out) | computed | enrich03/grid.cjs; 6.2M in-wedge samples, 0 failures (census.cjs) |
+| 03 | At ε just above c0 (1.05 c0) thresholding finds the fault in 8% of trials at abs(δ) = 2 c0, 70% at 3 c0, 97% at 4 c0, 100% from 4.2 c0; left of ε = c0 at most 3% | computed | enrich03/grid.cjs; headless readouts of the same cells |
+| 03 | For abs(δ) >= 2 c0 and ε > c0 the success share depends only on abs(δ) - 2ε, so the soft edge is parallel to the bound | derived | star thresholds are abs(δ)/2 + const there; grid check 635 of 650 shifted pairs equal, 15 differ by one trial (float ties) |
+| 03 | Audit E1's 66% at δ = 2 c0 and 0 failures in 4152 are for the eps-free argmax localiser, not thresholding (reproduced: 0.664, 0/4152) | computed | census03.cjs rerun; not stated on the page |
