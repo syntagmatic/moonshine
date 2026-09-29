@@ -190,3 +190,13 @@ One new figure per essay after the fix pass. Check scripts named below live in t
 | 06 | Cornell and Wisconsin behave the same way (λ ≥ 1: 70.6%, 65.1%; two steps keep 22.3%, 22.6%, then 14.5%, 14.6% with (D + I)) | computed | Figure 3 readout; `spec2.txt` |
 | 06 | With the sign-flip sheaf and the model's normalization, Texas's label energy below λ = 1 rises from 56.8% to 78.3%, two steps keep 30.9%; the smallest eigenvalue is 0.039, so the sheaf is not balanced and nothing reaches the kernel | computed + derived | Figure 3 readout (maps = sign flip); `spec2.txt`; balance iff nontrivial kernel on a connected signed graph (Harary; essay 4) |
 | 06 | The page's plain diffusion uses (D + I)^{-1/2} L (D + I)^{-1/2} with X - ΔX steps | computed | `lib/nsd.js` header and its check "plain Delta kills (D + I)^{1/2} 1"; `Sheaf.normalizedLaplacian(S, true)` equals my hand-built operator exactly |
+### 02 enrichment
+
+| page | claim | kind | how we know |
+|---|---|---|---|
+| 02 | On the constant hexagon all six edges have the same arrow in H¹, and the class coordinate is the loop total divided by √6 | derived | ker δᵀ = span (1,…,1)/√6; class = basis·b = Σb/√6; headless drag matched to 0.00 px |
+| 02 | Class's distance from the origin equals ‖r‖ | derived | r = b − δx ∈ ker δᵀ and basis orthonormal, so ‖basis·b‖ = ‖basis·r‖ = ‖r‖; headless within 2 dp |
+| 02 | With the chord, the three edges on each side share an arrow; the chord's arrow lies along the difference of the two loops | derived | Axes (z1−z2)/√10, rim/√6: arrows (1/√10, 1/√6), (−1/√10, 1/√6), (−2/√10, 0); headless chord and AB drags |
+| 02 | ‖b‖² = ‖δx‖² + ‖r‖² (drawn as a right triangle) | derived | im δ ⟂ ker δᵀ; drawn triangle hyp² = legs² to 1e-16 |
+| 02 | Twisted theta: H¹ is carried by loop ADEF; AB, BC, CD have zero arrows, explained on loop ABCD with E, F copying D | computed | Sheaf.nullspace(δᵀ) = (0,0,0,½,½,½,½); Sheaf.explain(e_AB, e_BC, e_CD) gives |r| = 0 with x_E = x_F = x_D (absorb.cjs) |
+| 02 | A change some assignment explains does not move the class | derived | basis ⟂ im δ; headless "Values some assignment explains" puts the class at the origin |
