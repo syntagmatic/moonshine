@@ -221,3 +221,14 @@ One new figure per essay after the fix pass. Check scripts named below live in t
 | 07 | Halfway round (c = -1) the re-expanded coefficients reach 4.4e18 (sqrt, k = 15; cbrt 7.2e18, log 1.05e20); float error there ~1e7, which the cancelling return does not remove | computed | `circuit().sizes`/`peak`; mpmath comparison of float vs exact trajectory |
 | 07 | The page's steps: drag steps at most 0.278\|c\| (<= 0.3); Once round 0.105\|c\| | derived | moveTo caps log r and angle steps at 0.18: \|e^(0.18+0.18i) - 1\| = 0.278; 2 sin(pi/60) |
 | lib (germs) | Header comment: re-expansion fails because it continues the truncated polynomial and cancels ~18 digits, not because truncation errors compound | derived, computed | as above; replaces the old comment |
+### 05 enrichment
+
+| page | claim | kind | how we know |
+|---|---|---|---|
+| 05 | Only α/β matters for where the one-edge joint flow ends; scaling both rates rescales time | derived | the vector field is (α·, β·) times g; t → c t with (α, β) → (α, β)/c leaves trajectories fixed |
+| 05 | In the clock τ = ∫ g dt the one-edge joint flow is linear: u moves by (x, F)' = (αF, βx) and v by its reverse; g never changes sign; each stance is monotone, d(F_u x_u)/dτ = αF_u² + βx_u² | derived, computed | divide eq. 9.1 on one edge by g; g' = −g(α ΣF² + β Σx²). The closed-form end state matches Sheaf.jointFlow to 5 decimals on four starts, and RK4 on a 500-cell grid with 0 mismatches (enrich05/numbers.cjs) |
+| 05 | A stance reaches zero when tanh(√(αβ) τ) = min(ρ, 1/ρ), ρ = √α|F|/(√β|x|); if the stances start with opposite signs, the agent with ρ farther from 1 flips (lies if ρ < 1, changes mind if ρ > 1) and the other does not | derived, computed | solve the linear system for F = 0 or x = 0; the stances meet between their starts. 0 mismatches against the exact solver on 3000 random starts, and on the page's own grids (enrich05/numbers.cjs, pagegrid.cjs) |
+| 05 | Figure 4's solid boundaries: \|x_u\|/\|F_u\| = \|x_v\|/\|F_v\| and α/β = \|x_u x_v\|/\|F_u F_v\|; at the default start x_u = −1 and α/β = \|x_u\|; on them both agents fall silent | derived, computed | ties ρ_u = ρ_v and ρ_u ρ_v = 1; limit stance ~1e-16 at 5 boundary points (enrich05/numbers.cjs) |
+| 05 | At most one stance changes sign, so no start teaches both agents to lie; same-sign stances mean nobody flips | derived | stances are monotone toward each other and meet at one value between their starts |
+| 05 | Figure 3 at α = 0.3, β = 1, x = (−0.5, 1), F = (1, 1): v ends believing 0.84 and saying −0.12, u at −0.21 | computed | exact solver and Sheaf.jointFlow: u (−0.21004, 0.56011), v (0.84017, −0.14003); headless Figure 3 readout after the Figure 4 click (enrich05/verify-out.txt) |
+| 05 | Figure 2 at the default end: most friendships carry some discord, and it is concentrated on a few edges | computed | limit edge discord median 0.198, max 1.333, 66 of 78 edges > 0.03, half the energy on 7 edges (enrich05/club.cjs) |
