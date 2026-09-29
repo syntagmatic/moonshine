@@ -439,3 +439,60 @@ Splits verified: the ten `<name>_split_0.6_0.2_<k>.npz` files hold 48/32/20% of 
 (Texas 87/59/37), so the filename is misleading and NSD's 48/32/20 is right. Edge homophily of
 Texas with undirected non-loop edges is 0.061 (17 of 279); the 0.108 above counts directed lines
 with self-loops. Data file: `docs/sheaves/data/webkb.js` from `scripts/sheaves-webkb.mjs`.
+
+---
+
+## 8 (addendum, 2026-09-28 session 6): Leray and Cartan read in the primary sources
+
+Method: Gallica page images through its IIIF API (plain curl gets 403; a browser User-Agent
+works for images, the OCR text endpoints hit a captcha) and Numdam PDFs. Gallica arks: CRAS
+t. 222 (1946) `bpt6k31740` (printed page = view); J. Math. Pures Appl. t. 29 (1950)
+`bd6t541874743` (printed page n = view n + 16); t. 24 (1945) `bpt6k97042399` (n = view n + 6).
+IIIF pattern: `https://gallica.bnf.fr/iiif/ark:/12148/<id>/f<view>/full/1300,/0/native.jpg`.
+Numdam: `https://www.numdam.org/issues/SHC_1950-1951__3_/`.
+
+**Acyclic-cover theorem, three layers, all read in print.**
+- 1945, constant coefficients: J. Leray, "Sur la forme des espaces topologiques et sur les
+  points fixes des représentations", J. Math. Pures Appl. (9) 24 (1945) 95-167. Théorème 12
+  (p. 138): "Soit E un espace de Hausdorff bicompact, possédant une couverture K' à supports
+  simples. Les classes d'homologie de E s'identifient alors aux classes d'homologie de K'."
+  Remarque 3 (p. 139) defines a "recouvrement convexoïde": members closed and simple, finite
+  intersections empty or simple. "Simple" (no. 15, p. 116) = homology of a point.
+- 1946, sheaf coefficients, announced: CRAS 222 (1946) 1366-1368, séance du 27 mai 1946.
+  p. 1366 defines the italicised *faisceau* on closed sets; p. 1367: "Si E possède une
+  couverture C à supports simples relativement à ℬ, E a mêmes modules d'homologie que C".
+  No proof.
+- 1950, with proof: J. Leray, "L'anneau spectral et l'anneau filtré d'homologie d'un espace
+  localement compact et d'une application continue", J. Math. Pures Appl. (9) 29 (1950) 1-139.
+  Sheaves on closed sets (no. 23, p. 43); Čech complex of a closed, locally finite cover
+  (no. 39, pp. 71-72); Théorème 49.2(a), p. 90: for a cover of finite order, if
+  H(F ∘ ℬ) = Hℬ(F) on every nonempty intersection F, then H(K* ⊗ ℬ) = H(X ∘ ℬ). The word
+  "acyclique" does not occur; it is Cartan's (seminar exp. 19, 1951), which states the theorem
+  for closed covers and calls it "un théorème de LERAY (Journal de Math. 1946)".
+
+**Étalé space.** H. Cartan, "Faisceaux sur un espace topologique I", Séminaire Henri Cartan 3
+(1950-51), exposé 14, typescript dated "le 9.4.1951" (Miller says April 8). p. 14-01: a sheaf
+of K-modules is a set F with a projection onto X, a module structure on each fibre, and a
+topology "(en général non séparée)" for which the projection is a local homeomorphism; "La
+définition qui suit est due, sous la forme 'topologique' qui lui est donnée, à LAZARD". Cartan
+says "faisceau", not "espace étalé". p. 14-03: for holomorphic functions "le module F_x
+s'identifie au module des séries entières convergentes au voisinage du point x ... une
+composante connexe de F n'est pas autre chose qu'une fonction analytique dans tout son domaine
+d'existence (surface de Riemann non ramifiée sur X). Remarque : la topologie du faisceau F est
+séparée (principe du prolongement analytique)."
+
+**Weierstrass / Weyl.** Searched the OCR of Cartan exp. 14-20 for weierstrass, weyl, riemann,
+germe, prolongement, analytique: no mention of Weierstrass, function elements, or Weyl 1913.
+The genealogy stays standard framing; essay 07 says the sources do not name them.
+
+**Not read.** Cartan seminar 1948-49 exposés 12-17 ("faisceaux et carapaces") are not on
+Numdam (404). An earlier printed use of "faisceau" than CRAS 222 was not ruled out.
+
+**Verdict.** The item-8 lead and the essay-02 ledger lead are resolved: cite Leray 1950
+Thm 49.2 for the theorem, with 1946 CRAS (announcement) and 1945 Thm 12 (constant
+coefficients); cite Cartan exp. 14 (1951) for the étalé space and the Riemann-surface remark.
+
+**Directions not taken (metadata only, Crossref).** S. Abramsky and A. Brandenburger, The
+sheaf-theoretic structure of non-locality and contextuality, New J. Phys. 13 (2011) 113036,
+DOI 10.1088/1367-2630/13/11/113036. M. Kashiwara and P. Schapira, Persistent homology and
+microlocal sheaf theory, J. Appl. Comput. Topol. 2 (2018) 83-113, DOI 10.1007/s41468-018-0019-z.
