@@ -180,3 +180,13 @@ One new figure per essay after the fix pass. Check scripts named below live in t
 | 04 | λ_min ≤ 4ℓ/n, strict on this graph for every unbalanced class | derived, computed | Rayleigh quotient at the best ±1 split: each violated edge costs 4; equality needs every vertex on the same number of violated edges, impossible for 1 ≤ ℓ ≤ 3 with n = 8; census max λ/bound 0.804 |
 | 04 | Census counts: 1, 13, 39, 11 classes at ℓ = 0..3; λ_min ranges 0.276-0.354, 0.475-0.764, 0.828-1.206; rows do not overlap; within-row spread up to 1.6× | computed | census.cjs; page census readout |
 | 04 | One enemy edge: AB or EF cheapest (0.276), chord CG dearest (0.354); two flips CD+CG 0.475 vs AC+EG 0.764 | computed | census.cjs and vec.cjs (flips from the default signs); page readouts |
+### 06 enrichment
+
+| page | claim | kind | how we know |
+|---|---|---|---|
+| 06 | On Texas, with D^{-1/2} normalization, 67.0% of the label energy (centred one-hot class indicators) lies at λ ≥ 1, 13.8% exactly at λ = 1 | computed | Figure 3 readout; node `temp/sheaves-audit/enrich06/spec2.cjs` (tred2/tql2 and `Sheaf.symEig` agree to 1e-13); 33.0 / 13.8 / 53.1% below / at / above 1 |
+| 06 | λ = 1 has multiplicity 74 in Δ0 on Texas, the null space of the adjacency matrix, and one step removes it | derived + computed | Δ0 = I - D^{-1/2} A D^{-1/2}, so Δ0 x = x iff A D^{-1/2} x = 0; count 74 (\|λ - 1\| < 1e-8) in `spec2.txt`; gain 1 - λ = 0 |
+| 06 | Two plain steps keep 25.9% of the label energy with D^{-1/2}, 14.0% with the model's (D + I)^{-1/2}; the latter's spectrum is [0, 1.46] | computed | kept = sum a_i (1 - λ_i)^4; Figure 3 readout and `spec.txt`. The audit's 42% / 28% are the one-step values (sum a(1 - λ)^2), shown by the page at steps = 1 |
+| 06 | Cornell and Wisconsin behave the same way (λ ≥ 1: 70.6%, 65.1%; two steps keep 22.3%, 22.6%, then 14.5%, 14.6% with (D + I)) | computed | Figure 3 readout; `spec2.txt` |
+| 06 | With the sign-flip sheaf and the model's normalization, Texas's label energy below λ = 1 rises from 56.8% to 78.3%, two steps keep 30.9%; the smallest eigenvalue is 0.039, so the sheaf is not balanced and nothing reaches the kernel | computed + derived | Figure 3 readout (maps = sign flip); `spec2.txt`; balance iff nontrivial kernel on a connected signed graph (Harary; essay 4) |
+| 06 | The page's plain diffusion uses (D + I)^{-1/2} L (D + I)^{-1/2} with X - ΔX steps | computed | `lib/nsd.js` header and its check "plain Delta kills (D + I)^{1/2} 1"; `Sheaf.normalizedLaplacian(S, true)` equals my hand-built operator exactly |
