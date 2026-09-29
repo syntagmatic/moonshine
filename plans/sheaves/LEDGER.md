@@ -156,3 +156,18 @@ Corrections and new claims from the graphics audit fix pass (audit notes and the
 | 03 | Mote 16 reads 1.05 to 1.29 C below mote 17 in the Sunday small hours; +3 C lights no edge, -3 C lights exactly 16-17 | computed | data03.cjs sweep, headless readout "0 of 106" / "1 of 106"; fix pass 2026-09-29: replaces the implied "+3 lights one edge" |
 | 03 | Sunday small hours (00:00 to 07:00) radius 0.56 to 0.76 C; +3 C lights the whole star for 45 to 47 of 51 motes at eps 1 (Sun 00:00 to 06:00) | computed | data03.cjs; fix pass 2026-09-29 |
 | 07 | g(0.05) = e^{-20} ≈ 2.06 × 10^{-9} > 0, below the plot's resolution | computed | `Germs.flat(0.05, 0)`; readout at x = 0.05 prints 2.1e−9; fix pass 2026-09-29: (prose line 57) |
+
+## Enrichment 2026-09-29
+
+One new figure per essay after the fix pass. Check scripts named below live in temp/sheaves-audit/ (gitignored).
+
+### 01 enrichment
+
+| page | claim | kind | how we know |
+|---|---|---|---|
+| 01 | On the hexagon with scalar maps (x_{k+1} = s_k x_k, edges and vertices in loop order), δ is square and det δ = h − 1 | derived, computed | permutation expansion: identity gives ∏(−s_k) = h (n = 6 even), the 6-cycle gives −1; max residual 2.8e−14 over 2000 random sheaves (temp/sheaves-audit/enrich01/proto.cjs) and ≤ 2e−15 over the 341 points of Fig 3 |
+| 01 | Rescaling vertex coordinates keeps h and det δ but changes the smallest singular value of δ | derived, computed | δ' = diag(1/g_{k+1}) δ diag(g_k); Fig 3 readout: 40 rescalings at h = −1 keep det −2.000, σ_min spreads (e.g. 0.134 to 0.394 at seed 1) |
+| 01 | Default twisted hexagon (one −1 edge) has σ_min(δ) = 0.518; with AB = 2 and DE = ½ (h still −1) it is 0.306 | computed | Fig 3 readout via Sheaf.symEig of Sheaf.laplacian; 0.518 = 2 sin(π/12) from the twisted circulant |
+| 01 | σ_min(δ) = 0 exactly when h = 1 | derived | δ square: singular iff det δ = h − 1 = 0 |
+| 01 | σ_min(δ)² is the smallest eigenvalue of L = δᵀδ, the least disagreement of a unit-length assignment | derived | singular values of δ are square roots of eigenvalues of δᵀδ; Rayleigh quotient |
+| 01 | For rotation maps the Laplacian spectrum on a cycle depends on the holonomy alone | derived | orthogonal vertex gauge moves all twist to one edge and preserves the spectrum; closed form Sheaf.cycleSpectrum (essay 04 Fig 3) |
