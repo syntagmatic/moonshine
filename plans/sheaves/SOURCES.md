@@ -365,3 +365,30 @@ accurately estimate the angles if the proportion of good measurements is o(√n/
 **Verdict: confirmed, with one precision.** The paper defines H_ij from the measured offsets,
 H_ij = e^{ιδ_ij}. The form e^{ι(θ_i−θ_j)} holds only on good edges. The robustness threshold
 for the complete graph is p > 1/√n.
+
+---
+
+## 3 (addendum, 2026-09-28 session 3): Robinson re-read for essay 03
+
+Both arXiv PDFs re-extracted (1603.01446v3, 1805.08927v6). Read and used:
+2017 Problem 19 (nearest global section in the sup distance), Def. 20, Prop. 23 with its
+proof (D(a, s) >= eps / (1 + K) for K-Lipschitz restrictions), Prop. 25 (claims a unique
+solution of Problem 19 for sheaves of Banach spaces), Theorem 29 (Leray, stated with
+citations to Leray, Hubbard and Bredon; a secondary statement, so the essay 02 Leray lead
+stays open for a primary source). 2020 Def. 7, Prop. 1, Remark 3 (radius, not diameter),
+Def. 15-17 and Prop. 8-9 (local radius, assignments supported on a subset, epsilon-consistent
+collections), Example 4 (constant sheaf, circumcentre extension), Sec. 9 and Def. 19 (star
+consistency radius; star-supported assignments can have larger radius, Example 2).
+
+Caveat: Prop. 25's uniqueness fails for the max norm (see the LEDGER example with two
+sensors of x and one of y). The essays do not repeat it.
+
+## 10. Intel Berkeley Research Lab sensor data
+
+https://db.csail.mit.edu/labdata/labdata.html (page read 2026-09-28). 54 Mica2Dot motes
+with weather boards, 28 Feb to 5 Apr 2004, readings about every 31 s; schema date, time,
+epoch, moteid, temperature (C), humidity, light, voltage; mote_locs.txt gives x, y in
+metres from the upper right corner of the lab. Collected by Peter Bodik, Wei Hong, Carlos
+Guestrin, Sam Madden, Mark Paskin and Romain Thibaux; use permitted with acknowledgement.
+Essay 03's data file is built by scripts/sheaves-intel-lab.mjs from data.txt.gz and
+mote_locs.txt.

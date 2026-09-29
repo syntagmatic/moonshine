@@ -46,6 +46,19 @@
 //                                     in coordinates listing each cell's stalk in turn
 //   Sheaf.cech(S, cover)              Cech complex of a cover by open sets, through C^2;
 //                                     { pieces, pairs, triples, d0, d1, c0, c1, c2, h0, h1 }
+//   Sheaf.consistency(S, x, y, skip)  critical thresholds and consistency radius of the
+//                                     assignment x on vertices, y on edges (y omitted:
+//                                     midpoints, the radius-minimising choice); vertices
+//                                     in skip are withheld. { edge: [{u, v, max}], radius,
+//                                     worst, y }
+//   Sheaf.fuse(S, a)                  nearest global section in least squares, the
+//                                     orthogonal projection onto H^0; { x, residual }
+//   Sheaf.supDistance(S, x, y, s)     Robinson's sup distance from the assignment (x, y)
+//                                     to the global section s
+//   Sheaf.lipschitz(S)                largest operator norm among the restriction maps
+//   Sheaf.positionSheaf(phi, dirs)    sensors locating a point in the plane: world frame,
+//                                     a frame turned by phi, and one line of position per
+//                                     direction angle in dirs
 (function (global) {
   'use strict';
 
@@ -426,6 +439,95 @@
       h0: c0 - r0, h1: c1 - r1 - r0 };
   }
 
+  // F x_w for one end of an edge, as a new array of length de.
+  function applyMap(F, x, off, dim) {
+    return F.map(function (row) { var s = 0; for (var b = 0; b < dim; b++) s += row[b] * x[off + b]; return s; });
+  }
+  function dist(p, q) { var s = 0; for (var a = 0; a < p.length; a++) s += (p[a] - q[a]) * (p[a] - q[a]); return Math.sqrt(s); }
+
+  // Consistency (Robinson 2017, Def. 20; 2020, Def. 7). An assignment puts a
+  // value on every cell: x in C^0 on the vertices, y in C^1 on the edges. The
+  // critical threshold of an incidence w <| e is |y_e - F_{w,e} x_w|, and the
+  // consistency radius is the largest one; it is zero exactly on sections.
+  // With y omitted, each edge takes the value that minimises its larger
+  // threshold, the midpoint (F_u x_u + F_v x_v) / 2, so both thresholds are
+  // |(delta x)_e| / 2. Vertices in `skip` are withheld: their incidences are
+  // not compared, and an edge value left free follows the other end.
+  function consistency(S, x, y, skip) {
+    var off = {};
+    (skip || []).forEach(function (v) { off[v] = 1; });
+    var edge = [], radius = 0, worst = -1, yUsed = new Float64Array(S.n1);
+    S.edges.forEach(function (e, k) {
+      var fu = applyMap(e.Fu, x, S.offV[e.u], S.dims[e.u]), fv = applyMap(e.Fv, x, S.offV[e.v], S.dims[e.v]);
+      var ye = fu.map(function (_, a) {
+        if (y) return y[S.offE[k] + a];
+        return off[e.u] ? fv[a] : off[e.v] ? fu[a] : (fu[a] + fv[a]) / 2;
+      });
+      ye.forEach(function (v, a) { yUsed[S.offE[k] + a] = v; });
+      var tu = off[e.u] ? 0 : dist(ye, fu), tv = off[e.v] ? 0 : dist(ye, fv), m = Math.max(tu, tv);
+      edge.push({ u: tu, v: tv, max: m });
+      if (m > radius) { radius = m; worst = k; }
+    });
+    return { edge: edge, radius: radius, worst: worst, y: yUsed };
+  }
+
+  // Nearest global section in least squares: the orthogonal projection of a
+  // vertex assignment onto H^0 = ker delta. Unique, and linear in the data.
+  function fuse(S, a) {
+    var x = new Float64Array(S.n0);
+    cohomology(S).sections.forEach(function (q) {
+      var c = dot(q, a);
+      for (var i = 0; i < S.n0; i++) x[i] += c * q[i];
+    });
+    return { x: x, residual: Float64Array.from(a, function (v, i) { return v - x[i]; }) };
+  }
+
+  // Robinson's assignment distance D(a, s) = sup over cells of |a(c) - s(c)|,
+  // for an assignment (x, y) and a global section s given on the vertices.
+  function supDistance(S, x, y, s) {
+    var D = 0;
+    S.dims.forEach(function (d, v) {
+      D = Math.max(D, dist(Array.from(x).slice(S.offV[v], S.offV[v] + d), Array.from(s).slice(S.offV[v], S.offV[v] + d)));
+    });
+    S.edges.forEach(function (e, k) {
+      var se = applyMap(e.Fu, s, S.offV[e.u], S.dims[e.u]);
+      D = Math.max(D, dist(Array.from(y).slice(S.offE[k], S.offE[k] + e.de), se));
+    });
+    return D;
+  }
+
+  // Sensors locating one point p in the plane. Vertex 0 reports p in world
+  // coordinates (R^2), vertex 1 reports rot(-phi) p in a frame turned by phi
+  // (R^2), and vertex 1 + k reports the single number u_k . p for a unit
+  // direction u_k = (cos t_k, sin t_k) (a line of position). Edges compare
+  // what each pair can both see: 0-1 on R^2 (maps I and rot(phi)), and 0-k,
+  // 1-k on R. Two line sensors share nothing and get no edge.
+  function positionSheaf(phi, dirs) {
+    var dims = [2, 2], R = rot(phi), edges = [{ u: 0, v: 1, Fu: [[1, 0], [0, 1]], Fv: R }];
+    dirs.forEach(function (t, k) {
+      var u = [Math.cos(t), Math.sin(t)], uR = [u[0] * R[0][0] + u[1] * R[1][0], u[0] * R[0][1] + u[1] * R[1][1]];
+      dims.push(1);
+      edges.push({ u: 0, v: 2 + k, Fu: [u], Fv: [[1]] });
+      edges.push({ u: 1, v: 2 + k, Fu: [uR], Fv: [[1]] });
+    });
+    return create({ dims: dims, edges: edges });
+  }
+
+  // Largest Lipschitz constant (operator norm) among the restriction maps.
+  function lipschitz(S) {
+    var K = 0;
+    S.edges.forEach(function (e) {
+      [[e.Fu, S.dims[e.u]], [e.Fv, S.dims[e.v]]].forEach(function (m) {
+        if (!m[1] || !e.de) return;
+        var G = zeros(m[1], m[1]);
+        m[0].forEach(function (row) { for (var i = 0; i < m[1]; i++) for (var j = 0; j < m[1]; j++) G[i][j] += row[i] * row[j]; });
+        var ev = symEig(G).values;
+        K = Math.max(K, Math.sqrt(Math.max(0, ev[ev.length - 1])));
+      });
+    });
+    return K;
+  }
+
   function mulberry32(a) {
     return function () {
       a |= 0; a = a + 0x6D2B79F5 | 0;
@@ -569,6 +671,73 @@
     check('Cech d1 d0 = 0 on the wide cover (triple overlap nonempty)', Cw.c2 > 0 && dd.every(function (r) { return r.every(function (v) { return Math.abs(v) < 1e-10; }); }));
 
 
+
+    // Consistency radius and fusion (Robinson). Random sheaves with stalks of
+    // dimension 1-2, random assignments on vertices and edges.
+    var rc = mulberry32(11), midOK = true, zeroOK = true, boundOK = true, trials = 0;
+    for (trial = 0; trial < 20; trial++) {
+      var nv2 = 3 + Math.floor(rc() * 3), dims2 = [], ed2 = [];
+      for (i = 0; i < nv2; i++) dims2.push(1 + Math.floor(rc() * 2));
+      for (i = 0; i < nv2; i++) for (j2 = i + 1; j2 < nv2; j2++) {
+        if (rc() < 0.35) continue;
+        var de2 = 1 + Math.floor(rc() * 2), rm2 = function (r_, c_) {
+          var M = [];
+          for (var a = 0; a < r_; a++) { M.push([]); for (var b = 0; b < c_; b++) M[a].push(rc() * 2 - 1); }
+          return M;
+        };
+        ed2.push({ u: i, v: j2, Fu: rm2(de2, dims2[i]), Fv: rm2(de2, dims2[j2]) });
+      }
+      var Sc2 = create({ dims: dims2, edges: ed2 });
+      if (!Sc2.n1) continue;
+      trials++;
+      var xa = new Float64Array(Sc2.n0);
+      for (i = 0; i < Sc2.n0; i++) xa[i] = rc() * 4 - 2;
+      var cm = consistency(Sc2, xa), dxa = edgeDisagreement(Sc2, xa);
+      if (!close(cm.radius, Math.max.apply(null, dxa) / 2, 1e-10)) midOK = false;
+      for (var s2 = 0; s2 < 30; s2++) {
+        var yr = Float64Array.from(cm.y, function (v) { return v + (rc() - 0.5) * 0.5; });
+        if (consistency(Sc2, xa, yr).radius < cm.radius - 1e-12) midOK = false;
+      }
+      var K2 = lipschitz(Sc2), fz = fuse(Sc2, xa);
+      var yRand = Float64Array.from(cm.y, function (v) { return v + (rc() - 0.5); }), cr = consistency(Sc2, xa, yRand).radius;
+      if (supDistance(Sc2, xa, yRand, fz.x) < cr / (1 + K2) - 1e-12) boundOK = false;
+      cohomology(Sc2).sections.forEach(function (q) {
+        if (consistency(Sc2, q).radius > 1e-9) zeroOK = false;
+        if (supDistance(Sc2, xa, yRand, q) < cr / (1 + K2) - 1e-12) boundOK = false;
+      });
+    }
+    check('midpoint edge values minimise the radius, which is max |(delta x)_e| / 2 (' + trials + ' random sheaves)', midOK);
+    check('every global section has consistency radius 0', zeroOK);
+    check('D(a, s) >= c(a) / (1 + K) for the fused section and every basis section (Robinson Prop. 23)', boundOK);
+
+    var Kg = signedGraph(4, [[0, 1, 1], [1, 2, 1], [2, 3, 1], [3, 0, 1], [0, 2, 1]]), xg = [3, -1, 4, 1.5];
+    check('fusing on the constant sheaf of a connected graph gives the mean everywhere',
+      Array.from(fuse(Kg, xg).x).every(function (v) { return close(v, 1.875, 1e-10); }));
+    var loo = harmonicExtend(laplacian(Kg), [1, 2, 3], [-1, 4, 1.5]);
+    check('harmonic extension to one withheld vertex of the constant sheaf is its neighbours\' mean', close(loo[0], (-1 + 4 + 1.5) / 3, 1e-10));
+
+    // Plane position sheaf: R (world), C (turned 35 deg), two lines of position.
+    var phi = 35 * Math.PI / 180, tP = 0, tQ = 2 * Math.PI / 3, Sp = positionSheaf(phi, [tP, tQ]), hp = cohomology(Sp);
+    check('position sheaf: H^0 = R^2 (a point), H^1 = R^2, K = 1', hp.h0 === 2 && hp.h1 === 2 && close(lipschitz(Sp), 1, 1e-9));
+    var pr2 = [0.3, -0.2], pc = [-0.4, 0.5], cP = 0.7, cQ = -0.1, Rm = rot(-phi);
+    var ap = [pr2[0], pr2[1], Rm[0][0] * pc[0] + Rm[0][1] * pc[1], Rm[1][0] * pc[0] + Rm[1][1] * pc[1], cP, cQ];
+    var fp = fuse(Sp, ap).x, uP = [1, 0], uQ = [Math.cos(tQ), Math.sin(tQ)];
+    var N = [[2 + uP[0] * uP[0] + uQ[0] * uQ[0], uP[0] * uP[1] + uQ[0] * uQ[1]], [uP[0] * uP[1] + uQ[0] * uQ[1], 2 + uP[1] * uP[1] + uQ[1] * uQ[1]]];
+    var rhs2 = [pr2[0] + pc[0] + cP * uP[0] + cQ * uQ[0], pr2[1] + pc[1] + cP * uP[1] + cQ * uQ[1]], pn = solve(N, rhs2);
+    check('position sheaf: fusion equals the normal equations (2I + u_P u_P^T + u_Q u_Q^T) p = r + c + c_P u_P + c_Q u_Q',
+      close(fp[0], pn[0], 1e-10) && close(fp[1], pn[1], 1e-10) && close(fp[4], uP[0] * pn[0] + uP[1] * pn[1], 1e-10));
+
+    // In the sup distance a nearest section need not be unique: two scalar
+    // sensors of x read 0 and 2 (edge value 1), a third sensor of y reads 5
+    // alone. Sections are (t, t, w); D >= max(|t|, |t - 2|) >= 1, and D = 1 for
+    // every w in [4, 6].
+    var Su = create({ dims: [1, 1, 1], edges: [{ u: 0, v: 1, Fu: [[1]], Fv: [[1]] }] }), au = [0, 2, 5], yu = [1];
+    var dA = supDistance(Su, au, yu, [1, 1, 4.5]), dB = supDistance(Su, au, yu, [1, 1, 5.5]), gridMin = Infinity;
+    for (var tt = -1; tt <= 3; tt += 0.05) for (var ww = 3; ww <= 7; ww += 0.05) gridMin = Math.min(gridMin, supDistance(Su, au, yu, [tt, tt, ww]));
+    check('sup-distance nearest section is not unique: (1, 1, 4.5) and (1, 1, 5.5) both attain the minimum 1',
+      close(dA, 1) && close(dB, 1) && gridMin > 1 - 1e-9, 'grid min ' + gridMin.toFixed(4));
+    var fu2 = fuse(Su, au).x;
+    check('least-squares fusion of the same data is the single section (1, 1, 5)', close(fu2[0], 1) && close(fu2[1], 1) && close(fu2[2], 5));
     return out;
   }
 
@@ -579,7 +748,8 @@
     signedGraph: signedGraph, rotationSheaf: rotationSheaf, cycleSpectrum: cycleSpectrum,
     mulberry32: mulberry32, dot: dot, matVec: matVec, nullspace: nullspace, cohomology: cohomology,
     explain: explain, subSheaf: subSheaf, openSet: openSet, openStar: openStar, intersect: intersect,
-    sectionsOver: sectionsOver, cech: cech, runChecks: runChecks
+    sectionsOver: sectionsOver, cech: cech, consistency: consistency, fuse: fuse,
+    supDistance: supDistance, lipschitz: lipschitz, positionSheaf: positionSheaf, runChecks: runChecks
   };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else global.Sheaf = api;
