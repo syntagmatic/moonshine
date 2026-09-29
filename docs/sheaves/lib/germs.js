@@ -34,12 +34,17 @@
 //                                    a0 = Log c + 2 pi i m (log)
 //   Germs.monodromy(kind)            the loop's effect on the local system of
 //                                    solutions, as a complex matrix (1x1 or 2x2)
-//   Germs.cover(n)                   n disks round the unit circle: { centres, r }
+//   Germs.cover(n)                   n disks round the unit circle, placed so the
+//                                    negative real axis runs midway between two
+//                                    centres: { centres, r, cut } with cut the index k
+//                                    of the overlap k, k+1 that straddles it
 //   Germs.nerveSheaf(kind, n, m)     the local system of solutions on the disk cover,
 //                                    as a cellular sheaf on its nerve (an n-cycle),
 //                                    realified; m[k] is disk k's chosen branch.
 //                                    { S, scal } with scal[k] the complex map on
-//                                    overlap k, k+1
+//                                    overlap k, k+1 writing g_k in g_{k+1}'s basis, so
+//                                    the product (log: sum) round the cycle is the
+//                                    counterclockwise monodromy
 //   Germs.flat(x, K)                 derivatives 0..K of exp(-1/x) (0 for x <= 0)
 //   Germs.runChecks()                [{ name, ok, detail }]
 (function (global) {
@@ -136,14 +141,16 @@
     return [[polar(1, TAU * K.alpha)]];
   }
 
-  // n disks centred on the unit circle at angles 2 pi k / n. Consecutive disks
-  // overlap, others are disjoint, and none contains 0, so the nerve is an n-cycle
-  // and every disk and overlap is convex.
+  // n disks centred on the unit circle at angles 2 pi k / n, turned by pi / n when n
+  // is even, so that no centre lies on the negative real axis and the axis runs
+  // through the middle of one overlap, k = floor((n - 1) / 2), for every n.
+  // Consecutive disks overlap, others are disjoint, and none contains 0, so the
+  // nerve is an n-cycle and every disk and overlap is convex.
   function cover(n) {
     var r = n === 3 ? 0.93 : Math.min(0.92, (Math.sin(Math.PI / n) + Math.sin(TAU / n)) / 2);
-    var centres = [];
-    for (var k = 0; k < n; k++) centres.push(polar(1, TAU * k / n));
-    return { centres: centres, r: r };
+    var centres = [], off = n % 2 ? 0 : Math.PI / n;
+    for (var k = 0; k < n; k++) centres.push(polar(1, off + TAU * k / n));
+    return { centres: centres, r: r, cut: Math.floor((n - 1) / 2) };
   }
 
   function realify(M) {
@@ -158,8 +165,11 @@
 
   // Disk k carries the branch g_k: the germ at its centre with the principal value
   // times e^(2 pi i m_k / sheets), or Log + 2 pi i m_k. On the overlap of disks k and
-  // k+1 the edge stalk uses disk k's basis, so F_{k <| e} = I and F_{k+1 <| e} is the
-  // matrix that writes g_{k+1} in terms of g_k there. Both branches are continued to
+  // k+1 the edge stalk uses disk k+1's basis, so F_{k+1 <| e} = I and F_{k <| e} is the
+  // matrix that writes g_k in terms of g_{k+1} there (g_k = s g_{k+1}, or
+  // g_k = g_{k+1} + d for log). Continuing g_0 counterclockwise through the disks then
+  // multiplies it by the product of the s (adds the sum of the d), so the holonomy
+  // round the cycle is the monodromy, not its inverse. Both branches are continued to
   // the midpoint of the two centres and compared, so the map is measured, not assumed.
   function branch(kind, c, m) {
     var K = KINDS[kind], p = principalValue(kind, c);
@@ -172,16 +182,16 @@
       var j = (k + 1) % n, mid = scale(add(cv.centres[k], cv.centres[j]), 0.5);
       var vk = moveTo(gs[k], mid).germ.a[0], vj = moveTo(gs[j], mid).germ.a[0], M;
       if (K.log) {
-        var d = sub(vj, vk);
+        var d = sub(vk, vj);
         M = [[[1, 0], d], [[0, 0], [1, 0]]];
         scal.push(d);
       } else {
-        var s = div(vj, vk);
+        var s = div(vk, vj);
         M = [[s]];
         scal.push(s);
       }
       var I = dim === 1 ? [[[1, 0]]] : [[[1, 0], [0, 0]], [[0, 0], [1, 0]]];
-      edges.push({ u: k, v: j, Fu: realify(I), Fv: realify(M) });
+      edges.push({ u: k, v: j, Fu: realify(M), Fv: realify(I) });
     }
     var dims = cv.centres.map(function () { return 2 * dim; });
     return { S: { dims: dims, edges: edges }, scal: scal, cover: cv };
@@ -294,8 +304,20 @@
       });
       check('nerve of the disk cover: H^0, H^1 = ker, coker(M - 1): sqrt 0,0; cbrt 0,0; log 1,1 (complex dims), for n = 3..8', allOk, rows.join('; '));
 
-      var ns = nerveSheaf('sqrt', 6), neg = ns.scal.map(function (s) { return Math.round(s[0]); });
-      check('principal branches on six disks: every overlap +1 except the one across the negative real axis, -1', neg.join(',') === '1,1,1,-1,1,1' || neg.join(',') === '1,1,-1,1,1,1', neg.join(','));
+      // The one -1 must sit on the overlap whose lens the negative real axis bisects,
+      // and on no other, for every n.
+      var cutOk = true, cutRows = [];
+      for (n = 3; n <= 8; n++) {
+        var nsq = nerveSheaf('sqrt', n), cvq = nsq.cover, kc = cvq.cut;
+        var midc = scale(add(cvq.centres[kc], cvq.centres[(kc + 1) % n]), 0.5);
+        if (!(midc[0] < 0 && Math.abs(midc[1]) < 1e-12)) cutOk = false;
+        nsq.scal.forEach(function (s, k) {
+          if (abs(sub(s, [k === kc ? -1 : 1, 0])) > 1e-10) cutOk = false;
+          if (Math.abs(arg(cvq.centres[k]) - Math.PI) < 1e-9) cutOk = false;
+        });
+        if (n === 6) cutRows.push(nsq.scal.map(function (s) { return Math.round(s[0]); }).join(','));
+      }
+      check('principal branches, n = 3..8: every overlap +1 except the one the negative real axis bisects, -1 (no centre on the axis)', cutOk, 'n = 6: ' + cutRows.join(''));
 
       var inv = true, prodErr = 0;
       for (var trial = 0; trial < 20; trial++) {
@@ -304,10 +326,10 @@
         var nsm = nerveSheaf(kind, nn, mm), com = Sh.cohomology(Sh.create(nsm.S)), base = Sh.cohomology(Sh.create(nerveSheaf(kind, nn).S));
         if (com.h0 !== base.h0 || com.h1 !== base.h1) inv = false;
         var hol = kind === 'log' ? nsm.scal.reduce(add, [0, 0]) : nsm.scal.reduce(mul, [1, 0]);
-        var wantHol = kind === 'log' ? [0, -TAU] : polar(1, -TAU * KINDS[kind].alpha);
+        var mono = monodromy(kind), wantHol = kind === 'log' ? mono[0][1] : mono[0][0];
         prodErr = Math.max(prodErr, abs(sub(hol, wantHol)));
       }
-      check('changing the branch on any disks leaves H^0, H^1 and the holonomy (product, or sum for log) unchanged', inv && prodErr < 1e-9, 'max holonomy error ' + e3(prodErr));
+      check('changing the branch on any disks leaves H^0, H^1 and the holonomy (product, or sum for log) unchanged, equal to the counterclockwise monodromy', inv && prodErr < 1e-9, 'max holonomy error ' + e3(prodErr));
 
       // Gluing axiom for the open-star cover of a cellular sheaf is ker delta.
       var eqOk = true;
