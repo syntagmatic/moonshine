@@ -15,8 +15,11 @@
 // other coefficient of the new germ from that value. `reexpand` computes the
 // low coefficients the other way, by re-expanding the old series about the new
 // centre, and the checks confirm the two agree. (Re-expanding every coefficient
-// at every step is numerically unstable: truncation errors in the high
-// coefficients grow geometrically from step to step.)
+// at every step instead fails, for two reasons `circuit` measures: it continues
+// the 48-term polynomial, which has no branch point, so even exact arithmetic
+// would bring the starting germ back unchanged; and on the far side of 0 that
+// polynomial's coefficients reach 4.4e18 for sqrt, so the binomial sums that bring
+// them back to size 1 cancel far more digits than double precision carries.)
 //
 // Complex numbers are [re, im] pairs.
 //
@@ -29,6 +32,17 @@
 //                                    polar coordinates (the shorter way round, never
 //                                    closer to 0 than rmin); { germ, centres, values }
 //                                    with the germ's value at every intermediate centre
+//   Germs.circuit(kind, n, method)   continue the principal germ at 1 once round 0
+//                                    counterclockwise in n equal chords (h/|c| =
+//                                    2 sin(pi/n)), by 'ode' (step) or 'reexpand' (all
+//                                    N coefficients re-expanded); { germ, exact, err,
+//                                    peak, sizes, h } with err the largest coefficient
+//                                    error against the closed-form germ, peak the
+//                                    germ with the largest coefficient, and sizes[i]
+//                                    the largest |a_k| after step i (i = 0..n)
+//   Germs.truncBound(kind, n)        bound on circuit's 'ode' error in exact
+//                                    arithmetic: n A x^N / (1 - x), x = h/|c|,
+//                                    A = |binom(alpha, N)| (roots) or 1/N (log)
 //   Germs.sheet(g)                   integer m with a0 = principal value times
 //                                    e^(2 pi i m / sheets) (roots, m mod sheets) or
 //                                    a0 = Log c + 2 pi i m (log)
@@ -123,6 +137,42 @@
       values.push(g.a[0]);
     }
     return { germ: g, centres: centres, values: values };
+  }
+
+  // One counterclockwise loop round the unit circle in n equal chords, by either
+  // method, scored against the closed-form germ it should return with (the
+  // principal germ times the monodromy). Coefficient errors are scaled by |c|^k,
+  // which is 1 here.
+  function circuit(kind, n, method) {
+    var c0 = [1, 0], g = principal(kind, c0), peak = g, big = 0, K = KINDS[kind], sizes = [];
+    for (var i = 0; i <= n; i++) {
+      if (i > 0) {
+        var c2 = polar(1, TAU * i / n);
+        g = method === 'reexpand' ? { kind: kind, c: c2, a: reexpand(g, c2, N) } : step(g, c2);
+      }
+      var m = 0;
+      for (var k = 0; k < N; k++) m = Math.max(m, abs(g.a[k]));
+      if (m > big) { big = m; peak = g; }
+      sizes.push(m);
+    }
+    var p = principalValue(kind, c0);
+    var exact = germ(kind, c0, K.log ? add(p, [0, TAU]) : mul(p, polar(1, TAU * K.alpha)));
+    var err = 0;
+    for (k = 0; k < N; k++) err = Math.max(err, abs(sub(g.a[k], exact.a[k])));
+    return { germ: g, exact: exact, err: err, peak: peak, sizes: sizes, h: 2 * Math.sin(Math.PI / n) };
+  }
+
+  // Each 'ode' step sums the old series at distance h; the terms it drops are
+  // a_m h^m for m >= N, with |a_m| |c|^m = |a_0| |binom(alpha, m)| (roots, falling in m)
+  // or 1/m (log). So a step changes the value by at most A x^N / (1 - x) relative to
+  // |a_0| (roots) or absolutely (log), the new germ is exact given its value, and
+  // over n steps these add. On the unit circle |a_0| = 1 and every coefficient error
+  // is at most the value's.
+  function truncBound(kind, n) {
+    var K = KINDS[kind], x = 2 * Math.sin(Math.PI / n), A = 1;
+    if (K.log) A = 1 / N;
+    else for (var m = 0; m < N; m++) A *= Math.abs(K.alpha - m) / (m + 1);
+    return x < 1 - 1e-9 ? n * A * Math.pow(x, N) / (1 - x) : Infinity;
   }
 
   function sheet(g) {
@@ -274,6 +324,20 @@
     });
     check('after three loops every coefficient matches the closed-form germ', lastErr < 1e-9, 'max error ' + e3(lastErr));
 
+    // Step size: ODE reseeding stays under the truncation bound (plus roundoff);
+    // re-expanding every coefficient is far off at every step size.
+    var odeOk = true, reMin = Infinity, odeWorst = 0;
+    ['sqrt', 'cbrt', 'log'].forEach(function (kind) {
+      [8, 10, 21, 60].forEach(function (n) {
+        var e = circuit(kind, n, 'ode').err;
+        if (e > truncBound(kind, n) + 1e-12) odeOk = false;
+        if (n >= 21) odeWorst = Math.max(odeWorst, e);
+        reMin = Math.min(reMin, circuit(kind, n, 'reexpand').err);
+      });
+    });
+    check('one loop in n = 8, 10, 21, 60 chords: ODE reseeding within n |a_N| x^N / (1 - x) + 1e-12 of the closed form (under 1e-12 once h/|c| <= 0.3); full re-expansion off by more than 1e6', odeOk && odeWorst < 1e-12 && reMin > 1e6,
+      'ODE at h/|c| <= 0.3: ' + e3(odeWorst) + '; re-expansion at least ' + e3(reMin));
+
     // Homotopy invariance: a loop that does not enclose 0 changes nothing; two
     // paths from 1 to -1 on either side differ by the monodromy.
     var g0 = principal('sqrt', [1, 0]), g = g0;
@@ -360,7 +424,7 @@
 
   var api = { N: N, KINDS: KINDS, add: add, sub: sub, mul: mul, div: div, abs: abs, arg: arg, polar: polar, cexp: cexp, clog: clog,
     principalValue: principalValue, germ: germ, principal: principal, evaluate: evaluate, reexpand: reexpand, step: step,
-    moveTo: moveTo, sheet: sheet, monodromy: monodromy, cover: cover, realify: realify, branch: branch, nerveSheaf: nerveSheaf,
+    moveTo: moveTo, circuit: circuit, truncBound: truncBound, sheet: sheet, monodromy: monodromy, cover: cover, realify: realify, branch: branch, nerveSheaf: nerveSheaf,
     flat: flat, runChecks: runChecks };
   global.Germs = api;
   if (typeof module === 'object' && module.exports) module.exports = api;
