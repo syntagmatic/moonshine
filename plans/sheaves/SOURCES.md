@@ -392,3 +392,31 @@ metres from the upper right corner of the lab. Collected by Peter Bodik, Wei Hon
 Guestrin, Sam Madden, Mark Paskin and Romain Thibaux; use permitted with acknowledgement.
 Essay 03's data file is built by scripts/sheaves-intel-lab.mjs from data.txt.gz and
 mote_locs.txt.
+
+---
+
+## 2 (addendum, 2026-09-28 session 4): Hansen & Ghrist re-read for essay 05
+
+Read Secs. 1-9 and 12 of the arXiv text in full. The dynamics are: (4.1) opinion diffusion,
+(5.1) stubborn agents with Thm 5.1 (limit is the harmonic extension nearest x0), (6.1) linear
+control with Thms 6.1/6.2 (stabilizable/detectable when relative H^0 vanishes), (7.1) weighted
+reluctance via a stubborn "parent" on an augmented graph, (8.1)-(8.3) restriction-map diffusion
+with Thm 8.1, (9.1) the joint flow with Lemma 9.1, Thms 9.2-9.4, and Secs. 10-12 nonlinear,
+bounded-confidence and antagonistic dynamics. **There is no diffusion on expressed 1-cochains**;
+the paper's "evolution of expression" is the map flow. Thm 9.3 as printed writes the condition
+with x0^T x0 where the proof uses x x^T. The proof's d/dt diag(M) = 0 is the conserved
+quantity used in essay 05.
+
+## 11. Zachary's karate club
+
+**Citation.** W. W. Zachary, "An Information Flow Model for Conflict and Fission in Small
+Groups," *Journal of Anthropological Research* 33(4):452-473, December 1977. DOI
+10.1086/jar.33.4.3629752 (Crossref, confirmed this session). Paper not read.
+
+**Data used.** NetworkX `karate_club_graph` (networkx/generators/social.py, main branch,
+fetched 2026-09-28): 34x34 matrix of interaction counts and the 'club' attribute ("Club After
+Split From Data" column of Zachary's Table 3; Mr. Hi's club = nodes 0-8, 10-13, 16, 17, 19,
+21). The matrix is asymmetric in 7 pairs (e.g. (0, 12) is 2 above the diagonal and 1 below,
+(22, 33) is 0 above and 3 below); NetworkX keeps the lower-triangle value because it adds
+rows in order. The union of nonzero entries is the standard 78-edge graph, which is what the
+page uses, unweighted.

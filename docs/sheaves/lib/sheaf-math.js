@@ -59,6 +59,14 @@
 //   Sheaf.positionSheaf(phi, dirs)    sensors locating a point in the plane: world frame,
 //                                     a frame turned by phi, and one line of position per
 //                                     direction angle in dirs
+//   Sheaf.stubborn(S, x0, fixed)      opinion flow with the vertices in `fixed` held at
+//                                     x0 (Hansen-Ghrist Thm 5.1); { at(t), limit, rate }
+//   Sheaf.relativeH0(S, fixed)        dim H^0(G, U; F), sections vanishing on `fixed`
+//   Sheaf.nearestSheaf(S, x)          Frobenius-nearest sheaf with x a global section,
+//                                     the limit of the map flow (Thm 8.1)
+//   Sheaf.jointFlow(S, x0, alpha, beta, T, steps, samples)  opinions and restriction
+//                                     maps flowing together (eq. 9.1), RK4; snapshots
+//                                     [{ t, x, S }]
 (function (global) {
   'use strict';
 
@@ -528,6 +536,148 @@
     return K;
   }
 
+  // Discourse sheaves (Hansen and Ghrist 2021). A vertex stalk holds a
+  // person's private opinions, an edge stalk the topic a pair discusses, and
+  // a restriction map how that person expresses their opinions to that
+  // neighbour.
+
+  // Stubborn agents (their Thm 5.1): x' = -L x on the free vertices while the
+  // vertices in `fixed` keep their values from x0. On the free coordinates Y,
+  // y' = -(L_YY y + L_YU u). The forcing L_YU u lies in im L_YY, so with
+  // y_inf = P_ker y0 - L_YY^+ L_YU u the solution is
+  // y(t) = y_inf + exp(-t L_YY)(y0 - y_inf), and y_inf is the harmonic
+  // extension of u nearest x0. Returns { at(t), limit, rate } where rate is
+  // the smallest nonzero eigenvalue of L_YY.
+  function stubborn(S, x0, fixed) {
+    var L = laplacian(S), isFixed = {}, Y = [], U = [];
+    fixed.forEach(function (v) { isFixed[v] = 1; });
+    S.dims.forEach(function (d, v) { for (var b = 0; b < d; b++) (isFixed[v] ? U : Y).push(S.offV[v] + b); });
+    var eig = symEig(Y.map(function (i) { return Y.map(function (j) { return L[i][j]; }); }));
+    var r = Y.map(function (i) { var s = 0; U.forEach(function (j) { s += L[i][j] * x0[j]; }); return s; });
+    var y0 = Y.map(function (i) { return x0[i]; }), yinf = new Float64Array(Y.length), rate = Infinity;
+    eig.values.forEach(function (l, k) {
+      var phi = eig.vectors[k], c = l < TOL ? dot(phi, y0) : -dot(phi, r) / l;
+      if (l >= TOL) rate = Math.min(rate, l);
+      for (var i = 0; i < Y.length; i++) yinf[i] += c * phi[i];
+    });
+    var diff = y0.map(function (v, i) { return v - yinf[i]; });
+    var coef = eig.vectors.map(function (phi) { return dot(phi, diff); });
+    function at(t) {
+      var out = Float64Array.from(x0);
+      Y.forEach(function (i, a) { out[i] = yinf[a]; });
+      if (t === Infinity) return out;
+      eig.values.forEach(function (l, k) {
+        if (l < TOL) return;
+        var c = coef[k] * Math.exp(-t * l), phi = eig.vectors[k];
+        Y.forEach(function (i, a) { out[i] += c * phi[a]; });
+      });
+      return out;
+    }
+    return { at: at, limit: at(Infinity), rate: rate };
+  }
+
+  // Relative cohomology H^0(G, U; F): global sections that vanish on the
+  // vertices in U. Zero means values on U determine the harmonic extension,
+  // and (their Thm 6.1) that controlling U is enough to steer the network.
+  function relativeH0(S, fixed) {
+    var isFixed = {}, Y = [];
+    fixed.forEach(function (v) { isFixed[v] = 1; });
+    S.dims.forEach(function (d, v) { for (var b = 0; b < d; b++) if (!isFixed[v]) Y.push(S.offV[v] + b); });
+    var D = coboundary(S).map(function (row) { return Y.map(function (i) { return row[i]; }); });
+    return Y.length - nullspace(D, Y.length).rank;
+  }
+
+  function copySheaf(S) {
+    return create({ dims: S.dims, edges: S.edges.map(function (e) {
+      return { u: e.u, v: e.v, Fu: e.Fu.map(function (r) { return Array.from(r); }), Fv: e.Fv.map(function (r) { return Array.from(r); }) };
+    }) });
+  }
+
+  // Learning to lie (their Thm 8.1): with opinions x held fixed, the map flow
+  // d delta_e / dt = -beta delta_e x_e x_e^T converges to the sheaf nearest in
+  // Frobenius norm for which x is a global section. Edge by edge that is
+  // delta_e (I - x_e x_e^T / |x_e|^2), where x_e stacks x_u and x_v; in the
+  // maps, Fv -= g x_v^T / |x_e|^2 and Fu += g x_u^T / |x_e|^2 with g = (delta x)_e.
+  function nearestSheaf(S, x) {
+    var T = copySheaf(S);
+    T.edges.forEach(function (e, k) {
+      var g = edgeVec(S, x, k), du = S.dims[e.u], dv = S.dims[e.v], n2 = 0, a, b;
+      for (b = 0; b < du; b++) n2 += x[S.offV[e.u] + b] * x[S.offV[e.u] + b];
+      for (b = 0; b < dv; b++) n2 += x[S.offV[e.v] + b] * x[S.offV[e.v] + b];
+      if (n2 === 0) return;
+      for (a = 0; a < e.de; a++) {
+        for (b = 0; b < du; b++) e.Fu[a][b] += g[a] * x[S.offV[e.u] + b] / n2;
+        for (b = 0; b < dv; b++) e.Fv[a][b] -= g[a] * x[S.offV[e.v] + b] / n2;
+      }
+    });
+    return T;
+  }
+
+  // Joint opinion-expression diffusion (their eq. 9.1):
+  //   x' = -alpha delta^T delta x,   delta_e' = -beta delta_e x_e x_e^T,
+  // so Fu' = beta g x_u^T and Fv' = -beta g x_v^T with g = (delta x)_e.
+  // alpha = 0 is learning to lie alone (8.1), beta = 0 is plain opinion
+  // diffusion (4.1). Fourth-order Runge-Kutta, `steps` steps to time T,
+  // `samples` + 1 snapshots { t, x, S } evenly spaced in time.
+  function jointFlow(S0, x0, alpha, beta, T, steps, samples) {
+    samples = samples || 1;
+    var S = copySheaf(S0), n0 = S.n0, idx = [], p = n0;
+    S.edges.forEach(function (e) {
+      idx.push({ fu: p, fv: p + e.de * S.dims[e.u] });
+      p += e.de * (S.dims[e.u] + S.dims[e.v]);
+    });
+    var z = new Float64Array(p);
+    for (var i = 0; i < n0; i++) z[i] = x0[i];
+    S.edges.forEach(function (e, k) {
+      var du = S.dims[e.u], dv = S.dims[e.v];
+      for (var a = 0; a < e.de; a++) {
+        for (var b = 0; b < du; b++) z[idx[k].fu + a * du + b] = e.Fu[a][b];
+        for (b = 0; b < dv; b++) z[idx[k].fv + a * dv + b] = e.Fv[a][b];
+      }
+    });
+    function deriv(z) {
+      var d = new Float64Array(p);
+      S.edges.forEach(function (e, k) {
+        var du = S.dims[e.u], dv = S.dims[e.v], ou = S.offV[e.u], ov = S.offV[e.v], a, b;
+        for (a = 0; a < e.de; a++) {
+          var g = 0;
+          for (b = 0; b < dv; b++) g += z[idx[k].fv + a * dv + b] * z[ov + b];
+          for (b = 0; b < du; b++) g -= z[idx[k].fu + a * du + b] * z[ou + b];
+          for (b = 0; b < dv; b++) {
+            d[ov + b] -= alpha * z[idx[k].fv + a * dv + b] * g;
+            d[idx[k].fv + a * dv + b] -= beta * g * z[ov + b];
+          }
+          for (b = 0; b < du; b++) {
+            d[ou + b] += alpha * z[idx[k].fu + a * du + b] * g;
+            d[idx[k].fu + a * du + b] += beta * g * z[ou + b];
+          }
+        }
+      });
+      return d;
+    }
+    function snap(t) {
+      var Sk = copySheaf(S);
+      Sk.edges.forEach(function (e, k) {
+        var du = S.dims[e.u], dv = S.dims[e.v];
+        for (var a = 0; a < e.de; a++) {
+          for (var b = 0; b < du; b++) e.Fu[a][b] = z[idx[k].fu + a * du + b];
+          for (b = 0; b < dv; b++) e.Fv[a][b] = z[idx[k].fv + a * dv + b];
+        }
+      });
+      return { t: t, x: z.slice(0, n0), S: Sk };
+    }
+    var every = Math.max(1, Math.round(steps / samples));
+    steps = every * samples;
+    var h = T / steps, out = [snap(0)];
+    function axpy(a, s, b) { var o = new Float64Array(p); for (var i = 0; i < p; i++) o[i] = a[i] + s * b[i]; return o; }
+    for (var st = 1; st <= steps; st++) {
+      var k1 = deriv(z), k2 = deriv(axpy(z, h / 2, k1)), k3 = deriv(axpy(z, h / 2, k2)), k4 = deriv(axpy(z, h, k3));
+      for (var q = 0; q < p; q++) z[q] += h / 6 * (k1[q] + 2 * k2[q] + 2 * k3[q] + k4[q]);
+      if (st % every === 0) out.push(snap(st * h));
+    }
+    return out;
+  }
+
   function mulberry32(a) {
     return function () {
       a |= 0; a = a + 0x6D2B79F5 | 0;
@@ -738,6 +888,152 @@
       close(dA, 1) && close(dB, 1) && gridMin > 1 - 1e-9, 'grid min ' + gridMin.toFixed(4));
     var fu2 = fuse(Su, au).x;
     check('least-squares fusion of the same data is the single section (1, 1, 5)', close(fu2[0], 1) && close(fu2[1], 1) && close(fu2[2], 5));
+
+    // Discourse sheaves (Hansen and Ghrist 2021).
+    var rd = mulberry32(2021);
+    function randSheaf(nv, ne, maxDim) {
+      var dimsR = [], edgesR = [], seen = {};
+      for (var v = 0; v < nv; v++) dimsR.push(1 + Math.floor(rd() * maxDim));
+      for (v = 1; v < nv; v++) seen[(v - 1) + ',' + v] = 1;
+      var pairsR = [];
+      for (v = 1; v < nv; v++) pairsR.push([v - 1, v]);
+      while (pairsR.length < ne) {
+        var a = Math.floor(rd() * nv), b = Math.floor(rd() * nv);
+        if (a === b || seen[Math.min(a, b) + ',' + Math.max(a, b)]) continue;
+        seen[Math.min(a, b) + ',' + Math.max(a, b)] = 1;
+        pairsR.push([Math.min(a, b), Math.max(a, b)]);
+      }
+      pairsR.forEach(function (pq) {
+        var de = 1 + Math.floor(rd() * maxDim), m = function (c) {
+          var M = [];
+          for (var i = 0; i < de; i++) { var row = []; for (var j = 0; j < c; j++) row.push(rd() * 2 - 1); M.push(row); }
+          return M;
+        };
+        edgesR.push({ u: pq[0], v: pq[1], Fu: m(dimsR[pq[0]]), Fv: m(dimsR[pq[1]]) });
+      });
+      return create({ dims: dimsR, edges: edgesR });
+    }
+    function randVec(n, s) { var o = new Float64Array(n); for (var i = 0; i < n; i++) o[i] = (rd() * 2 - 1) * (s || 1); return o; }
+    function frob(A, B) {
+      var s = 0;
+      A.edges.forEach(function (e, k) {
+        [['Fu', e.Fu], ['Fv', e.Fv]].forEach(function (m) {
+          m[1].forEach(function (row, a) { row.forEach(function (val, b) { var d = val - B.edges[k][m[0]][a][b]; s += d * d; }); });
+        });
+      });
+      return s;
+    }
+
+    // Stubborn agents: the fixed vertices never move, the limit is harmonic
+    // off them, and a component with no stubborn vertex keeps its own mean.
+    var Sst = randSheaf(7, 10, 2), xs0 = randVec(Sst.n0), st = stubborn(Sst, xs0, [0, 3]), Lst = laplacian(Sst);
+    var fixedIdx = [];
+    [0, 3].forEach(function (v) { for (var b = 0; b < Sst.dims[v]; b++) fixedIdx.push(Sst.offV[v] + b); });
+    var holds = [0, 0.3, 2, 10].every(function (t) { var xt = st.at(t); return fixedIdx.every(function (i) { return xt[i] === xs0[i]; }); });
+    var Lx = matVec(Lst, st.limit), harm = Lx.every(function (v, i) { return fixedIdx.indexOf(i) >= 0 || Math.abs(v) < 1e-9; });
+    check('stubborn flow: fixed vertices hold, the limit is harmonic elsewhere (Thm 5.1)', holds && harm);
+    var tBig = st.at(60 / st.rate);
+    check('stubborn flow at large t reaches the limit', tBig.every(function (v, i) { return close(v, st.limit[i], 1e-9); }));
+    var Su0 = randSheaf(7, 10, 2);
+    while (relativeH0(Su0, [0, 3]) !== 0) Su0 = randSheaf(7, 10, 2);
+    var fixU = [];
+    [0, 3].forEach(function (v) { for (var b = 0; b < Su0.dims[v]; b++) fixU.push(Su0.offV[v] + b); });
+    var xu0 = randVec(Su0.n0), he = harmonicExtend(laplacian(Su0), fixU, fixU.map(function (i) { return xu0[i]; }));
+    var stU = stubborn(Su0, xu0, [0, 3]);
+    check('with H^0(G, U) = 0 the limit is the unique harmonic extension', he.every(function (v, i) { return close(v, stU.limit[i], 1e-8); }));
+    var two = signedGraph(5, [[0, 1, 1], [1, 2, 1], [3, 4, 1]]), st2 = stubborn(two, [1, -1, 0.5, 2, 0.4], [0]);
+    check('a component with no stubborn vertex converges to its own mean; H^0(G, U) = 1',
+      relativeH0(two, [0]) === 1 && close(st2.limit[1], 1) && close(st2.limit[2], 1) && close(st2.limit[3], 1.2) && close(st2.limit[4], 1.2));
+    var hex6 = signedGraph(6, [[0, 1, 1], [1, 2, 1], [2, 3, 1], [3, 4, 1], [4, 5, 1], [5, 0, 1]]);
+    check('constant sheaf: one stubborn vertex gives H^0(G, {v}) = 0 (Example 6.3); none gives H^0', relativeH0(hex6, [2]) === 0 && relativeH0(hex6, []) === 1);
+
+    // Learning to lie: the map flow with opinions fixed lands on the
+    // Frobenius-nearest sheaf with x a section.
+    var edge1 = create({ dims: [1, 1], edges: [{ u: 0, v: 1, Fu: [[1]], Fv: [[1]] }] }), xl = [-4, 1];
+    var ns1 = nearestSheaf(edge1, xl);
+    check('Example 8.2: constant sheaf on an edge with x = (-4, 1) learns maps (-3/17, 12/17)',
+      close(ns1.edges[0].Fu[0][0], -3 / 17, 1e-12) && close(ns1.edges[0].Fv[0][0], 12 / 17, 1e-12));
+    var Sl = randSheaf(6, 8, 2), xlr = randVec(Sl.n0).map(function (v) { return v + (v < 0 ? -0.5 : 0.5); }), nsl = nearestSheaf(Sl, xlr);
+    check('nearest sheaf has x as a global section', energy(nsl, xlr) < 1e-20);
+    var mf = jointFlow(Sl, xlr, 0, 1, 60, 12000, 1), fin = mf[mf.length - 1];
+    check('map flow (alpha = 0) converges to the nearest sheaf (Thm 8.1)', frob(fin.S, nsl) < 1e-14 && fin.x.every(function (v, i) { return v === xlr[i]; }),
+      'Frobenius^2 gap ' + frob(fin.S, nsl).toExponential(1));
+    var nearer = true;
+    for (var tr = 0; tr < 20; tr++) {
+      // Any other sheaf with x a section: perturb, then project edge by edge.
+      var Sp2 = copySheaf(nsl);
+      Sp2.edges.forEach(function (e) { e.Fu.forEach(function (r) { r.forEach(function (_, b) { r[b] += (rd() - 0.5) * 0.5; }); }); e.Fv.forEach(function (r) { r.forEach(function (_, b) { r[b] += (rd() - 0.5) * 0.5; }); }); });
+      var other = nearestSheaf(Sp2, xlr);
+      if (frob(other, Sl) < frob(nsl, Sl) - 1e-12) nearer = false;
+    }
+    check('no other sheaf with x a section is nearer in Frobenius norm (20 random competitors)', nearer);
+
+    // Joint flow (9.1): diagonal blocks of alpha delta^T delta - beta x x^T are
+    // conserved (proof of Thm 9.3); |delta|_F, |x|, |delta x| and the Rayleigh
+    // quotient never increase (Thm 9.4).
+    var Sj = randSheaf(5, 7, 2), xj = randVec(Sj.n0, 1.5), al = 0.7, be = 1.3;
+    var jf = jointFlow(Sj, xj, al, be, 40, 40000, 80);
+    function diagBlocks(S, x) {
+      var D = coboundary(S), blocks = [];
+      S.dims.forEach(function (d, v) {
+        var o = S.offV[v], B = [];
+        for (var i = 0; i < d; i++) {
+          B.push([]);
+          for (var j = 0; j < d; j++) {
+            var s = 0;
+            for (var r = 0; r < D.length; r++) s += D[r][o + i] * D[r][o + j];
+            B[i].push(al * s - be * x[o + i] * x[o + j]);
+          }
+        }
+        blocks.push(B);
+      });
+      return blocks;
+    }
+    var b0 = diagBlocks(Sj, xj), drift = 0;
+    jf.forEach(function (sn) {
+      diagBlocks(sn.S, sn.x).forEach(function (B, v) { B.forEach(function (row, i) { row.forEach(function (val, j) { drift = Math.max(drift, Math.abs(val - b0[v][i][j])); }); }); });
+    });
+    check('joint flow conserves each vertex block of alpha delta^T delta - beta x x^T', drift < 1e-8, 'max drift ' + drift.toExponential(1));
+    var mono2 = true, prev = null;
+    jf.forEach(function (sn) {
+      var D = coboundary(sn.S), dF = 0;
+      D.forEach(function (row) { row.forEach(function (v) { dF += v * v; }); });
+      var nx = dot(sn.x, sn.x), e2 = energy(sn.S, sn.x), cur = [dF, nx, e2, e2 / nx];
+      if (prev && cur.some(function (v, i) { return v > prev[i] + 1e-10; })) mono2 = false;
+      prev = cur;
+    });
+    check('joint flow: |delta|_F^2, |x|^2, |delta x|^2 and |delta x|^2 / |x|^2 never increase (Thm 9.4)', mono2);
+    var endJ = jf[jf.length - 1], midJ = jf[(jf.length - 1) / 2], e0J = energy(Sj, xj), eEnd = energy(endJ.S, endJ.x);
+    check('joint flow heads for a global section, but slowly: energy down 10^4-fold by t = 40 and still falling, x not tending to 0',
+      eEnd < 1e-4 * e0J && eEnd < energy(midJ.S, midJ.x) && dot(endJ.x, endJ.x) > 1,
+      'energy ' + e0J.toFixed(2) + ' -> ' + energy(midJ.S, midJ.x).toExponential(1) + ' (t = 20) -> ' + eEnd.toExponential(1) + ' (t = 40)');
+
+    // One edge, scalar stalks: alpha F_v^2 - beta x_v^2 is conserved for each
+    // agent, so an agent that starts with it negative never changes the sign of
+    // their opinion, and one that starts with it positive never changes the
+    // sign of their map.
+    var dich = true, both = [0, 0];
+    for (var tr2 = 0; tr2 < 40; tr2++) {
+      var xo = [(rd() * 2 - 1) * 4, (rd() * 2 - 1) * 4], Fo = [(rd() * 2 - 1) * 1.5, (rd() * 2 - 1) * 1.5];
+      var a2 = 0.2 + rd() * 1.8, b2 = 0.2 + rd() * 1.8;
+      var ed = create({ dims: [1, 1], edges: [{ u: 0, v: 1, Fu: [[Fo[0]]], Fv: [[Fo[1]]] }] });
+      var run = jointFlow(ed, xo, a2, b2, 20, 8000, 400);
+      [0, 1].forEach(function (w) {
+        var c = a2 * Fo[w] * Fo[w] - b2 * xo[w] * xo[w];
+        run.forEach(function (sn) {
+          var F = w === 0 ? sn.S.edges[0].Fu[0][0] : sn.S.edges[0].Fv[0][0];
+          if (c < 0 && sn.x[w] * xo[w] <= 0) dich = false;
+          if (c > 0 && F * Fo[w] <= 0) dich = false;
+        });
+        both[c < 0 ? 0 : 1]++;
+      });
+    }
+    check('one edge: an agent with alpha F^2 < beta x^2 keeps the sign of their opinion, one with alpha F^2 > beta x^2 the sign of their map',
+      dich && both[0] > 5 && both[1] > 5, both[0] + ' firm, ' + both[1] + ' flexible');
+    var ex95 = jointFlow(edge1, xl, 1, 1, 40, 40000, 1), e95 = ex95[1];
+    check('Example 9.5 (alpha = beta = 1): the agent at -4 ends lying (map < 0) with opinion still below -sqrt(15)',
+      e95.S.edges[0].Fu[0][0] < 0 && e95.x[0] < -Math.sqrt(15) + 1e-9 && e95.S.edges[0].Fv[0][0] > 0 && energy(e95.S, e95.x) < 1e-12,
+      'x = (' + e95.x[0].toFixed(3) + ', ' + e95.x[1].toFixed(3) + '), F = (' + e95.S.edges[0].Fu[0][0].toFixed(3) + ', ' + e95.S.edges[0].Fv[0][0].toFixed(3) + ')');
     return out;
   }
 
@@ -749,7 +1045,8 @@
     mulberry32: mulberry32, dot: dot, matVec: matVec, nullspace: nullspace, cohomology: cohomology,
     explain: explain, subSheaf: subSheaf, openSet: openSet, openStar: openStar, intersect: intersect,
     sectionsOver: sectionsOver, cech: cech, consistency: consistency, fuse: fuse,
-    supDistance: supDistance, lipschitz: lipschitz, positionSheaf: positionSheaf, runChecks: runChecks
+    supDistance: supDistance, lipschitz: lipschitz, positionSheaf: positionSheaf,
+    stubborn: stubborn, relativeH0: relativeH0, nearestSheaf: nearestSheaf, jointFlow: jointFlow, runChecks: runChecks
   };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else global.Sheaf = api;
