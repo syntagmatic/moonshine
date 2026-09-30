@@ -113,6 +113,42 @@ disagree; every new number is computed in-page.
   only down to M5. Point-source shaking biases the no-warning share high, not low: a
   line source lowered it in every row (near-land median 31% to 19%).
 
+## 06 tsunami-source figure (2026-09-30)
+
+The step cartoon under "How a Tsunami Forms" became a model (shared/06-tsunami-source.js,
+checks in tests/japan-earthquakes.html: Okada matches cutde to 5e-11 m per m of slip at 45
+points; Kajiura volume; shallow-water volume and speed). Profile: ETOPO1 via ERDDAP
+etopo180, scripts/japan-06-bathy-profile.mjs, azimuth 101.5 deg (fitted trench strike
+11.5 deg + 90) through the USGS epicentre 38.297 N 142.373 E; trench 7,443 m at 144 km;
+coast 79 km west of the epicentre. Observations verified by a subagent from primary
+sources (full table in temp/japan-audit/06-source-obs.md, gitignored):
+
+- [x] GSI GEONET Oshika (960550), 38.301 N 141.501 E: about 5.3 m ESE, about 1.2 m down
+  (GSI crustal-deformation pages).
+- [x] MYGI (JCG GPS-acoustic), 38.083 N 142.916 E, about 1,700 m: about 24 m ESE, nearly
+  3 m up (Sato et al. 2011, Science 332:1395).
+- [x] MYGW, 38.150 N 142.433 E: about 15 m ESE, about 0.8 m down (JCG 2011 report Fig. 6,
+  read off a figure).
+- [x] Near-trench seafloor, 40 km band next to the trench on the 38 N track: about 50 m
+  ESE and about 10 m up (Fujiwara et al. 2011, Science, abstract; "7-10 m" is the press
+  release).
+- [x] Miyagi-Central GPS buoy (NOWPHAS 801G), 38.2325 N 141.6836 E, 144 m, about 19 km off
+  the line: peak 4.83 m datum-corrected (5.78 m raw) at 15:16 JST. The Kamaishi buoy's
+  famous 6.7 m is the raw value; corrected 6.13 m.
+- [x] Peak near-trench slip in published models: 55 m (USGS FFM file; its metadata field
+  "19.2" is wrong), 57 m (Maeda 2011), about 62 m (Sun 2017), 69 m (Satake 2013).
+- [x] USGS W-phase dip 14 deg, FFM 15 deg at the hypocentre; the page's plane is 10 deg
+  from the trench, which puts the catalog hypocentre (29 km) on the plane. Not claimed.
+- The 2011 preset (60 m at the trench tapering to 15 m, 180 km down dip, 10 deg, 210 km
+  long, Mw 9.10) is a grid-search best fit to the marks above
+  (temp/japan-audit/f06src/fit.cjs). Fitted vs measured, up/east m: Oshika -2.3/8 vs
+  -1.2/5.3; MYGW -1.9/17 vs -0.8/14; MYGI 1.8/25 vs 3/22; trench band 10.4/38 vs 10/50.
+  `p3` says the verticals miss by about a meter.
+- Model at the Miyagi-Central buoy depth (first cell >= 140 m): 11.0 m at 33.7 min against
+  4.83 m at about 30 min; `p3b` says "more than twice ... within a few minutes". Presets at
+  that gauge: even slip 9.9 m at 52 min; farther down 14.7 m at 27 min.
+- `p3`: "5 to 8 meters" of uplift replaced by the measured values above.
+
 ## Status
 
 | # | article | verified | wrong | unverifiable | notes |

@@ -11,6 +11,7 @@
 <script src="../vendor/js/d3.v7.min.js"></script>
 <script src="../vendor/js/topojson-client.min.js"></script>
 <script src="../lib/motion.js"></script>
+<script src="shared/06-tsunami-source.js"></script>
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
@@ -65,6 +66,22 @@
   .eq-block { padding: 0.75rem 0.5rem; }
   .figure { padding: 1rem 0.75rem; }
 }
+.figure.figure-wide { max-width: 900px; margin-left: -40px; margin-right: -40px; }
+.src-row { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; align-items: center; justify-content: space-between; margin-bottom: 0.6rem; }
+.src-presets { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.src-check { font-family: var(--heading-font); font-size: 0.82rem; color: var(--text-2); display: flex; gap: 0.35rem; align-items: center; cursor: pointer; }
+.src-sliders { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.3rem 1.1rem; font-family: var(--heading-font); font-size: 0.78rem; color: var(--text-2); }
+.src-sliders label { display: flex; flex-direction: column; gap: 0.1rem; }
+.src-lbl { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.src-sliders input { width: 100%; accent-color: var(--accent); }
+.src-sliders output, #src-t-v { font-family: var(--mono-font); color: var(--text); font-size: 0.76rem; }
+.src-readout { font-family: var(--heading-font); font-size: 0.82rem; color: var(--text-2); margin: 0.45rem 0 0.2rem; min-height: 1.3em; }
+.src-readout b { color: var(--text); font-weight: 600; }
+.src-time { display: flex; align-items: center; gap: 0.6rem; margin-top: 0.3rem; }
+.src-time input { flex: 1; accent-color: var(--accent); }
+#src-t-v { min-width: 4.5em; }
+@media (max-width: 820px) { .figure.figure-wide { margin-left: 0; margin-right: 0; } }
+@media (max-width: 600px) { .src-sliders { grid-template-columns: 1fr 1fr; } .src-lbl { white-space: normal; } }
 .gauge-controls { display: flex; align-items: center; gap: 0.4rem 1rem; flex-wrap: wrap; margin-bottom: 0.4rem; font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); }
 .gauge-controls input[type="range"] { width: 150px; accent-color: var(--accent); }
 .gauge-legend { display: flex; gap: 0.9rem; flex-wrap: wrap; }
@@ -152,17 +169,34 @@ svg .axis line, svg .axis path { stroke: var(--border); }
 
 <p data-i18n="p2">A tsunami is a <em>shallow water wave</em>, a pulse that moves the entire water column from seafloor to surface. It starts when a large section of seafloor is abruptly displaced upward (or downward), shoving the water above it like a piston. The displaced water then radiates outward as a wave that carries a great deal of energy because the entire depth of the ocean is in motion.</p>
 
-<div class="figure">
-  <div class="step-buttons" id="cross-section-steps">
-    <button class="step-btn active" data-step="0" data-i18n="step_fault_rupture">1. Fault rupture</button>
-    <button class="step-btn" data-step="1" data-i18n="step_water_displaced">2. Water displaced</button>
-    <button class="step-btn" data-step="2" data-i18n="step_waves_radiate">3. Waves radiate</button>
+<div class="figure figure-wide" id="fig-source">
+  <div class="src-row">
+    <div class="src-presets" role="group" aria-label="Scenarios">
+      <button type="button" class="step-btn active" data-preset="trench" data-i18n="src_p_trench">Slip peaks at the trench (like 2011)</button>
+      <button type="button" class="step-btn" data-preset="even" data-i18n="src_p_even">Same size, slip spread evenly</button>
+      <button type="button" class="step-btn" data-preset="deep" data-i18n="src_p_deep">Same size, farther down, under the shelf</button>
+    </div>
+    <label class="src-check"><input type="checkbox" id="src-horiz"> <span data-i18n="src_horiz">Add the push of the sloping seafloor</span></label>
   </div>
-  <div id="cross-section"></div>
-  <div class="figure-caption" data-i18n="caption_cross_section">Cross-section of tsunami generation. A shallow thrust fault lifts the seafloor, displacing the water column above it, which then radiates outward as waves.</div>
+  <div class="src-sliders">
+    <label><span class="src-lbl"><span data-i18n="src_slip">Peak slip</span> <output id="src-slip-v"></output></span><input type="range" id="src-slip" min="5" max="80" step="1"></label>
+    <label><span class="src-lbl"><span data-i18n="src_top">Top edge, landward of trench</span> <output id="src-top-v"></output></span><input type="range" id="src-top" min="0" max="250" step="5"></label>
+    <label><span class="src-lbl"><span data-i18n="src_width">Width down dip</span> <output id="src-width-v"></output></span><input type="range" id="src-width" min="40" max="240" step="10"></label>
+    <label><span class="src-lbl"><span data-i18n="src_dip">Dip</span> <output id="src-dip-v"></output></span><input type="range" id="src-dip" min="5" max="25" step="1"></label>
+  </div>
+  <div class="src-readout" id="src-readout" aria-live="polite"></div>
+  <div id="src-chart"></div>
+  <div class="src-time">
+    <button type="button" id="src-play" class="step-btn">Play</button>
+    <input type="range" id="src-t" min="0" max="60" step="0.5" value="0" aria-label="Minutes after the earthquake">
+    <span id="src-t-v"></span>
+  </div>
+  <div class="figure-caption" data-i18n="caption_source"><span style="font-weight:600;color:var(--text);">Figure.</span> A model of the 2011 source along one line through the epicentre, across the Japan Trench, on the real seafloor (ETOPO1). Slip on the fault, a rectangle 210 km long in elastic rock (Okada 1985), moves the seafloor: up above the shallow part of the fault, down at the coast. The water copies that shape at once, smoothed over a width about the water&#8217;s depth, and the hump splits: half runs out to sea, half runs to the coast, slowing and growing as the water shallows (linear shallow-water equations). The bottom panel shows every place on the line (across) at every moment of the first hour (down); the side traces are the sea surface at the two triangles. Grey dots are catalog earthquakes within 40 km of the line; the star is the 2011 hypocentre. Orange marks are what instruments measured in 2011: ground and seafloor movement, and the peak at the Miyagi-Central GPS buoy. The model&#8217;s wave cannot spread along the coast, so its heights near shore are upper bounds, and its rupture is instant, where the real one took minutes. Hover or tap the bottom panel; click it to set the time.</div>
 </div>
 
-<p data-i18n="p3">The fault must be <em>shallow</em> (near the seafloor) and produce <em>vertical displacement</em>. The 2011 Tohoku earthquake began at a depth of about 29 km on a thrust fault, the Pacific Plate diving beneath the Okhotsk Plate. Portions of the seafloor shifted upward by as much as 5 to 8 meters, over a rupture about 500 km long and 200 km wide.</p>
+<p data-i18n="p3">The fault must be <em>shallow</em> (near the seafloor) and produce <em>vertical displacement</em>. The 2011 earthquake began 29 km down on the thrust fault where the Pacific Plate dives beneath the Okhotsk Plate, and the figure opens on that rupture as this simple model best matches it: 60 m of slip where the fault meets the trench, tapering down the fault, enough for magnitude 9.1. Published models of 2011 put the peak slip near the trench at 55 to 69 m. The orange marks are what instruments measured: the seafloor beside the trench rose about 10 m and moved about 50 m east, a seafloor station 50 km east of the epicenter rose about 3 m, and the coast at Oshika sank 1.2 m. The model&#8217;s vertical movements miss each mark by about a meter, the price of a flat fault in uniform rock.</p>
+
+<p data-i18n="p3b">Water cannot copy a bump narrower than its own depth, so the 7 km of ocean over the trench spreads the seafloor&#8217;s spike into a lower, wider hump, which splits at once: half heads out into the Pacific, half heads for the coast, slowing and steepening as the water shallows. The same magnitude with slip spread evenly makes a lower hump and a later peak at the coast; moved down the fault, under the shallow shelf, the same slip makes the wave bigger and sooner. The model&#8217;s weakest step is the last one. Its wave cannot spread sideways along the coast, so at the Miyagi-Central GPS buoy, in 144 m of water, it peaks at more than twice the 4.8 m the buoy recorded, though within a few minutes of the buoy&#8217;s 30.</p>
 
 <h2 data-i18n="h2_speed">Speed Depends on Depth</h2>
 
@@ -460,214 +494,523 @@ document.addEventListener("click", ev => {
 });
 
 // ============================================================
-// CROSS-SECTION DIAGRAM
+// TSUNAMI SOURCE: fault slip -> seafloor -> sea surface -> waves
 // ============================================================
-(function() {
-  const host = document.getElementById("cross-section");
-  const narrow = (host.clientWidth || 700) < 500;
-  const W = narrow ? 480 : 700, H = 360;
+// The model lives in shared/06-tsunami-source.js (Okada 1985 dislocation,
+// Kajiura filter, linear shallow-water equations); the depth profile is
+// ETOPO1 along a line through the epicentre, perpendicular to the trench.
+(function () {
+  const host = document.getElementById("src-chart");
+  if (!host || !window.TsunamiSource) return;
+  const TS = window.TsunamiSource;
+  const narrow = (host.clientWidth || 860) < 560;
+  const W = narrow ? 520 : 860;
+  const X0 = narrow ? 34 : 44, X1 = W - (narrow ? 96 : 132);
+  const ROW = { sea: [22, 92], floor: [104, 172], sec: [184, 334], hov: [360, 536] };
+  const H = 568;
   const fs = fsFor(W, host, 1.8);
-  const svg = d3.select("#cross-section").append("svg")
-    .attr("viewBox", `0 0 ${W} ${H}`)
-    .attr("width", "100%")
+  const TMAX = 60, EVERY = 10;
+  // Rupture length along the trench. 210 km with the 2011 preset's slip gives
+  // Mw 9.1; the preset itself is the best fit of this planar model to the
+  // measured 2011 displacements marked on the seafloor panel.
+  const L_KM = 210;
+  const INLAND = 30, SEA_END = 290;       // plot from 30 km inland to s = 290 km
+
+  const C = {
+    up: DARK ? "#f4796b" : "#c0392b",
+    down: DARK ? "#6aaeef" : "#1f63b4",
+    mid: DARK ? "#1f1f2b" : "#ffffff",
+    ocean: DARK ? "#1b3550" : "#dbeafe",
+    upper: DARK ? "#4a4136" : "#ddd3c3",
+    lower: DARK ? "#34343f" : "#bdb7ae",
+    fault: DARK ? "#f87171" : "#dc2626",
+    quake: DARK ? "#b8b8c8" : "#57534e",
+    ink: DARK ? "#e8e6dd" : "#1a1a2e",
+    muted: MUTED,
+    grid: DARK ? "#3a3a4e" : "#e2e2e8",
+    wave: WAVE,
+    obs: DARK ? "#fbbf24" : "#b45309"
+  };
+  const lerpUp = d3.interpolateLab(C.mid, C.up), lerpDown = d3.interpolateLab(C.mid, C.down);
+  const divColor = v => {  // v in [-1, 1]; gamma lifts small values
+    const a = Math.pow(Math.min(1, Math.abs(v)), 0.6);
+    return v >= 0 ? lerpUp(a) : lerpDown(a);
+  };
+
+  const TXT = {
+    en: {
+      play: "Play", pause: "Pause", min: "min",
+      readout: (r) => `<b>M<sub>w</sub> ${r.mw}</b> · seafloor rises up to <b>${r.up} m</b> · the coast ${r.coastUp < 0 ? "sinks" : "rises"} <b>${Math.abs(r.coastUp).toFixed(1)} m</b> and moves <b>${r.coastE} m</b> east · first hump <b>${r.eta} m</b> high`,
+      slipV: v => `${v} m`, kmV: v => `${v} km`, degV: v => `${v}°`,
+      topV: (v, z) => `${v} km (${z} km deep)`,
+      ve: v => `Depth to 70 km, vertical scale ×${v}`, tAria: "Minutes after the earthquake",
+      obsTip: (n, up, hz) => `${n}<br>measured in 2011: ${up > 0 ? "up" : "down"} <b>${Math.abs(up)} m</b>, about ${hz} m east`,
+      bandTip: (up, hz) => `Seafloor next to the trench, from repeated depth surveys (Fujiwara et al. 2011): about <b>${up} m</b> up and ${hz} m east`,
+      buoyTip: (up, t) => `Miyagi-Central GPS buoy, 144 m deep, about 19 km off this line: peak <b>${up} m</b> at ${t} min`,
+      tip: (t, x, e) => `${t} min after the quake<br>${x} km ${x < 0 ? "inland" : "off the coast"}<br>sea surface <b>${e} m</b>`,
+      gaugeTip: (n, pk, t) => `${n}<br>peak <b>${pk} m</b> at ${t} min`,
+      aria: "Four linked panels on one distance axis from 30 km inland to the open Pacific: the sea surface at the chosen time, the seafloor's vertical movement, a cross-section of the fault beneath the seafloor with catalog earthquakes near the line, and the sea surface over the first hour, each column one place and each row one moment."
+    },
+    ja: {
+      play: "再生", pause: "一時停止", min: "分",
+      readout: (r) => `<b>M<sub>w</sub> ${r.mw}</b>・海底は最大 <b>${r.up} m</b> 隆起・海岸は <b>${Math.abs(r.coastUp).toFixed(1)} m</b> ${r.coastUp < 0 ? "沈降" : "隆起"}し、東へ <b>${r.coastE} m</b> 動く・最初の盛り上がりは高さ <b>${r.eta} m</b>`,
+      slipV: v => `${v} m`, kmV: v => `${v} km`, degV: v => `${v}°`,
+      topV: (v, z) => `${v} km（深さ${z} km）`,
+      ve: v => `深さ70 kmまで、縦方向は${v}倍`, tAria: "地震発生からの経過時間（分）",
+      obsTip: (n, up, hz) => `${n}<br>2011年の実測：<b>${Math.abs(up)} m</b> ${up > 0 ? "隆起" : "沈降"}、東へ約${hz} m`,
+      bandTip: (up, hz) => `海溝に接する海底、繰り返しの海底地形調査から（Fujiwara et al. 2011）：約 <b>${up} m</b> 隆起、東へ${hz} m`,
+      buoyTip: (up, t) => `宮城中部沖GPS波浪計（水深144 m、この測線から約19 km）：${t}分後に最大 <b>${up} m</b>`,
+      tip: (t, x, e) => `地震の${t}分後<br>${x < 0 ? "内陸" : "海岸から沖へ"}${Math.abs(x)} km<br>海面 <b>${e} m</b>`,
+      gaugeTip: (n, pk, t) => `${n}<br>${t}分後に最大 <b>${pk} m</b>`,
+      aria: "陸から30 km内陸の地点から太平洋の沖まで、同じ距離軸を共有する4つの連動した図。選んだ時刻の海面、海底の上下の動き、海底下の断層の断面と測線近くのカタログの地震、最初の1時間の海面の変化（列が場所、行が時刻）。"
+    }
+  };
+  const tx = () => TXT[pageLang6()];
+
+  const PRESETS = {
+    trench: { slip: 60, top: 0, width: 180, dip: 10, shape: "taper" },
+    even: { slip: 38, top: 0, width: 180, dip: 10, shape: "even" },
+    deep: { slip: 38, top: 80, width: 180, dip: 10, shape: "even" }
+  };
+  const state = Object.assign({ preset: "trench", horiz: false, t: 0 }, PRESETS.trench);
+
+  const svg = d3.select(host).append("svg")
+    .attr("viewBox", `0 0 ${W} ${H}`).attr("width", "100%").style("display", "block")
     .attr("role", "img");
-  ariaBoth(svg,
-    "Cross-section of a subduction zone: ocean above oceanic crust and mantle. The step buttons show the fault rupturing, the seafloor lifting the water column, and waves radiating outward.",
-    "沈み込み帯の断面図。海洋の下に海洋地殻とマントルがある。ボタンで、断層の破壊、海底の隆起による水柱の変位、波の放射を順に示す。");
+  ariaBoth(svg, TXT.en.aria, TXT.ja.aria);
 
-  // Layers
-  const waterColor = "#3b82f6", waterLight = "#93c5fd", crustColor = "#78716c";
-  const mantleColor = "#a8a29e", seafloorColor = "#57534e";
+  Promise.all([
+    d3.json("shared/data/06-bathy-profile.json"),
+    d3.csv("shared/data/earthquakes.csv", d => d.type !== "earthquake" ? null : {
+      id: d.id, lat: +d.latitude, lon: +d.longitude, depth: +d.depth, mag: +d.mag
+    })
+  ]).then(([P, quakes]) => build(P, quakes));
 
-  let currentStep = 0;
+  function build(P, quakes) {
+    const n = P.elev.length;
+    const S = d3.range(n).map(i => P.s0 + i * P.ds);
+    const elev = P.elev;
+    const iOf = s => Math.max(0, Math.min(n - 1, Math.round((s - P.s0) / P.ds)));
+    // Trench: deepest point east of the epicentre. Coast: the last land-to-sea
+    // step west of the trench.
+    let iT = iOf(0);
+    for (let i = iOf(0); i < iOf(250); i++) if (elev[i] < elev[iT]) iT = i;
+    let iC = 0;
+    for (let i = 1; i < iT; i++) if (elev[i - 1] >= 0 && elev[i] < 0) iC = i;
+    const sT = S[iT], sC = S[iC], zTrench = -elev[iT] / 1000;
+    const iEnd = iOf(SEA_END), iStart = iOf(sC - INLAND);
+    const xk = s => s - sC;                       // km east of the coast
+    const x = d3.scaleLinear().domain([xk(S[iStart]), xk(S[iEnd])]).range([X0, X1]);
+    const refDepth = s => -elev[iOf(s)] / 1000;
+    const Sin = S.slice(iStart, iEnd + 1);
+    const water = d3.range(iC, iEnd + 1);        // SWE cells
+    const depthW = water.map(i => -elev[i]);
 
-  function draw(step, animate = true) {
-    svg.selectAll("*").remove();
-    const dur = animate ? 600 : 0;
-
-    // Ocean
-    const waterTop = 80;
-    const waterBottom = 220;
-    const crustBottom = 280;
-
-    // Mantle
-    svg.append("rect").attr("x", 0).attr("y", crustBottom)
-      .attr("width", W).attr("height", H - crustBottom).attr("fill", mantleColor).attr("opacity", 0.4);
-    svg.append("text").attr("x", 30).attr("y", crustBottom + 35)
-      .text("Mantle").attr("data-i18n", "svg_mantle").attr("fill", DARK ? "#d6d3d1" : "#78716c").attr("font-size", 11).attr("font-weight", 600);
-
-    // Crust. The megathrust surfaces at the trench (fx0) and dips under the
-    // overriding plate, down to the left (fx1 at the base of the crust).
-    const crustY = waterBottom;
-    const fx0 = W/2 + 20, fx1 = W/2 - 45;
-    const faultLine = () => svg.append("line").attr("x1", fx0).attr("y1", crustY).attr("x2", fx1).attr("y2", crustBottom)
-      .attr("stroke", "#ef4444").attr("stroke-width", 2).attr("stroke-dasharray", "6,4");
-    if (step === 0) {
-      // Unruptured seafloor
-      svg.append("rect").attr("x", 0).attr("y", crustY)
-        .attr("width", W).attr("height", crustBottom - crustY).attr("fill", seafloorColor);
-
-      // Fault line (dashed)
-      faultLine();
-      svg.append("text").attr("x", fx1 - 6).attr("y", crustBottom + 16).attr("text-anchor", "end")
-        .text("Fault plane").attr("data-i18n", "svg_fault_plane").attr("fill", DARK ? "#f87171" : "#dc2626").attr("font-size", 11).attr("font-weight", 600);
-
-      // Plate labels
-      svg.append("text").attr("x", W/2 - (narrow ? 50 : 60)).attr("y", crustY + 35)
-        .attr("text-anchor", "end")
-        .text("Overriding plate").attr("data-i18n", "svg_overriding_plate").attr("fill", "#fff").attr("font-size", 11).attr("font-weight", 600);
-      svg.append("text").attr("x", W/2 + 50).attr("y", crustY + 35)
-        .text("Subducting plate").attr("data-i18n", "svg_subducting_plate").attr("fill", "#fff").attr("font-size", 11).attr("font-weight", 600);
-
-      // Stress arrows
-      for (let i = 0; i < 3; i++) {
-        const ax = W/2 - 120 + i * 20;
-        svg.append("line").attr("x1", ax - 15).attr("y1", crustY + 15)
-          .attr("x2", ax).attr("y2", crustY + 15)
-          .attr("stroke", "#fbbf24").attr("stroke-width", 2).attr("marker-end", "url(#arrowY)");
-      }
-      for (let i = 0; i < 3; i++) {
-        const ax = W/2 + 100 + i * 20;
-        svg.append("line").attr("x1", ax + 15).attr("y1", crustY + 15)
-          .attr("x2", ax).attr("y2", crustY + 15)
-          .attr("stroke", "#fbbf24").attr("stroke-width", 2).attr("marker-end", "url(#arrowY)");
-      }
-    }
-
-    // Water
-    if (step < 2) {
-      const bulgeH = step >= 1 ? 15 : 0;
-      const waterPath = step >= 1
-        ? `M0,${waterTop} Q${W*0.25},${waterTop} ${W*0.35},${waterTop} Q${W*0.42},${waterTop - bulgeH} ${W*0.5},${waterTop - bulgeH} Q${W*0.58},${waterTop - bulgeH} ${W*0.65},${waterTop} Q${W*0.75},${waterTop} ${W},${waterTop} L${W},${waterBottom} L0,${waterBottom} Z`
-        : `M0,${waterTop} L${W},${waterTop} L${W},${waterBottom} L0,${waterBottom} Z`;
-      svg.append("path").attr("d", waterPath).attr("fill", waterColor).attr("opacity", 0.5);
-
-      if (step >= 1) {
-        // Water displacement arrows
-        for (let i = 0; i < 3; i++) {
-          const ax = W/2 - 40 + i * 40;
-          svg.append("line").attr("x1", ax).attr("y1", waterTop + 50)
-            .attr("x2", ax).attr("y2", waterTop - 5)
-            .attr("stroke", INK).attr("stroke-width", 2).attr("marker-end", "url(#arrowB)")
-            .attr("opacity", 0.7);
-        }
-        svg.append("text").attr("x", W/2).attr("y", waterTop - bulgeH - 12)
-          .text("Water column displaced upward").attr("data-i18n", "svg_water_displaced").attr("fill", INK).attr("font-size", 12)
-          .attr("font-weight", 600).attr("text-anchor", "middle");
-      }
-    } else {
-      // Step 3: waves radiating
-      const waveY = waterTop;
-      let waterD = `M0,${waveY}`;
-      const nWaves = 12;
-      const amp = 8;
-      for (let i = 0; i <= nWaves; i++) {
-        const x = (i / nWaves) * W;
-        const distFromCenter = Math.abs(x - W/2) / (W/2);
-        const envelope = Math.exp(-distFromCenter * 1.5) * amp;
-        const phase = (i - nWaves/2) * 0.8;
-        const y = waveY - Math.sin(phase) * envelope;
-        waterD += ` L${x},${y}`;
-      }
-      waterD += ` L${W},${waterBottom} L0,${waterBottom} Z`;
-      svg.append("path").attr("d", waterD).attr("fill", waterColor).attr("opacity", 0.5);
-
-      // Radiation arrows
-      const arrowData = [
-        { x1: W/2 - 50, y1: waveY + 20, x2: W/2 - 130, y2: waveY + 20 },
-        { x1: W/2 + 50, y1: waveY + 20, x2: W/2 + 130, y2: waveY + 20 },
-      ];
-      arrowData.forEach(a => {
-        svg.append("line").attr("x1", a.x1).attr("y1", a.y1)
-          .attr("x2", a.x2).attr("y2", a.y2)
-          .attr("stroke", INK).attr("stroke-width", 2.5).attr("marker-end", "url(#arrowB)");
-      });
-      svg.append("text").attr("x", W/2).attr("y", waveY - 18)
-        .text("Waves radiate in all directions").attr("data-i18n", "svg_waves_radiate").attr("fill", INK).attr("font-size", 12)
-        .attr("font-weight", 600).attr("text-anchor", "middle");
-    }
-
-    // Ruptured crust, drawn over the water so the lifted wedge is solid.
-    // The hanging wall (left of the fault) springs up toward the trench.
-    if (step >= 1) {
-      const liftAmount = 18;
-      // Right block (subducting), beneath the fault
-      svg.append("path").attr("d", `M${fx0},${crustY} L${W},${crustY} L${W},${crustBottom} L${fx1},${crustBottom} Z`)
-        .attr("fill", seafloorColor);
-      // Left block (lifted), above the fault
-      svg.append("path").attr("d", `M0,${crustY} L${fx0 - 10},${crustY - liftAmount} L${fx0},${crustY} L${fx1},${crustBottom} L0,${crustBottom} Z`)
-        .attr("fill", "#4b4540");
-      faultLine();
-      // Uplift arrows
-      for (let i = 0; i < 4; i++) {
-        const ax = W/2 - 180 + i * 50;
-        svg.append("line").attr("x1", ax).attr("y1", crustY + 5)
-          .attr("x2", ax).attr("y2", crustY - 30)
-          .attr("stroke", "#ef4444").attr("stroke-width", 2.5).attr("marker-end", "url(#arrowR)");
-      }
-      svg.append("text").attr("x", W/2 - 120).attr("y", crustY - 35)
-        .text("Seafloor lifts 5-8 m").attr("data-i18n", "svg_seafloor_lifts").attr("fill", DARK ? "#fca5a5" : "#b91c1c").attr("font-size", 12).attr("font-weight", 600)
-        .attr("text-anchor", "middle");
-    }
-
-    // Sky/labels
-    svg.append("text").attr("x", 15).attr("y", waterTop + 40)
-      .text("Ocean").attr("data-i18n", "svg_ocean").attr("fill", INK).attr("font-size", 11).attr("font-weight", 600);
-    svg.append("text").attr("x", 15).attr("y", waterBottom + 25)
-      .text("Crust").attr("data-i18n", "svg_crust").attr("fill", "#fff").attr("font-size", 11).attr("font-weight", 600);
-    svg.append("text").attr("x", 15).attr("y", 30)
-      .text("Surface").attr("data-i18n", "svg_surface").attr("fill", MUTED).attr("font-size", 11);
-
-    // Surface line
-    svg.append("line").attr("x1", 0).attr("y1", waterTop).attr("x2", W).attr("y2", waterTop)
-      .attr("stroke", "#60a5fa").attr("stroke-width", 1).attr("stroke-dasharray", "4,4").attr("opacity", 0.5);
-
-    // Defs for arrows
-    const defs = svg.append("defs");
-    defs.append("marker").attr("id", "arrowR").attr("viewBox", "0 0 10 10")
-      .attr("refX", 9).attr("refY", 5).attr("markerWidth", 6).attr("markerHeight", 6)
-      .attr("orient", "auto").append("path").attr("d", "M0,0 L10,5 L0,10 Z").attr("fill", "#ef4444");
-    defs.append("marker").attr("id", "arrowB").attr("viewBox", "0 0 10 10")
-      .attr("refX", 9).attr("refY", 5).attr("markerWidth", 6).attr("markerHeight", 6)
-      .attr("orient", "auto").append("path").attr("d", "M0,0 L10,5 L0,10 Z").attr("fill", INK);
-    defs.append("marker").attr("id", "arrowY").attr("viewBox", "0 0 10 10")
-      .attr("refX", 9).attr("refY", 5).attr("markerWidth", 6).attr("markerHeight", 6)
-      .attr("orient", "auto").append("path").attr("d", "M0,0 L10,5 L0,10 Z").attr("fill", "#fbbf24");
-  }
-
-  function reapplyI18n() {
-    var lang = window.getPageLang ? window.getPageLang() : "en";
-    var ja = window.PAGE_JA || {};
-    if (lang === "ja") svg.selectAll("[data-i18n]").each(function() {
-      var key = this.getAttribute("data-i18n");
-      if (ja[key]) this.textContent = ja[key];
+    // Catalog events within 40 km of the line, and the 2011 mainshock
+    const az = P.azimuth * Math.PI / 180, lat0 = P.epicentre[0], lon0 = P.epicentre[1];
+    const kmLon = 111.2 * Math.cos(lat0 * Math.PI / 180);
+    const proj = q => {
+      const e = (q.lon - lon0) * kmLon, nn = (q.lat - lat0) * 111.2;
+      return { s: e * Math.sin(az) + nn * Math.cos(az), off: e * Math.cos(az) - nn * Math.sin(az) };
+    };
+    const near = [];
+    let main = null;
+    quakes.forEach(q => {
+      const p = proj(q);
+      if (q.mag >= 9) main = Object.assign({}, q, p);
+      if (Math.abs(p.off) <= 40 && p.s >= S[iStart] && p.s <= SEA_END && q.depth <= 80)
+        near.push(Object.assign({}, q, p));
     });
-    fsText(svg, fs);
-    fitText(svg, W);
-  }
 
-  draw(0, false);
-  reapplyI18n();
+    // Measured 2011 seafloor and ground motion near the line (within 20 km of it).
+    // Sources in plans/japan-earthquakes/LEDGER.md (06, tsunami source figure).
+    const OBS = [
+      { lat: 38.301, lon: 141.501, up: -1.2, hz: 5.3, en: "GSI GNSS station Oshika", ja: "国土地理院の電子基準点「牡鹿」" },
+      { lat: 38.150, lon: 142.433, up: -0.8, hz: 15, en: "Seafloor station MYGW (Japan Coast Guard)", ja: "海底局 宮城沖2（海上保安庁）" },
+      { lat: 38.083, lon: 142.916, up: 3, hz: 24, en: "Seafloor station MYGI (Sato et al. 2011)", ja: "海底局 宮城沖1（Sato et al. 2011）" }
+    ].map(o => Object.assign(o, proj(o)));
+    // Repeated bathymetry: about 10 m up and 50 m east over the 40 km of slope
+    // next to the trench (Fujiwara et al. 2011)
+    const BAND = { s0: sT - 40, s1: sT, up: 10, hz: 50 };
+    // Miyagi-Central GPS buoy (NOWPHAS 801G, 144 m deep): 4.83 m at 15:16 JST
+    const BUOY = { up: 4.83, t: (15 * 60 + 16) - (14 * 60 + 46.4) };
 
-  d3.selectAll("#cross-section-steps .step-btn").on("click", function() {
-    const step = +this.dataset.step;
-    if (step === currentStep) return;
-    currentStep = step;
-    d3.selectAll("#cross-section-steps .step-btn").classed("active", false);
-    d3.select(this).classed("active", true);
-    // Fade out, redraw, fade in with cubicInOut easing
-    svg.transition().duration(200).ease(d3.easeCubicInOut).style("opacity", 0)
-      .on("end", function() {
-        draw(step, false);
-        reapplyI18n();
-        svg.transition().duration(300).ease(d3.easeCubicInOut).style("opacity", 1);
+    // ---- layers ----
+    const gGuides = svg.append("g");
+    const gSea = svg.append("g"), gFloor = svg.append("g"), gSec = svg.append("g");
+    const gHov = svg.append("g"), gMar = svg.append("g"), gLab = svg.append("g");
+    const yDepth = d3.scaleLinear().domain([-1, 70]).range(ROW.sec);
+    const yTime = d3.scaleLinear().domain([0, TMAX]).range(ROW.hov);
+
+    // Static: section background, ocean, catalog quakes
+    const surfPts = Sin.map(s => [x(xk(s)), yDepth(Math.max(-1, -elev[iOf(s)] / 1000))]);
+    gSec.append("rect").attr("x", X0).attr("y", ROW.sec[0]).attr("width", X1 - X0)
+      .attr("height", ROW.sec[1] - ROW.sec[0]).attr("fill", C.lower);
+    const upperPath = gSec.append("path").attr("fill", C.upper);
+    const oceanPath = "M" + [[x(0), yDepth(0)], [X1, yDepth(0)]].concat(
+      Sin.filter(s => s >= sC).reverse().map(s => [x(xk(s)), yDepth(-elev[iOf(s)] / 1000)])).join("L") + "Z";
+    gSec.append("path").attr("d", oceanPath).attr("fill", C.ocean);
+    // above sea level on land: sky stays figure background
+    gSec.append("path").attr("d", "M" + [[X0, ROW.sec[0]]].concat(surfPts.filter(p => p[0] <= x(0)), [[x(0), ROW.sec[0]]]).join("L") + "Z")
+      .attr("fill", C.mid);
+    const faceLine = gSec.append("path").attr("fill", "none").attr("stroke", C.muted)
+      .attr("stroke-dasharray", "4 3").attr("stroke-width", 1);
+    const rupture = gSec.append("path").attr("fill", C.fault).attr("fill-opacity", 0.85);
+    gSec.append("path").attr("d", d3.line()(surfPts)).attr("fill", "none").attr("stroke", C.muted).attr("stroke-width", 0.8);
+    const rq = d3.scaleSqrt().domain([4.5, 9.1]).range([1.2, 5]);
+    const quakeSel = gSec.append("g").selectAll("circle").data(near.filter(q => q.mag < 9)).join("circle")
+      .attr("cx", q => x(xk(q.s))).attr("cy", q => yDepth(q.depth)).attr("r", q => rq(q.mag))
+      .attr("fill", C.quake).attr("fill-opacity", 0.35);
+    if (main) {
+      const star = d3.symbol().type(d3.symbolStar).size(150);
+      gSec.append("path").attr("d", star).attr("transform", `translate(${x(xk(main.s))},${yDepth(main.depth)})`)
+        .attr("fill", C.obs).attr("stroke", C.ink).attr("stroke-width", 0.8);
+    }
+    gSec.append("clipPath").attr("id", "src-sec-clip").append("rect")
+      .attr("x", X0).attr("y", ROW.sec[0]).attr("width", X1 - X0).attr("height", ROW.sec[1] - ROW.sec[0]);
+    gSec.attr("clip-path", "url(#src-sec-clip)");
+
+    // Section labels (outside the clip)
+    const lab = (xx, yy, key, en, opt = {}) => gLab.append("text").attr("x", xx).attr("y", yy)
+      .attr("data-i18n", key).attr("data-en", en).text(en)
+      .attr("font-size", opt.size || 10.5).attr("fill", opt.fill || C.muted)
+      .attr("text-anchor", opt.anchor || "start").attr("font-weight", opt.weight || 400);
+    lab(x(xk(sT)) + 4, yDepth(zTrench) + 14, "src_l_trench", "Japan Trench", { fill: C.ink, weight: 600 });
+    lab(x(xk(sT)) + 30, ROW.sec[1] - 22, "src_l_pacific", "Pacific Plate", { fill: C.ink });
+    lab(x(20), yDepth(12), "src_l_upper", "Okhotsk Plate", { fill: C.ink });
+    lab(x(xk(sT)) - 6, yDepth(0) - 3, "src_l_ocean", "Pacific Ocean", { anchor: "end", fill: DARK ? "#93c5fd" : "#1e40af", size: 9.5 });
+    if (main) lab(x(xk(main.s)) - 9, yDepth(main.depth) - 6, "src_l_hypo", "2011 hypocentre", { fill: C.ink, size: 10, anchor: "end" });
+    const ve = ((yDepth(1) - yDepth(0)) / (x(1) - x(0))).toFixed(1);
+    const veLab = gLab.append("text").attr("x", X0 + 2).attr("y", ROW.sec[1] - 4)
+      .attr("font-size", 9.5).attr("fill", C.muted);
+
+    // Row titles (right column)
+    const RX = X1 + 10;
+    const rowTitle = (yy, key, en) => lab(RX, yy, key, en, { fill: C.ink, weight: 600, size: 10.5 });
+    rowTitle(ROW.sea[0] + 10, "src_r_sea", "Sea surface");
+    rowTitle(ROW.floor[0] + 10, "src_r_floor", "Seafloor moves");
+    rowTitle(ROW.sec[0] + 10, "src_r_sec", "The fault");
+    rowTitle(ROW.hov[0] - (narrow ? 14 : 6), "src_r_mar", "Two gauges");
+
+    // Guides: coast, epicentre, trench through every panel
+    const guides = [
+      { s: sC, key: "src_g_coast", en: "coast" },
+      { s: 0, key: "src_g_epi", en: "epicentre" },
+      { s: sT, key: "src_g_trench", en: "trench" }
+    ];
+    guides.forEach(g => {
+      gGuides.append("line").attr("x1", x(xk(g.s))).attr("x2", x(xk(g.s)))
+        .attr("y1", ROW.sea[0]).attr("y2", ROW.hov[1]).attr("stroke", C.grid).attr("stroke-dasharray", "2 3");
+      lab(x(xk(g.s)), ROW.sea[0] - 6, g.key, g.en, { anchor: "middle", size: 10 });
+    });
+
+    // Axes
+    const axX = svg.append("g").attr("class", "axis").attr("transform", `translate(0,${ROW.hov[1]})`)
+      .call(d3.axisBottom(x).ticks(narrow ? 5 : 8).tickSizeOuter(0));
+    lab(X1, ROW.hov[1] + 30, "src_ax_x", "km east of the coast", { anchor: "end", size: 10 });
+    svg.append("g").attr("class", "axis").attr("transform", `translate(${X0},0)`)
+      .call(d3.axisLeft(yTime).ticks(6).tickSizeOuter(0));
+    lab(X0 - 4, ROW.hov[0] - 6, "src_ax_t", "min", { anchor: "end", size: 10 });
+    svg.append("g").attr("class", "axis").attr("transform", `translate(${X0},0)`)
+      .call(d3.axisLeft(yDepth).tickValues([0, 20, 40, 60]).tickSizeOuter(0));
+
+    // Sea-surface strip
+    const ySea = d3.scaleLinear().range([ROW.sea[1], ROW.sea[0]]);
+    gSea.append("line").attr("x1", x(0)).attr("x2", X1).attr("stroke", C.grid);
+    const seaUp = gSea.append("path").attr("fill", C.up).attr("fill-opacity", 0.3);
+    const seaDown = gSea.append("path").attr("fill", C.down).attr("fill-opacity", 0.3);
+    const seaInit = gSea.append("path").attr("fill", "none").attr("stroke", C.muted).attr("stroke-dasharray", "3 3");
+    const seaLine = gSea.append("path").attr("fill", "none").attr("stroke", C.wave).attr("stroke-width", 1.6);
+    const seaAx = gSea.append("g").attr("class", "axis").attr("transform", `translate(${X0},0)`);
+    const tLabel = gSea.append("text").attr("x", X1 + 10).attr("y", ROW.sea[0] + 28)
+      .attr("font-size", 13).attr("font-weight", 600).attr("fill", C.wave);
+
+    // Seafloor strip
+    const yFl = d3.scaleSymlog().constant(0.5).range([ROW.floor[1], ROW.floor[0]]);
+    gFloor.append("line").attr("x1", X0).attr("x2", X1).attr("stroke", C.grid).attr("class", "zero");
+    const flUp = gFloor.append("path").attr("fill", C.up).attr("fill-opacity", 0.35);
+    const flDown = gFloor.append("path").attr("fill", C.down).attr("fill-opacity", 0.35);
+    const flLine = gFloor.append("path").attr("fill", "none").attr("stroke", C.ink).attr("stroke-width", 1.1);
+    const flEff = gFloor.append("path").attr("fill", "none").attr("stroke", C.ink).attr("stroke-width", 1).attr("stroke-dasharray", "4 2");
+    const flAx = gFloor.append("g").attr("class", "axis").attr("transform", `translate(${X0},0)`);
+    const obsG = gFloor.append("g");
+
+    // Hovmöller image + marigrams
+    const xW0 = x(xk(S[iC])) - (x(1) - x(0)) / 2, xW1 = x(xk(S[iEnd])) + (x(1) - x(0)) / 2;
+    gHov.append("rect").attr("x", X0).attr("y", ROW.hov[0]).attr("width", xW0 - X0)
+      .attr("height", ROW.hov[1] - ROW.hov[0]).attr("fill", C.upper);
+    lab((X0 + xW0) / 2, ROW.hov[1] - 6, "src_l_land", "land", { anchor: "middle", size: 10 });
+    const canvas = document.createElement("canvas");
+    canvas.width = water.length; canvas.height = TMAX * 60 / EVERY + 1;
+    const ctx = canvas.getContext("2d");
+    const hovImg = gHov.append("image").attr("x", xW0).attr("y", ROW.hov[0])
+      .attr("width", xW1 - xW0).attr("height", ROW.hov[1] - ROW.hov[0])
+      .attr("preserveAspectRatio", "none").style("image-rendering", "auto");
+    const hovHit = gHov.append("rect").attr("x", xW0).attr("y", ROW.hov[0])
+      .attr("width", xW1 - xW0).attr("height", ROW.hov[1] - ROW.hov[0])
+      .attr("fill", "transparent").style("cursor", "crosshair");
+    const cursor = gHov.append("line").attr("x1", X0).attr("x2", W - 6)
+      .attr("stroke", C.ink).attr("stroke-width", 1).attr("stroke-opacity", 0.7);
+
+    // Two gauges: near shore (the first cell at least 140 m deep) and above the epicentre
+    let iG1 = water.findIndex(i => -elev[i] >= 140);
+    const iG2 = water.indexOf(iOf(0));
+    const gauges = [
+      { k: iG1, key: "src_g1", en: "Near shore", dash: null },
+      { k: iG2, key: "src_g2", en: "Above epicentre", dash: "4 2" }
+    ];
+    const MX0 = X1 + 12, MX1 = W - 8;
+    const xMar = d3.scaleLinear().range([MX0, MX1]);
+    gMar.append("line").attr("class", "mzero").attr("y1", ROW.hov[0]).attr("y2", ROW.hov[1]).attr("stroke", C.grid);
+    const marPaths = gauges.map(g => gMar.append("path").attr("fill", "none").attr("stroke", C.wave)
+      .attr("stroke-width", 1.3).attr("stroke-dasharray", g.dash));
+    const marAx = gMar.append("g").attr("class", "axis").attr("transform", `translate(0,${ROW.hov[1]})`);
+    gauges.forEach((g, j) => {
+      const gx = x(xk(S[water[g.k]]));
+      gHov.append("path").attr("d", d3.symbol().type(d3.symbolTriangle).size(40))
+        .attr("transform", `translate(${gx},${ROW.hov[0] - 5}) rotate(180)`).attr("fill", C.wave);
+      const ly = ROW.hov[0] + 10 + j * 13;
+      gMar.append("line").attr("x1", MX0).attr("x2", MX0 + 14).attr("y1", ly - 3).attr("y2", ly - 3)
+        .attr("stroke", C.wave).attr("stroke-width", 1.5).attr("stroke-dasharray", g.dash);
+      gMar.append("rect").attr("x", MX0 + 16).attr("y", ly - 10).attr("width", MX1 - MX0 - 16).attr("height", 12).attr("fill", C.mid).attr("fill-opacity", 0.85);
+      gMar.append("text").attr("x", MX0 + 18).attr("y", ly)
+        .attr("data-i18n", g.key).attr("data-en", g.en).text(g.en).attr("font-size", 9.5).attr("fill", C.ink);
+    });
+
+    // ---- model ----
+    let model = null;
+    function faultOpts() {
+      const dip = state.dip * Math.PI / 180;
+      const zT = zTrench + 1;                      // interface 1 km below the trench floor
+      const sTop = sT - state.top, zTop = zT + state.top * Math.tan(dip);
+      const shape = state.shape, S0 = state.slip;
+      return {
+        sTop, zTop, W: state.width, L: L_KM, dipDeg: state.dip, zT,
+        slipAt: shape === "taper" ? f => S0 * (1 - 0.75 * f) : () => S0
+      };
+    }
+    function compute() {
+      const o = faultOpts();
+      const { ue, uz } = TS.seafloorDisplacement(o, Sin, refDepth);
+      const off = iC - iStart;
+      const ueW = ue.slice(off, off + water.length), uzW = uz.slice(off, off + water.length);
+      const { src, eta } = TS.initialSurface(ueW, uzW, depthW, P.ds, state.horiz);
+      const sim = TS.simulate(eta, depthW, P.ds, TMAX * 60, EVERY);
+      const mw = TS.momentMagnitude(o);
+      model = { o, ue, uz, src, eta, sim, mw };
+      drawStatic();
+      state.t = Math.min(state.t, TMAX);
+      drawTime();
+    }
+
+    function drawStatic() {
+      const { o, uz, src, eta, sim, mw } = model;
+      // Section: overriding plate above the interface, the rupture as a band
+      const dip = o.dipDeg * Math.PI / 180, tn = Math.tan(dip);
+      const zAt = s => o.zT + (sT - s) * tn;
+      const sLeft = S[iStart];
+      const upper = Sin.filter(s => s <= sT).map(s => [x(xk(s)), yDepth(Math.max(-1, -elev[iOf(s)] / 1000))]);
+      upper.push([x(xk(sT)), yDepth(o.zT)], [x(xk(sLeft)), yDepth(zAt(sLeft))]);
+      upperPath.attr("d", "M" + upper.join("L") + "Z");
+      faceLine.attr("d", d3.line()([[x(xk(sT)), yDepth(o.zT)], [x(xk(sLeft)), yDepth(zAt(sLeft))]]));
+      const cs = Math.cos(dip), sn = Math.sin(dip), pxPerM = 0.16;
+      const top = [], bot = [];
+      for (let k = 0; k <= 24; k++) {
+        const f = k / 24, along = f * o.W;
+        const s = o.sTop - along * cs, z = o.zTop + along * sn;
+        const th = Math.max(0.6, o.slipAt(Math.min(f, 0.999)) * pxPerM);
+        const px = x(xk(s)), py = yDepth(z);
+        // perpendicular to the plane on screen
+        const dx = x(xk(s - cs)) - px, dy = yDepth(z + sn) - py, len = Math.hypot(dx, dy);
+        top.push([px - dy / len * th, py + dx / len * th]);
+        bot.push([px + dy / len * th, py - dx / len * th]);
+      }
+      rupture.attr("d", "M" + top.concat(bot.reverse()).join("L") + "Z");
+
+      // Seafloor strip
+      const U = Math.max(1, d3.max(uz, Math.abs), state.horiz ? d3.max(src, Math.abs) : 0);
+      yFl.domain([-U, U]);
+      const pts = Sin.map((s, i) => [x(xk(s)), uz[i]]);
+      flUp.attr("d", d3.area().x(p => p[0]).y0(yFl(0)).y1(p => yFl(Math.max(0, p[1])))(pts));
+      flDown.attr("d", d3.area().x(p => p[0]).y0(yFl(0)).y1(p => yFl(Math.min(0, p[1])))(pts));
+      flLine.attr("d", d3.line().x(p => p[0]).y(p => yFl(p[1]))(pts));
+      flEff.attr("d", state.horiz ? d3.line()(water.map((i, k) => [x(xk(S[i])), yFl(src[k])])) : null);
+      gFloor.select(".zero").attr("y1", yFl(0)).attr("y2", yFl(0));
+      obsG.selectAll("*").remove();
+      obsG.append("line").attr("x1", x(xk(BAND.s0))).attr("x2", x(xk(BAND.s1)))
+        .attr("y1", yFl(BAND.up)).attr("y2", yFl(BAND.up)).attr("stroke", C.obs).attr("stroke-width", 3)
+        .call(sel => bindTip(sel, () => tx().bandTip(BAND.up, BAND.hz)));
+      obsG.selectAll("path.ob").data(OBS).join("path").attr("class", "ob")
+        .attr("d", d3.symbol().type(d3.symbolDiamond).size(46))
+        .attr("transform", o => `translate(${x(xk(o.s))},${yFl(o.up)})`)
+        .attr("fill", C.obs).attr("stroke", C.mid).attr("stroke-width", 0.8)
+        .call(sel => bindTip(sel, o => tx().obsTip(pageLang6() === "ja" ? o.ja : o.en, o.up, o.hz)));
+      flAx.call(d3.axisLeft(yFl).tickValues((narrow ? [-10, 0, 10] : [-10, -1, 0, 1, 10]).filter(v => Math.abs(v) <= U)).tickFormat(d3.format("d")).tickSizeOuter(0));
+
+      // Sea strip scale: largest wave away from the wall (beyond 10 km offshore)
+      const k10 = water.findIndex(i => xk(S[i]) >= 10);
+      let A = 0;
+      sim.frames.forEach(f => { for (let k = k10; k < f.length; k++) A = Math.max(A, Math.abs(f[k])); });
+      A = Math.max(1, A);
+      ySea.domain([-A, A]).nice();
+      seaAx.call(d3.axisLeft(ySea).ticks(narrow ? 2 : 3).tickSizeOuter(0));
+      seaInit.attr("d", d3.line()(water.map((i, k) => [x(xk(S[i])), ySea(clampA(eta[k]))])));
+      gSea.select("line").attr("y1", ySea(0)).attr("y2", ySea(0));
+
+      // Hovmöller: colour by eta / A
+      const img = ctx.createImageData(canvas.width, canvas.height);
+      sim.frames.forEach((f, r) => {
+        for (let k = 0; k < f.length; k++) {
+          const c = d3.rgb(divColor(f[k] / A)), o4 = (r * canvas.width + k) * 4;
+          img.data[o4] = c.r; img.data[o4 + 1] = c.g; img.data[o4 + 2] = c.b; img.data[o4 + 3] = 255;
+        }
       });
-  });
+      ctx.putImageData(img, 0, 0);
+      hovImg.attr("href", canvas.toDataURL());
 
-  window.addEventListener("langchange", function() {
-    draw(currentStep, false);
-    reapplyI18n();
-  });
+      // Marigrams
+      const series = gauges.map(g => sim.frames.map(f => f[g.k]));
+      const B = Math.max(0.5, d3.max(series.flat(), Math.abs));
+      xMar.domain([-B, B]).nice();
+      gMar.select(".mzero").attr("x1", xMar(0)).attr("x2", xMar(0));
+      series.forEach((ser, j) => marPaths[j].attr("d",
+        d3.line().x(v => xMar(v)).y((v, r) => yTime(r * EVERY / 60))(ser)));
+      gMar.selectAll("path.buoy").data([BUOY]).join("path").attr("class", "buoy")
+        .attr("d", d3.symbol().type(d3.symbolDiamond).size(46))
+        .attr("transform", b => `translate(${xMar(b.up)},${yTime(b.t)})`)
+        .attr("fill", C.obs).attr("stroke", C.mid).attr("stroke-width", 0.8)
+        .call(sel => bindTip(sel, b => tx().buoyTip(b.up, Math.round(b.t))));
+      marAx.call(d3.axisBottom(xMar).tickValues(narrow ? [0] : xMar.ticks(2)).tickSizeOuter(0));
+      gauges.forEach((g, j) => {
+        const ser = series[j]; let r = d3.maxIndex(ser);
+        g.peak = ser[r]; g.tPeak = r * EVERY / 60;
+      });
+      bindTip(marPaths[0], () => tx().gaugeTip(gauges[0].label || gauges[0].en, gauges[0].peak.toFixed(1), Math.round(gauges[0].tPeak)));
+      bindTip(marPaths[1], () => tx().gaugeTip(gauges[1].label || gauges[1].en, gauges[1].peak.toFixed(1), Math.round(gauges[1].tPeak)));
+
+      // Readout
+      const coastUp = uz[iC - iStart], coastE = model.ue[iC - iStart];
+      model.read = {
+        mw: mw.Mw.toFixed(2), up: d3.max(uz).toFixed(1), coastUp,
+        coastE: coastE.toFixed(1), eta: d3.max(eta).toFixed(1)
+      };
+      writeReadout();
+      fsText(svg, fs); fitLabels();
+    }
+    function clampA(v) { const d = ySea.domain(); return Math.max(d[0], Math.min(d[1], v)); }
+
+    function drawTime() {
+      const r = Math.round(state.t * 60 / EVERY);
+      const f = model.sim.frames[r];
+      const pts = water.map((i, k) => [x(xk(S[i])), clampA(f[k])]);
+      seaLine.attr("d", d3.line().x(p => p[0]).y(p => ySea(p[1]))(pts));
+      seaUp.attr("d", d3.area().x(p => p[0]).y0(ySea(0)).y1(p => ySea(Math.max(0, p[1])))(pts));
+      seaDown.attr("d", d3.area().x(p => p[0]).y0(ySea(0)).y1(p => ySea(Math.min(0, p[1])))(pts));
+      cursor.attr("y1", yTime(state.t)).attr("y2", yTime(state.t));
+      tLabel.text(`t = ${state.t % 1 ? state.t.toFixed(1) : state.t} ${tx().min}`);
+      tSlider.value = state.t;
+      tOut.textContent = `${state.t % 1 ? state.t.toFixed(1) : state.t} ${tx().min}`;
+    }
+
+    function writeReadout() {
+      document.getElementById("src-readout").innerHTML = tx().readout(model.read);
+    }
+    function fitLabels() { fitText(svg, W); }
+
+    // ---- controls ----
+    const sl = {
+      slip: document.getElementById("src-slip"), top: document.getElementById("src-top"),
+      width: document.getElementById("src-width"), dip: document.getElementById("src-dip")
+    };
+    const outs = {
+      slip: document.getElementById("src-slip-v"), top: document.getElementById("src-top-v"),
+      width: document.getElementById("src-width-v"), dip: document.getElementById("src-dip-v")
+    };
+    function writeOuts() {
+      const T = tx();
+      outs.slip.textContent = T.slipV(state.slip);
+      const z = (zTrench + 1 + state.top * Math.tan(state.dip * Math.PI / 180)).toFixed(0);
+      outs.top.textContent = T.topV(state.top, z);
+      outs.width.textContent = T.kmV(state.width);
+      outs.dip.textContent = T.degV(state.dip);
+    }
+    function syncInputs() {
+      Object.keys(sl).forEach(k => { sl[k].value = state[k]; });
+      document.getElementById("src-horiz").checked = state.horiz;
+      d3.selectAll("#fig-source [data-preset]").classed("active", function () { return this.dataset.preset === state.preset; });
+      writeOuts();
+    }
+    let pending = false;
+    const schedule = () => { if (pending) return; pending = true; requestAnimationFrame(() => { pending = false; compute(); }); };
+    Object.keys(sl).forEach(k => sl[k].addEventListener("input", () => {
+      state[k] = +sl[k].value; state.preset = null; syncInputs(); schedule();
+    }));
+    document.getElementById("src-horiz").addEventListener("change", e => { state.horiz = e.target.checked; schedule(); });
+    d3.selectAll("#fig-source [data-preset]").on("click", function () {
+      Object.assign(state, PRESETS[this.dataset.preset], { preset: this.dataset.preset });
+      syncInputs(); schedule();
+    });
+
+    const tSlider = document.getElementById("src-t"), tOut = document.getElementById("src-t-v");
+    const playBtn = document.getElementById("src-play");
+    let playing = false, last = null, raf = null;
+    function setPlaying(p) {
+      playing = p; playBtn.textContent = p ? tx().pause : tx().play;
+      if (p && !raf) { last = null; raf = requestAnimationFrame(step); }
+    }
+    function step(ts) {
+      raf = null;
+      if (!playing) return;
+      if (last !== null) state.t = Math.min(TMAX, state.t + (ts - last) / 1000 * 4); // 4 minutes per second
+      last = ts;
+      drawTime();
+      if (state.t >= TMAX) { setPlaying(false); return; }
+      raf = requestAnimationFrame(step);
+    }
+    playBtn.addEventListener("click", () => {
+      if (!playing && state.t >= TMAX) state.t = 0;
+      setPlaying(!playing);
+    });
+    tSlider.addEventListener("input", () => { setPlaying(false); state.t = +tSlider.value; drawTime(); });
+    const tAt = ev => Math.max(0, Math.min(TMAX, yTime.invert(d3.pointer(ev, svg.node())[1])));
+    hovHit.on("click", ev => { setPlaying(false); state.t = Math.round(tAt(ev) * 2) / 2; drawTime(); });
+    bindTip(hovHit, function (d, ev) {
+      const [px] = d3.pointer(ev, svg.node());
+      const k = Math.max(0, Math.min(water.length - 1, Math.round((px - xW0) / (xW1 - xW0) * water.length - 0.5)));
+      const t = tAt(ev), r = Math.round(t * 60 / EVERY);
+      return tx().tip(Math.round(t), Math.round(xk(S[water[k]])), model.sim.frames[r][k].toFixed(1));
+    });
+
+    // Autoplay once when first seen, unless motion is reduced
+    // onVisible reports "visible" once synchronously before the observer has
+    // measured anything; only the observer's own reports count.
+    let seen = false, measured = false;
+    Motion.onVisible(host, v => {
+      if (!measured) return;
+      if (!v) { if (playing) setPlaying(false); return; }
+      if (!seen && !Motion.reduced()) { state.t = 0; setPlaying(true); }
+      seen = true;
+    });
+    measured = true;
+
+    function applyLang() {
+      const ja = pageLang6() === "ja", J = window.PAGE_JA || {};
+      svg.selectAll("text[data-i18n]").each(function () {
+        const k = this.getAttribute("data-i18n");
+        this.textContent = ja && J[k] ? J[k] : this.dataset.en;
+      });
+      gauges.forEach(g => { g.label = ja && J[g.key] ? J[g.key] : g.en; });
+      playBtn.textContent = playing ? tx().pause : tx().play;
+      veLab.text(tx().ve(ve));
+      tSlider.setAttribute("aria-label", tx().tAria);
+      writeOuts(); writeReadout(); drawTime(); fitLabels();
+    }
+    window.addEventListener("langchange", applyLang);
+
+    syncInputs();
+    compute();
+    applyLang();
+  }
 })();
 
 // ============================================================
@@ -1682,13 +2025,39 @@ document.addEventListener("click", ev => {
 </script>
 <script>
 window.PAGE_JA = {
+  "src_p_trench": "海溝付近ですべりが最大（2011年型）",
+  "src_p_even": "同じ規模で、すべりを均等に",
+  "src_p_deep": "同じ規模で、もっと陸寄りの陸棚の下",
+  "src_horiz": "傾いた海底が水平に動く効果を加える",
+  "src_slip": "最大すべり量",
+  "src_top": "上端の位置（海溝から陸側へ）",
+  "src_width": "傾斜方向の幅",
+  "src_dip": "傾斜角",
+  "src_l_trench": "日本海溝",
+  "src_l_pacific": "太平洋プレート",
+  "src_l_upper": "オホーツクプレート",
+  "src_l_ocean": "太平洋",
+  "src_l_hypo": "2011年の震源",
+  "src_l_land": "陸",
+  "src_r_sea": "海面",
+  "src_r_floor": "海底の動き",
+  "src_r_sec": "断層",
+  "src_r_mar": "2地点の記録",
+  "src_g_coast": "海岸",
+  "src_g_epi": "震央",
+  "src_g_trench": "海溝",
+  "src_ax_x": "海岸から東への距離（km）",
+  "src_ax_t": "分",
+  "src_g1": "沿岸",
+  "src_g2": "震央の上",
+  "caption_source": "<span style=\"font-weight:600;color:var(--text);\">図.</span> 震央を通り日本海溝を横切る1本の測線に沿った、2011年の波源のモデル。海底地形は実測（ETOPO1）。弾性体の中の長さ210 kmの長方形断層（Okada 1985）のすべりが海底を動かす。断層の浅い部分の上では隆起し、海岸では沈降する。海水はその形を瞬時に写し取り、水深ほどの幅でならされる。盛り上がりは二つに分かれ、半分は沖へ、半分は海岸へ向かい、浅くなるにつれて遅く、高くなる（線形浅水方程式）。下の図は測線上のすべての地点（横）と最初の1時間のすべての時刻（縦）を示し、右の2本の線は三角印の2地点の海面。灰色の点は測線から40 km以内のカタログの地震、星は2011年の震源。オレンジの印は2011年の観測値で、地面と海底の動き、宮城中部沖GPS波浪計の最大波を示す。このモデルの波は海岸に沿って広がれないため沿岸での高さは上限値で、破壊も一瞬で起きる（実際は数分かかった）。下の図にカーソルを合わせるかタップすると値が出て、クリックすると時刻が変わる。",
   "title": "津波の伝播",
   "subtitle": "2011年の津波は15,000人以上の命を奪い、1日足らずで太平洋を横断した。その速さは海の深さで決まり、沿岸の浅い海で波は高くなる。",
   "p1": "第5部では、869年の貞観から2011年まで、三陸海岸が繰り返し津波に襲われてきたことを見た。この部では2011年の津波をたどりながら、地震がどのように津波を生み、どれほどの速さで海を渡り、なぜ海岸でこれほど高くなるのかを考える。2011年3月11日、現地時間14時46分、マグニチュード9.1の地震が宮城県沖約70 kmの日本海溝に沿って約500 kmにわたり破壊した。発生した津波は15,000人以上の命を奪い、福島第一原発のメルトダウンを引き起こした。",
   "h2_how_forms": "津波はどう発生するか",
   "p2": "津波は、海底から海面まで水柱全体を動かす<em>浅水波</em>だ。海底の広い領域が突然上方（または下方）に変位し、その上の水をピストンのように押し上げることで始まる。変位した水は波として四方に放射される。海洋の全深度が運動に関わるため、大きなエネルギーを運ぶ。",
-  "caption_cross_section": "津波発生の断面図。浅い逆断層が海底を持ち上げ、その上の水柱が変位し、波として四方に伝播する。",
-  "p3": "断層は<em>浅く</em>（海底に近く）、<em>鉛直方向の変位</em>を生むものでなければならない。2011年の東北地震は深さ約29 kmの逆断層で発生し、太平洋プレートがオホーツクプレートの下に潜り込んだ。長さ約500 km、幅約200 kmの破壊域で、海底の一部は最大5〜8メートル隆起した。",
+  "p3": "断層は<em>浅く</em>（海底に近く）、<em>鉛直方向の変位</em>を生むものでなければならない。2011年の地震は、太平洋プレートがオホーツクプレートの下に沈み込む逆断層の深さ29 kmで始まった。図の最初の設定は、この単純なモデルでその破壊を最もよく再現したもので、断層が海溝に達する所で60 mすべり、断層の深部に向かって小さくなる。これでマグニチュード9.1になる。2011年の研究モデルでは、海溝付近の最大すべり量は55〜69 mとされている。オレンジの印は観測値だ。海溝沿いの海底は約10 m隆起して東へ約50 m動き、震央の東約50 kmの海底局は約3 m隆起し、牡鹿の海岸は1.2 m沈降した。モデルの上下の動きは、どの印とも1 mほどずれる。平らな断層と一様な岩石を仮定した代償だ。",
+  "p3b": "水は自分の深さより狭い凸凹を写し取れない。そのため海溝の上の7 kmの海水は、海底の鋭い隆起を低く幅広い盛り上がりにならす。盛り上がりはすぐに二つに分かれ、半分は太平洋の沖へ、半分は海岸へ向かい、浅くなるにつれて遅く、険しくなる。同じ規模でもすべりを均等に広げると盛り上がりは低くなり、海岸での最大波も遅れる。同じすべりを断層の深部、浅い陸棚の下に移すと、波は大きく、早くなる。モデルが最も弱いのは最後の段階だ。波が海岸に沿って横に広がれないため、水深144 mの宮城中部沖GPS波浪計の位置では、波浪計が記録した4.8 mの2倍以上になる。ただし最大となる時刻は、波浪計の30分と数分しか違わない。",
   "h2_speed": "速度は水深で決まる",
   "p4": "津波の速さは浅水近似から導かれる。波長が水深よりはるかに大きいときに成り立つ近似で、津波はその条件を満たす。",
   "eq_label_wave_speed": "浅水波の速度",
@@ -1716,16 +2085,8 @@ window.PAGE_JA = {
   "h2_japan_position": "日本の地理的位置",
   "p15": "日本は4つのプレートの交差点に位置するが、津波の危険は太平洋側に集中している。日本海溝と南海トラフはいずれも海洋プレートが日本の下に潜り込む沈み込み帯であり、津波を発生させる浅い逆断層の構造を持つ。東北の太平洋岸は至近距離で海溝に面している。日本海側にはこうした海溝はない。日本海側の津波は、1983年や1993年のように日本海東縁の断層から生じる。太平洋側より数も規模も小さいが、数分で到達することがある。",
   "p16": "2011年の津波は、この海岸で数世紀にわたって続いてきたパターンの最新例だった。計画する側が過小評価していたのは最大規模だった。東北の海岸では、海溝型地震の発生から15〜30分以内に第1波が到達しうるが、揺れはそれよりさらに早く届く。第7部では、揺れが来る前に日本が出せる警報を取り上げる。",
-  "svg_mantle": "マントル",
-  "svg_fault_plane": "断層面",
   "svg_overriding_plate": "上盤プレート",
   "svg_subducting_plate": "沈み込むプレート",
-  "svg_seafloor_lifts": "海底が5-8m隆起",
-  "svg_water_displaced": "水柱が上方に変位",
-  "svg_waves_radiate": "波が全方向に放射",
-  "svg_ocean": "海洋",
-  "svg_crust": "地殻",
-  "svg_surface": "海面",
   "svg_city_tokyo": "東京",
   "svg_city_osaka": "大阪",
   "svg_city_sendai": "仙台",
@@ -1736,9 +2097,6 @@ window.PAGE_JA = {
   "svg_runup_note": "残りは湾と遡上による：2011年は最大40 m",
   "svg_not_to_scale": "縮尺は実際と異なる（高さは誇張）",
   "svg_toward_coast": "海岸方向",
-  "step_fault_rupture": "1. 断層破壊",
-  "step_water_displaced": "2. 水の変位",
-  "step_waves_radiate": "3. 波の放射",
   "step_deep_ocean": "深海",
   "step_continental_shelf": "大陸棚",
   "step_near_shore": "沿岸",
