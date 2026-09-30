@@ -48,8 +48,14 @@
     window.dispatchEvent(new CustomEvent("langchange", { detail: { lang: lang } }));
   }
 
+  // Site chrome from ../lib/motion.js, shared by every page in the series.
+  var SITE_JA = {
+    site_notice: "<strong>このコンテンツは機械で生成されたもので、誤りを含むことがあります。</strong>参照する前に、引用元の資料で内容を確かめてください。",
+    site_dismiss: "閉じる"
+  };
+
   function translate(lang, root) {
-    var ja = window.PAGE_JA || {};
+    var ja = Object.assign({}, SITE_JA, window.PAGE_JA || {});
     root.querySelectorAll("[data-i18n]").forEach(function (el) {
       var key = el.getAttribute("data-i18n");
       var isSVG = el.namespaceURI === "http://www.w3.org/2000/svg";

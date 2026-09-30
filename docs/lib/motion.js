@@ -353,10 +353,13 @@
       ].join(';');
       var msg = doc.createElement('span');
       msg.innerHTML = '<strong>This content is machine-generated and may contain errors.</strong> Check claims against the cited sources before relying on them.';
+      // Bilingual series (shared/i18n.js) translate these two by key.
+      msg.setAttribute('data-i18n', 'site_notice');
       var btn = doc.createElement('button');
       btn.type = 'button';
       btn.setAttribute('aria-label', 'Dismiss notice');
       btn.textContent = 'Dismiss';
+      btn.setAttribute('data-i18n', 'site_dismiss');
       btn.style.cssText = [
         "font-family: 'Source Sans 3', system-ui, sans-serif",
         'font-size: 0.85rem',

@@ -53,6 +53,66 @@ fixed in docs/ (English and Japanese):
 The `[?]` items still stand as they were (07's timeline presents modeled times, the
 06 Hokkaido 1.0 h label, and the Sanriku "highest risk" superlative).
 
+## Enrichment pass (2026-09-30)
+
+A graphics audit, then one fix-and-enrich pass per article (commits 17319d0, 3e6f9a3,
+42109bd, 9b35f02, e0e105e, 1f62eea, 6b1de7a; shared depth ramp 0561a0e). Each article
+gained one headline figure. Entries below supersede the rows further down where they
+disagree; every new number is computed in-page.
+
+- **Series-wide**: one depth ramp (shared/depth.js). The site notice is translated in
+  Japanese mode. Place names such as "?funato" are how USGS itself serves older events
+  (the ComCat CSV carries a literal `?` for long vowels); the CSV is left as the source
+  gives it.
+- **01**: 17 of 33 M7+ lie along the trench, carrying 93% of M7+ energy (the old 18
+  counted a 2003 Tokachi-oki event on the Kuril Trench). Typical year about 530 (median
+  530.5). The old claim that the timeline showed the steady deep rate was false; the new
+  heatmap shows it: events above 70 km put 13.5% in March 2011 alone, monthly variance
+  291x the mean; the 300+ km band has none extra, variance 1.3x the mean, drifting from
+  23 to 17 a year. Catalog default depths (33 km in 2000-2003, 10 km later) make 30 km
+  splits unreliable. The shallow rate rose about 65% after 2011, which overlaps a
+  magnitude-type change (mww 1 of 4,347 before, 1,150 of 8,686 after).
+- **02**: deepest event 683.4 km (was "about 680"); the three below 660 km are all 2015
+  Bonin. Transect D (28.5N): slab dip about 75 deg. B-B' Pacific-slab events west of
+  Tokyo are 258-349 km (was 300-350). C-C' runs western Honshu to Shikoku, not Kyushu
+  to Kii. B-B' cannot separate its two slabs at M4.5+; the text says so.
+- **03**: M6+ is 343 (344 included the 2017 nuclear test). Aftershock counts exclude
+  the mainshock: 530 in 24 h, 2,080 in 30 days, 68x background (1.01/day,
+  2001-2010). Tokachi-oki is M8.16 in the catalog, so Tohoku releases 25.7x its energy
+  (22x is the rounded M8.2). Omori-Utsu over the Tohoku box: p = 0.96, c = 0.42 d; the
+  rate falls below background after 7.1 years (5 to 10.6 depending on the box), so
+  "weeks or months" became "years".
+- **04**: the regions went from 8 boxes covering 75.4% to 9 covering 99.0%. Chubu's
+  largest is M7.5 (Noto 2024), not M6.2. Tohoku-Kanto b gap 3.8 se if independent, 2.9
+  under a year-block bootstrap (was "about four"). M6+ per year: 13.10 predicted, 13.19
+  observed; 2011 had 84 against a 7-21 band; 4 of 26 years fall outside. Mainshocks
+  (Gardner-Knopoff) have dispersion 1.95 against 16.9 for all events, "much closer to
+  chance", not Poisson. Ten-year windows forecast 0.64-2.20 M7+ a year.
+- **05**: the selection is now every NOAA Japan record with more than 100 deaths: 88 of
+  429, adding 1792 Unzen and dropping 1741 (NOAA lists it as tsunami only). The rank
+  correlation is 0.27 over the 89 records with a magnitude and at least 10 deaths
+  (0.20 over the timeline), not 0.29. p14: 10 M8+ Sanriku events. `[?]` 1982
+  Urakawa-oki: NOAA gives 110 deaths, while Japanese records list 167 injured and no
+  deaths; NOAA is kept and flagged. NOAA tolls differ from Japanese catalogues for
+  1751, 1766, 1793, 1828, 1854 Iga-Ueno, 1872, 1925 and 1930; NOAA is kept. Before 1600
+  the record holds 8 M8+ against about 92 expected at the 20th-century rate.
+- **06**: Kamaishi first arrival 0h 04m (NOAA gauge), largest wave 0h 35m (was
+  "~0h 30m"). Tokyo Bay 1h 54m (Harumi), not "~1h"; the Sapporo claim is removed.
+  4,000 m speed about 710 km/h (was 720). Shoaling speeds 713/159/36 km/h,
+  wavelengths about 45 km and 10 km; Green's law growth about 4.5x. Hawaii about
+  6,000 km (was 6,200). The old map rings reached Hilo about 1.2 h late and California
+  3.4 h late (degree circles). The 2011 gauges: DART median 820 km/h (about 5,300 m);
+  far tide gauges a median 71 min behind the 5,000 m line; 26 of 142 within 3%.
+- **07**: Tokyo's "44 s" is its S-P gap; its model warning is 86 s, Sendai's 18 s (the
+  old "Sendai 16 s" was also an S-P gap). The model alert comes 20.1 s after rupture,
+  6.1 s after first detection (the real one was 8.6 s). Noto alert 8.7 s, not 45.8 s
+  (no Japan Sea stations before). The `[?]` rows for the timeline and actions captions
+  are resolved: both now say modeled or illustrative. The range plot: 32 M6.5+ quakes;
+  median no-warning share 31% near land and 29% offshore at 6 s processing (6% and 100%
+  near land at 3 s and 9 s); Tohoku 0%, median 41 s. The audit's "100% inland" held
+  only down to M5. Point-source shaking biases the no-warning share high, not low: a
+  line source lowered it in every row (near-land median 31% to 19%).
+
 ## Status
 
 | # | article | verified | wrong | unverifiable | notes |
