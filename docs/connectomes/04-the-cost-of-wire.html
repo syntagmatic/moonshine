@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Cost of Wire · Connectomes</title>
+<script src="../lib/motion.js"></script>
+<script src="../vendor/js/d3.v7.min.js"></script>
+<link rel="stylesheet" href="../vendor/katex@0.16.11/katex.min.css">
+<script src="../vendor/katex@0.16.11/katex.min.js"></script>
+<link href="../vendor/fonts/sans-serif-mono/fonts.css" rel="stylesheet">
+<script src="shared/graph.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  color-scheme: light dark;
+  --article-width: 740px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem;
+  --line-height: 1.6;
+  --text: #1c1d24;
+  --text-2: #50525e;
+  --accent: #2b62a8;
+  --accent-light: #dde8f6;
+  --bg: #fafaf8;
+  --fig-bg: #ffffff;
+  --border: #e3e2de;
+  /* Series roles, fixed across all eight articles:
+     observed data = ink (--text); null models and expected values = --c-null;
+     sensory / inter / motor neurons = --c-sensory / --c-inter / --c-motor;
+     gap junctions = --c-gap; neuropeptides = --c-pep. Validated for colour
+     vision deficiency in both themes. */
+  --c-null: #7c8597;
+  --c-null-light: #e6e8ee;
+  --c-sensory: #00928a;
+  --c-inter: #b9780a;
+  --c-motor: #b8405e;
+  --c-gap: #6b55c4;
+  --c-pep: #5d8a2b;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --text: #e6e5e0; --text-2: #a8a9b3;
+    --accent: #7aa7e6; --accent-light: #1f2b3d;
+    --bg: #15161a; --fig-bg: #1c1d22; --border: #33343b;
+    --c-null: #8b93a5; --c-null-light: #2a2d35;
+    --c-sensory: #21a198; --c-inter: #c2841a; --c-motor: #d6607e; --c-gap: #8e7ce0; --c-pep: #76a63f;
+  }
+}
+
+body {
+  font-family: var(--body-font); font-size: var(--body-size); line-height: var(--line-height);
+  color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased;
+}
+
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1rem 6rem; }
+h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+p { margin: 0 0 1rem; }
+a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+.subtitle { font-family: var(--heading-font); font-size: 1.15rem; color: var(--text-2); margin-bottom: 2rem; }
+.kicker { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-bottom: 0.5rem; }
+.kicker a { color: var(--text-2); }
+
+.figure { margin: 2rem 0; padding: 1.25rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; }
+.figure-wide { margin-left: -2rem; margin-right: -2rem; }
+@media (min-width: 1040px) { .figure-wide { margin-left: -7rem; margin-right: -7rem; } }
+.figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; line-height: 1.45; }
+.figure-label { font-weight: 600; color: var(--text); }
+.readout { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); min-height: 2.8em; font-variant-numeric: tabular-nums; margin: 0.4rem 0 0; line-height: 1.45; }
+.readout b { color: var(--text); font-weight: 600; }
+
+.controls { display: flex; align-items: center; gap: 0.5rem 1.25rem; flex-wrap: wrap; margin-bottom: 0.75rem; font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); }
+.controls label { display: inline-flex; align-items: center; gap: 0.4rem; }
+.controls input[type="range"] { width: 120px; max-width: 100%; accent-color: var(--accent); }
+.controls input[type="checkbox"] { accent-color: var(--accent); }
+.controls .val { font-variant-numeric: tabular-nums; color: var(--text); min-width: 2.4em; display: inline-block; }
+button.btn { font-family: var(--heading-font); font-size: 0.8rem; color: var(--text); background: var(--fig-bg); border: 1px solid var(--border); border-radius: 4px; padding: 3px 9px; cursor: pointer; min-height: 30px; }
+button.btn:hover:not(:disabled) { border-color: var(--accent); }
+button.btn:disabled { color: var(--text-2); cursor: default; opacity: 0.6; }
+
+.panels { display: grid; gap: 0.75rem 1.5rem; align-items: start; }
+.p-3-2 { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
+.panels > div { min-width: 0; }
+.panels h3 { font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600; color: var(--text); margin: 0 0 0.25rem; }
+.panels h3 span { font-weight: 400; color: var(--text-2); }
+.fig-body { position: relative; width: 100%; }
+.fig-body svg { display: block; overflow: visible; }
+.tip { position: absolute; pointer-events: none; font-family: var(--heading-font); font-size: 0.78rem; background: var(--fig-bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; white-space: nowrap; display: none; z-index: 2; }
+.side-ro { min-height: 6.2em; }
+.side-btns { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.4rem; }
+#pl-sc svg { touch-action: pan-y; cursor: grab; }
+#pl-sc svg.dragging { cursor: grabbing; }
+
+svg text { font-family: var(--heading-font); }
+svg .axis text { font-size: 11px; fill: var(--text-2); }
+svg .axis line, svg .axis path { stroke: var(--border); }
+svg .axis-label { font-size: 11px; fill: var(--text-2); }
+svg .pt-lab { font-size: 11px; fill: var(--text); font-weight: 600; pointer-events: none; }
+svg .halo { paint-order: stroke; stroke: var(--fig-bg); stroke-width: 4px; stroke-linejoin: round; }
+svg .note { font-size: 11px; fill: var(--text-2); }
+svg .row-lab { font-size: 11.5px; fill: var(--text); }
+svg .row-n { font-size: 10.5px; fill: var(--text-2); }
+svg .row-hit { fill: transparent; cursor: pointer; }
+svg .row-sel { fill: var(--accent-light); }
+svg:focus-visible, :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.legend { display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; font-family: var(--heading-font); font-size: 0.8rem; color: var(--text-2); margin: 0.35rem 0 0; }
+.legend span { display: inline-flex; align-items: center; gap: 0.35rem; }
+.legend svg { overflow: visible; }
+
+.katex-display { overflow-x: auto; overflow-y: hidden; padding: 2px 0; }
+
+@media (max-width: 640px) {
+  h1 { font-size: 1.75rem; }
+  .figure { padding: 1rem 0.6rem; }
+  .figure-wide { margin-left: 0; margin-right: 0; }
+  .p-3-2 { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="article">
+  <header>
+    <p class="kicker"><a href="index.html">Connectomes</a>, part 4 of 8</p>
+    <h1>The Cost of Wire</h1>
+    <p class="subtitle">A worm's neurons sit roughly where the cheapest wiring would put them, and the ones that don't are the interesting ones.</p>
+  </header>
+
+  <p>Axons and dendrites take up volume, cost energy to build and run, and slow signals down as they get longer. Santiago Ram&oacute;n y Cajal argued over a century ago that nervous systems are laid out to save wire. That is a hypothesis about geometry, and a connectome makes it testable. If we know which neurons connect and how strongly, we can work out where a wire-saving animal would put each cell body and compare that with where the cell bodies actually are.</p>
+
+  <p>Chen, Hall and Chklovskii did that for <i>C. elegans</i> in 2006. This article rebuilds their calculation on the worm's 2011 wiring, in the page, and then asks the same question at a much larger scale, about the connections between areas of the macaque cortex. In both cases distance accounts for a lot. The useful part is what it leaves out.</p>
+
+  <h2>Where the neurons would sit</h2>
+
+  <p>The worm is more than ten times longer than it is wide, so the model treats it as a line. Each neuron gets one number <i>x<sub>i</sub></i>, its position between the nose (0) and the tail (1). Three kinds of connection need wire: between neurons that share synapses, from sensory neurons to the <span style="color: var(--c-sensory)">sensory endings</span> they serve, and from motor neurons to the <span style="color: var(--c-motor)">muscles</span> they drive. Sensory endings and muscles stay where the body puts them. The cost of a connection grows as a power <i>&zeta;</i> of its length:</p>
+  <div id="eq-cost"></div>
+  <p><i>A<sub>ij</sub></i> counts the synapses between neurons <i>i</i> and <i>j</i> in either direction, chemical synapses and gap junctions alike. <i>S<sub>ik</sub></i> counts a neuron's endings at sensory organ <i>k</i>, and <i>M<sub>il</sub></i> its neuromuscular junctions on muscle <i>l</i>. The constant <i>&alpha;</i> is the number of synapses that share one wire. Most worm neurons are unbranched, with one or two processes that make dozens of synapses in passing, so charging every synapse a whole wire would overcount. Chen and colleagues divided by <i>&alpha;</i>&nbsp;=&nbsp;29.3, half the average of 58.6 synapses and neuromuscular junctions per neuron. A sensory ending has a neurite to itself and is not divided.</p>
+
+  <p>With <i>&zeta;</i>&nbsp;=&nbsp;2 the cost is a sum of squares. Setting its derivative to zero says that each neuron sits at the weighted average of everything it connects to:</p>
+  <div id="eq-avg"></div>
+  <p>That holds for all 279 neurons at once, which makes it a system of linear equations with a single solution, and the page solves it directly. Physically it is the resting shape of a network of rubber bands pinned at the nose, the muscles and the tail. The pins matter. Without them every neuron could slide to the same point at zero cost, and part&nbsp;5 recovers a useful answer from the same sum of squares only by adding constraints, which gives the Fiedler vector. For exponents other than 2 the cost is still convex, and the page minimises it by repeatedly solving a reweighted version of the same system.</p>
+
+  <div class="figure figure-wide" id="fig-place">
+    <div class="controls">
+      <label>Exponent <i>&zeta;</i> <input type="range" id="pl-z" min="1.25" max="4" step="0.25" value="2" aria-label="Cost exponent"><span class="val" id="pl-z-val"></span></label>
+      <label>Synapses per wire <i>&alpha;</i> <input type="range" id="pl-a" min="0" max="8" step="1" value="5" aria-label="Synapses sharing one wire"><span class="val" id="pl-a-val"></span></label>
+      <label><input type="checkbox" id="pl-gap" checked> Include gap junctions</label>
+      <button class="btn" id="pl-ten">Pin the ten costliest at their cell bodies</button>
+      <button class="btn" id="pl-clear">Release all</button>
+    </div>
+    <div class="panels p-3-2">
+      <div>
+        <h3>Every neuron <span>where the model puts it against where its cell body is</span></h3>
+        <div class="fig-body" id="pl-sc"><svg tabindex="0" role="img" aria-label="Scatter plot of each worm neuron's predicted position against its actual cell-body position, both from head to tail. Drag a point up or down to pin it."></svg><div class="tip"></div></div>
+        <div class="legend">
+          <span><svg width="12" height="12"><circle cx="6" cy="6" r="3.5" style="fill: var(--c-sensory)"></circle></svg>sensory</span>
+          <span><svg width="12" height="12"><circle cx="6" cy="6" r="3.5" style="fill: var(--c-inter)"></circle></svg>inter</span>
+          <span><svg width="12" height="12"><circle cx="6" cy="6" r="3.5" style="fill: var(--c-motor)"></circle></svg>motor</span>
+          <span><svg width="12" height="12"><circle cx="6" cy="6" r="4" style="fill: none; stroke: var(--text); stroke-width: 1.5"></circle></svg>pinned</span>
+          <span><svg width="10" height="12"><line x1="5" y1="1" x2="5" y2="11" style="stroke: var(--c-sensory); stroke-width: 2"></line></svg>sensory ending</span>
+          <span><svg width="10" height="12"><line x1="5" y1="1" x2="5" y2="11" style="stroke: var(--c-motor); stroke-width: 2"></line></svg>muscle</span>
+        </div>
+      </div>
+      <div>
+        <h3 id="pl-side-h">One neuron</h3>
+        <div class="fig-body" id="pl-side"><svg role="img" aria-label="The selected neuron's partners and anchors along the body, with the cost of moving it."></svg></div>
+        <p class="readout side-ro" id="pl-side-ro" aria-live="polite"></p>
+        <div class="side-btns"><button class="btn" id="pl-pin">Pin at its cell body</button><button class="btn" id="pl-rel">Release</button></div>
+      </div>
+    </div>
+    <p class="readout" id="pl-ro" aria-live="polite"></p>
+    <p class="figure-caption"><span class="figure-label">Figure 1.</span> Wire-cost placement of the 279 neurons of <i>C. elegans</i> (Chen, Hall &amp; Chklovskii 2006), computed in the page from the 2011 wiring (Varshney et al.) and the sensory endings and neuromuscular junctions on WormAtlas. Positions run from the nose (0) to the tail (1); points on the diagonal are predicted exactly, and the strips above the plot mark the anchors. Drag a point up or down with a mouse to pin that neuron anywhere, and watch the others re-settle; click or tap one to see, in the second panel, its partners at their model positions (larger for more synapses), its anchors, and the cost of moving it with everything else held still. The ten costliest are ranked by the exact formula for <i>&zeta;</i>&nbsp;=&nbsp;2 at the current <i>&alpha;</i>.</p>
+  </div>
+
+  <p>The model gets most neurons roughly right. Their predicted positions are on average 9.7% of the body length from the real cell bodies, and half are within 5.2%. A uniformly random layout misses by about 35%. Chen and colleagues report 9.71% and 5.10% with the 2006 version of the wiring. The errors are not spread evenly: neurons tied to a sensory ending or a muscle land on average 7.7% from their cell bodies, while the 80 tied to neither, 56 of them interneurons, land 14.7% away.</p>
+
+  <p>The settings move this less than you might expect. Linear cost, <i>&zeta;</i> near 1, pulls each neuron toward a weighted median of its partners rather than their mean, and higher powers punish the longest wires hardest. The prediction is best near <i>&zeta;</i>&nbsp;=&nbsp;2 and worsens slowly on either side, to about 10.5% at 1.5 and at 3. At other exponents <i>&alpha;</i> needs retuning, because positions below 1 shrink when raised to a higher power; Chen and colleagues searched both and found the best pair near <i>&alpha;</i>&nbsp;=&nbsp;27 and <i>&zeta;</i>&nbsp;=&nbsp;2. Small <i>&alpha;</i> lets the synapses dominate and the layout bunches up: at <i>&alpha;</i>&nbsp;=&nbsp;1 the predicted positions spread less than half as widely as the real ones. Large <i>&alpha;</i> lets the anchors dominate, and neurons drift toward their endings and muscles with less regard for their partners.</p>
+
+  <p>The real worm is not at the optimum. Its layout costs 4.2 times the minimum, and random positions cost about 16 times. Nearly all of the excess is in the wiring between neurons, at 5.8 times its optimal cost, while the wiring to sensory endings and muscles costs only 1.4 times. Chen and colleagues, on the older wiring, put the ratio of optimal to real to random at 1&nbsp;:&nbsp;4&nbsp;:&nbsp;16, with 6.24 and 0.93 for the two parts. Either way, cell bodies sit close to the endings and muscles they serve, and the extra cost is in how neurons connect to each other.</p>
+
+  <h2>The neurons that sit somewhere else</h2>
+
+  <p>Pick AVG in the figure. Its cell body is in the head, at 0.22, but its partners are spread along the ventral nerve cord, and the model puts it at 0.71. AVG is a pioneer neuron: during development it sends the first process down the right side of the ventral cord, and later axons follow it. Its synapses sit along that process, far from its cell body. The model charges every connection as if it were made at the cell body, so it cannot know this. PVP and PVQ are pioneers in the other direction, with cell bodies in the tail and processes that grow forward, and they are among the worst predictions in the worm. Chen and colleagues found every known pioneer of the ventral cord among the outliers.</p>
+
+  <p>Which neurons does the real layout pay most for? Pin one neuron at its cell body, let the other 278 re-settle, and for <i>&zeta;</i>&nbsp;=&nbsp;2 the cost rises by an amount with a closed form:</p>
+  <div id="eq-price"></div>
+  <p>Here <i>a<sub>i</sub></i> is the real position, <i>x<sub>i</sub></i> the model's, and <i>Q</i> the matrix of the linear system. 1/(<i>Q</i><sup>&minus;1</sup>)<sub><i>ii</i></sub> is how stiffly the neuron is held once its partners are allowed to follow it. The costliest neurons are not the pioneers but the command interneurons that drive locomotion: AVA, about 17.5% of the optimum for each of the left and right cells, PVC about 17%, and DVA 13%, followed by DVC, PVQ, PVP and AVG. They are among the most connected neurons in the worm, so every bit of displacement costs more. Chen and colleagues noticed that the command interneurons have mostly input synapses near their cell bodies, which hints at a rule the cost function lacks: inputs and outputs need not be equally cheap to place far from the cell body.</p>
+
+  <p>Now press <i>Pin the ten costliest</i>. Ten neurons, under 4% of the worm, take the cost from the optimum to 2.5 times it, nearly half of the way to the real worm's 4.2. Meanwhile the predictions for the other 269 neurons get worse rather than better: their average error rises from 8.4% to 9.3% of the body length. Pinning AVA in the head drags its partners in the cord toward the head, because in the model a connection pulls on cell bodies. In the worm, AVA's synapses are out along its process, next to the cord's motor neurons. The model is wrong about these neurons because it puts their synapses at their cell bodies, not because the worm wastes wire on them. Chen and colleagues went on to place each neuron's synapses along a wire of its own and, with separate rules for pioneers and command interneurons, brought the error down to 9.4%.</p>
+
+  <h2>Distance and the weight of a pathway</h2>
+
+  <p>In a mammal the same question applies at a coarser scale. The cortex is divided into areas a few millimetres to a few centimetres across, joined by axons that run through the white matter. Markov and colleagues injected a retrograde tracer into 29 of the 91 areas in their map of the macaque cortex and counted the labelled neurons in every other area. The <b>fraction of extrinsic labelled neurons</b> (FLNe) of a source area is its share of all the labelled neurons outside the injected area. It is a weight for the pathway from source to target, it sums to 1 over the sources of each injection, and it spans about five orders of magnitude. For 11 of the injected areas they also published the distance from every source, measured through the white matter between the centres of the two areas in a three-dimensional atlas brain: 628 pathways with both a weight and a length.</p>
+
+  <p>If long wire is expensive, strong pathways should be short. An exponential decay is the simplest form of that, and it is a straight line on a log scale:</p>
+  <div id="eq-edr"></div>
+
+  <div class="figure figure-wide" id="fig-edr">
+    <div class="controls">
+      <label>Your decay constant <i>&lambda;</i> <input type="range" id="ed-l" min="0" max="0.45" step="0.001" value="0.188" aria-label="Decay constant per millimetre"><span class="val" id="ed-l-val"></span></label>
+      <button class="btn" id="ed-fit">Match the best fit</button>
+    </div>
+    <div class="panels p-3-2">
+      <div>
+        <h3 id="ed-h">All 628 pathways <span>weight against white-matter distance</span></h3>
+        <div class="fig-body" id="ed-sc"><svg tabindex="0" role="img" aria-label="Scatter plot of the FLNe of each macaque pathway, on a log scale, against its white-matter distance, with a least-squares line and an adjustable line."></svg><div class="tip"></div></div>
+        <div class="legend">
+          <span><svg width="12" height="12"><circle cx="6" cy="6" r="3" style="fill: var(--text)"></circle></svg>pathway</span>
+          <span><svg width="22" height="12"><line x1="1" y1="6" x2="21" y2="6" style="stroke: var(--c-null); stroke-width: 2.5"></line></svg>least-squares line</span>
+          <span><svg width="22" height="12"><line x1="1" y1="6" x2="21" y2="6" style="stroke: var(--accent); stroke-width: 2"></line><circle cx="21" cy="6" r="3.5" style="fill: var(--accent)"></circle></svg>your line, drag its end</span>
+        </div>
+      </div>
+      <div>
+        <h3>Each target area <span>best &lambda; per mm, 95% interval</span></h3>
+        <div class="fig-body" id="ed-fp"><svg tabindex="0" role="img" aria-label="Best decay constant for all pathways and for each of the 11 target areas, with 95% intervals. Click a row to show that target's pathways."></svg><div class="tip"></div></div>
+      </div>
+    </div>
+    <p class="readout" id="ed-ro" aria-live="polite"></p>
+    <p class="figure-caption"><span class="figure-label">Figure 2.</span> Macaque interareal pathways: FLNe from Markov et al. 2014 (<i>Cereb Cortex</i>; averaged over repeat injections of V1, V2 and V4, counting an injection without labelled neurons as 0) against white-matter distance from Markov et al. 2014 (<i>J Comp Neurol</i>, Table 2), for the 628 pathways into the 11 targets with published distances. Lines are fits of log<sub>10</sub>&nbsp;FLNe to distance; your line keeps your slope and takes the best height for it. Only pathways that exist are shown, since an FLNe of 0 has no logarithm. Click a row on the right to pick out one target's inputs; the dashed line there is the 0.188 per mm of Ercsey-Ravasz et al. 2013.</p>
+  </div>
+
+  <p>The line captures the trend. Pooled over all 628 pathways the best decay constant is 0.16 per millimetre: weight falls by a factor of <i>e</i> every 6.3&nbsp;mm and tenfold every 14&nbsp;mm. Ercsey-Ravasz and colleagues, fitting the distribution of labelled neurons over distance rather than one weight per pathway, found 0.188 per millimetre and called the result the <b>exponential distance rule</b>. The two estimates measure slightly different things and land close together.</p>
+
+  <p>But distance explains only 26% of the variance in log weight. At any distance the pathways scatter about a decade either side of the line: the residual standard deviation is 1.07 decades, against 1.24 for the weights themselves. Giving each target area its own height raises the share explained to 32%, and its own slope as well, to 37%. Drag your line away from the best fit and the share falls off slowly, which is another way of saying the data don't pin the slope tightly.</p>
+
+  <p>The slopes differ between targets. Inputs to MT, V2 and TEO, visual areas, fall off fastest, at 0.25 to 0.30 per millimetre. Inputs to the frontal area 8l and the parietal area 7A fall off at about 0.08, a decay length of 12&nbsp;mm, so these areas take a much larger share of their input from far away. Distance sets the overall scale of cortical wiring, and how far an area reaches beyond that scale is a property of the area.</p>
+
+  <p>The two models make the same argument at very different scales: connections cost wire, so connected things should be close. In the worm that places most cell bodies within a few percent of the body length, and in the macaque it sets the scale over which pathway weights fall. Where they fail they point at something specific: neurons that make their synapses far from their cell bodies, and cortical areas that reach farther than their neighbours.</p>
+
+  <footer style="margin-top: 4rem; padding-top: 2rem; border-top: 1px solid var(--border); font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2);">
+    <p>Placement model and fixed points: Chen, Hall &amp; Chklovskii 2006 (PNAS 103, 4723), with the sensory endings and neuromuscular junctions from WormAtlas's NeuronFixedPoints table. Wiring: Varshney, Chen, Paniagua, Hall &amp; Chklovskii 2011 (PLoS Comput Biol 7, e1001066), from WormAtlas's NeuronConnect and NeuronType tables; cell types from NemaNode. No licence is stated for the WormAtlas tables; cite the papers. Pioneer neurons: Durbin 1987 (PhD thesis, Cambridge), as discussed by Chen et al.</p>
+    <p>Macaque: FLNe from Markov et al. 2014 (Cereb Cortex 24, 17; CC BY-NC); white-matter distances from Markov et al. 2014 (J Comp Neurol 522, 225; CC BY), both via core-nets.org as archived by the Internet Archive. Exponential distance rule: Ercsey-Ravasz et al. 2013 (Neuron 80, 184); the 0.188 per mm is from Horv&aacute;t et al. 2016 (PLoS Biol 14, e1002512), Table 1.</p>
+    <p><a href="index.html">Connectomes</a>, part 4 of 8. Previously: <a href="03-surprising-compared-to-what.html">Surprising Compared to What?</a> Next: <a href="05-reading-the-matrix.html">Reading the Matrix</a></p>
+    <p>Built with <a href="https://github.com/enjalot/moonshine" style="color: var(--text-2);">moonshine</a>.</p>
+  </footer>
+</div>
+
+<script>
+// ── Shared helpers ──
+const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const narrow = () => matchMedia('(max-width: 640px)').matches;
+function responsive(el, render) {
+  let w = 0;
+  new ResizeObserver(() => {
+    if (el.clientWidth > 0 && el.clientWidth !== w) { w = el.clientWidth; render(w); }
+  }).observe(el);
+}
+const onTheme = f => matchMedia('(prefers-color-scheme: dark)').addEventListener('change', f);
+const fmt = (v, d) => v.toLocaleString('en', { minimumFractionDigits: d, maximumFractionDigits: d });
+const pct = (v, d = 1) => fmt(100 * v, d) + '%';
+const G = GraphLib;
+const ROLE_VAR = { s: '--c-sensory', i: '--c-inter', m: '--c-motor' };
+const ROLE_NAME = { s: 'sensory neuron', i: 'interneuron', m: 'motor neuron' };
+
+const K = String.raw;
+function equations() {
+  const tex = (id, s) => katex.render(s, document.getElementById(id), { throwOnError: false, displayMode: true });
+  const cs = css('--c-sensory'), cm = css('--c-motor');
+  tex('eq-cost', K`C \;=\; \frac{1}{\alpha}\sum_{\{i,j\}} A_{ij}\,\lvert x_i - x_j\rvert^{\zeta} \;+\; \color{${cs}}{\sum_{i,k} S_{ik}\,\lvert x_i - s_k\rvert^{\zeta}} \;+\; \color{${cm}}{\frac{1}{\alpha}\sum_{i,l} M_{il}\,\lvert x_i - m_l\rvert^{\zeta}}`);
+  tex('eq-avg', K`x_i \;=\; \frac{\tfrac{1}{\alpha}\sum_j A_{ij}\,x_j \;+\; \color{${cs}}{\sum_k S_{ik}\,s_k} \;+\; \color{${cm}}{\tfrac{1}{\alpha}\sum_l M_{il}\,m_l}}{\tfrac{1}{\alpha}\sum_j A_{ij} \;+\; \color{${cs}}{\sum_k S_{ik}} \;+\; \color{${cm}}{\tfrac{1}{\alpha}\sum_l M_{il}}}`);
+  tex('eq-price', K`\Delta C_i \;=\; \frac{(a_i - x_i)^2}{\big(Q^{-1}\big)_{ii}}`);
+  tex('eq-edr', K`\text{FLNe} \;\approx\; c\, e^{-\lambda d} \qquad\Longleftrightarrow\qquad \log_{10}\text{FLNe} \;\approx\; \log_{10} c \;-\; \frac{\lambda}{\ln 10}\, d`);
+}
+equations();
+onTheme(equations);
+
+Promise.all(['worm-varshney.json', 'worm-anchors.json', 'macaque-fln.json'].map(f => d3.json('shared/data/' + f))).then(([worm, anch, fln]) => {
+  placeFigure(worm, anch.anchors);
+  edrFigure(fln.pathways);
+});
+
+// ── Figure 1: wire-cost placement of the worm's neurons ──
+function placeFigure(data, A) {
+  const N = data.nodes, n = N.length, ap = N.map(d => d.ap);
+  const ALPHAS = [1, 2, 4, 8, 15, 29.3, 45, 70, 100];
+  const ctl = { z: document.getElementById('pl-z'), a: document.getElementById('pl-a'), gap: document.getElementById('pl-gap') };
+  const byNode = Array.from({ length: n }, () => []);
+  A.forEach(a => byNode[a[0]].push(a));
+  const anchored = new Set(A.map(a => a[0]));
+  const name = new Map(N.map((d, i) => [d.name, i]));
+  // Mean distance of a uniformly random position from each real one: (a^2 + (1 - a)^2) / 2.
+  const randDev = d3.mean(ap, a => (a * a + (1 - a) * (1 - a)) / 2);
+
+  let S = null;           // settings and the unpinned optimum
+  let cur = null;         // current layout (with pins)
+  const pins = new Map();
+  let sel = name.get('AVG'), hover = -1;
+
+  const settings = () => ({ zeta: +ctl.z.value, alpha: ALPHAS[+ctl.a.value], gap: ctl.gap.checked });
+  const edgesFor = gap => gap ? data.chem.concat(data.gap) : data.chem;
+  const total = c => c.internal + c.external;
+
+  function partnersOf(E) {
+    const P = Array.from({ length: n }, () => new Map());
+    for (const [a, b, w] of E) { P[a].set(b, (P[a].get(b) || 0) + w); P[b].set(a, (P[b].get(a) || 0) + w); }
+    return P;
+  }
+
+  function solveBase() {
+    const s = settings(), E = edgesFor(s.gap);
+    const prev = S && S.gap === s.gap && S.alpha === s.alpha ? S.base.x : undefined;
+    const base = G.placement(n, E, A, { zeta: s.zeta, alpha: s.alpha, x0: prev });
+    const C0 = total(base.cost);
+    const real = G.wireCost(ap, E, A, s);
+    const r = G.rng(11);
+    let rc = 0;
+    for (let k = 0; k < 20; k++) rc += total(G.wireCost(Float64Array.from({ length: n }, r), E, A, s));
+    const price = G.pinPrice(n, E, A, ap, { alpha: s.alpha });
+    S = { ...s, E, P: partnersOf(E), base, C0, real, randRatio: rc / 20 / C0, price, rank: d3.range(n).sort((p, q) => price[q] - price[p]) };
+  }
+  function relax() {
+    cur = pins.size ? G.placement(n, S.E, A, { zeta: S.zeta, alpha: S.alpha, pins, x0: cur ? cur.x : S.base.x }) : S.base;
+  }
+
+  // ── scatter ──
+  const body = document.getElementById('pl-sc'), svg = d3.select(body).select('svg'), tip = d3.select(body).select('.tip');
+  let sw = 0, geo = null;
+  function drawScatter() {
+    const w = sw; if (!w || !cur) return;
+    const M = { l: 44, r: 12, t: 30, b: 38 }, iw = w - M.l - M.r, ih = Math.min(iw, narrow() ? 300 : 400), h = ih + M.t + M.b;
+    svg.attr('width', w).attr('height', h).selectAll('*').remove();
+    const g = svg.append('g').attr('transform', `translate(${M.l},${M.t})`);
+    const x = d3.scaleLinear().domain([0, 1]).range([0, iw]), y = d3.scaleLinear().domain([0, 1]).range([0, ih]);
+    geo = { M, x, y, ih };
+    g.append('g').attr('class', 'axis').attr('transform', `translate(0,${ih})`).call(d3.axisBottom(x).ticks(5).tickSizeOuter(0));
+    g.append('g').attr('class', 'axis').call(d3.axisLeft(y).ticks(5).tickSizeOuter(0));
+    g.append('text').attr('class', 'axis-label').attr('x', iw).attr('y', ih + 32).attr('text-anchor', 'end').text('cell body, from nose (0) to tail (1)');
+    g.append('text').attr('class', 'axis-label').attr('transform', 'rotate(-90)').attr('x', 0).attr('y', -34).attr('text-anchor', 'end').text('model position (head at top)');
+    // Anchor strips above the plot.
+    const strip = (kind, y0, color) => g.append('g').selectAll('line').data(A.filter(a => a[1] === kind)).join('line')
+      .attr('x1', a => x(a[2])).attr('x2', a => x(a[2])).attr('y1', y0).attr('y2', y0 + 9)
+      .style('stroke', css(color)).style('stroke-width', 1.5).style('stroke-opacity', 0.35);
+    strip('s', -26, '--c-sensory');
+    strip('m', -14, '--c-motor');
+    g.append('line').attr('x1', 0).attr('y1', 0).attr('x2', iw).attr('y2', ih).style('stroke', css('--c-null')).style('stroke-dasharray', '4 3');
+    // Selected neuron: lines to its partners' model positions, faint.
+    const X = cur.x;
+    if (sel >= 0) {
+      for (const [j] of S.P[sel]) g.append('line').attr('x1', x(ap[sel])).attr('y1', y(X[sel])).attr('x2', x(ap[j])).attr('y2', y(X[j]))
+        .style('stroke', css('--text-2')).style('stroke-opacity', 0.25).style('stroke-width', 0.8);
+    }
+    const tr = !Motion.reduced() && drawScatter.animate;
+    drawScatter.animate = false;
+    g.selectAll('circle.pt').data(d3.range(n)).join('circle').attr('class', 'pt')
+      .attr('cx', i => x(ap[i])).attr('cy', i => y(tr ? (drawScatter.prev || X)[i] : X[i])).attr('r', i => i === sel ? 4.5 : 3.2)
+      .style('fill', i => css(ROLE_VAR[N[i].role])).style('fill-opacity', i => sel >= 0 && i !== sel && !S.P[sel].has(i) ? 0.45 : 0.9)
+      .style('stroke', i => i === sel ? css('--text') : 'none').style('stroke-width', 1.5)
+      .call(s => { if (tr) s.transition().duration(450).attr('cy', i => y(X[i])); });
+    drawScatter.prev = X;
+    g.selectAll('circle.pin').data([...pins.keys()]).join('circle').attr('class', 'pin')
+      .attr('cx', i => x(ap[i])).attr('cy', i => y(X[i])).attr('r', 6.5).style('fill', 'none').style('stroke', css('--text')).style('stroke-width', 1.5);
+    // Label the largest errors and the selection.
+    const dev = d3.range(n).map(i => Math.abs(X[i] - ap[i]));
+    // One label per cell class (left and right partners sit together), named by class.
+    const lab = new Map();
+    for (const i of d3.range(n).sort((p, q) => dev[q] - dev[p])) {
+      if (lab.size >= 4) break;
+      if (![...lab.keys()].some(j => N[j].cls === N[i].cls)) lab.set(i, N[i].cls);
+    }
+    if (sel >= 0) { for (const j of [...lab.keys()]) if (N[j].cls === N[sel].cls) lab.delete(j); lab.set(sel, N[sel].name); }
+    for (const [i, text] of lab) {
+      const left = ap[i] > 0.75;
+      g.append('text').attr('class', 'pt-lab halo').attr('x', x(ap[i]) + (left ? -8 : 8)).attr('y', y(X[i]) + 4)
+        .attr('text-anchor', left ? 'end' : 'start').text(text);
+    }
+  }
+
+  function nearest(px, py) {
+    if (!geo) return -1;
+    let best = -1, bd = 144;
+    for (let i = 0; i < n; i++) {
+      const dx = geo.M.l + geo.x(ap[i]) - px, dy = geo.M.t + geo.y(cur.x[i]) - py, d = dx * dx + dy * dy;
+      if (d < bd) { bd = d; best = i; }
+    }
+    return best;
+  }
+  function showTip(i) {
+    if (i < 0) { tip.style('display', 'none'); return; }
+    tip.style('display', 'block').html(`${N[i].name}: cell body ${fmt(ap[i], 2)}, model ${fmt(cur.x[i], 2)}${pins.has(i) ? ' (pinned)' : ''}`);
+    const tw = tip.node().offsetWidth, ax = geo.M.l + geo.x(ap[i]), ay = geo.M.t + geo.y(cur.x[i]);
+    tip.style('left', Math.max(0, Math.min(sw - tw, ax - tw / 2)) + 'px').style('top', (ay - 30) + 'px');
+  }
+
+  let drag = null, frame = 0;
+  const schedule = () => { if (!frame) frame = requestAnimationFrame(() => { frame = 0; relax(); drawAll(); }); };
+  svg.on('pointerdown', ev => {
+    const [px, py] = d3.pointer(ev), i = nearest(px, py);
+    if (i < 0) return;
+    sel = i;
+    if (ev.pointerType !== 'touch') { drag = { i, y0: py, moved: false }; svg.classed('dragging', true); svg.node().setPointerCapture(ev.pointerId); }
+    drawAll(); showTip(i);
+  }).on('pointermove', ev => {
+    const [px, py] = d3.pointer(ev);
+    if (drag) {
+      if (Math.abs(py - drag.y0) > 3) drag.moved = true;
+      if (!drag.moved) return;
+      pins.set(drag.i, Math.max(0, Math.min(1, geo.y.invert(py - geo.M.t))));
+      schedule(); showTip(drag.i);
+      return;
+    }
+    hover = nearest(px, py); showTip(hover);
+  }).on('pointerup pointercancel', () => { drag = null; svg.classed('dragging', false); })
+    .on('pointerleave', ev => { if (!drag && ev.pointerType !== 'touch') { hover = -1; showTip(-1); } })
+    .on('dblclick', ev => { const [px, py] = d3.pointer(ev), i = nearest(px, py); if (i >= 0 && pins.delete(i)) { relax(); drawAll(); } });
+  // Keyboard: arrows step through neurons from head to tail; Enter pins or releases.
+  svg.on('keydown', ev => {
+    const ord = d3.range(n).sort((p, q) => ap[p] - ap[q] || (N[p].name < N[q].name ? -1 : 1));
+    if (/^Arrow(Left|Right)$/.test(ev.key)) {
+      ev.preventDefault();
+      const k = ord.indexOf(sel) + (ev.key === 'ArrowRight' ? 1 : -1);
+      sel = ord[Math.max(0, Math.min(n - 1, k))]; drawAll(); showTip(sel);
+    } else if (ev.key === 'Enter') { ev.preventDefault(); togglePin(sel); }
+  }).on('blur', () => showTip(-1));
+
+  function togglePin(i) {
+    if (i < 0) return;
+    if (pins.has(i) && pins.get(i) === ap[i]) pins.delete(i); else pins.set(i, ap[i]);
+    drawScatter.animate = true; relax(); drawAll();
+  }
+  document.getElementById('pl-pin').addEventListener('click', () => { if (sel >= 0) { pins.set(sel, ap[sel]); drawScatter.animate = true; relax(); drawAll(); } });
+  document.getElementById('pl-rel').addEventListener('click', () => { if (sel >= 0 && pins.delete(sel)) { drawScatter.animate = true; relax(); drawAll(); } });
+  document.getElementById('pl-ten').addEventListener('click', () => {
+    pins.clear(); S.rank.slice(0, 10).forEach(i => pins.set(i, ap[i]));
+    drawScatter.animate = true; relax(); drawAll();
+  });
+  document.getElementById('pl-clear').addEventListener('click', () => { pins.clear(); drawScatter.animate = true; relax(); drawAll(); });
+
+  // ── one neuron ──
+  const sBody = document.getElementById('pl-side'), sSvg = d3.select(sBody).select('svg');
+  let ssw = 0;
+  function drawSide() {
+    const w = ssw; if (!w || !cur || sel < 0) return;
+    const i = sel, X = cur.x, s = S;
+    const M = { l: 36, r: 10, t: 16, b: 30 }, iw = w - M.l - M.r, ch = 120, th = 56, h = M.t + ch + 14 + th + M.b;
+    sSvg.attr('width', w).attr('height', h).selectAll('*').remove();
+    const g = sSvg.append('g').attr('transform', `translate(${M.l},${M.t})`);
+    const x = d3.scaleLinear().domain([0, 1]).range([0, iw]);
+    // Cost of neuron i at position p with every other neuron held where it is.
+    const f = p => {
+      let c = 0;
+      for (const [j, wt] of s.P[i]) c += wt / s.alpha * Math.abs(p - X[j]) ** s.zeta;
+      for (const [, k, q, wt] of byNode[i]) c += (k === 'm' ? wt / s.alpha : wt) * Math.abs(p - q) ** s.zeta;
+      return c;
+    };
+    const ps = d3.range(0, 1.0001, 1 / 160), fs = ps.map(f), fmin = d3.min(fs);
+    const rel = fs.map(v => (v - fmin) / s.C0 * 100);
+    const y = d3.scaleLinear().domain([0, Math.max(1, d3.max(rel))]).nice().range([ch, 0]);
+    g.append('g').attr('class', 'axis').call(d3.axisLeft(y).ticks(4).tickFormat(v => v + '%').tickSizeOuter(0));
+    g.append('text').attr('class', 'note').attr('x', 4).attr('y', -4).text('added cost, others held, % of optimum');
+    g.append('path').datum(ps.map((p, k) => [x(p), y(rel[k])])).attr('d', d3.line()).style('fill', 'none').style('stroke', css('--text')).style('stroke-width', 1.6);
+    // Track of partners and anchors.
+    const ty = ch + 14 + th / 2;
+    g.append('line').attr('x1', 0).attr('x2', iw).attr('y1', ty).attr('y2', ty).style('stroke', css('--border'));
+    const wmax = d3.max([...s.P[i].values()]) || 1;
+    for (const [j, wt] of s.P[i]) {
+      g.append('circle').attr('cx', x(X[j])).attr('cy', ty).attr('r', 1.5 + 5 * Math.sqrt(wt / wmax))
+        .style('fill', css(ROLE_VAR[N[j].role])).style('fill-opacity', 0.55);
+    }
+    for (const [, k, q] of byNode[i]) {
+      g.append('line').attr('x1', x(q)).attr('x2', x(q)).attr('y1', ty - th / 2).attr('y2', ty - th / 2 + 10)
+        .style('stroke', css(k === 's' ? '--c-sensory' : '--c-motor')).style('stroke-width', 2);
+    }
+    g.append('g').attr('class', 'axis').attr('transform', `translate(0,${ty + th / 2})`).call(d3.axisBottom(x).ticks(5).tickSizeOuter(0));
+    g.append('text').attr('class', 'axis-label').attr('x', iw).attr('y', ty + th / 2 + 28).attr('text-anchor', 'end').text('position along the body, partners at model positions');
+    // Markers: the model's position and the real cell body.
+    const mark = (p, color, dash, label, anchor) => {
+      g.append('line').attr('x1', x(p)).attr('x2', x(p)).attr('y1', 0).attr('y2', ty + th / 2).style('stroke', css(color)).style('stroke-width', 1.6).style('stroke-dasharray', dash);
+      g.append('text').attr('class', 'pt-lab halo').attr('x', x(p) + (anchor === 'end' ? -4 : 4)).attr('y', ch - 4).attr('text-anchor', anchor).text(label);
+    };
+    const leftFirst = X[i] < ap[i];
+    mark(ap[i], '--text', '4 3', 'cell body', leftFirst ? 'start' : 'end');
+    mark(X[i], '--accent', null, pins.has(i) ? 'pinned' : 'model', leftFirst ? 'end' : 'start');
+    sideReadout();
+  }
+  function sideReadout() {
+    const i = sel, X = cur.x, s = S, d = N[i];
+    document.getElementById('pl-side-h').innerHTML = `${d.name} <span>${ROLE_NAME[d.role]}</span>`;
+    let tw = 0, sum = 0;
+    for (const [j, wt] of s.P[i]) { tw += wt; sum += wt * ap[j]; }
+    const nA = byNode[i].length;
+    // Price of holding i at its cell body with the others free (current pins kept).
+    let price;
+    if (pins.has(i)) price = null;
+    else if (!pins.size && s.zeta === 2) price = s.price[i];
+    else {
+      const p2 = new Map(pins); p2.set(i, ap[i]);
+      price = total(G.placement(n, s.E, A, { zeta: s.zeta, alpha: s.alpha, pins: p2, x0: X }).cost) - total(cur.cost);
+    }
+    document.getElementById('pl-side-ro').innerHTML =
+      `Cell body at <b>${fmt(ap[i], 2)}</b> of the body; the model ${pins.has(i) ? 'has it pinned at' : 'puts it at'} <b>${fmt(X[i], 2)}</b>. ` +
+      `Its ${fmt(tw, 0)} synapses and junctions are with ${s.P[i].size} partners whose cell bodies average ${fmt(sum / tw, 2)}` +
+      (nA ? `, and it has ${nA} ${nA === 1 ? 'anchor' : 'anchors'}.` : `; it has no sensory ending or muscle.`) +
+      (price === null ? '' : ` Held at its cell body while the others re-settle, it adds <b>${pct(price / s.C0)}</b> to the optimum's cost.`);
+    document.getElementById('pl-pin').disabled = pins.has(i) && pins.get(i) === ap[i];
+    document.getElementById('pl-rel').disabled = !pins.has(i);
+  }
+
+  function readout() {
+    const X = cur.x, s = S, dev = X.map((v, i) => Math.abs(v - ap[i]));
+    const sorted = Array.from(dev).sort((p, q) => p - q), med = (sorted[(n - 1) >> 1] + sorted[n >> 1]) / 2;
+    let html;
+    if (!pins.size) {
+      html = `At exponent ${fmt(s.zeta, 2)} with ${fmt(s.alpha, s.alpha % 1 ? 1 : 0)} ${s.alpha === 1 ? 'synapse' : 'synapses'} per wire the model is on average <b>${pct(d3.mean(dev))}</b> of the body length from the real cell bodies (median ${pct(med)}); a random layout averages ${pct(randDev)}. ` +
+        `The real layout costs <b>${fmt(total(s.real) / s.C0, 1)}</b> times the optimum (wiring between neurons ${fmt(s.real.internal / s.base.cost.internal, 1)} times, to endings and muscles ${fmt(s.real.external / s.base.cost.external, 1)}); random positions about ${fmt(s.randRatio, 0)}.`;
+    } else {
+      const free = d3.range(n).filter(i => !pins.has(i));
+      const fd = d3.mean(free, i => dev[i]), fd0 = d3.mean(free, i => Math.abs(s.base.x[i] - ap[i]));
+      html = `With ${pins.size} ${pins.size === 1 ? 'neuron' : 'neurons'} pinned the layout costs <b>${fmt(total(cur.cost) / s.C0, 2)}</b> times the optimum (the real worm ${fmt(total(s.real) / s.C0, 1)}). ` +
+        `The other ${free.length} neurons are on average <b>${pct(fd)}</b> from their cell bodies, against ${pct(fd0)} with nothing pinned.`;
+    }
+    document.getElementById('pl-ro').innerHTML = html;
+  }
+
+  function drawAll() { drawScatter(); drawSide(); readout(); }
+  function update() {
+    ctl.z.nextElementSibling.textContent = fmt(+ctl.z.value, 2);
+    const a = ALPHAS[+ctl.a.value];
+    ctl.a.nextElementSibling.textContent = fmt(a, a % 1 ? 1 : 0);
+    solveBase(); cur = null; relax(); drawScatter.animate = true; drawAll();
+  }
+  let pending = 0;
+  const onInput = () => { if (!pending) pending = requestAnimationFrame(() => { pending = 0; update(); }); };
+  ctl.z.addEventListener('input', onInput);
+  ctl.a.addEventListener('input', onInput);
+  ctl.gap.addEventListener('change', update);
+  responsive(body, w => { sw = w; drawScatter(); });
+  responsive(sBody, w => { ssw = w; drawSide(); });
+  onTheme(drawAll);
+  update();
+}
+
+// ── Figure 2: the exponential distance rule in the macaque ──
+function edrFigure(P) {
+  const LN10 = Math.LN10;
+  const targets = [...new Set(P.map(p => p[0]))];
+  const REGION = { V1: 'primary visual cortex', V2: 'second visual area', V4: 'visual area V4', MT: 'middle temporal visual area', TEO: 'inferior temporal cortex', TEpd: 'inferior temporal cortex',
+    STPc: 'superior temporal polysensory cortex', DP: 'dorsal prelunate visual area', '7A': 'posterior parietal cortex', '8l': 'frontal area 8, lateral', '8m': 'frontal area 8, medial' };
+  const fitOf = rows => {
+    const f = G.linfit(rows.map(p => p[2]), rows.map(p => Math.log10(p[3])));
+    return { ...f, lam: -f.slope * LN10, ci: 1.96 * f.se * LN10, n: rows.length, rows };
+  };
+  const all = fitOf(P);
+  const per = Object.fromEntries(targets.map(t => [t, fitOf(P.filter(p => p[0] === t))]));
+  // Shared slope with a height per target, and a line per target: shares of the pooled variance.
+  const ys = P.map(p => Math.log10(p[3])), ybar = d3.mean(ys), sst = d3.sum(ys, v => (v - ybar) ** 2);
+  const mx = Object.fromEntries(targets.map(t => [t, d3.mean(per[t].rows, p => p[2])]));
+  const my = Object.fromEntries(targets.map(t => [t, d3.mean(per[t].rows, p => Math.log10(p[3]))]));
+  let sxy = 0, sxx = 0;
+  P.forEach(p => { const a = p[2] - mx[p[0]], b = Math.log10(p[3]) - my[p[0]]; sxy += a * b; sxx += a * a; });
+  const bs = sxy / sxx;
+  const r2shared = 1 - d3.sum(P, p => (Math.log10(p[3]) - my[p[0]] - bs * (p[2] - mx[p[0]])) ** 2) / sst;
+  const r2sep = 1 - d3.sum(P, p => { const f = per[p[0]]; return (Math.log10(p[3]) - f.intercept - f.slope * p[2]) ** 2; }) / sst;
+  const resSd = Math.sqrt(d3.sum(P, p => (Math.log10(p[3]) - all.intercept - all.slope * p[2]) ** 2) / (P.length - 2));
+  const ySd = d3.deviation(ys);
+
+  const rows = [{ key: 'all', label: 'All', f: all }].concat(targets.map(t => ({ key: t, label: t, f: per[t] })).sort((a, b) => a.f.lam - b.f.lam));
+  const slider = document.getElementById('ed-l');
+  let selKey = 'all', lam = +slider.value;
+  const cur = () => (selKey === 'all' ? all : per[selKey]);
+
+  const body = document.getElementById('ed-sc'), svg = d3.select(body).select('svg'), tip = d3.select(body).select('.tip');
+  const fBody = document.getElementById('ed-fp'), fSvg = d3.select(fBody).select('svg'), fTip = d3.select(fBody).select('.tip');
+  let sw = 0, fw = 0, geo = null;
+  const DMAX = 50;
+
+  function drawScatter() {
+    const w = sw; if (!w) return;
+    const M = { l: 48, r: 14, t: 10, b: 38 }, h = narrow() ? 280 : 340, iw = w - M.l - M.r, ih = h - M.t - M.b;
+    svg.attr('width', w).attr('height', h).selectAll('*').remove();
+    const g = svg.append('g').attr('transform', `translate(${M.l},${M.t})`);
+    const x = d3.scaleLinear().domain([0, DMAX]).range([0, iw]), y = d3.scaleLinear().domain([-6.5, 0]).range([ih, 0]);
+    geo = { M, x, y, iw, ih };
+    g.append('g').attr('class', 'axis').attr('transform', `translate(0,${ih})`).call(d3.axisBottom(x).ticks(5).tickSizeOuter(0));
+    g.append('g').attr('class', 'axis').call(d3.axisLeft(y).tickValues([-6, -5, -4, -3, -2, -1, 0]).tickFormat(v => v === 0 ? '1' : '10' + String(v).replace('-', '⁻').replace(/\d/g, c => '⁰¹²³⁴⁵⁶⁷⁸⁹'[c])).tickSizeOuter(0));
+    g.append('text').attr('class', 'axis-label').attr('x', iw).attr('y', ih + 32).attr('text-anchor', 'end').text('white-matter distance (mm)');
+    g.append('text').attr('class', 'axis-label').attr('transform', 'rotate(-90)').attr('x', 0).attr('y', -38).attr('text-anchor', 'end').text('FLNe, log scale');
+    const f = cur(), inSel = p => selKey === 'all' || p[0] === selKey;
+    const ink = css('--text');
+    g.append('g').selectAll('circle').data(P.slice().sort((a, b) => inSel(a) - inSel(b))).join('circle')
+      .attr('cx', p => x(p[2])).attr('cy', p => y(Math.log10(p[3]))).attr('r', p => inSel(p) && selKey !== 'all' ? 3.2 : 2.4)
+      .style('fill', ink).style('fill-opacity', p => (selKey === 'all' ? 0.42 : inSel(p) ? 0.85 : 0.1));
+    // Least-squares line for the selection; the pooled one stays faint when a target is picked.
+    const line = (a, b, color, wdt, dash) => g.append('line').attr('x1', x(0)).attr('y1', y(a)).attr('x2', x(DMAX)).attr('y2', y(a + b * DMAX))
+      .style('stroke', css(color)).style('stroke-width', wdt).style('stroke-dasharray', dash || null);
+    if (selKey !== 'all') line(all.intercept, all.slope, '--c-null', 1.2, '4 3');
+    line(f.intercept, f.slope, '--c-null', 2.5);
+    // The reader's line: slope -lam / ln 10, best height for that slope.
+    const b = -lam / LN10, a = G.linfit(f.rows.map(p => p[2]), f.rows.map(p => Math.log10(p[3])), b).intercept;
+    line(a, b, '--accent', 2);
+    const hx = x(DMAX), hy = y(a + b * DMAX);
+    g.append('circle').attr('cx', hx).attr('cy', hy).attr('r', 6).style('fill', css('--accent')).style('cursor', 'ns-resize');
+    geo.handle = { hx: hx + M.l, hy: hy + M.t };
+    geo.mean = { x: d3.mean(f.rows, p => p[2]), y: d3.mean(f.rows, p => Math.log10(p[3])) };
+  }
+
+  function drawForest() {
+    const w = fw; if (!w) return;
+    const M = { l: 70, r: 12, t: 22, b: 34 }, rh = 23, ih = rows.length * rh, h = M.t + ih + M.b, iw = w - M.l - M.r;
+    fSvg.attr('width', w).attr('height', h).selectAll('*').remove();
+    const g = fSvg.append('g').attr('transform', `translate(${M.l},${M.t})`);
+    const x = d3.scaleLinear().domain([0, 0.45]).range([0, iw]);
+    g.append('g').attr('class', 'axis').attr('transform', `translate(0,${ih})`).call(d3.axisBottom(x).ticks(4).tickSizeOuter(0));
+    g.append('text').attr('class', 'axis-label').attr('x', iw).attr('y', ih + 30).attr('text-anchor', 'end').text('decay constant λ (per mm)');
+    g.append('line').attr('x1', x(0.188)).attr('x2', x(0.188)).attr('y1', -6).attr('y2', ih).style('stroke', css('--c-null')).style('stroke-dasharray', '4 3');
+    g.append('text').attr('class', 'note').attr('x', x(0.188) + 4).attr('y', -8).text('0.188');
+    g.append('line').attr('x1', x(lam)).attr('x2', x(lam)).attr('y1', 0).attr('y2', ih).style('stroke', css('--accent')).style('stroke-width', 1.5);
+    rows.forEach((r, k) => {
+      const yy = k * rh + rh / 2;
+      if (r.key === selKey) g.append('rect').attr('class', 'row-sel').attr('x', -M.l + 2).attr('y', k * rh + 1).attr('width', iw + M.l - 2).attr('height', rh - 2).attr('rx', 3);
+      g.append('text').attr('class', 'row-lab').attr('x', -M.l + 8).attr('y', yy + 4).style('font-weight', r.key === 'all' ? 600 : 400).text(r.label);
+      g.append('text').attr('class', 'row-n').attr('x', -10).attr('y', yy + 4).attr('text-anchor', 'end').text(r.f.n);
+      g.append('line').attr('x1', x(Math.max(0, r.f.lam - r.f.ci))).attr('x2', x(Math.min(0.45, r.f.lam + r.f.ci))).attr('y1', yy).attr('y2', yy).style('stroke', css('--text')).style('stroke-width', 1.4);
+      g.append('circle').attr('cx', x(r.f.lam)).attr('cy', yy).attr('r', r.key === 'all' ? 4.5 : 3.5).style('fill', css('--text'));
+      g.append('rect').attr('class', 'row-hit').attr('x', -M.l).attr('y', k * rh).attr('width', iw + M.l).attr('height', rh)
+        .on('click', () => select(r.key))
+        .on('pointerenter', () => {
+          fTip.style('display', 'block').html(r.key === 'all' ? `All ${r.f.n} pathways: λ ${fmt(r.f.lam, 3)} ± ${fmt(r.f.ci, 3)}, R² ${fmt(r.f.r2, 2)}`
+            : `${r.label} (${REGION[r.key]}), ${r.f.n} inputs: λ ${fmt(r.f.lam, 3)} ± ${fmt(r.f.ci, 3)}, R² ${fmt(r.f.r2, 2)}`);
+          const tw = fTip.node().offsetWidth;
+          fTip.style('left', Math.max(0, Math.min(w - tw, M.l + x(r.f.lam) - tw / 2)) + 'px').style('top', (M.t + k * rh - 26) + 'px');
+        })
+        .on('pointerleave', () => fTip.style('display', 'none'));
+    });
+  }
+
+  function readout() {
+    const f = cur(), b = -lam / LN10, mine = G.linfit(f.rows.map(p => p[2]), f.rows.map(p => Math.log10(p[3])), b);
+    const who = selKey === 'all' ? `All ${f.n} pathways` : `The ${f.n} inputs to ${selKey} (${REGION[selKey]})`;
+    const len = lam > 0 ? `, a factor of e every ${fmt(1 / lam, 1)} mm` : '';
+    document.getElementById('ed-h').innerHTML = (selKey === 'all' ? `All ${f.n} pathways` : `Inputs to ${selKey}`) + ' <span>weight against white-matter distance</span>';
+    document.getElementById('ed-ro').innerHTML =
+      `Your line, λ = ${fmt(lam, 3)} per mm${len}, explains <b>${pct(Math.max(0, mine.r2), 0)}</b> of the variance in log FLNe. ${who}: best λ <b>${fmt(f.lam, 3)}</b> per mm, explaining ${pct(f.r2, 0)}.` +
+      (selKey === 'all' ? ` Residual spread ${fmt(resSd, 2)} decades (the weights alone ${fmt(ySd, 2)}). A height per target explains ${pct(r2shared, 0)}; a line per target ${pct(r2sep, 0)}.` : '');
+  }
+
+  function drawAll() { slider.value = lam; document.getElementById('ed-l-val').textContent = fmt(lam, 3); drawScatter(); drawForest(); readout(); }
+  function select(k) { selKey = k; drawAll(); }
+  slider.addEventListener('input', () => { lam = +slider.value; drawAll(); });
+  document.getElementById('ed-fit').addEventListener('click', () => { lam = Math.round(cur().lam * 1000) / 1000; drawAll(); });
+
+  // Drag the end of your line: it pivots on the selection's mean point.
+  let dragging = false;
+  svg.on('pointerdown', ev => {
+    const [px, py] = d3.pointer(ev);
+    if (geo && (px - geo.handle.hx) ** 2 + (py - geo.handle.hy) ** 2 < 400) { dragging = true; svg.node().setPointerCapture(ev.pointerId); ev.preventDefault(); }
+  }).on('pointermove', ev => {
+    const [px, py] = d3.pointer(ev);
+    if (dragging) {
+      const yv = geo.y.invert(py - geo.M.t), slope = (yv - geo.mean.y) / (DMAX - geo.mean.x);
+      lam = Math.max(0, Math.min(0.45, Math.round(-slope * LN10 * 200) / 200));
+      drawAll();
+      return;
+    }
+    // Hover: nearest pathway.
+    let best = null, bd = 100;
+    for (const p of P) {
+      if (selKey !== 'all' && p[0] !== selKey) continue;
+      const dx = geo.M.l + geo.x(p[2]) - px, dy = geo.M.t + geo.y(Math.log10(p[3])) - py, d = dx * dx + dy * dy;
+      if (d < bd) { bd = d; best = p; }
+    }
+    if (!best) { tip.style('display', 'none'); return; }
+    tip.style('display', 'block').html(`${best[1]} → ${best[0]}: ${fmt(best[2], 1)} mm, FLNe ${best[3].toExponential(1)}`);
+    const tw = tip.node().offsetWidth, ax = geo.M.l + geo.x(best[2]), ay = geo.M.t + geo.y(Math.log10(best[3]));
+    tip.style('left', Math.max(0, Math.min(sw - tw, ax - tw / 2)) + 'px').style('top', (ay - 30) + 'px');
+  }).on('pointerup pointercancel', () => { dragging = false; })
+    .on('pointerleave', () => tip.style('display', 'none'));
+  svg.on('keydown', ev => {
+    if (!/^Arrow(Up|Down)$/.test(ev.key)) return;
+    ev.preventDefault();
+    lam = Math.max(0, Math.min(0.45, +(lam + (ev.key === 'ArrowUp' ? -0.005 : 0.005)).toFixed(3)));
+    drawAll();
+  });
+  fSvg.on('keydown', ev => {
+    if (!/^Arrow(Up|Down)$/.test(ev.key)) return;
+    ev.preventDefault();
+    const k = rows.findIndex(r => r.key === selKey) + (ev.key === 'ArrowDown' ? 1 : -1);
+    select(rows[Math.max(0, Math.min(rows.length - 1, k))].key);
+  });
+
+  responsive(body, w => { sw = w; drawScatter(); });
+  responsive(fBody, w => { fw = w; drawForest(); });
+  onTheme(drawAll);
+  drawAll();
+}
+</script>
+</body>
+</html>

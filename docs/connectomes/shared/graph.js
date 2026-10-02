@@ -465,6 +465,117 @@
   }
   const spearman = (x, y) => pearson(ranks(x), ranks(y));
 
+  // Least-squares line y = a + b x, with R^2. Pass slope to fit the intercept only.
+  function linfit(x, y, slope) {
+    const mx = mean(x), my = mean(y);
+    let sxy = 0, sxx = 0, syy = 0;
+    for (let i = 0; i < x.length; i++) { const a = x[i] - mx, b = y[i] - my; sxy += a * b; sxx += a * a; syy += b * b; }
+    const b = slope === undefined ? sxy / sxx : slope, a = my - b * mx;
+    let ss = 0;
+    for (let i = 0; i < x.length; i++) ss += (y[i] - a - b * x[i]) ** 2;
+    return { intercept: a, slope: b, r2: 1 - ss / syy, se: Math.sqrt(ss / (x.length - 2) / sxx) };
+  }
+
+  // Solve Q x = b in place for symmetric positive definite Q (n x n, row-major
+  // Float64Array). Returns false if Q is not positive definite.
+  function cholSolve(Q, b, n) {
+    for (let j = 0; j < n; j++) {
+      const rj = j * n;
+      let s = Q[rj + j];
+      for (let k = 0; k < j; k++) s -= Q[rj + k] * Q[rj + k];
+      if (!(s > 0)) return false;
+      const d = Math.sqrt(s);
+      Q[rj + j] = d;
+      for (let i = j + 1; i < n; i++) {
+        const ri = i * n;
+        let t = Q[ri + j];
+        for (let k = 0; k < j; k++) t -= Q[ri + k] * Q[rj + k];
+        Q[ri + j] = t / d;
+      }
+    }
+    for (let i = 0; i < n; i++) { let t = b[i]; for (let k = 0; k < i; k++) t -= Q[i * n + k] * b[k]; b[i] = t / Q[i * n + i]; }
+    for (let i = n - 1; i >= 0; i--) { let t = b[i]; for (let k = i + 1; k < n; k++) t -= Q[k * n + i] * b[k]; b[i] = t / Q[i * n + i]; }
+    return true;
+  }
+
+  // Wire-cost placement (Chen, Hall and Chklovskii 2006). Every node gets one
+  // position x_i along a line; the cost is
+  //   sum over edges [a, b, w] of (w / alpha) |x_a - x_b|^zeta
+  //   + sum over anchors [i, kind, p, w] of (w / alpha if kind is 'm', else w) |x_i - p|^zeta
+  // (edges may repeat; their weights add). Sensory endings ('s') have one dedicated
+  // neurite each, so only synapses and muscles are divided by alpha, the number of
+  // synapses that share one neurite. zeta = 2 is one linear solve; other zeta > 1 use
+  // iteratively reweighted least squares with backtracking (the cost is convex).
+  // pins: Map node -> fixed position. Returns { x, cost: {internal, external}, iters }.
+  function placement(n, edges, anchors, { zeta = 2, alpha = 29.3, pins = new Map(), x0, maxIter = 200, tol = 1e-10 } = {}) {
+    const free = [], slot = new Int32Array(n).fill(-1);
+    for (let i = 0; i < n; i++) if (!pins.has(i)) { slot[i] = free.length; free.push(i); }
+    const m = free.length;
+    const E = edges.map(([a, b, w]) => [a, b, w / alpha]);
+    const X = anchors.map(([i, k, p, w]) => [i, p, k === 'm' ? w / alpha : w]);
+    let x = Float64Array.from({ length: n }, (_, i) => pins.has(i) ? pins.get(i) : x0 ? x0[i] : 0.5);
+    const total = y => wireCost(y, edges, anchors, { zeta, alpha });
+    const eps = 1e-4;
+    const step = (y, first) => {
+      // Reweighted quadratic: weight w |d|^(zeta - 2) at the current positions.
+      const r = d => zeta === 2 || first ? 1 : Math.max(Math.abs(d), eps) ** (zeta - 2);
+      const Q = new Float64Array(m * m), b = new Float64Array(m);
+      for (const [a, c, w] of E) {
+        const k = w * r(y[a] - y[c]), sa = slot[a], sc = slot[c];
+        if (sa >= 0) { Q[sa * m + sa] += k; if (sc >= 0) { Q[sa * m + sc] -= k; } else b[sa] += k * y[c]; }
+        if (sc >= 0) { Q[sc * m + sc] += k; if (sa >= 0) { Q[sc * m + sa] -= k; } else b[sc] += k * y[a]; }
+      }
+      for (const [i, p, w] of X) { const s = slot[i]; if (s < 0) continue; const k = w * r(y[i] - p); Q[s * m + s] += k; b[s] += k * p; }
+      if (!cholSolve(Q, b, m)) throw new Error('placement: system is singular (a component has no anchor)');
+      const out = Float64Array.from(y);
+      free.forEach((v, s) => { out[v] = b[s]; });
+      return out;
+    };
+    if (zeta === 2 || !x0) x = step(x, true);
+    if (zeta === 2) return { x, cost: total(x), iters: 1 };
+    const sum = c => c.internal + c.external;
+    let c = sum(total(x)), it = 0;
+    for (; it < maxIter; it++) {
+      const y = step(x, false);
+      let t = 1, z = y, cz = sum(total(z));
+      while (cz > c && t > 1e-3) { t /= 2; z = x.map((v, i) => v + t * (y[i] - v)); cz = sum(total(z)); }
+      if (cz > c) break;
+      const done = c - cz <= tol * c;
+      x = z; c = cz;
+      if (done) break;
+    }
+    return { x, cost: total(x), iters: it + 1 };
+  }
+
+  // For the quadratic cost (zeta = 2): the rise in the minimum cost when node i
+  // alone is pinned at target[i] and every other node re-settles, for every i at
+  // once. Minimising a quadratic with one coordinate fixed leaves a parabola in that
+  // coordinate whose curvature is 1 / (Q^-1)_ii, so the rise is
+  // (target_i - x_i)^2 / (Q^-1)_ii, with x the unpinned optimum and Q the system
+  // matrix of placement() (here without the factor 2 the gradient would carry).
+  function pinPrice(n, edges, anchors, target, { alpha = 29.3 } = {}) {
+    const Q = new Float64Array(n * n);
+    for (const [a, b, w] of edges) { const k = w / alpha; Q[a * n + a] += k; Q[b * n + b] += k; Q[a * n + b] -= k; Q[b * n + a] -= k; }
+    for (const [i, k, , w] of anchors) Q[i * n + i] += k === 'm' ? w / alpha : w;
+    const L = Float64Array.from(Q), x = placement(n, edges, anchors, { alpha }).x;
+    if (!cholSolve(L, new Float64Array(n), n)) throw new Error('pinPrice: singular');
+    // (Q^-1)_ii = |L^-1 e_i|^2 summed over rows of L^-1: solve L y = e_i for each i.
+    const diag = new Float64Array(n), y = new Float64Array(n);
+    for (let i = 0; i < n; i++) {
+      y.fill(0);
+      for (let r = i; r < n; r++) { let t = r === i ? 1 : 0; for (let k = i; k < r; k++) t -= L[r * n + k] * y[k]; y[r] = t / L[r * n + r]; diag[i] += y[r] * y[r]; }
+    }
+    return Float64Array.from(x, (v, i) => (target[i] - v) ** 2 / diag[i]);
+  }
+
+  // The two parts of the placement cost above for positions x.
+  function wireCost(x, edges, anchors, { zeta = 2, alpha = 29.3 } = {}) {
+    let internal = 0, external = 0;
+    for (const [a, b, w] of edges) internal += w * Math.abs(x[a] - x[b]) ** zeta;
+    for (const [i, k, p, w] of anchors) external += (k === 'm' ? w / alpha : w) * Math.abs(x[i] - p) ** zeta;
+    return { internal: internal / alpha, external };
+  }
+
   // ---- checks (node: require(...).runChecks()) ----
   function runChecks(log = console.log) {
     const res = [];
@@ -568,6 +679,31 @@
     // T = 2 is 1 plus the squared weights of the node's column, scaled.
     const ac2 = avgControl(W4, { T: 2 });
     ok('T = 2 is 1 + sum of squared weights / (1 + xi)^2', ac2.every((x, i) => near(x, 1 + W4[i].reduce((s, w) => s + w * w, 0) / (1 + xi) ** 2, 1e-12)));
+    // Placement: a chain held at both ends by stiff anchors spreads evenly.
+    const chain = placement(4, [[0, 1, 2], [1, 2, 2], [2, 3, 2]], [[0, 's', 0, 1e9], [3, 's', 1, 1e9]], { alpha: 2 }).x;
+    ok('placement: chain between two anchors is evenly spaced', [0, 1 / 3, 2 / 3, 1].every((v, i) => near(chain[i], v, 1e-7)), Array.from(chain, v => v.toFixed(4)).join(' '));
+    // One free node, three anchors, zeta = 1.5: compare with golden-section search.
+    const A3 = [[0, 's', 0, 1], [0, 'm', 0.6, 3], [0, 's', 1, 2]];
+    const f1 = x => wireCost([x], [], A3, { zeta: 1.5, alpha: 1 }).external;
+    let lo = 0, hi = 1;
+    for (let k = 0; k < 200; k++) { const m1 = lo + (hi - lo) * 0.382, m2 = lo + (hi - lo) * 0.618; if (f1(m1) < f1(m2)) hi = m2; else lo = m1; }
+    const p3 = placement(1, [], A3, { zeta: 1.5, alpha: 1, x0: [0.5] }).x[0];
+    ok('placement: zeta = 1.5 single node matches golden-section search', near(p3, lo, 1e-5), p3.toFixed(6) + ' vs ' + lo.toFixed(6));
+    // Small random graph, zeta = 3 and 1.5, one node pinned: the gradient vanishes at every free node.
+    const r5 = rng(7), E5 = Array.from({ length: 11 }, (_, i) => [i, i + 1, 1]), A5 = [];
+    for (let a = 0; a < 12; a++) for (let b = a + 1; b < 12; b++) if (r5() < 0.3) E5.push([a, b, 1 + Math.floor(r5() * 5)]);
+    for (let i = 0; i < 12; i += 2) A5.push([i, i % 4 ? 'm' : 's', r5(), 1 + r5() * 3]);
+    for (const zeta of [1.5, 3]) {
+      const pins = new Map([[3, 0.9]]), x0 = placement(12, E5, A5, { alpha: 4, pins }).x;
+      const P = placement(12, E5, A5, { zeta, alpha: 4, pins, x0, tol: 1e-14 }).x;
+      const g = new Float64Array(12), dz = d => zeta * Math.abs(d) ** (zeta - 1) * Math.sign(d);
+      for (const [a, b, w] of E5) { const t = w / 4 * dz(P[a] - P[b]); g[a] += t; g[b] -= t; }
+      for (const [i, k, p, w] of A5) g[i] += (k === 'm' ? w / 4 : w) * dz(P[i] - p);
+      const gmax = Math.max(...Array.from(g).filter((_, i) => i !== 3).map(Math.abs));
+      ok(`placement: zeta = ${zeta} gradient vanishes at free nodes, pin held`, gmax < 1e-4 && P[3] === 0.9, gmax.toExponential(1));
+    }
+    const lf = linfit([0, 1, 2, 3], [1, 3, 4, 8]);
+    ok('linfit slope 2.2, intercept 0.7, R^2 1 - 1.8 / 26', near(lf.slope, 2.2, 1e-12) && near(lf.intercept, 0.7, 1e-12) && near(lf.r2, 1 - 1.8 / 26, 1e-12), lf.r2.toFixed(6));
     ok('rho = xi / (1 + xi) is the same as c = 1', avgControl(W4, { rho: xi / (1 + xi) }).every((x, i) => near(x, acInf[i], 1e-12)));
     ok('Spearman with ties', near(spearman([1, 2, 2, 3], [1, 2, 3, 4]), 0.9486832980505138, 1e-12));
     return res;
@@ -606,9 +742,39 @@
     return res;
   }
 
+  // Article 4's data (worm-anchors.json, macaque-fln.json) against numpy 2.0 and
+  // scipy 1.13 (numpy.linalg.solve for zeta = 2, L-BFGS-B for zeta = 1.5 and 3).
+  function wireChecks(worm, anch, fln, log = console.log) {
+    const res = [];
+    const ok = (name, pass, detail = '') => { res.push({ name, pass }); log((pass ? 'pass ' : 'FAIL ') + name + (detail ? ': ' + detail : '')); };
+    const n = worm.nodes.length, ap = worm.nodes.map(d => d.ap), A = anch.anchors;
+    ok('649 anchors on 199 neurons', A.length === 649 && new Set(A.map(a => a[0])).size === 199);
+    const E = worm.chem.concat(worm.gap), devs = x => Array.from(x, (v, i) => Math.abs(v - ap[i]));
+    const med = a => { const s = a.slice().sort((p, q) => p - q); return (s[(s.length - 1) >> 1] + s[s.length >> 1]) / 2; };
+    const P = placement(n, E, A), dv = devs(P.x), c = P.cost.internal + P.cost.external;
+    ok('zeta 2, alpha 29.3: mean deviation 0.09689, median 0.05203, cost 4.88213 (numpy)', Math.abs(mean(dv) - 0.09689) < 5e-6 && Math.abs(med(dv) - 0.05203) < 5e-6 && Math.abs(c - 4.882127) < 5e-6,
+      mean(dv).toFixed(5) + ', ' + med(dv).toFixed(5) + ', ' + c.toFixed(6));
+    const ca = wireCost(ap, E, A), ratio = (ca.internal + ca.external) / c;
+    ok('actual layout costs 4.1765 times the optimum (internal 5.8455, external 1.3606)', Math.abs(ratio - 4.1765) < 5e-5 && Math.abs(ca.internal / P.cost.internal - 5.8455) < 5e-5 && Math.abs(ca.external / P.cost.external - 1.3606) < 5e-5, ratio.toFixed(4));
+    for (const [zeta, want, wc] of [[1.5, 0.10578, 11.08837], [3, 0.10470, 1.039424]]) {
+      const Q = placement(n, E, A, { zeta, x0: P.x }), m = mean(devs(Q.x)), cq = Q.cost.internal + Q.cost.external;
+      ok(`zeta ${zeta}: mean deviation ${want}, cost ${wc} (L-BFGS-B)`, Math.abs(m - want) < 1e-4 && Math.abs(cq - wc) / wc < 1e-5, m.toFixed(5) + ', ' + cq.toFixed(6) + ', ' + Q.iters + ' iterations');
+    }
+    const pr = pinPrice(n, E, A, ap), top = Array.from(pr.keys()).sort((a, b) => pr[b] - pr[a]);
+    const direct = top.slice(0, 3).map(i => { const Q = placement(n, E, A, { pins: new Map([[i, ap[i]]]) }); return Q.cost.internal + Q.cost.external - c; });
+    ok('pinPrice equals a direct pinned solve; costliest AVAR, AVAL, PVCR, PVCL, DVA', direct.every((d, k) => Math.abs(d - pr[top[k]]) < 1e-9 * c) &&
+      top.slice(0, 5).map(i => worm.nodes[i].name).join() === 'AVAR,AVAL,PVCR,PVCL,DVA', top.slice(0, 5).map(i => worm.nodes[i].name + ' ' + (100 * pr[i] / c).toFixed(1)).join(', '));
+    const pins = new Map(top.slice(0, 10).map(i => [i, ap[i]])), Q10 = placement(n, E, A, { pins });
+    ok('ten costliest pinned at their cell bodies: 2.46 times the optimum (numpy)', Math.abs((Q10.cost.internal + Q10.cost.external) / c - 2.46) < 0.005, ((Q10.cost.internal + Q10.cost.external) / c).toFixed(4));
+    const F = fln.pathways, L = linfit(F.map(p => p[2]), F.map(p => Math.log10(p[3])));
+    ok('628 pathways into 11 targets', F.length === 628 && new Set(F.map(p => p[0])).size === 11);
+    ok('pooled fit: lambda 0.15955 per mm, R^2 0.26408 (numpy polyfit)', Math.abs(-L.slope * Math.LN10 - 0.15955) < 5e-6 && Math.abs(L.r2 - 0.26408) < 5e-6, (-L.slope * Math.LN10).toFixed(5) + ', ' + L.r2.toFixed(5));
+    return res;
+  }
+
   return {
     dataChecks, rng, undirected, csr, degrees, clustering, transitivity, meanPath, nullER, distanceBins, nullSpatial, swap,
     mutualPairs, swapDirected, swapReciprocal, triadCensus, triadEdges, TRIADS, mean, sd, runChecks,
-    eigh, dense, fiedler, edgeSpan, avgControl, pearson, ranks, spearman,
+    eigh, dense, fiedler, edgeSpan, avgControl, pearson, ranks, spearman, linfit, cholSolve, placement, pinPrice, wireCost, wireChecks,
   };
 });

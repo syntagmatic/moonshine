@@ -13,6 +13,8 @@ The deep-research report in `research/REPORT.md` is not a source; see
 | File | Source | Fetched by |
 |---|---|---|
 | `docs/connectomes/shared/data/worm-varshney.json` | WormAtlas `NeuronConnect.xls` (edges; rows S and Sp give the 2,194 directed chemical pairs, 6,394 synapses; EJ rows give 514 gap-junction pairs, 887 junctions) and `NeuronType.xls` (279 neurons, soma position 0 to 1 along the body), both from Varshney et al. 2011; 3D cell-body positions from OpenWorm `c302_A_Full.net.nml`; roles (s/i/m) from NemaNode `/api/cells` (AVH, AVK, RID are "n" only there and are set to interneuron). Fetched 2026-10-01. | `scripts/connectomes/fetch-worm.py` |
+| `docs/connectomes/shared/data/worm-anchors.json` | WormAtlas `NeuronFixedPoints.xls` (Chen, Hall & Chklovskii 2006): 650 rows `Neuron, Landmark, Landmark Position, Weight`; VC06 (not among the 279) dropped, leaving 649 anchors on 199 neurons; landmarks "Sensory"/"SensoryNB" are sensory endings (weight 1), the rest body-wall muscles plus MANAL (weights are the M_il of Chen et al. Eq. 3, some fractional). Fetched 2026-10-01. | `scripts/connectomes/fetch-wire.py` |
+| `docs/connectomes/shared/data/macaque-fln.json` | FLNe: Markov et al. 2014 Cereb Cortex supplementary table (`Cercor_2012 Table.xls`, core-nets.org via the Internet Archive, 1,989 rows, 39 injections, 29 targets); distances: Markov et al. 2014 J Comp Neurol Table 2 (`JCN_2013 Table.xls`, 628 pathways into 11 targets). Nine area spellings mapped (8L, ENTORHINAL, PERIRHINAL, PIRIFORM, SUBICULUM, TEMPORAL_POLE, INSULA, Parainsula, CORE); after mapping every distance pathway has FLNe and vice versa. Repeat injections (V1 5, V2 3, V4 2) averaged with 0 for an unlabelled injection (16 pathways affected). Same fit as the INM-6 multi-area-model CSV copy. | `scripts/connectomes/fetch-wire.py` |
 
 ## Article 3: Surprising Compared to What?
 
@@ -56,6 +58,45 @@ The deep-research report in `research/REPORT.md` is not a source; see
 | c302 is MIT licensed | S | GitHub openworm/c302 LICENSE on master |
 
 Source detail with quotes and URLs: `research/check/sources-03.md` (verification pass of 2026-10-01).
+
+## Article 4: The Cost of Wire
+
+Data: `worm-varshney.json`, `worm-anchors.json`, `macaque-fln.json`. Library additions in `shared/graph.js`: `linfit`, `cholSolve`, `placement` (quadratic solve, IRLS with backtracking for other exponents), `pinPrice`, `wireCost`; `runChecks` covers them (chain between anchors, golden-section search, vanishing gradient at zeta 1.5 and 3, linfit by hand) and `wireChecks` pins the shipped data to numpy and scipy (`tests/connectomes.html`, 57/57).
+
+| Claim | Type | How we know |
+|---|---|---|
+| Cost function: (1/alpha) sum A_ij \|x_i - x_j\|^zeta + sum S_ik \|x_i - s_k\|^zeta + (1/alpha) sum M_il \|x_i - m_l\|^zeta; A both directions, chemical and gap alike, sign and polarity ignored; sensory not divided by alpha | S | Chen et al. 2006 PNAS 103, 4723, Eqs. 1 to 3 and text (PMC1550972; equation images read) |
+| alpha = 29.3: 58.6 en passant synapses and NMJs per neuron over two neurites | S | Chen 2006, text after Eq. 3 |
+| Worm more than ten times longer than wide; 1D model | S | Chen 2006: "The length of the worm is >10 times greater than its diameter" |
+| zeta = 2 solution: each x_i the weighted average of partners and anchors | D | gradient of the quadratic set to zero; equals Chen's Eq. 5, x = Q^-1 [S s + M m / alpha] |
+| Mean deviation 9.7%, median 5.2% (2011 wiring, gap junctions included, alpha 29.3) | C | `wireChecks` 0.09689 / 0.05203 equal to numpy `linalg.solve`; figure 1 readout |
+| Published 9.71% mean, 5.10% median; random 34.6% | S | Chen 2006, "Comparison" section |
+| Random layout misses by about 35% | D | E\|U - a\| = (a^2 + (1 - a)^2)/2 averaged over the 279 cell bodies = 0.3453; readout shows 34.5% |
+| Anchored neurons 7.7%, the 80 unanchored 14.7%; 56 of those 80 are interneurons (12 sensory, 12 motor) | C | node check on the shipped files |
+| zeta 1.5 and 3 at alpha 29.3: 10.6% and 10.5% ("about 10.5%"); 1.25 gives 12.0% | C | `wireChecks` against scipy L-BFGS-B (0.10578, 0.10470); figure readout at 1.25 (12.0%; numpy IRLS 0.1197) |
+| Best near zeta 2 with alpha refit at each zeta (2: 9.7%; 1.5: 9.9% at alpha 20; 3: 10.2% at alpha 60) | C | numpy IRLS sweep over alpha in {5, 10, 20, 29.3, 40, 60, 100} |
+| Chen's search: best near alpha 27, zeta 2, mean 9.71% | S | Chen 2006, "Robustness" section |
+| alpha = 1: predicted positions spread less than half as widely as the real ones | C | node: SD of model positions 0.112 vs 0.260 for cell bodies |
+| Real layout 4.2 times the optimum; internal 5.8, external 1.4; random about 16 | C | `wireChecks` 4.1765, 5.8455, 1.3606; readout random 16 (20 seeded layouts; numpy 15.7 over 200) |
+| Chen's 1:4:16, internal 6.24, external 0.93, internal 91.7% of real cost | S | Chen 2006, "Comparison" section |
+| AVG: cell body 0.22, model 0.71; pioneer of the right ventral cord during development | C, S | figure 1 side panel; Chen 2006 "Distribution of Synapse Locations" (citing Durbin 1987 thesis) |
+| PVP and PVQ: tail pioneers growing forward; every known ventral-cord pioneer is an outlier | S | Chen 2006: "This group of neurons includes all developmental pioneers of the ventral cord currently known in C. elegans: AVG, PVPL/R, and PVQL/R"; "all pioneers are outliers" |
+| Price formula (a_i - x_i)^2 / (Q^-1)_ii | D, C | minimising a quadratic with one coordinate fixed leaves a parabola of curvature 1/(Q^-1)_ii (Schur complement); `wireChecks` equals a direct pinned solve to 1e-9 |
+| Costliest: AVAR 17.7%, AVAL 17.5%, PVCR 17.4%, PVCL 16.9%, DVA 13.4%, then DVC 13.0, PVQR 12.8, PVPR 10.8, AVG 10.7, PVQL 10.0 | C | `pinPrice` (node) equal to numpy (Q^-1 diagonal) to 0.1 |
+| AVA, PVC, DVA among the most connected | C | strength chemical plus gap: AVAL 493, AVAR 478 (top two), PVCL 188 and PVCR 186 (6th, 7th), DVA 184 (9th) |
+| Command interneurons have mostly inputs near the cell body | S | Chen 2006, "Directionality of Synapses": 12 neurons with >75% postsynaptic near the soma include all command interneurons but PVCR |
+| Ten costliest pinned: 2.46 times the optimum, nearly half of the way to 4.2; the other 269 go from 8.4% to 9.3% | C | `wireChecks` 2.4592; figure readout (numpy 2.46, 0.0934 vs 0.0844); (2.46 - 1)/(4.18 - 1) = 0.46 |
+| AVA's synapses lie along its process next to the cord motor neurons | C | article 5 ledger: about four fifths of AVA's output synapses onto cord motor neurons |
+| Shared-wire model with rules for pioneers and command interneurons: 9.41% | S | Chen 2006, "Wiring Optimization Using the Shared-Wire Model" |
+| Markov: 29 injected of 91 areas; FLNe = share of labelled neurons outside the injected area; spans about 5 orders of magnitude | S | Markov et al. 2014 Cereb Cortex 24, 17, abstract ("5 log units"); data 9.3e-7 to 0.76 over the 628 |
+| Distances through white matter between area centres in a 3D atlas (M132) | S | Markov et al. 2014 J Comp Neurol 522, 225 (PMC4255240), methods quoted in `research/check/data-other.md` |
+| Pooled lambda 0.16 per mm; e-fold 6.3 mm; tenfold 14 mm; R^2 26% | C | `wireChecks` 0.15955, 0.26408 equal to numpy `polyfit`; 1/0.1595 = 6.27; ln 10/0.1595 = 14.4 |
+| 0.188 per mm, from the neuron-count distribution over distance; name "exponential distance rule" | S | Horvat et al. 2016 PLoS Biol 14, e1002512, Table 1 (macaque white matter 0.188) and text (p(d) of labelled neurons; credits Ercsey-Ravasz et al. 2013 Neuron 80, 184) |
+| Residual SD 1.07 decades, log FLNe SD 1.24; height per target 32%; line per target 37% | C | figure 2 readout; numpy 1.07, 1.24, 0.325 (prints 32% in the page), 0.370 |
+| Per-target lambda: MT 0.30, V2 0.28, TEO 0.25; 8l 0.082, 7A 0.085 (decay length about 12 mm) | C | figure 2 forest plot; numpy per-target polyfit |
+| Residual against SLN (r = -0.42 with \|SLN - 0.5\|) not used | note | weak pathways have few labelled neurons and so extreme SLN by chance; confounded |
+
+Source detail: `research/check/sources-04.md` (verification pass of 2026-10-02).
 
 ## Article 5: Reading the Matrix
 
