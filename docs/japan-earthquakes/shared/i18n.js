@@ -11,7 +11,8 @@
   }
 
   // --- Toggle button ---
-  // On wide screens it floats in the top-right margin. Below 1000px there is
+  // On wide screens it floats in the top-right margin, under the theme and
+  // motion toggles from ../lib/motion.js (fixed at top 12px, 32px tall). Below 1000px there is
   // no margin to float in, so it sits in its own row at the top of the
   // article instead of covering the heading or the notice banner.
   var css = document.createElement("style");
@@ -24,7 +25,7 @@
     "transition:background 0.15s,color 0.15s}" +
     "#lang-toggle:hover,#lang-toggle:focus-visible{background:var(--accent,#2563eb);color:var(--fig-bg,#fff)}" +
     "@media (min-width:1000px){.lang-bar{margin:0;height:0}" +
-    "#lang-toggle{position:fixed;top:1rem;right:1rem;z-index:9999;box-shadow:0 1px 6px rgba(0,0,0,0.10)}}";
+    "#lang-toggle{position:fixed;top:52px;right:12px;z-index:9999;box-shadow:0 1px 6px rgba(0,0,0,0.10)}}";
   document.head.appendChild(css);
 
   var btn = document.createElement("button");
