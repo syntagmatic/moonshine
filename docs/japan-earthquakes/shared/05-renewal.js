@@ -19,13 +19,10 @@
 //    sequence as it stood on the day before 2011-03-11.
 //
 // Works in the browser (window.Renewal) and in node (module.exports).
-// No fetch in here: the page passes in shared/data/05-renewal.json. Under node,
-// runChecks() reads that file itself when it is not handed one.
+// No fetch in here: the page and the test runner pass in shared/data/05-renewal.json.
 (function (root) {
   "use strict";
   const SQRT2 = Math.SQRT2, SQRTPI = Math.sqrt(Math.PI);
-  // where this script was loaded from, for the browser test page to find the data next to it
-  const SRC = typeof document !== "undefined" && document.currentScript ? document.currentScript.src : null;
 
   // ---- normal distribution, accurate far into the tail ----
   // erfc(z) for z >= 0: power series for z < 2, continued fraction beyond.
@@ -239,28 +236,17 @@ const MLE_REF = [
   ["V", 119.1, 0.242790511],
 ];
 
-  function loadData() {
-    try {
-      if (typeof module !== "undefined" && module.exports && typeof require === "function") {
-        return JSON.parse(require("fs").readFileSync(require("path").join(__dirname, "data", "05-renewal.json"), "utf8"));
-      }
-      if (typeof XMLHttpRequest !== "undefined" && SRC) {
-        const x = new XMLHttpRequest();
-        x.open("GET", SRC.replace(/[^/]*$/, "data/05-renewal.json"), false);
-        x.send();
-        if (x.status === 200) return JSON.parse(x.responseText);
-      }
-    } catch (e) { /* fall through */ }
-    return null;
-  }
   // The page and the checks share this: the intervals of one HERP case, from NOAA dates
   function caseTimes(nk, c) { return nk.cases[c].map(i => nk.events[i].t); }
 
   function runChecks(print, data) {
     const out = [];
     const check = (name, ok, detail) => out.push({ name, ok: !!ok, detail });
+    if (!data || !data.nankai || !data.herp || !data.trench) {
+      check("reference data supplied (05-renewal.json)", false, "runChecks(print, data) got no usable data object");
+      return out;
+    }
     // The browser test page can hand over another library's data object, so check the shape
-    if (!data || !data.nankai || !data.herp) data = loadData();
 
     let w = 0;
     BPT_REF.forEach(r => { w = Math.max(w, Math.abs(bptCdf(r[2], r[0], r[1]) - r[3])); });

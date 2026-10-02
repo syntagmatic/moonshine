@@ -24,25 +24,6 @@
 (function (root) {
   "use strict";
   const LN10 = Math.LN10;
-  // Where this file was loaded from, so the checks can find their reference data when the
-  // test runner passes none (tests/japan-earthquakes.libs.js lists this library without one).
-  const SELF = typeof document !== "undefined" && document.currentScript ? document.currentScript.src : null;
-  function loadReference() {
-    try {
-      if (typeof module !== "undefined" && module.exports && typeof require === "function") {
-        const fs = require("fs"), path = require("path");
-        return JSON.parse(fs.readFileSync(path.join(__dirname, "data", "03-etas-fit.json"), "utf8"));
-      }
-      if (SELF) {
-        const x = new XMLHttpRequest();
-        x.open("GET", SELF.replace(/[^/]*$/, "") + "data/03-etas-fit.json", false);
-        x.send();
-        if (x.status === 200 || x.status === 0) return JSON.parse(x.responseText);
-      }
-    } catch (e) { /* reported by the check below */ }
-    return null;
-  }
-
   // ---- optimizer ----
   // Nelder-Mead with restarts; returns {x, f}. step is the initial simplex edge per axis.
   function nelderMead(f, x0, step, iters, opts) {
@@ -347,9 +328,12 @@
 
   // ---- checks ----
   function runChecks(print, data) {
-    data = data || loadReference();
     const out = [];
     const check = (name, ok, detail) => out.push({ name, ok: !!ok, detail });
+    if (!data || !data.sapp || !data.fits) {
+      check("reference data supplied (03-etas-fit.json)", false, "runChecks(print, data) got no usable data object");
+      return out;
+    }
     const rel = (a, b) => Math.abs(a - b) / Math.max(1e-300, Math.abs(b));
 
     // closed form against numeric quadrature (Simpson on a log grid)
