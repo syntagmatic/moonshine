@@ -149,6 +149,61 @@ sources (full table in temp/japan-audit/06-source-obs.md, gitignored):
   that gauge: even slip 9.9 m at 52 min; farther down 14.7 m at 27 min.
 - `p3`: "5 to 8 meters" of uplift replaced by the measured values above.
 
+## 06 map-view source, "The Sanriku Coast" (2026-10-01)
+
+New figure under "The Sanriku Coast": the cross-section's model on a map. Library additions
+in shared/06-tsunami-source.js (seafloorDisplacementMap, initialSurfaceMap with a separable
+Kajiura filter, createMapSim/simulateMap: linear shallow water on the sphere, C grid, walls
+at the coast below 10 m, 16-cell sponge), five new checks in tests/japan-earthquakes.html
+(12/12). Grid: ETOPO1 1 arc-minute, 35.6-41.2 N, 140.3-146.0 E,
+scripts/japan-06-bathy-grid.mjs. Fit: scripts/japan-06-source-fit.mjs writes
+shared/data/06-source-fit.json; the page recomputes everything from its fault.
+
+Observations (verified by a subagent from Kawai, Satoh, Kawaguchi, Seki 2011, Report of PARI
+50(4), Tables 3.1 and 3.5; full table in temp/japan-audit/06-buoy-obs.md, gitignored):
+
+- [x] Six NOWPHAS GPS buoys, peak corrected / raw: Iwate North 807G (40.1167 N 142.0667 E,
+  125 m) 4.02 raw only, 15:19; Iwate Central 804G (39.6272, 142.1867, 200 m) 6.07/6.30,
+  15:12; Iwate South 802G (39.2586, 142.0969, 204 m) 6.13/6.67, 15:12; Miyagi North 803G
+  (38.8578, 141.8944, 160 m) 5.02/5.68, 15:14; Miyagi Central 801G (38.2325, 141.6836,
+  144 m) 4.83/5.78, 15:16; Fukushima 806G (36.9714, 141.1856, 137 m) 2.14/2.62, 15:16 (its
+  maximum is the second wave). Aomori East 805G was offline. None of the records is cut.
+- [L] The traces drawn are digitized by the subagent from the vector paths of Kawai Fig. 4.2,
+  each minute 14:48-15:25, good to about 0.15 m and half a minute; drawn only, not fitted.
+  Corrected by subtracting PARI's subsidence; Iwate North left raw, as PARI does.
+- [x] TM1 seafloor pressure gauge peaked above 5 m (Maeda et al. 2011); site from Satake
+  et al. 2013 Table 1.
+- [L] DART 21418: 1.84 m at 33 min (06:19 UTC), computed by the subagent from the raw NDBC
+  file (ndbc.noaa.gov/data/historical/dart/21418t2011.txt.gz); NOAA's own "1.8 m" was only
+  seen in a search snippet.
+- [x] JCG KAMS, KAMN, FUKU verticals (1.5, 1.5, 0.9 m up) and Tohoku Univ. GJT3, GJT4
+  (about 5 and 3.5 m up, preliminary) from temp/japan-audit/06-source-obs.md rows 2c-3b.
+
+Findings:
+
+- The cross-section's source on the map (210 km centred on the line, 60 to 15 m) gives
+  10.9 m at Miyagi Central (2.26x), 3.6 at Iwate Central (-41%), 3.0 at Fukushima (+42%).
+  Along-coast spreading barely changes the overshoot (1D gave 10.5 m at the same spot), so
+  the old `p3b` and caption claim ("its wave cannot spread along the coast, so its heights
+  near shore are upper bounds") was wrong as an explanation; both now say the source is
+  the cause and point to the map.
+- Fit (four numbers, 20 km steps, 63,960 candidates; score in the script header): a0 -200,
+  a1 +80 km along strike from the line's trench point, so 280 km; slip 40 m at the top
+  falling to 10 m; Mw 9.07. Model vs measured peak: Iwate N 4.20/4.02 (+5%), Iwate C
+  5.60/6.07 (-8%), Iwate S 6.94/6.13 (+13%), Miyagi N 7.02/5.02 (+40%), Miyagi C
+  6.02/4.83 (+25%), Fukushima 1.80/2.14 (-16%). Iwate crests 2.5 min early. TM1 3.0 vs >5.
+  Verticals: Oshika -1.5/-1.2, MYGW -1.3/-0.8, MYGI 1.1/3, KAMS 2.1/1.5, KAMN 2.2/1.5,
+  FUKU -0.4/0.9, GJT3 3.7/5, GJT4 0.3/3.5, trench band 6.0/10.
+- A north/south split of the slip (5 parameters) improves the score only 36 to 34 and
+  pushes slip south; not used. Adding the slope term fits no better (L 300, Mw 9.15).
+- DART 21418, run on a wider 1' grid (to 149.5 E): 2.41 m at 27.8 min vs 1.84 at 32.6.
+  `p_coast2` says 31 percent high and 5 minutes early, and names dispersion and the
+  instant rupture as the missing pieces (not tested here).
+- Resolution: the buoys are not converged. 2' to 1' raises them about 13%, 1' to 0.5'
+  (bilinear upsample of ETOPO1) another 8% (Miyagi C 5.5, 6.3, 6.9 for the 2' fit's
+  source). The fit is done at 1', the page's grid, so it absorbs this; a finer grid would
+  ask for a weaker source. Not stated on the page.
+
 ## Status
 
 | # | article | verified | wrong | unverifiable | notes |

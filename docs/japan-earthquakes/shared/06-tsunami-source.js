@@ -150,6 +150,257 @@
     return { frames, dt, every };
   }
 
+  // ---- Map view: the same physics on a latitude-longitude grid ----
+  // grid: { lat0, lon0, dlat, dlon, nlat, nlon, elev[] } (06-bathy-grid.json),
+  // elev in m, row-major from the south-west corner.
+  const R_EARTH = 6371;
+  const RAD = Math.PI / 180;
+  // Local east/north km of (lat, lon) from an origin, flat-earth (good to well
+  // under 1% over a few hundred km, which is all the fault needs).
+  function toKm(lat, lon, o) {
+    return [(lon - o[1]) * RAD * R_EARTH * Math.cos(o[0] * RAD), (lat - o[0]) * RAD * R_EARTH];
+  }
+
+  // Seafloor displacement over the grid from a fault whose top edge runs along
+  // a straight line at azimuth `strike` through `anchor` (lat, lon), zTop km
+  // below sea level, dipping to the right of the strike. The fault spans
+  // along-strike distance [a0, a1] km from the anchor (positive along strike)
+  // and W km down dip, with slip slipAt(frac) down dip (0 = top edge).
+  // Returns east, north and up displacement (m) at every cell centre.
+  // `within` (km) skips cells farther than that from the fault's surface
+  // projection, where the motion is negligible. `rows` [i0, i1) and `into`
+  // (a previous result) let a page fill the grid a slice at a time.
+  function seafloorDisplacementMap(grid, opts) {
+    const { anchor, strike, zTop, W, dipDeg, a0, a1, slipAt, nu = 0.25, strips = 16, within = 400 } = opts;
+    const { nlat, nlon, elev } = grid;
+    const N = nlat * nlon;
+    const res = opts.into || { ue: new Float64Array(N), un: new Float64Array(N), uz: new Float64Array(N) };
+    const { ue, un, uz } = res;
+    const [r0, r1] = opts.rows || [0, nlat];
+    const dip = dipDeg * RAD, cs = Math.cos(dip), sn = Math.sin(dip);
+    // Okada frame: x along strike, y up dip (horizontal), z up; right-handed,
+    // so y is the strike rotated 90 degrees anticlockwise in map view.
+    const st = strike * RAD;
+    const xe = Math.sin(st), xn = Math.cos(st);   // along strike
+    const ye = -xn, yn = xe;                      // up dip (to the left of strike)
+    const L = a1 - a0, w = W / strips;
+    for (let i = r0; i < r1; i++) {
+      const lat = grid.lat0 + i * grid.dlat;
+      for (let j = 0; j < nlon; j++) {
+        const lon = grid.lon0 + j * grid.dlon;
+        const [e, n] = toKm(lat, lon, anchor);
+        const xs = e * xe + n * xn, yp = e * ye + n * yn;   // along strike, up dip from the top edge
+        const dx = xs < a0 ? a0 - xs : xs > a1 ? xs - a1 : 0;
+        const dy = yp > 0 ? yp : yp < -W * cs ? -W * cs - yp : 0;
+        if (dx * dx + dy * dy > within * within) continue;
+        const k0 = i * nlon + j, ref = -elev[k0] / 1000;    // km below sea level of this point's surface
+        let ux = 0, uy = 0, uzz = 0;
+        for (let k = 0; k < strips; k++) {
+          const slip = slipAt((k + 0.5) / strips);
+          if (!slip) continue;
+          const yB = -(k + 1) * w * cs;                     // bottom edge of strip k, up-dip coordinate
+          const d = zTop + (k + 1) * w * sn - ref;
+          if (d - w * sn <= 0.05) continue;
+          const u = okadaDipSlip(xs - a0, yp - yB, d, dip, L, w, slip, nu);
+          ux += u[0]; uy += u[1]; uzz += u[2];
+        }
+        ue[k0] = ux * xe + uy * ye;
+        un[k0] = ux * xn + uy * yn;
+        uz[k0] = uzz;
+      }
+    }
+    return res;
+  }
+
+  // Grid metrics: cell widths in m (east-west per row, north-south).
+  function gridMetrics(grid) {
+    const dy = grid.dlat * RAD * R_EARTH * 1000;
+    const dx = new Float64Array(grid.nlat), cosC = new Float64Array(grid.nlat), cosF = new Float64Array(grid.nlat + 1);
+    for (let i = 0; i < grid.nlat; i++) {
+      cosC[i] = Math.cos((grid.lat0 + i * grid.dlat) * RAD);
+      dx[i] = grid.dlon * RAD * R_EARTH * 1000 * cosC[i];
+    }
+    for (let i = 0; i <= grid.nlat; i++) cosF[i] = Math.cos((grid.lat0 + (i - 0.5) * grid.dlat) * RAD);
+    return { dx, dy, cosC, cosF };
+  }
+
+  // Initial sea surface on the grid: vertical seafloor motion plus, if asked,
+  // the horizontal motion of the sloping seafloor, then Kajiura's filter
+  // applied along each axis in turn (a product of two 1D sech kernels of the
+  // local depth, the separable stand-in for the radial 2D kernel). Land and
+  // water shallower than minDepth carry no water.
+  function initialSurfaceMap(grid, disp, horizontal, minDepth = 10) {
+    const { nlat: ny, nlon: nx, elev } = grid;
+    const { dx, dy } = gridMetrics(grid);
+    const N = nx * ny, src = new Float64Array(N);
+    const wet = k => -elev[k] >= minDepth;
+    for (let i = 0; i < ny; i++) for (let j = 0; j < nx; j++) {
+      const k = i * nx + j;
+      if (!wet(k)) continue;
+      let v = disp.uz[k];
+      if (horizontal && i > 0 && i < ny - 1 && j > 0 && j < nx - 1) {
+        const sx = (elev[k + 1] - elev[k - 1]) / (2 * dx[i]);     // elevation slope, m per m
+        const sy = (elev[k + nx] - elev[k - nx]) / (2 * dy);
+        v += disp.ue[k] * sx + disp.un[k] * sy;
+      }
+      src[k] = v;
+    }
+    const pass = (inp, along) => {
+      const outp = new Float64Array(N);
+      for (let i = 0; i < ny; i++) for (let j = 0; j < nx; j++) {
+        const k = i * nx + j;
+        if (!wet(k)) continue;
+        const h = -elev[k], step = along === "x" ? dx[i] : dy;
+        const reach = Math.ceil(6 * h / step) + 1;
+        let sum = 0, wsum = 0;
+        for (let m = -reach; m <= reach; m++) {
+          const ii = along === "x" ? i : i + m, jj = along === "x" ? j + m : j;
+          if (ii < 0 || ii >= ny || jj < 0 || jj >= nx) continue;
+          const g = 1 / Math.cosh(Math.PI * m * step / (2 * h));
+          wsum += g;
+          const kk = ii * nx + jj;
+          if (wet(kk)) sum += g * inp[kk];
+        }
+        outp[k] = wsum > 0 ? sum / wsum : 0;
+      }
+      return outp;
+    };
+    const eta = pass(pass(src, "x"), "y");
+    return { src, eta };
+  }
+
+  // Linear shallow-water equations on the sphere (no Coriolis: its period here
+  // is about 20 hours, far longer than the first hour), staggered C grid.
+  // Coast cells (shallower than minDepth) are walls; a sponge `sponge` cells
+  // wide absorbs the wave at the grid's edges. Records the sea surface every
+  // `every` s as Int16 cm frames, block-averaged over frameFactor x frameFactor
+  // cells (wet cells only), the sea surface at each gauge {lat, lon} every
+  // `gaugeEvery` s, and the highest sea surface each cell reaches (hmax).
+  // createMapSim returns a stepper so a page can run it in slices:
+  // sim.advance(t) steps until model time t (s) and returns true once tEnd is
+  // reached. simulateMap runs it to the end.
+  function createMapSim(grid, eta0, opts = {}) {
+    const { tEnd = 3600, every = 20, gaugeEvery = 10, gauges = [], minDepth = 10, sponge = 16, g = 9.81, cfl = 0.8,
+      keepFrames = true, frameFactor = 1 } = opts;
+    const { nlat: ny, nlon: nx, elev } = grid;
+    const { dx, dy, cosC, cosF } = gridMetrics(grid);
+    const N = nx * ny;
+    const h = new Float64Array(N);
+    let hmaxDepth = 0;
+    for (let k = 0; k < N; k++) { h[k] = -elev[k] >= minDepth ? -elev[k] : 0; if (h[k] > hmaxDepth) hmaxDepth = h[k]; }
+    // face depths, 0 across any wall
+    const W1 = nx + 1;
+    const hP = new Float64Array(ny * W1), hQ = new Float64Array((ny + 1) * nx);
+    for (let i = 0; i < ny; i++) for (let j = 1; j < nx; j++) {
+      const a = h[i * nx + j - 1], b = h[i * nx + j];
+      hP[i * W1 + j] = a > 0 && b > 0 ? 0.5 * (a + b) : 0;
+    }
+    for (let i = 1; i < ny; i++) for (let j = 0; j < nx; j++) {
+      const a = h[(i - 1) * nx + j], b = h[i * nx + j];
+      hQ[i * nx + j] = a > 0 && b > 0 ? 0.5 * (a + b) : 0;
+    }
+    let dxMin = Infinity; for (let i = 0; i < ny; i++) dxMin = Math.min(dxMin, dx[i]);
+    const dt = cfl * Math.min(dxMin, dy) / Math.sqrt(2 * g * hmaxDepth);
+    // sponge: damping per step on the cells near the edges
+    const damp = new Float64Array(N).fill(1), spongeCells = [];
+    for (let i = 0; i < ny; i++) for (let j = 0; j < nx; j++) {
+      const e = Math.min(i, j, ny - 1 - i, nx - 1 - j);
+      if (e < sponge) {
+        const r = (sponge - e) / sponge;
+        damp[i * nx + j] = Math.exp(-dt * 0.02 * r * r);
+        spongeCells.push(i, j);
+      }
+    }
+    const eta = Float64Array.from(eta0);
+    for (let k = 0; k < N; k++) if (!h[k]) eta[k] = 0;
+    const P = new Float64Array(ny * W1), Q = new Float64Array((ny + 1) * nx);
+    const hmax = new Float32Array(N);
+    for (let k = 0; k < N; k++) hmax[k] = h[k] ? Math.max(0, eta[k]) : 0;
+    // gauges: bilinear weights over wet neighbours
+    const gw = gauges.map(gg => {
+      const fi = (gg.lat - grid.lat0) / grid.dlat, fj = (gg.lon - grid.lon0) / grid.dlon;
+      const i0 = Math.floor(fi), j0 = Math.floor(fj), a = fi - i0, b = fj - j0;
+      const pts = [[i0, j0, (1 - a) * (1 - b)], [i0, j0 + 1, (1 - a) * b], [i0 + 1, j0, a * (1 - b)], [i0 + 1, j0 + 1, a * b]]
+        .map(([i, j, w]) => [i * nx + j, w]).filter(([k]) => h[k] > 0);
+      const s = pts.reduce((m, p) => m + p[1], 0);
+      return pts.map(([k, w]) => [k, w / s]);
+    });
+    const gaugeNow = () => gw.map(pts => pts.reduce((s, [k, w]) => s + w * eta[k], 0));
+    let prev = gaugeNow();
+    const series = prev.map(v => [v]);
+    // frames, block-averaged
+    const F = frameFactor, fny = Math.floor(ny / F), fnx = Math.floor(nx / F);
+    const frames = [];
+    const snap = () => {
+      const f = new Int16Array(fny * fnx);
+      for (let I = 0; I < fny; I++) for (let J = 0; J < fnx; J++) {
+        let s = 0, c = 0;
+        for (let a = 0; a < F; a++) for (let b = 0; b < F; b++) {
+          const k = (I * F + a) * nx + J * F + b;
+          if (h[k]) { s += eta[k]; c++; }
+        }
+        f[I * fnx + J] = c ? Math.max(-32767, Math.min(32767, Math.round(s / c * 100))) : 0;
+      }
+      frames.push(f);
+    };
+    if (keepFrames) snap();
+    let t = 0, nextF = every, nextG = gaugeEvery;
+    function step() {
+      const gdt = g * dt;
+      for (let i = 0; i < ny; i++) {
+        const r = i * W1, c = i * nx, f = gdt / dx[i];
+        for (let j = 1; j < nx; j++) { const hp = hP[r + j]; if (hp) P[r + j] -= f * hp * (eta[c + j] - eta[c + j - 1]); }
+      }
+      const fy = gdt / dy;
+      for (let i = 1; i < ny; i++) {
+        const c = i * nx;
+        for (let j = 0; j < nx; j++) { const hq = hQ[c + j]; if (hq) Q[c + j] -= fy * hq * (eta[c + j] - eta[c - nx + j]); }
+      }
+      for (let i = 0; i < ny; i++) {
+        const r = i * W1, c = i * nx, ax = dt / dx[i], ay = dt / (dy * cosC[i]), cs = cosF[i], cn = cosF[i + 1];
+        for (let j = 0; j < nx; j++) {
+          const k = c + j;
+          if (!h[k]) continue;
+          const v = eta[k] - ax * (P[r + j + 1] - P[r + j]) - ay * (Q[k + nx] * cn - Q[k] * cs);
+          eta[k] = v;
+          if (v > hmax[k]) hmax[k] = v;
+        }
+      }
+      for (let m = 0; m < spongeCells.length; m += 2) {
+        const i = spongeCells[m], j = spongeCells[m + 1], d = damp[i * nx + j];
+        eta[i * nx + j] *= d; P[i * W1 + j] *= d; Q[i * nx + j] *= d;
+      }
+      t += dt;
+      if (gw.length) {
+        const cur = gaugeNow();
+        // linear in time between the last two steps
+        while (t >= nextG - 1e-9 && nextG <= tEnd + 1e-9) {
+          const a = 1 - (t - nextG) / dt;
+          cur.forEach((v, m) => series[m].push(prev[m] + a * (v - prev[m])));
+          nextG += gaugeEvery;
+        }
+        prev = cur;
+      }
+      if (keepFrames && t >= nextF - 1e-9) { snap(); nextF += every; }
+    }
+    const sim = {
+      frames, every, series, gaugeEvery, hmax, dt, tEnd, frameNx: fnx, frameNy: fny, frameFactor: F,
+      get t() { return t; },
+      get done() { return t >= tEnd - 1e-9; },
+      advance(until) {
+        const stop = Math.min(until, tEnd);
+        while (t < stop - 1e-9) step();
+        return sim.done;
+      }
+    };
+    return sim;
+  }
+  function simulateMap(grid, eta0, opts = {}) {
+    const sim = createMapSim(grid, eta0, opts);
+    sim.advance(Infinity);
+    return sim;
+  }
+
   // Checks, run by tests/japan-earthquakes.html (or in node:
   // node -e "require('./docs/japan-earthquakes/shared/06-tsunami-source.js').runChecks()").
   // Reference: surface displacement of the same fault (L 100, W 50 km, dip 20 deg,
@@ -236,12 +487,44 @@
     for (let i = 200; i < n; i++) { m += f[i]; mx += f[i] * (i + 0.5); }
     const moved = mx / m - 200, c = Math.sqrt(9.81 * 4000) * 600 / 1000;   // km in 600 s
     check("a pulse in 4,000 m of water moves at sqrt(g h)", Math.abs(moved - c) < 1, moved.toFixed(1) + " km vs " + c.toFixed(1));
+    // Map view. Two halves of a fault sum to the whole (the fit relies on it)
+    const g2 = { lat0: 37, lon0: 141, dlat: 1 / 15, dlon: 1 / 15, nlat: 46, nlon: 61, elev: new Array(46 * 61).fill(-4000) };
+    const fo = { anchor: [38.5, 143], strike: 191.5, zTop: 5, W: 80, dipDeg: 12, slipAt: f => 10 * (1 - 0.5 * f) };
+    const whole = seafloorDisplacementMap(g2, Object.assign({}, fo, { a0: -60, a1: 60 })).uz;
+    const h1 = seafloorDisplacementMap(g2, Object.assign({}, fo, { a0: -60, a1: 0 })).uz;
+    const h2 = seafloorDisplacementMap(g2, Object.assign({}, fo, { a0: 0, a1: 60 })).uz;
+    let addErr = 0; for (let k = 0; k < whole.length; k++) addErr = Math.max(addErr, Math.abs(whole[k] - h1[k] - h2[k]));
+    check("map view: two halves of a fault move the seafloor as much as the whole", addErr < 1e-9, "max diff " + addErr.toExponential(1) + " m");
+    // and the map fault matches the cross-section formula on the line through its middle
+    const mid = okadaDipSlip(60, 30 * Math.cos(12 * RAD) + 10, 5 + 30 * Math.sin(12 * RAD), 12 * RAD, 120, 30, 1, 0.25)[2];
+    const g1 = { lat0: 0, lon0: 0, dlat: 1, dlon: 1, nlat: 1, nlon: 1, elev: [0] };
+    const st = 191.5 * RAD;
+    const pe = -Math.cos(st) * 10, pn = Math.sin(st) * 10;          // 10 km up dip of the top edge, mid-length
+    const lat = 38.5 + pn / R_EARTH / RAD, lon = 143 + pe / (R_EARTH * Math.cos(38.5 * RAD)) / RAD;
+    const one = seafloorDisplacementMap(Object.assign(g1, { lat0: lat, lon0: lon }),
+      { anchor: [38.5, 143], strike: 191.5, zTop: 5, W: 30, dipDeg: 12, a0: -60, a1: 60, slipAt: () => 1, strips: 1 }).uz[0];
+    check("map view: a point seaward of the fault's middle matches the plain Okada formula", Math.abs(one - mid) < 2e-3 * Math.abs(mid) + 1e-6, one.toFixed(5) + " vs " + mid.toFixed(5));
+    // shallow water on the sphere: volume kept by walls, front at sqrt(g h), sponge absorbs
+    const gb = { lat0: 36, lon0: 140, dlat: 1 / 30, dlon: 1 / 30, nlat: 120, nlon: 120, elev: new Array(14400).fill(-4000) };
+    const e0 = new Float64Array(14400);
+    for (let i = 0; i < 120; i++) for (let j = 0; j < 120; j++) e0[i * 120 + j] = Math.exp(-((i - 60) ** 2 + (j - 60) ** 2) / 9);
+    const met = gridMetrics(gb), volOf = f => { let v = 0; for (let i = 0; i < 120; i++) for (let j = 0; j < 120; j++) v += f[i * 120 + j] * met.dx[i]; return v * met.dy; };
+    const sw = simulateMap(gb, e0, { tEnd: 600, every: 600, sponge: 0 });
+    const f600 = Float64Array.from(sw.frames[1], v => v / 100);
+    check("map view: shallow-water volume is kept inside walls", Math.abs(volOf(f600) / volOf(e0) - 1) < 3e-3, (volOf(f600) / volOf(e0)).toFixed(4) + " (frames stored to 1 cm)");
+    let bj = 60; for (let j = 60; j < 120; j++) if (f600[60 * 120 + j] > f600[60 * 120 + bj]) bj = j;
+    const ring = (bj - 60) * met.dx[60] / 1000, c2 = Math.sqrt(9.81 * 4000) * 0.6;
+    check("map view: the ring from a hump in 4,000 m of water moves at sqrt(g h)", Math.abs(ring - c2) < 3, ring.toFixed(1) + " km vs " + c2.toFixed(1));
+    const sp = simulateMap(gb, e0, { tEnd: 3000, every: 3000 });
+    let left = 0; for (const v of sp.frames[1]) left = Math.max(left, Math.abs(v) / 100);
+    check("map view: the absorbing edge leaves under 1 cm after 50 minutes", left < 0.01, (left * 100).toFixed(1) + " cm");
     if (print && typeof console !== "undefined") out.forEach(r => console.log((r.ok ? "PASS " : "FAIL ") + r.name + (r.detail ? "  (" + r.detail + ")" : "")));
     return out;
   }
   function d3max(a) { let m = -Infinity; for (const v of a) if (v > m) m = v; return m; }
 
-  const api = { okadaDipSlip, seafloorDisplacement, momentMagnitude, initialSurface, simulate, runChecks };
+  const api = { okadaDipSlip, seafloorDisplacement, momentMagnitude, initialSurface, simulate,
+    seafloorDisplacementMap, initialSurfaceMap, createMapSim, simulateMap, gridMetrics, toKm, runChecks };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.TsunamiSource = api;
 })(typeof window !== "undefined" ? window : globalThis);
