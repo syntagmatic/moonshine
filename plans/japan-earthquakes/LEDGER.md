@@ -65,22 +65,22 @@ disagree; every new number is computed in-page.
   (the ComCat CSV carries a literal `?` for long vowels); the CSV is left as the source
   gives it.
 - **01**: 17 of 33 M7+ lie along the trench, carrying 93% of M7+ energy (the old 18
-  counted a 2003 Tokachi-oki event on the Kuril Trench). Typical year about 530 (median
-  530.5). The old claim that the timeline showed the steady deep rate was false; the new
+  counted a 2003 Tokachi-oki event on the Kuril Trench). Typical year about 530 (median [superseded 2026-10-01, see Quality pass]
+  530.5). The old claim that the timeline showed the steady deep rate was false; the new [superseded 2026-10-01, see Quality pass]
   heatmap shows it: events above 70 km put 13.5% in March 2011 alone, monthly variance
   291x the mean; the 300+ km band has none extra, variance 1.3x the mean, drifting from
   23 to 17 a year. Catalog default depths (33 km in 2000-2003, 10 km later) make 30 km
   splits unreliable. The shallow rate rose about 65% after 2011, which overlaps a
   magnitude-type change (mww 1 of 4,347 before, 1,150 of 8,686 after).
 - **02**: deepest event 683.4 km (was "about 680"); the three below 660 km are all 2015
-  Bonin. Transect D (28.5N): slab dip about 75 deg. B-B' Pacific-slab events west of
+  Bonin. Transect D (28.5N): slab dip about 75 deg. B-B' Pacific-slab events west of [superseded 2026-10-01, see Quality pass]
   Tokyo are 258-349 km (was 300-350). C-C' runs western Honshu to Shikoku, not Kyushu
   to Kii. B-B' cannot separate its two slabs at M4.5+; the text says so.
 - **03**: M6+ is 343 (344 included the 2017 nuclear test). Aftershock counts exclude
   the mainshock: 530 in 24 h, 2,080 in 30 days, 68x background (1.01/day,
   2001-2010). Tokachi-oki is M8.16 in the catalog, so Tohoku releases 25.7x its energy
   (22x is the rounded M8.2). Omori-Utsu over the Tohoku box: p = 0.96, c = 0.42 d; the
-  rate falls below background after 7.1 years (5 to 10.6 depending on the box), so
+  rate falls below background after 7.1 years (5 to 10.6 depending on the box), so [superseded 2026-10-01, see Quality pass]
   "weeks or months" became "years".
 - **04**: the regions went from 8 boxes covering 75.4% to 9 covering 99.0%. Chubu's
   largest is M7.5 (Noto 2024), not M6.2. Tohoku-Kanto b gap 3.8 se if independent, 2.9
@@ -103,12 +103,12 @@ disagree; every new number is computed in-page.
   6,000 km (was 6,200). The old map rings reached Hilo about 1.2 h late and California
   3.4 h late (degree circles). The 2011 gauges: DART median 820 km/h (about 5,300 m);
   far tide gauges a median 71 min behind the 5,000 m line; 26 of 142 within 3%.
-- **07**: Tokyo's "44 s" is its S-P gap; its model warning is 86 s, Sendai's 18 s (the
+- **07**: Tokyo's "44 s" is its S-P gap; its model warning is 86 s, Sendai's 18 s (the [superseded 2026-10-01, see Quality pass]
   old "Sendai 16 s" was also an S-P gap). The model alert comes 20.1 s after rupture,
   6.1 s after first detection (the real one was 8.6 s). Noto alert 8.7 s, not 45.8 s
   (no Japan Sea stations before). The `[?]` rows for the timeline and actions captions
   are resolved: both now say modeled or illustrative. The range plot: 32 M6.5+ quakes;
-  median no-warning share 31% near land and 29% offshore at 6 s processing (6% and 100%
+  median no-warning share 31% near land and 29% offshore at 6 s processing (6% and 100% [superseded 2026-10-01, see Quality pass]
   near land at 3 s and 9 s); Tohoku 0%, median 41 s. The audit's "100% inland" held
   only down to M5. Point-source shaking biases the no-warning share high, not low: a
   line source lowered it in every row (near-land median 31% to 19%).
@@ -204,6 +204,139 @@ Findings:
   source). The fit is done at 1', the page's grid, so it absorbs this; a finer grid would
   ask for a weaker source. Not stated on the page.
 
+## Quality pass (2026-10-01)
+
+Essays 01-05 and 07 raised to the level of 06: each now has a shared library with checks
+against an independent reference, external observations or published values in
+shared/data/, and prose that says where the model misses (commits be4ef5a 02, e39f7cb 03,
+920d0e9 07, 4a81694 05, 33f8f98 01, 9c119d0 04; test registry 9287aa6). Rows below
+supersede the per-article rows above where they disagree; the old rows are marked in
+place. Per-essay agent reports: temp/japan-audit/qfix-0N.md (gitignored).
+
+Series-wide finding: the catalog records M4.5-4.9 more completely after about 2010
+(M4.5-4.9 per M5+ event 2.5 before 2010 vs 4.4 from 2012, whole catalog; M5+ per year
+flat at 107 vs 115). Completeness.eraContrast puts the lowest stable cutoff at M5.0.
+Fits and rates at M5+ where it matters; maps keep every quake; each page says why once.
+
+### 01 Where
+
+- [x] PB2002 plate boundaries, Bird 2003 G-cubed 4(3):1027 (fetched; sha in 01-plates.json).
+- [x] GCMT: 943 solutions Mw>=5.5, 2000-2025 (scripts/japan-01-plates.mjs; sha prefixes in 01-gcmt.json).
+- [x] 72% of 16,787 quakes within 30 km of a Slab2 surface vs 13% for a seeded random-position control; free depths 79% (control 12%), default depths (34% of events) 59%; holdout 2018 on 80% vs 79% for 2000-2016; deep (300+) 87% within 50 km, median 34 km, 33% within 30 km (page, from the csv and slab2.json).
+- [x] 17 M7+ off Tohoku: 13 on the plate, 4 seaward (outer rise). Closes the old [?] on p7.
+- [x] GCMT mechanism shares: 854 of 1,095 M5.5+ matched (60 s, 100 km); on the plate 81% thrust (n=500), 68% within 30 deg of the slab thrust; above the plate 29% thrust; seaward 70% normal; deep 50% oblique; since 2018 88% of 125 on-plate are thrust (Frohlich-Apperson plunge limits; Kagan 1991 angle checked vs scipy).
+- [x] Nankai: nine great earthquakes since 684; since 1361 gaps 91-147, mean 117, last 1946 (from 05-history.json via NOAA ids). Replaces "roughly every 100-150 years".
+- [x] Deep (300+) steadiness: variance/mean 1.08 at M5+ (chi-square p 0.17, consistent with steady), 1.26 at M4.5 (p 0.001); deep rate 23 to 17 a year at M4.5 vs 7.5 to 6.3 at M5+ (the M4.5 excess is partly the catalog). Replaces the old "1.3x" row.
+- [x] Shallow rate: 92 to 97 a year at M5+; the old "320 to 530" is the catalog's M4.5 recording.
+- [x] "Where stress is building" replaced: Nankai box 31.5-34.5N 132-137.5E, <60 km: 37 M5+ in 26 years vs 705 in a same-size box off Tohoku.
+- [L] Slab2 uses some GCMT thrusts and relocated hypocentres as input (Hayes 2018 methods not read; stated generically).
+- [L] Locked-fault silence at Nankai ("can mean"; coupling studies such as Yokota et al. 2016, none read).
+- [L] 2015 Bonin M7.8 outside the main slab in the literature (Obayashi 2017; Ye 2016); the page states only the distance.
+
+Still misses: 2015 M7.8 at 664 km is 169 km from the slab; Noto 2024 and Kumamoto 2016 are crustal (about 215 and 176 km); 2,133 events (13%) more than 20 km above a slab; default depths; Slab2 circularity. Seaward vs back-arc is a heuristic. The time brush does not filter the mechanism panel. The ECDF null uses one seed.
+
+### 02 Plates
+
+- [x] Slab2 (Hayes et al. 2018, Science 362:58; doi 10.5066/F7PV6JNV), ScienceBase 5aa1b00ee4b0b1c392e86467; kur 5aa4060de4b0b1c392eaaee2, izu 5aa3185ee4b0b1c392ea3f0d, ryu 5aa40aafe4b0b1c392eaaefa; versions 02.24.18 (kur, izu), 02.26.18 (ryu); fetch date and sha256 in slab2.json.
+- [x] 85.5% (1,927 of 2,254) of events at 70 km or deeper lie 0-50 km below the Slab2 top (3D distance to the triangulated surface); by transect A 98%, B 96%, D 76%, C 38%; median offset by depth band 20/21/33/40 km.
+- [x] Dips: Pacific apparent 22-29 deg on A; D apparent 62 deg (100-400 km), true dip peaks 69 deg. The old "dip about 75" is retracted: it came from dots 36-42 km inside the slab.
+- [x] Age does not set the angle: Pacific 28 vs 62 deg at 134 vs 143 Ma (EarthByte 2020 ages; in slab2.json `published`, from the q-02 prototype, not recomputed by script).
+- [x] Pacific plate rate 8.9 cm/yr (PB2002 poles, trench-normal 88.9 mm/yr).
+- [x] Nankai plate age 17-30 Ma (EarthByte 2020) replaces "15 to 50 Ma"; 50 Ma is the West Philippine Basin at the Ryukyu Trench.
+- [x] Volcano depth above the slab (GVP Holocene volcanoes, WFS GVP-VOTW:Smithsonian_VOTW_Holocene_Volcanoes): median 109 km under 40 NE Japan arc volcanoes, 88 km under the front (84-130), Izu 106, Kuril 97, Ogasawara 134.
+- [x] 2015 Bonin events 169-182 km from the nearest Slab2 point; transect C: 15 of 17 events nearest the Philippine Sea slab lie above its top (median 10 km); 2023 M4.9 at 645 km 76 km out. Kanto 376 events >=30 km: 239 Pacific only, 44 Philippine Sea only, 25 both, 68 neither; Slab2's Philippine Sea slab ends at 139.9E.
+- [x] Tohoku: seafloor moved about 50 m (Fujiwara et al. 2011), peak slip 55-69 m (published models, Part 6). Supersedes "slip as much as 50 meters".
+- [x] HERP 2025: SSD-BPT 60-90% or more and BPT case III 20-50% given side by side, neither preferred (nankai_gaiyou2_3.pdf pp.3, 9; read by 05). Supersedes "60-90% main model, 20-50% alternative" (old 02 `p8`).
+- [L] "Arc volcanoes stand over slab roughly 100 km deep" (Syracuse and Abers 2006; England et al. 2004): exact means not verified.
+- [L] "Young, warm slab stops breaking sooner" (thermal parameter, Kirby et al. 1996): stated as expected, untested.
+- [L] A Japan-specific model (Hirose et al. 2008; Iwasaki et al. 2015) would cover eastern Kanto; availability unchecked.
+- [L] Bonin deep events vs a slab hanging through 660 km (published picture): not checked.
+- [L] Which parts of Slab2 use hypocentres and CMTs (circularity statement): not confirmed in Hayes et al. 2018.
+
+Still misses: 2015 Bonin events, transect C's events above its top (Slab2 too deep, ComCat depths too shallow, or the degree-space projection: not separated), the 2023 Korea-Russia event, circularity; Slab2 `thk` unused; no Philippine Sea slab under eastern Kanto; supplement distances are point-based. Ages and rates not recomputed by a script.
+
+### 03 When
+
+- [x] M4.5-4.9 per M5+ event 2.5 (2000-2009) vs 4.4 (2012-2025); M5+ 107 vs 115 a year (page, from earthquakes.csv).
+- [x] Box M5+ per year 28 (2017-2024) vs 30 (2001-2010). Supersedes "7.1 years" and "1.3x its pre-2011 rate in 2023-24", which were reporting changes at M4.5.
+- [x] Helmstetter, Kagan & Jackson 2006, BSSA 96:90-106: Mc(t) = Mmain - 4.5 - 0.75 log10 t (6.10 / 5.35 / 4.50 computed; 4.5 reached at 1.36 d).
+- [x] Jalilian 2019, J. Stat. Softw. 88(CS1) pp. 29-32: beta 1.9734 (b 0.857), mu 0.5505, c 0.0296 d (43 min), alpha 1.6579, p 1.1534, background probability mean 0.5452 (read from the PDF; stored with citation in 03-etas-fit.json).
+- [x] Ogata's SAPP (CRAN 1.0.9-4) on main2003JUL26: exact likelihoods and optima in the data file; the JS matches (scripts/japan-03-sapp-fixture.R).
+- [x] ETAS fit, box M5.0: mu 15.0 a year, c 8 min (ln c se 0.31), alpha 2.16, p 1.066 +- 0.016, background 26% (M5.5 32%, M4.5 7%), branching ratio 1.00, KS D 0.047. Supersedes "c = 0.42 d, p = 0.96" (plain Omori c is 0.26, 0.08, 0.03 d at M4.5, 5.0, 5.5: mostly the catalog's incomplete first hours).
+- [x] Tohoku-descent share of box M5+ events by year: 69, 46, 34, 18% for 2012, 14, 16, 24; direct offspring 31% of expected events after day 1 (page).
+- [x] Bath's law: largest aftershock in the box M7.9 at 29 min, dM 1.20; model median 1.11 (16-84%: 0.54-1.51, 400 seeded runs).
+- [x] Far-field triggering: M6.2 near Nagano-Niigata and M6.2 off Akita within 15 h, M6.0 near Fuji at 4 d (catalog, regional windows).
+- [x] Row correction: 04's Tohoku box holds 4,515 events, not 4,584 (old 03 `p7` row).
+- [L] Bath (1965) Tectonophysics 2:483-514, dM 1.2: standard, not re-read.
+- [L] Utsu, Ogata & Matsu'ura 1995 p range: no longer cited.
+- [L] Seif et al. 2017 on supercritical bias: "known bias" in prose, not read; soften or verify.
+- [L] Only M7+ events in the box get a scored-out window; other large shocks are not gapped.
+
+Still misses: branching ratio 1.00 (critical; 0.61 to 2025); M4.5 fit has p = 0.995 and reads the post-2010 rise as triggering; KS fails modestly at M5.0 (passes at M5.5); time-only model (no space: Nagano/Akita/Fuji and the 42N edge not modeled); c poorly determined (factor 1.4 either way). D5 energy units, the min-mag slider not driving Fig 2, spatial ETAS: not done.
+
+### 04 Gutenberg-Richter
+
+- [x] USGS FDSN 1900-1999 M6.5+ in 122-150E 24-46N: 401 earthquakes, 327 in 1920-99 (scripts/japan-04-century.mjs).
+- [x] HERP 2026-01-01 summary (ichiran.pdf, sha256 df8f77cd...): p.34 Kuril 17th-century type M8.8+, mean interval 340-380 yr, 30-yr 7-40%, 10-yr 2-10%; Japan Trench Tohoku-oki type M9.0, 550-600 yr, 30-yr ほぼ0%; p.35 Sagami M8 class 180-590 yr; p.36 pre-2011 reference row 4-6 / 10-20 / 20-30%; notes 1 (Poisson vs BPT) and 4 (340-380 from tsunami deposits).
+- [x] b-stability Mc 5.2 (seismostats 1.0.1 and 04-gr.js). Cao & Gao 2002 / Woessner & Wiemer 2005 as method [L: not re-read].
+- [x] Gardner-Knopoff windows = OpenQuake hmtk GardnerKnopoffWindow (53.2 km / 499 d at M6; 128.7 km / 1,072 d at M9.1).
+- [x] Era change in M4.5-4.9 recording (Completeness.eraContrast, 2000-09 vs 2013-25): 3.5 vs 5.3 per M5+ event, M5+ 107 vs 112 a year, cutoff M5.0; b at M4.5 1.04 vs 1.36; above M5.2 0.96 vs 1.10.
+- [x] 26-year fit (b 1.02, M5.2+) vs USGS 1920-99: M7+ 100 predicted (84-119) vs 125; M8+ 9.5 vs 12; M8.5+ 2.9 vs 1; M9 0.9 vs 0. Mainshock b 0.82 predicts 5.2 M8.5+ in 80 years vs 1. Tapered law 2000-25 at M5.2+: corner M9.35, 95% lower bound M8.7, no upper bound.
+- [x] HERP gives per-source mean intervals, not a box-wide rate, and its 30-year numbers are renewal-conditional: the old "M8.8+ once per 221 yr" is only a floor (210-233 yr). Tapered law reaches the Japan Trench M9 interval (550-600 yr) at corner M8.77-8.79; box M8.8+ then every 137-145 yr vs 55 yr for the plain line.
+- [x] 2011 window miss: 19 mainshocks M6+ vs band 2-13; 15 struck after the M9.1 within 500 km (135-476 km), incl. M7.9 29 min later (page).
+- [x] Reference checks: b to 1e-6 at Mc 4.5-6.0 and all test statistics to 1e-10 vs seismostats; GK flags vs hmtk 99.4% on 348 M5.5+ events (98.3% on all 16,787, ties); tapered survival vs scipy 1e-9. Utsu b reads about 0.5% below exact ML (1.021 vs 1.026 at M5.2).
+- [L] Mizrahi, Nandan & Wiemer 2021, SRL 92:2333: declustering lowers b by up to 30% (from the q-04 reading; the in-page ETAS check confirms the direction: all 1.01, mainshocks 0.92).
+- [L] Kagan 2002 tapered-law form (checked vs scipy; formula from memory). Bird & Kagan 2004 and Kagan & Jackson 2013 not cited.
+- [L] Magnitude scatter 0.2 inflating counts by 1.12 (arithmetic; ISC-GEM uncertainties not checked).
+- [L] Early-era events named in p14 (Kanto 1923, Sanriku 1933, Tonankai/Nankai 1944-46, Tokachi 1952, Kuril 1958/1963) not matched to rows of 04-century.json.
+- [L] "G-R enters only for background earthquakes" (J-SHIS/HERP): left out of the prose.
+- The stale 04 section further down (16,792 events, eight boxes, Tohoku 4,584 and the rest) is superseded where it conflicts with the 2026-09-30 enrichment row and this section; not rewritten row by row.
+
+Still misses: the plain law is low by about a quarter at M7-7.5 and high at M8.5+ by a factor of 3 (era split and magnitude scatter are only candidate explanations); mainshock b cannot be extrapolated; 26 years cannot bound the largest earthquake. Fig 3's Poisson range for the held-out count not built; GK ties vs hmtk not reconciled.
+
+### 05 History
+
+- [x] HERP 2025 summary (jishin.go.jp/main/chousa/25sep_nankai/nankai_gaiyou2_3.pdf, sha256 e63c65ac...) p.7: nine earthquakes 684.9, 887.7, 1098.1, 1361.6, 1498.7, 1605.1, 1707.8, 1855.0, 1946.0; cases I-V. NOAA ids 162; 262; 375+7381; 556; 7383; 833; 1178; 1969+1971; 3791+3845 reproduce them to 0.05 yr (script check).
+- [x] Same PDF p.4: Murotsu uplift Hoei 1.83 +- 0.51 m, Ansei 1.13 +- 0.52 m, Showa 1.02 +- 0.06 m (Hashimoto et al. 2024).
+- [x] Same PDF pp.2, 3, 9, 10: 30-year probabilities: time-predictable 60-70% (2013-01), 70% (2014), 70-80% (2018), about 80% (2025-01); BPT cases III-V 10-30% (2013-01); 2025 SSD-BPT 60-90% or more (70% credible interval; 94.5%+ written 90%程度以上), BPT case III 20-50%; mu 88.2 yr, alpha 0.20 and 0.24; HERP does not rank the two models and advises stressing the higher value.
+- [x] HERP 2019 Japan Trench (jishin.go.jp/main/chousa/kaikou_pdf/japan_trench.pdf, sha256 89dc82c5...): five deposit events in 3,000 years, Jogan Mw 8.3-8.6 or more, "やや小さい" than M9.0, mean interval about 550-600 yr, alpha 0.2-0.3, 30-year probability ほぼ0%, previous event 1454 or 1611. Supersedes "comparable magnitude" and "due" in p13.
+- [x] Page-computed (library plus script): case fits and P30 at 2025 (I 17%, II 8%, III 37%, IV 18%); time-predictable slope 80 yr/m, Showa predicts 82 yr; Monte Carlo 61-97% (mean 81%); case III grid posterior 19-48%; Japan Trench the day before 2011: 12-23% (1454), 1-6% (1611). The history alone moves BPT 8 to 37%; the model gap (BPT case III 37% vs time-predictable about 80%) is bigger. Library checks vs scipy to 7e-16 (cdf), 2e-8 (MLE).
+- [x] Hand-typed NOAA numbers (p5, p6, p7, c3, c4, c8; 1964 deaths, 1293, M of Noto) now spans from the JSON; 916 derived as 1600 - 684.
+- [L] Deposit ages for the two older Japan Trench events taken from HERP's century wording (Sawai et al. 2012 not read).
+- [L] 1454 Kyotoku has no NOAA record; 1454.5 is a placeholder.
+- [L] How HERP derives 88.2 yr from its earlier uplifts (our through-origin fit gives 80.5 yr/m).
+- [L] 2014 and 2018 time-predictable values read from p.9's version table (2.5 points of slack in the check).
+- [L] 1944/46 Tokai and Nankai halves "up to two years apart".
+- [L] Showa uplift "much better documented" is inferred from the sd (0.06), not read.
+
+Still misses: HERP's own Bayesian SSD-BPT (the Monte Carlo is a stand-in; the grid posterior agrees to 3 points); mu 88.2 taken as given; Keicho and neighbouring segments not modeled; the Trench counterfactual rests on century-range ages. The browser test page leaks a stale `var data` (tests/ not editable by the pass).
+
+### 07 Early warning
+
+Source for every JMA row: JMA 緊急地震速報（警報）発表状況, https://www.data.jma.go.jp/eew/data/nc/pub_hist/, page of the event id (`events[].page` in 07-eew-jma.json).
+
+- [x] JMA2001 P and S travel-time table and velocity model (tjma2001.zip, vjma2001.zip, data.jma.go.jp/eqev/data/bulletin/catalog/appendix/trtime/), trimmed to depth <= 700 km, distance <= 1500 km. A ray tracer through vjma2001 reproduces the table to 0.065 s on 108 arrivals; held-out nodes to 0.18 s worst case.
+- [x] Tokyo S-P 39 s, S 91.8 s, P 52.6 s from the USGS epicenter (373 km, 24 km deep); ideal-alert warning 70 s on the model, 63.8 s from JMA's hypocenter and real warning. Supersedes 44.4 s (constant speeds) and 86 s.
+- [x] Regional S gain about 24 s per 100 km (S(20 km deep, 300 km) - S(100 km))/2. Supersedes "29 s"; the old "12 s per 100 km" S-P row is dropped from the prose.
+- [x] JMA 2011-03-11 record (pub_hist 20110311144640): origin 14:46:18.1, 24 km, M9.0, detection 14:46:40.2 (+22.1 s), reports 1-15 at M4.3, 5.9, 6.8, 7.2 (the warning, report 4, 14:46:48.8, +30.7 s), 6.3, 6.6, 6.6, 7.2, 7.6, 7.7, 7.7, 7.9, 8.0, 8.1, 8.1. The catalog (USGS) origin is 6.0 s later than JMA's.
+- [x] Correction: "the initial estimate was M7.2" is wrong; M7.2 was the fourth report, the warning; the first report was M4.3. Supersedes the old row "Initial estimate M7.2".
+- [x] First report 3.2 to 7.9 s after first detection, median 4.4 s (13 events with a magnitude on report 1). Replaces "3-5 s" and "3-8 s".
+- [x] Fitted processing delay 7.36 s (IQR 5.2-8.1, n 16) after the second-nearest land station's P, from JMA's hypocenter and JMA2001; Noto 2024 excluded (detection precedes origin). Supersedes `PROCESSING_TIME = 3` and the 6 s default.
+- [x] JMA first detection minus the model's first land-station P: median +1.5 s (-4.1 to +3.3 s, 16 events).
+- [x] 2011 from JMA's hypocenter and the real warning: Sendai 16.0 s, Oshika tip 2.7 s, Tokyo 63.8 s; model alert 3.9 s before JMA's warning at the fitted delay. Consistent with the lead "alert preceded strong motion by roughly 15 s in parts of Miyagi" (Hoshiba et al. 2011; still not read).
+- [x] Noto 2024 (pub_hist 20240101161010): first warning (report 1, M5.5) 16:10:16.0, 6.5 s before the M7.6 origin 16:10:22.5; M5.9 origin 16:10:09.5; wider warning (report 20) +20.6 s.
+- [x] 2025-12-08 off Aomori (20251208231519): detection +9.8 s, warning +13.9 s; JMA detected 4.1 s before the land-station model.
+- [x] 2016-11-21 off Fukushima (20161122055958): report 1 at +19.1 s, warning at report 6 +27.7 s.
+- [x] No JMA warning on record for 2011-03-11 M7.9 off Ibaraki or 2020-02-13 M7.0 Kuril (no matching entry within -120/+180 s); why is not established.
+- [x] Public warnings began 2007-10-01 (range plot limited to it; the pub_hist list starts 2008-04).
+- [x] No-warning share at the fitted delay, 19 warning-era rows: near land 48% (n 9; 31% at 6 s), offshore 5% (n 7; 0%). Supersedes "31% near land, 29% offshore" over 32 quakes.
+- [L] Si and Midorikawa (1999) data cover Mw up to about 8.3 (`source.gmpe.mwMax`): check against the paper.
+- [L] Offshore cable networks (S-net) as the reason for early detection off Aomori 2025 ("most likely"): inference.
+- [L] "JMA has since updated its algorithms to better handle cascading ruptures" (p14): unsourced (IPF/PLUM 2016-2018).
+- [L] Cut: "Some Tokyo residents saw the alert on TV" (unsourced); cut: actions chart thresholds (5/10/15/30/60 s), which were illustrative.
+
+Still misses: the alert is the model's own (P at second station + delay); JMA's also waits for the magnitude (Fukushima 2016: +17.9 s over the model's P). One median delay blurs eras (IPF 2016, PLUM 2018, S-net). Land stations only (Aomori 2025 4 s late). Point source, hypocentral distance, Mw 9.1 outside the relation's range, so shares for M7.5+ lean high. Warning counted to S onset, not peak shaking. The page runs from the USGS hypocenter (6 s and 50 km from JMA's for 2011). Offshore share rests on 7 rows. No finite-fault footprint. The tests page runs the 07 checks through synchronous XHR; not opened in a browser.
+
 ## Status
 
 | # | article | verified | wrong | unverifiable | notes |
@@ -218,6 +351,7 @@ Findings:
 | 07 | Early warning | 19 | 0 | 3 | S-P arithmetic and 2011 alert facts hold |
 | all | Series-wide | 1 | 1 | 1 | nuclear tests counted as earthquakes; Hoei M8.6 vs M8.4 |
 | | **Total** | **178** | **11** | **15** | |
+| qp | Quality pass 2026-10-01 (01-05, 07) | 55 | 0 | 28 | new rows only: counts are [x] and [L] in the Quality pass section; they supersede old rows where marked, so the audit totals above are not recomputed |
 
 ## Series-wide
 
@@ -292,7 +426,7 @@ Checked against the page's own CSV parsing and its brush/preset code.
   quakes (e.g. 2005-11-14, 2011-03-11 M7.7, 2012-12-07, 2013-10-25 outer rise;
   2011-04-07 intraslab). In the historical record the Nankai Trough is as prolific.
   Soften to "many of".
-- [x] Nankai: "a great earthquake roughly every 100-150 years" (`p8`) : Sourced. HERP
+- [x] Nankai: "a great earthquake roughly every 100-150 years" (`p8`) : Sourced. HERP [superseded 2026-10-01, see Quality pass]
   long-term evaluation of the Nankai Trough (intervals 90-150 years; 1361, 1498, 1605,
   1707, 1854, 1944/46).
 - [x] Ryukyu Trench reaches toward Taiwan (`p9`) : Sourced. PB2002.
@@ -354,14 +488,14 @@ perpendicular distance, corridor 1.2 deg for A and B, 1.3 deg for C, frac -0.05 
   line.
 - [x] Pacific slab under Tohoku "stays active to 650 km" (`p7`) : Computed. A-A' max
   645 km.
-- [x] Philippine Sea plate "about 15 to 50 million years old" (`p7`) : Sourced.
+- [x] Philippine Sea plate "about 15 to 50 million years old" (`p7`) : Sourced. [superseded 2026-10-01, see Quality pass]
   Shikoku Basin ~15-27 Ma at the Nankai Trough, West Philippine Basin ~50 Ma.
 - [x] 1707 Hoei "estimated M8.6", "49 days later Mt. Fuji began its most recent
   eruption" (`p8`) : Sourced. Hoei earthquake 28 Oct 1707, Hoei eruption began
   16 Dec 1707 = 49 days. For M8.6 vs 05's 8.4, see Series-wide.
 - [x] ERC Nankai 30-year probability "about 80%" in January 2025 (`p8`) : Sourced.
   ERC January 2025 update (80%程度).
-- [x] September 2025 split: "60-90% or more" main model, "20-50%" alternative (`p8`) :
+- [x] September 2025 split: "60-90% or more" main model, "20-50%" alternative (`p8`) : [superseded 2026-10-01, see Quality pass]
   Sourced. Japan Times 2025-09-27; JST Science Japan 2025-11-26. The ERC wording is
   "60-90%程度以上"; the raw upper value was 94.5%.
 - [x] Kanto: Philippine Sea under North American, Pacific under both (`p9`) :
@@ -383,7 +517,7 @@ perpendicular distance, corridor 1.2 deg for A and B, 1.3 deg for C, frac -0.05 
   Bonin M7.8 at 664 km gave shindo 5+ in Kanagawa), which cuts against "gently". Soften.
 - [x] Earthquakes happen inside the cold slab (`insight_cross_section`) : Sourced.
   Standard Wadati-Benioff zone physics.
-- [x] Tohoku ruptured "about 500 km", slip "as much as 50 meters", reaching the trench
+- [x] Tohoku ruptured "about 500 km", slip "as much as 50 meters", reaching the trench [superseded 2026-10-01, see Quality pass]
   (`insight_tohoku`) : Sourced. Fujiwara et al. 2011 (Science) ~50 m horizontal
   displacement near the trench; rupture ~400-500 km long.
 - [?] "If you're in Tokyo, it's everything at once" (`p15`) : Rhetorical; leave or
@@ -439,7 +573,7 @@ perpendicular distance, corridor 1.2 deg for A and B, 1.3 deg for C, frac -0.05 
   07:10 UTC, M7.5.
 - [x] USGS Kumamoto M7.0 and Noto M7.5; JMA 7.3 and 7.6 (`insight_notable`) :
   Computed (CSV) for USGS; Sourced for JMA (JMA event pages: Mj 7.3, Mj 7.6).
-- [x] "the offshore trench east of Honshu is the single biggest source of earthquakes"
+- [x] "the offshore trench east of Honshu is the single biggest source of earthquakes" [superseded 2026-10-01, see Quality pass]
   (`p7`) : Computed (CSV). 04's Tohoku box holds 4,584 events, the most of any region;
   events east of 141E between 35-41.5N: 5,828 (35%).
 - [x] Legend magnitude bins M4.5-5.0, 5.0-6.0, 6.0-7.0, 7.0+ : Computed (page),
@@ -450,7 +584,7 @@ perpendicular distance, corridor 1.2 deg for A and B, 1.3 deg for C, frac -0.05 
   beneath the city is a sharp jolt" (`p7`) : Sourced as a general statement
   (intensity attenuates with hypocentral distance); illustrative.
 
-## 04 Gutenberg-Richter
+## 04 Gutenberg-Richter [superseded 2026-10-01, see Quality pass]
 
 Reproduced with the page's own rounding (`Math.round(mag*10)/10`), Aki-Utsu estimator
 b = log10(e) / (mean - (Mc - 0.05)), se = b/sqrt(n), and prediction
@@ -459,7 +593,7 @@ N7 = n 10^(-b(7-Mc)).
 - [x] Gutenberg and Richter 1944, log10 N = a - bM (`p1`) : Sourced. Gutenberg &
   Richter (1944), "Frequency of earthquakes in California", BSSA 34.
 - [x] "a b of 1 means exactly a factor of ten per magnitude unit" (`p1`) : Derived.
-- [x] 16,792 events (`p2`) : Computed (CSV).
+- [x] 16,792 events (`p2`) : Computed (CSV). [superseded 2026-10-01, see Quality pass]
 - [x] Caption: magnitudes rounded to 0.1; ML fit above cutoff; b=1 dashed; mb gray,
   Mw blue, other amber (`cap_gr`) : Computed (page). `TYPE_COLORS`, `magFamily`.
 - [x] "a b of 1 predicts 16,792 / 10^2.5 ≈ 53 earthquakes of M7 or larger" (`p3`) :
@@ -479,9 +613,9 @@ N7 = n 10^(-b(7-Mc)).
   types page).
 - [x] Law gives average rates, not timing; basis of hazard maps (`p5`) : Sourced.
   Standard PSHA practice.
-- [x] Eight regions, north to south, first match wins (`p6`, `data_note`) : Computed
+- [x] Eight regions, north to south, first match wins (`p6`, `data_note`) : Computed [superseded 2026-10-01, see Quality pass]
   (page). `REGIONS`, `BOUNDS`, `regionOf`.
-- [x] Tohoku 4,584 events (`p7`) : Computed. 4,584.
+- [x] Tohoku 4,584 events (`p7`) : Computed. 4,584. [superseded 2026-10-01, see Quality pass]
 - [x] Kanto second with 3,126 (`p7`) : Computed. 3,126.
 - [x] Okinawa third at 2,312 (`p7`) : Computed. 2,312 (Hokkaido 2,002 is fourth).
 - [x] Chubu, Kansai, Chugoku/Shikoku have the fewest events (`p8`) : Computed. 77,
@@ -712,16 +846,16 @@ records, type 2).
 
 - [x] P waves about 6 km/s, S waves about 3.5 km/s in the crust (`p2`, legend) :
   Sourced. Standard crustal values; page `VP = 6`, `VS = 3.5`.
-- [x] Gap grows "about 12 seconds for every 100 km" (`insight_key`) : Derived.
+- [x] Gap grows "about 12 seconds for every 100 km" (`insight_key`) : Derived. [superseded 2026-10-01, see Quality pass]
   100/3.5 - 100/6 = 11.9 s.
-- [x] "Tokyo is 373 km from the 2011 Tohoku epicenter ... about 44 seconds"
+- [x] "Tokyo is 373 km from the 2011 Tohoku epicenter ... about 44 seconds" [superseded 2026-10-01, see Quality pass]
   (`insight_key`) : Computed (page). Haversine from 38.3N 142.4E: 373 km, 44.4 s.
   (From the USGS epicenter 38.297, 142.373: 372 km, 44.2 s.)
-- [x] "Sendai, 134 km away, had a gap of about 16 seconds" (`insight_key`) : Computed
+- [x] "Sendai, 134 km away, had a gap of about 16 seconds" (`insight_key`) : Computed [superseded 2026-10-01, see Quality pass]
   (page). 134 km, 15.9 s.
-- [x] Caption: warning modeled 3 s after the third station detection; stations
+- [x] Caption: warning modeled 3 s after the third station detection; stations [superseded 2026-10-01, see Quality pass]
   schematic (`caption_simulation`) : Computed (page). `PROCESSING_TIME = 3`.
-- [x] "JMA can issue a preliminary warning within about 3-8 seconds of detecting the
+- [x] "JMA can issue a preliminary warning within about 3-8 seconds of detecting the [superseded 2026-10-01, see Quality pass]
   first P-wave" (`p5`) : Sourced. 2011: first forecast 5.4 s, public warning 8.6 s
   after first detection (Hoshiba et al. 2011, EPS 63).
 - [?] Timeline caption "Timeline of the 2011 Tohoku earthquake early warning sequence"
@@ -731,16 +865,16 @@ records, type 2).
   public warning 8.6 s later. Say "modeled" in the caption.
 - [x] "over 1,000 seismometers" (`p7`) : Sourced. JMA: ~690 JMA stations plus ~1,000
   NIED Hi-net stations feed the EEW.
-- [x] Three or more stations, ~3-5 s (`p8`) : Sourced as typical (JMA EEW
+- [x] Three or more stations, ~3-5 s (`p8`) : Sourced as typical (JMA EEW [superseded 2026-10-01, see Quality pass]
   description).
-- [x] Initial estimate M7.2; final M9.1 (JMA 9.0) (`p9`, `p14`) : Sourced. Hoshiba et
+- [x] Initial estimate M7.2; final M9.1 (JMA 9.0) (`p9`, `p14`) : Sourced. Hoshiba et [superseded 2026-10-01, see Quality pass]
   al. 2011: M7.2 at the fourth update, the warning.
 - [x] Warnings for areas expected at shindo 4 or above (`p10`) : Sourced. JMA issues
   a warning when max predicted shindo is 5-lower or more, to areas predicted 4 or more.
   Accurate as a description of who is warned.
 - [x] Broadcast channels (TV, radio, phones, factories, trains, elevators) (`p11`) :
   Sourced. JMA EEW description.
-- [x] "the public warning went out about 8 seconds after the first station detected
+- [x] "the public warning went out about 8 seconds after the first station detected [superseded 2026-10-01, see Quality pass]
   the P wave" (`insight_2011`) : Sourced. 8.6 s (Hoshiba et al. 2011).
 - [x] Warning covered Miyagi, Iwate, Fukushima, Akita and Yamagata; Kanto never
   warned; no warning for Tokyo (`insight_2011`) : Sourced. Hoshiba et al. 2011; JMA
@@ -752,7 +886,7 @@ records, type 2).
 - [x] Tohoku Shinkansen coastal seismometers cut power; no trains in passenger service
   derailed (`insight_2011`) : Sourced. JR East 2011 (one out-of-service test train
   derailed at low speed near Sendai).
-- [?] Actions chart: 5 s drop/cover, 10 s windows, 15 s elevator, 30 s bullet trains,
+- [?] Actions chart: 5 s drop/cover, 10 s windows, 15 s elevator, 30 s bullet trains, [superseded 2026-10-01, see Quality pass]
   60 s factory shutdown (`caption_actions`) : Illustrative thresholds, no source.
   Label as rough, or cite (e.g. JMA EEW guidance).
 - [x] Near the epicenter there is no gap; alert may arrive after shaking (`p13`) :
