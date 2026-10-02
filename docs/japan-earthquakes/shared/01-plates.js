@@ -27,6 +27,9 @@
 //                                          deepFrom), "seaward" (no slab beneath and the nearest slab
 //                                          point shallower than 40 km: off the trench), "behind" (no slab
 //                                          beneath, nearest point deeper), "deep" (depth >= deepFrom, 70)
+//   PlateDistance.trenchSide(lat, lon, lines)  "seaward" (subducting-plate side of the nearest PB2002 SUB
+//                                          trace) or "behind"; entry/classify use it when opts.trenches
+//                                          = lines is given, else the 40 km heuristic above
 //   PlateDistance.CLASSES                  ["plate", "above", "inside", "seaward", "behind", "deep"]
 //   PlateDistance.classify(r, e, opts)     the class alone, from a Slab nearest() result
 //   PlateDistance.nullEpicentres(n, seed, box)  [{lat, lon}] uniform on the sphere in box
@@ -76,12 +79,41 @@
     return out;
   }
 
+  // ---- side of the trench (PB2002) ----------------------------------------
+  // lines = PB2002 boundary records [{pair, cls, p: [lat, lon, ...]}]. Each trace runs in Bird's
+  // listing order with the first plate of `pair` on its left; a backslash in the pair means that
+  // first plate is the one going down, a slash that it is the one on top. Returns "seaward" when
+  // the point is on the subducting-plate side of the nearest subduction trace (local planar
+  // distance), else "behind". Beyond a trace's end the side still comes from that end segment.
+  function trenchSide(lat, lon, lines) {
+    const kx = Math.cos(lat * RAD);
+    let best = Infinity, subLeft = false, left = false;
+    for (const ln of lines) {
+      if (ln.cls !== "SUB") continue;
+      const p = ln.p, down = ln.pair.indexOf("\\") >= 0;
+      for (let i = 0; i + 3 < p.length; i += 2) {
+        const ax = (p[i + 1] - lon) * kx, ay = p[i] - lat, bx = (p[i + 3] - lon) * kx, by = p[i + 2] - lat;
+        const dx = bx - ax, dy = by - ay, L2 = dx * dx + dy * dy;
+        const t = L2 > 0 ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / L2)) : 0;
+        const d2 = (ax + t * dx) ** 2 + (ay + t * dy) ** 2;
+        if (d2 < best) { best = d2; subLeft = down; left = dx * (0 - ay) - dy * (0 - ax) > 0; }
+      }
+    }
+    if (best === Infinity) return null;
+    return left === subLeft ? "seaward" : "behind";
+  }
+
   // ---- classes ------------------------------------------------------------
   function classify(r, e, opts) {
     const o = opts || {}, tol = o.plateTol == null ? 20 : o.plateTol, deepFrom = o.deepFrom == null ? 70 : o.deepFrom;
     if (e.depth >= deepFrom) return "deep";
-    // no slab beneath the epicentre: seaward when the nearest slab point is the slab's shallow
+    // no slab beneath the epicentre: with the PB2002 traces (opts.trenches), the side of the nearest
+    // subduction trace; without them the heuristic below: seaward when the nearest slab point is the slab's shallow
     // trench edge (the event is off the trench, in the incoming plate), behind the arc otherwise
+    if (!r || r.vert == null) {
+      const sd = o.trenches && e.lat != null ? trenchSide(e.lat, e.lon, o.trenches) : null;
+      if (sd) return sd;
+    }
     if (!r || r.vert == null) return r && r.foot && r.foot.depth < (o.edgeDepth == null ? 40 : o.edgeDepth) ? "seaward" : "behind";
     if (r.signed < -tol) return "above";
     return r.signed <= tol ? "plate" : "inside";
@@ -313,6 +345,14 @@
     const fe = { lat: 35, lon: 141, depth: 30 }, fl = dipAt(dm, entry(dm, fe), fe);
     add("dipAt returns the slab dip and strike, and null with no slab beneath or for a supplement point", fl && fl.dip === 20 && fl.strike === 10 && dipAt(outside, entry(outside, fe), fe) === null && dipAt(dm, { vert: 1, slab: "supp" }, fe) === null, "");
 
+    // side of the trench: a synthetic trace running north, first plate (left, west) on top ("OK/PA"),
+    // then the same trench listed the other way round as "PA\\OK" (running south, first plate = subducting, on its left = east)
+    const tr = [{ pair: "OK/PA", cls: "SUB", p: [30, 140, 40, 140] }], trD = [{ pair: "PA\\OK", cls: "SUB", p: [40, 140, 30, 140] }];
+    const sides = [trenchSide(35, 142, tr), trenchSide(35, 138, tr), trenchSide(35, 142, trD), trenchSide(35, 138, trD), trenchSide(28, 142, tr)];
+    const ent2 = entry(outside, { lat: 35, lon: 142, depth: 20 }, { trenches: tr }).cls, ent3 = entry(edge(120), { lat: 35, lon: 142, depth: 20 }, { trenches: tr }).cls;
+    add("trenchSide: subducting side is seaward, overriding side behind, for both pair conventions (and past the trace end); classify uses it over the 40 km heuristic",
+      sides.join() === "seaward,behind,seaward,behind,seaward" && ent2 === "seaward" && ent3 === "seaward" && entry(edge(120), { lat: 35, lon: 138, depth: 20 }, { trenches: tr }).cls === "behind", sides.join());
+
     // interface-like: a thrust parallel to the slab, one rotated 40 degrees, one normal fault
     const slabSD = { strike: 200, dip: 15 };
     add("interfaceLike: a thrust on the slab yes (and on its auxiliary plane), the same plane as a normal fault no, a 40 degree turn no",
@@ -339,7 +379,7 @@
     return out;
   }
 
-  const api = { CLASSES, isFixedDepth, mulberry32, nullEpicentres, classify, entry, dipAt, logBins, cumulative, shareWithin, axes, mechClass, kagan,
+  const api = { CLASSES, isFixedDepth, mulberry32, nullEpicentres, trenchSide, classify, entry, dipAt, logBins, cumulative, shareWithin, axes, mechClass, kagan,
     interfaceLike, matchGcmt, chi2sf, dispersion, hav, runChecks };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   root.PlateDistance = api;
