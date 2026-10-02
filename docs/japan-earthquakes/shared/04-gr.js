@@ -26,6 +26,8 @@
 //                              inside the window of a larger or equal one, before or after,
 //                              is dropped; a dropped event drops no others.
 //   poisQ(lam, p)              Smallest k with P(X <= k) >= p for Poisson(lam).
+//   countRange(mu, level, bs)  Central range of a Poisson(mu) count (scipy ppf convention); bs = {se, dM} also spreads
+//                              mu by 10^(-dM * se * z), z standard normal (a b-value's uncertainty).
 //   poisInterval(k, level)     Exact (Garwood) range of the mean given an observed count k.
 //   prob30(rate)               1 - exp(-30 rate): chance of one or more in 30 years.
 //   surv(m, p)                 Tapered survival N(>= m) / N(>= p.mt - 0.05) for p = {mt, b,
@@ -98,6 +100,24 @@
   const gkL = M => Math.pow(10, 0.1238 * M + 0.983);
   const gkT = M => M >= 6.5 ? Math.pow(10, 0.032 * M + 2.7389) : Math.pow(10, 0.5409 * M - 0.547);
 
+  // numpy's argsort(kind="heapsort") (npysort aheapsort, 1-based), reversed
+  function heapOrderDesc(v) {
+    const n0 = v.length, a = new Int32Array(n0 + 1);
+    for (let i = 0; i < n0; i++) a[i + 1] = i;
+    const sift = (l, n) => {
+      const tmp = a[l];
+      let i = l, j = l << 1;
+      while (j <= n) {
+        if (j < n && v[a[j]] < v[a[j + 1]]) j++;
+        if (v[tmp] < v[a[j]]) { a[i] = a[j]; i = j; j += j; } else break;
+      }
+      a[i] = tmp;
+    };
+    for (let l = n0 >> 1; l > 0; l--) sift(l, n0);
+    for (let n = n0; n > 1;) { const tmp = a[n]; a[n] = a[1]; n--; a[1] = tmp; sift(1, n); }
+    return Array.from(a.subarray(1)).reverse();
+  }
+
   function declusterGK(qs) {
     const s = qs.slice().sort((a, b) => a.t - b.t);
     const n = s.length, ts = s.map(q => q.t), R = Math.PI / 180;
@@ -106,7 +126,10 @@
       const h = Math.sin(dl / 2) ** 2 + Math.cos(a.lat * R) * Math.cos(b.lat * R) * Math.sin(dn / 2) ** 2;
       return 2 * 6371 * Math.asin(Math.sqrt(h));
     };
-    const order = Array.from({ length: n }, (_, i) => i).sort((i, j) => s[j].mag - s[i].mag || s[i].t - s[j].t);
+    // Processing order: largest magnitude first. Among equal magnitudes the order is OpenQuake hmtk's,
+    // flipud(numpy.argsort(mag, kind="heapsort")) on the time-sorted catalog, so ties resolve as hmtk
+    // resolves them (it is arbitrary, not "earlier first"; "earlier first" differed from hmtk on 1.7% of flags).
+    const order = heapOrderDesc(s.map(q => q.mag));
     const removed = new Uint8Array(n);
     const lower = t => { let a = 0, b = n; while (a < b) { const m = (a + b) >> 1; if (ts[m] < t) a = m + 1; else b = m; } return a; };
     for (const i of order) {
@@ -134,6 +157,22 @@
     const lower = k === 0 ? 0 : solve(l => poisCdf(k - 1, l) > 1 - a);
     const upper = solve(l => poisCdf(k, l) > a);
     return [lower, upper];
+  }
+  // Central range of a Poisson count: [smallest k with P(X<=k) >= a/2, smallest k with P(X<=k) >= 1-a/2],
+  // the same convention as scipy.stats.poisson.ppf. With a b-value and its standard error the count is a
+  // mixture: b is spread over a normal (41 points over +-4 se, exact weights) and the Poisson pmfs are summed.
+  function countRange(mu, level, bs) {
+    const a = (1 - (level == null ? 0.95 : level)) / 2;
+    if (!bs) return [poisQ(mu, a), poisQ(mu, 1 - a)];
+    const pts = [];
+    let wsum = 0;
+    for (let i = -20; i <= 20; i++) { const z = i / 5, w = Math.exp(-z * z / 2); pts.push([mu * Math.pow(10, -(bs.dM || 1) * bs.se * z), w]); wsum += w; }
+    const kmax = Math.ceil(mu * 3 + 30 + 10 * Math.sqrt(mu));
+    const pmf = new Float64Array(kmax + 1);
+    for (const [m, w] of pts) { let pk = Math.exp(-m); for (let k = 0; k <= kmax; k++) { pmf[k] += w / wsum * pk; pk *= m / (k + 1); } }
+    let c = 0, lo = null, hi = null;
+    for (let k = 0; k <= kmax; k++) { c += pmf[k]; if (lo === null && c >= a) lo = k; if (c >= 1 - a) { hi = k; break; } }
+    return [lo, hi];
   }
   const prob30 = rate => 1 - Math.exp(-30 * rate);
 
@@ -670,7 +709,7 @@
       const bad = ev.filter(e => (e.main ? 1 : 0) !== e.ref);
       const agree = 1 - bad.length / ev.length;
       const big = bad.filter(e => e.mag >= 6);
-      check("Gardner-Knopoff flags agree with OpenQuake on at least 99% of " + ev.length + " M5.5+ events (2010-2012)", agree >= 0.99,
+      check("Gardner-Knopoff flags agree with OpenQuake on at least 99.9% of " + ev.length + " M5.5+ events (2010-2012)", agree >= 0.999,
         (100 * agree).toFixed(1) + "%; " + bad.length + " differ, " + big.length + " of them M6+" + (big.length ? ": " + big.map(e => new Date(e.t).toISOString().slice(0, 10) + " M" + e.mag).join(", ") : ""));
       const w = REFERENCE.windows;
       check("GK windows at M6 and M9.1 match OpenQuake's", Math.abs(gkL(6) - w.M6km) < 1e-6 && Math.abs(gkT(6) - w.M6days) < 1e-6 && Math.abs(gkL(9.1) - w.M91km) < 1e-6 && Math.abs(gkT(9.1) - w.M91days) < 1e-6,
@@ -702,10 +741,19 @@
       const iv = poisInterval(12, 0.95), q = poisQ(10, 0.975);
       check("Poisson range for a count of 12 is 6.2 to 21.0 (Garwood); the 97.5% quantile of Poisson(10) is 17", Math.abs(iv[0] - 6.2) < 0.05 && Math.abs(iv[1] - 20.96) < 0.05 && q === 17, iv.map(v => v.toFixed(2)).join(" to ") + ", " + q);
     }
+    {
+      // scipy.stats.poisson.ppf(0.025 / 0.975, mu), scipy 1.13
+      const ref = [[0.5, 0, 2], [3, 0, 7], [10, 4, 17], [17.3, 10, 26], [24.6, 15, 35], [87.2, 69, 106]];
+      const bad = ref.filter(r => { const g = countRange(r[0], 0.95); return g[0] !== r[1] || g[1] !== r[2]; });
+      const w = countRange(17.3, 0.95, { se: 0.04, dM: 1.8 }), p = countRange(17.3, 0.95);
+      check("95% Poisson count range equals scipy.stats.poisson.ppf at six means; spreading b widens it",
+        bad.length === 0 && w[0] <= p[0] && w[1] >= p[1] && (w[1] - w[0]) > (p[1] - p[0]),
+        (bad.length ? "wrong at " + bad.map(r => r[0]).join(", ") : "all six match") + "; mu 17.3: " + p.join("-") + ", with b spread " + w.join("-"));
+    }
     return res;
   }
 
-  const api = { rng, bValue, bValueExact, bStabilityMc, gkL, gkT, declusterGK, poisQ, poisInterval, prob30, surv, fitTapered, rateGE, returnYears, binCounts, etasCatalog, runChecks, REFERENCE, histMags };
+  const api = { rng, bValue, bValueExact, bStabilityMc, gkL, gkT, declusterGK, poisQ, poisInterval, countRange, prob30, surv, fitTapered, rateGE, returnYears, binCounts, etasCatalog, runChecks, REFERENCE, histMags };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   root.GutenbergRichter = api;
 })(typeof window !== "undefined" ? window : globalThis);
