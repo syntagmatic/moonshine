@@ -129,7 +129,7 @@ for (const Mz of mzList) {
     return { fixedFits, profile: { grid, limit: LIM, range: lo && hi ? { lo: round(lo.share, 4), hi: round(hi.share, 4), declLo: round(lo.decl, 4), declHi: round(hi.decl, 4) } : null }, pageCap: Mz === 5.0 ? 0.8 : capList[0], Teff: round(Teff, 8) };
   })() : null;
   fits[Mz.toFixed(1)] = {
-    Mz, n: t.length, nTarget, gaps: gaps.map(g => [round(g[0], 9), round(g[1], 9)]),
+    Mz, n: t.length, nTarget, gaps: gaps.map(g => [g[0], g[1]]), // full double precision: rounding could move an event (the mainshock) across its own gap start
     par: Object.fromEntries(Object.entries(par).map(([k, v]) => [k, round(v, 8)])),
     x: fit.x.map(v => round(v, 8)), se: se.map(v => round(v, 4)),
     negLogLik: round(fit.nll, 10), b: round(bv.b, 4), bSe: round(bv.se, 3),
@@ -137,6 +137,7 @@ for (const Mz of mzList) {
     backgroundShare: round(bgSum / nTarget, 4), muPerYear: round(par.mu * 365.25, 5),
     ks: { D: round(ks.D, 4), crit95: round(ks.crit95, 4) },
     robust,
+    events: Mz === 5.0 ? { t, m } : undefined, // full precision, so runChecks can recompute negLogLik
     seconds: Math.round((Date.now() - t1) / 1000)
   };
   console.error(`Mz ${Mz}: n ${t.length}, mu/yr ${(par.mu * 365.25).toFixed(1)}, c ${par.c.toFixed(4)} d, alpha ${par.alpha.toFixed(2)}, p ${par.p.toFixed(3)}, bg ${(bgSum / nTarget).toFixed(2)}, branching ${nBr.toFixed(2)}, KS D ${ks.D.toFixed(3)} (${fits[Mz.toFixed(1)].seconds} s)`);

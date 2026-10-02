@@ -375,6 +375,17 @@
     }
 
     // SAPP reference
+    {
+      // the stored likelihoods are reproducible from the file's own events, gaps and parameters
+      const ev = data.fits["5.0"] && data.fits["5.0"].events;
+      if (!ev) check("03-etas-fit.json carries the M5.0 events", false, "no fits.5.0.events");
+      else for (const key of ["5.0", "5.5"]) {
+        const F = data.fits[key], Mz0 = F.Mz, t = [], m = [];
+        for (let i = 0; i < ev.t.length; i++) if (ev.m[i] >= Mz0 - 1e-9) { t.push(ev.t[i]); m.push(ev.m[i]); }
+        const nll = etasNll(t, m, F.par, { Mz: Mz0, tStart: 0, tEnd: data.tEnd, gaps: F.gaps });
+        check(`M${key} stored negLogLik recomputes from the file's events, gaps and parameters (relative 1e-6)`, t.length === F.n && rel(nll, F.negLogLik) < 1e-6, `${nll.toFixed(4)} vs ${F.negLogLik.toFixed(4)}, n ${t.length}`);
+      }
+    }
     const sapp = data && data.sapp;
     if (!sapp) check("SAPP reference data present", false, "03-etas-fit.json has no sapp block");
     else {

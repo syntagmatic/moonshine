@@ -344,6 +344,10 @@ Still misses: the alert is the model's own (P at second station + delay); JMA's 
 - [x] 04: Fig 3 readout gives the exact Poisson 95% range of the held-out M7+ count with b spread by its standard error (checked against scipy at six means); 2000-2010 training window: forecast 19.4, range 10-31, observed 17, inside. Gardner-Knopoff ties now follow numpy heapsort order: 100% agreement with hmtk on the 348-event fixture (was 99.4%), mainshocks 4,197 to 4,192; full-catalog agreement not re-measured (3f01885).
 - [x] 07: page 5,967 to 5,552 px at 1280 and 9,095 to 7,082 px at 390, no claims cut, all 19 warning-era rows kept; 07-eew-jma.json 296 to 217 KB (further thinning failed the 0.3 s held-out check); 2011-04-07 depth note in the caption (fe6e59d).
 - Libraries no longer load their own data: tests/japan-earthquakes.libs.js passes 03-etas-fit.json, 05-renewal.json and 07-eew-jma.json to runChecks (e75e5ae). 113/113.
+- [x] 03: M5.0 ETAS branching ratio capped at 0.8 (infinite time, to M9.1): refit costs 1.23 log-likelihood units, background share 28.4%, Tohoku-descendant shares 65/30/14% (2012/2016/2024) vs 69/34/18% free (scripts/japan-03-etas-fit.mjs, fits.5.0.robust).
+- [x] 03: profile-likelihood 95% range (delta negLogLik <= 1.92) of the background share mu*T/N: M5.0 21.5% to 30.7%, M5.5 25.1% to 39.7% (script); page prints 22% to 31% beside the 26%.
+- [x] 03: branching ratio 1.00 is the infinite-time, M<=9.1 value; 0.61 over the record to 2025 (script, branching.toEnd). Alpha fixed at Jalilian's 1.658: delta negLogLik 22.8, share 19.9%, rejected.
+- [x] 03: 03-etas-fit.json is reproducible: gaps stored at full double precision (rounding moved the mainshock across its own gap start, so the stored likelihood did not recompute) and the M5.0 events included; runChecks recomputes the M5.0 and M5.5 negLogLik to 1e-6 relative. Printed page numbers unchanged.
 
 ## Status
 
