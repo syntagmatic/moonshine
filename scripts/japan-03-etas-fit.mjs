@@ -15,6 +15,13 @@
 // counts differ before and after 2010 at every level, M5+ does not); 4.5 and 5.5 are fitted
 // for the page's cutoff toggle.
 //
+// Robustness of the background share (fits.*.robust, M5.0 and M5.5): a fit with the
+// infinite-time branching ratio at the runaway edge (alpha near beta) may not separate
+// background from triggering, so the script refits with the ratio capped (K solved from the
+// cap), with alpha held at fixed values, and traces the profile likelihood of the background
+// share (mu fixed on a grid, the other four parameters refitted); `range` is the share where
+// the profile stays within 1.92 log-likelihood units of the best (about 95%).
+//
 // The file also carries the SAPP reference results (scripts/japan-03-sapp-fixture.json,
 // made by scripts/japan-03-sapp-fixture.R) that the library's checks use, and the
 // published Jalilian (2019) fit for comparison.
@@ -78,6 +85,49 @@ for (const Mz of mzList) {
   let bgSum = 0, nTarget = 0;
   for (let i = 0; i < t.length; i++) if (!gaps.some(g => t[i] >= g[0] && t[i] < g[1])) { bgSum += d.bg[i]; nTarget++; }
   const rt = A.residualTimes(t, m, par, o), ks = A.ksUniform(rt.tau.map(v => v / rt.total));
+  const robust = (Mz === 5.0 || Mz === 5.5) ? (() => {
+    const yearShare = (dd, y) => { // mean ancestry share of events in year y, as the page computes it
+      const a = (Date.UTC(y, 0, 1) - main.time) / DAY, b2 = (Date.UTC(y + 1, 0, 1) - main.time) / DAY;
+      let s = 0, n = 0; for (let i = root + 1; i < t.length; i++) { const r = t[i] - t0; if (r >= a && r < b2) { s += dd.anc[i]; n++; } } return s / n;
+    };
+    let Teff = tEnd; for (const g of gaps) Teff -= g[1] - g[0];
+    const sumBg = dd => { let s = 0; for (let i = 0; i < t.length; i++) if (!gaps.some(g => t[i] >= g[0] && t[i] < g[1])) s += dd.bg[i]; return s / nTarget; };
+    const row = (kind, value, r) => {
+      const dd = A.declustering(t, m, r.par, Mz, root);
+      return { kind, value, negLogLik: round(r.nll, 10), dNegLogLik: round(r.nll - fit.nll, 4), mu: round(r.par.mu, 6), muPerYear: round(r.par.mu * 365.25, 5),
+        shareMuT: round(r.par.mu * Teff / nTarget, 4), backgroundShare: round(sumBg(dd), 4), p: round(r.par.p, 5), c: round(r.par.c, 6), alpha: round(r.par.alpha, 5),
+        branching: { infinite: round(A.branchingRatio(r.par, bv.b, Mz, main.mag, Infinity), 4), toEnd: round(A.branchingRatio(r.par, bv.b, Mz, main.mag, tEnd), 4) },
+        descendants: { y2012: round(yearShare(dd, 2012), 4), y2016: round(yearShare(dd, 2016), 4), y2024: round(yearShare(dd, 2024), 4) } };
+    };
+    const fo = { iters: 500, restarts: 5 };
+    const ff = (fixed) => A.etasFitFixed(t, m, o, { ...par, p: Math.max(par.p, 1.1) }, fixed, fo);
+    const capList = Mz === 5.0 ? [0.95, 0.9, 0.8] : [0.5, 0.4];
+    const alphaList = Mz === 5.0 ? [2.0, 1.8, 1.6579, 1.5] : [1.8];
+    const fixedFits = [row("free", null, fit)];
+    for (const c of capList) fixedFits.push(row("cap", c, ff({ branching: c, b: bv.b, Mmax: main.mag })));
+    for (const a of alphaList) fixedFits.push(row("alpha", a, ff({ alpha: a })));
+    // profile of the background share: mu = k * mu_hat, the other four refitted, walking out from k = 1
+    const ks = [0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1, 1.05, 1.1, 1.15, 1.2, 1.25, 1.3, 1.4];
+    const grid = [], prev = { up: par, down: par };
+    for (const k of [...ks.filter(v => v >= 1), ...ks.filter(v => v < 1).reverse()]) {
+      const dir = k >= 1 ? "up" : "down";
+      const r = A.etasFitFixed(t, m, o, prev[dir], { mu: par.mu * k }, { iters: 500, restarts: 6 });
+      prev[dir] = r.par;
+      const dd = A.declustering(t, m, r.par, Mz, root);
+      grid.push({ k, mu: round(r.par.mu, 6), dNegLogLik: round(r.nll - fit.nll, 4), shareMuT: round(r.par.mu * Teff / nTarget, 4), backgroundShare: round(sumBg(dd), 4), branching: round(A.branchingRatio(r.par, bv.b, Mz, main.mag, Infinity), 3) });
+    }
+    grid.sort((a, b2) => a.k - b2.k);
+    const LIM = 1.92, side = (dir) => { // where dNegLogLik crosses LIM, interpolating linearly between grid points
+      const i0 = grid.findIndex(g => g.k === 1);
+      for (let i = i0; i + dir >= 0 && i + dir < grid.length; i += dir) {
+        const a = grid[i], b2 = grid[i + dir];
+        if (b2.dNegLogLik >= LIM) { const f = (LIM - a.dNegLogLik) / (b2.dNegLogLik - a.dNegLogLik); return { share: a.shareMuT + f * (b2.shareMuT - a.shareMuT), decl: a.backgroundShare + f * (b2.backgroundShare - a.backgroundShare) }; }
+      }
+      return null;
+    };
+    const lo = side(-1), hi = side(1);
+    return { fixedFits, profile: { grid, limit: LIM, range: lo && hi ? { lo: round(lo.share, 4), hi: round(hi.share, 4), declLo: round(lo.decl, 4), declHi: round(hi.decl, 4) } : null }, pageCap: Mz === 5.0 ? 0.8 : capList[0], Teff: round(Teff, 8) };
+  })() : null;
   fits[Mz.toFixed(1)] = {
     Mz, n: t.length, nTarget, gaps: gaps.map(g => [round(g[0], 9), round(g[1], 9)]),
     par: Object.fromEntries(Object.entries(par).map(([k, v]) => [k, round(v, 8)])),
@@ -86,6 +136,7 @@ for (const Mz of mzList) {
     branching: { Mmax: main.mag, infinite: round(nBr, 4), toEnd: round(nBr25, 4) },
     backgroundShare: round(bgSum / nTarget, 4), muPerYear: round(par.mu * 365.25, 5),
     ks: { D: round(ks.D, 4), crit95: round(ks.crit95, 4) },
+    robust,
     seconds: Math.round((Date.now() - t1) / 1000)
   };
   console.error(`Mz ${Mz}: n ${t.length}, mu/yr ${(par.mu * 365.25).toFixed(1)}, c ${par.c.toFixed(4)} d, alpha ${par.alpha.toFixed(2)}, p ${par.p.toFixed(3)}, bg ${(bgSum / nTarget).toFixed(2)}, branching ${nBr.toFixed(2)}, KS D ${ks.D.toFixed(3)} (${fits[Mz.toFixed(1)].seconds} s)`);

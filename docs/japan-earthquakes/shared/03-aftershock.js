@@ -151,6 +151,33 @@
     const r = nelderMead(f, pack(start), [0.3, 0.3, 0.3, 0.2, 0.05], opts.iters || 600, { tol: opts.tol == null ? 1e-11 : opts.tol, restarts: opts.restarts || 6 });
     return { par: unpack(r.x), x: r.x, nll: r.f };
   }
+  // Constrained ML fit. fixed: {mu, alpha} hold those parameters; {branching, b, Mmax} pins the
+  // infinite-time branching ratio (K is then solved from it, so the fit sits on the cap).
+  // Returns the same shape as etasFit, plus par.K from the pinned ratio.
+  function etasFitFixed(t, m, o, start, fixed, opts) {
+    opts = opts || {};
+    const pin = fixed.branching != null;
+    const names = ["mu", "K", "c", "alpha", "p"].filter(k => !(k === "mu" && fixed.mu != null) && !(k === "alpha" && fixed.alpha != null) && !(k === "K" && pin));
+    const x0 = pack(start), idx = { mu: 0, K: 1, c: 2, alpha: 3, p: 4 };
+    const build = z => {
+      const x = x0.slice();
+      names.forEach((k, i) => { x[idx[k]] = z[i]; });
+      if (fixed.mu != null) x[0] = Math.log(fixed.mu);
+      if (fixed.alpha != null) x[3] = fixed.alpha;
+      const par = unpack(x);
+      if (pin) { par.K = 1; par.K = fixed.branching / branchingRatio(par, fixed.b, o.Mz, fixed.Mmax, Infinity); x[1] = Math.log(par.K); }
+      return { par, x };
+    };
+    const f = z => {
+      const { par, x } = build(z);
+      if (x[0] < -40 || x[2] < -12 || x[2] > 4 || x[3] < 0 || x[3] > 6 || x[4] < (pin ? 1.0005 : 0.2) || x[4] > 3) return 1e30;
+      return etasNll(t, m, par, o);
+    };
+    const stepAll = { mu: 0.3, K: 0.3, c: 0.3, alpha: 0.2, p: 0.05 };
+    const r = nelderMead(f, names.map(k => x0[idx[k]]), names.map(k => stepAll[k]), opts.iters || 600, { tol: opts.tol == null ? 1e-11 : opts.tol, restarts: opts.restarts || 6 });
+    const { par, x } = build(r.x);
+    return { par, x, nll: r.f };
+  }
   // Standard errors of x (ln mu, ln K, ln c, alpha, p) from a central-difference Hessian
   function etasStdErr(t, m, o, x) {
     const n = 5, f = y => etasNll(t, m, unpack(y), o);
@@ -387,6 +414,27 @@
       check("branching ratio matches a Monte Carlo of offspring counts", rel(n0, s / N) < 0.03, `${n0.toFixed(3)} vs ${(s / N).toFixed(3)}`);
     }
     {
+      // truncated ratio against a midpoint quadrature of the Gutenberg-Richter density, also at alpha = beta (the closed form's limit case)
+      const quad = (par, bb, Mz0, Mm) => {
+        const beta = bb * LN10, N = 20000, h = (Mm - Mz0) / N; let num = 0, den = 0;
+        for (let i = 0; i < N; i++) { const mm = Mz0 + (i + 0.5) * h, w = Math.exp(-beta * (mm - Mz0)); num += w * Math.exp(par.alpha * (mm - Mz0)); den += w; }
+        return par.K * Math.pow(par.c, 1 - par.p) / (par.p - 1) * num / den;
+      };
+      const a = { K: 0.01, c: 0.02, alpha: 2.3, p: 1.1 }, e = { ...a, alpha: 1.0 * LN10 };
+      const r1 = rel(branchingRatio(a, 1, 5, 9.1, Infinity), quad(a, 1, 5, 9.1)), r2 = rel(branchingRatio(e, 1, 5, 9.1, Infinity), quad(e, 1, 5, 9.1));
+      check("truncated branching ratio equals a quadrature over magnitudes, including alpha = beta", r1 < 1e-5 && r2 < 1e-5, `alpha 2.3: ${r1.toExponential(1)}, alpha = beta: ${r2.toExponential(1)}`);
+    }
+    {
+      // constrained fits: the pinned ratio is met, fixed parameters stay fixed, and no constrained fit beats the free one
+      const T = 900, o = { Mz, tStart: 0, tEnd: T }, sim = etasSimulate(truth, b, Mz, Mmax, T, 1000);
+      const keep = []; for (let i = 0; i < sim.t.length; i++) if (sim.t[i] <= T) keep.push(i);
+      const t = keep.map(i => sim.t[i]), m = keep.map(i => sim.m[i]), st = { mu: 0.2, K: 0.02, c: 0.05, alpha: 1.2, p: 1.1 }, io = { iters: 300, restarts: 3 };
+      const free = etasFit(t, m, o, st, io), nFree = branchingRatio(free.par, b, Mz, Mmax, Infinity), cap = nFree * 0.8;
+      const pin = etasFitFixed(t, m, o, free.par, { branching: cap, b, Mmax }, io), fa = etasFitFixed(t, m, o, free.par, { alpha: 1.3, mu: 0.25 }, io);
+      const nPin = branchingRatio(pin.par, b, Mz, Mmax, Infinity);
+      check("constrained ETAS fits hold their constraints and cost likelihood", rel(nPin, cap) < 1e-9 && fa.par.alpha === 1.3 && Math.abs(fa.par.mu - 0.25) < 1e-12 && pin.nll >= free.nll - 1e-6 && fa.nll >= free.nll - 1e-6, `ratio ${nPin.toFixed(3)} for cap ${cap.toFixed(3)}; delta nll ${(pin.nll - free.nll).toFixed(2)} (cap), ${(fa.nll - free.nll).toFixed(2)} (alpha 1.3, mu 0.25)`);
+    }
+    {
       // simulated totals: mean count of one seeded mainshock's cascade vs closed form of generation sum
       const par = { mu: 0, K: 0.004, c: 0.0296, alpha: 1.2, p: 1.15 }, nr = branchingRatio(par, b, Mz, Mmax, Infinity);
       const M0 = 5; let tot = 0; const R = 5000, T = 1e15;
@@ -459,7 +507,7 @@
   }
 
   const api = { nelderMead, omoriIntegral, omoriNll, omoriFit,
-    etasIntensity, etasNll, etasFit, etasStdErr, etasExpected, residualTimes, ksUniform, declustering,
+    etasIntensity, etasNll, etasFit, etasFitFixed, etasStdErr, etasExpected, residualTimes, ksUniform, declustering,
     branchingRatio, etasSimulate, bathSimulate, largestMedian, segments, pack, unpack, rng, runChecks };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.Aftershock = api;
