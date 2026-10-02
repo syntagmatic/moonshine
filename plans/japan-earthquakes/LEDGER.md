@@ -224,7 +224,7 @@ Fits and rates at M5+ where it matters; maps keep every quake; each page says wh
 - [x] GCMT: 943 solutions Mw>=5.5, 2000-2025 (scripts/japan-01-plates.mjs; sha prefixes in 01-gcmt.json).
 - [x] 72% of 16,787 quakes within 30 km of a Slab2 surface vs 13% for a seeded random-position control; free depths 79% (control 12%), default depths (34% of events) 59%; holdout 2018 on 80% vs 79% for 2000-2016; deep (300+) 87% within 50 km, median 34 km, 33% within 30 km (page, from the csv and slab2.json).
 - [x] 17 M7+ off Tohoku: 13 on the plate, 4 seaward (outer rise). Closes the old [?] on p7.
-- [x] GCMT mechanism shares: 854 of 1,095 M5.5+ matched (60 s, 100 km); on the plate 81% thrust (n=500), 68% within 30 deg of the slab thrust; above the plate 29% thrust; seaward 70% normal; deep 50% oblique; since 2018 88% of 125 on-plate are thrust (Frohlich-Apperson plunge limits; Kagan 1991 angle checked vs scipy).
+- [x] GCMT mechanism shares: 854 of 1,095 M5.5+ matched (60 s, 100 km); on the plate 81% thrust (n=500), 68% within 30 deg of the slab thrust; above the plate 29% thrust; seaward 72% normal (70% before the 2026-10-02 side-of-trench rule); deep 50% oblique; since 2018 88% of 125 on-plate are thrust (Frohlich-Apperson plunge limits; Kagan 1991 angle checked vs scipy).
 - [x] Nankai: nine great earthquakes since 684; since 1361 gaps 91-147, mean 117, last 1946 (from 05-history.json via NOAA ids). Replaces "roughly every 100-150 years".
 - [x] Deep (300+) steadiness: variance/mean 1.08 at M5+ (chi-square p 0.17, consistent with steady), 1.26 at M4.5 (p 0.001); deep rate 23 to 17 a year at M4.5 vs 7.5 to 6.3 at M5+ (the M4.5 excess is partly the catalog). Replaces the old "1.3x" row.
 - [x] Shallow rate: 92 to 97 a year at M5+; the old "320 to 530" is the catalog's M4.5 recording.
@@ -233,7 +233,7 @@ Fits and rates at M5+ where it matters; maps keep every quake; each page says wh
 - [L] Locked-fault silence at Nankai ("can mean"; coupling studies such as Yokota et al. 2016, none read).
 - [L] 2015 Bonin M7.8 outside the main slab in the literature (Obayashi 2017; Ye 2016); the page states only the distance.
 
-Still misses: 2015 M7.8 at 664 km is 169 km from the slab; Noto 2024 and Kumamoto 2016 are crustal (about 215 and 176 km); 2,133 events (13%) more than 20 km above a slab; default depths; Slab2 circularity. Seaward vs back-arc is a heuristic. The time brush does not filter the mechanism panel. The ECDF null uses one seed.
+Still misses: 2015 M7.8 at 664 km is 169 km from the slab; Noto 2024 and Kumamoto 2016 are crustal (about 215 and 176 km); 2,133 events (13%) more than 20 km above a slab; default depths; Slab2 circularity. Seaward vs back-arc was a heuristic until 2026-10-02 (see Follow-ups). The time brush does not filter the mechanism panel. The ECDF null uses one seed.
 
 ### 02 Plates
 
@@ -336,6 +336,14 @@ Source for every JMA row: JMA 緊急地震速報（警報）発表状況, https:
 - [L] Cut: "Some Tokyo residents saw the alert on TV" (unsourced); cut: actions chart thresholds (5/10/15/30/60 s), which were illustrative.
 
 Still misses: the alert is the model's own (P at second station + delay); JMA's also waits for the magnitude (Fukushima 2016: +17.9 s over the model's P). One median delay blurs eras (IPF 2016, PLUM 2018, S-net). Land stations only (Aomori 2025 4 s late). Point source, hypocentral distance, Mw 9.1 outside the relation's range, so shares for M7.5+ lean high. Warning counted to S onset, not peak shaking. The page runs from the USGS hypocenter (6 s and 50 km from JMA's for 2011). Offshore share rests on 7 rows. No finite-fault footprint. The tests page runs the 07 checks through synchronous XHR; not opened in a browser.
+
+### Follow-ups (2026-10-02)
+
+- [x] 01: seaward means the subducting-plate side of the nearest PB2002 trench (runChecks case); 198 of 2,861 no-slab events changed class, none M7+; seaward normal share 72%. The mechanism panel follows the map, time and depth brushes with n per row (rows under 10 faded). Random control over 20 seeds: 13% within 30 km, range 12-13% (2646e02).
+- [x] 03: energy sparkline names log10 E = 1.5 M + 4.8 as a radiated-energy estimate; the min-magnitude slider is stated as map-only (Fig 2 stays at or above the M5.0 cutoff); p7's deep-M6.0 shindo example removed for lack of a primary source, p7 now says only that shindo falls with distance and depth (db0a94e).
+- [x] 04: Fig 3 readout gives the exact Poisson 95% range of the held-out M7+ count with b spread by its standard error (checked against scipy at six means); 2000-2010 training window: forecast 19.4, range 10-31, observed 17, inside. Gardner-Knopoff ties now follow numpy heapsort order: 100% agreement with hmtk on the 348-event fixture (was 99.4%), mainshocks 4,197 to 4,192; full-catalog agreement not re-measured (3f01885).
+- [x] 07: page 5,967 to 5,552 px at 1280 and 9,095 to 7,082 px at 390, no claims cut, all 19 warning-era rows kept; 07-eew-jma.json 296 to 217 KB (further thinning failed the 0.3 s held-out check); 2011-04-07 depth note in the caption (fe6e59d).
+- Libraries no longer load their own data: tests/japan-earthquakes.libs.js passes 03-etas-fit.json, 05-renewal.json and 07-eew-jma.json to runChecks (e75e5ae). 113/113.
 
 ## Status
 
