@@ -188,25 +188,9 @@
   }
 
   // ---- checks ----
-  function loadData() {
-    try {
-      if (typeof module !== "undefined" && module.exports && typeof require === "function") {
-        const fs = require("fs"), path = require("path");
-        return JSON.parse(fs.readFileSync(path.join(__dirname, "data", "07-eew-jma.json"), "utf8"));
-      }
-      if (typeof XMLHttpRequest !== "undefined" && typeof document !== "undefined") {
-        const x = new XMLHttpRequest(); x.open("GET", SCRIPT_BASE + "data/07-eew-jma.json", false); x.send();
-        return JSON.parse(x.responseText);
-      }
-    } catch (e) { /* fall through */ }
-    return null;
-  }
-  const SCRIPT_BASE = (typeof document !== "undefined" && document.currentScript) ? document.currentScript.src.replace(/[^/]*$/, "") : "";
-
   function runChecks(print, data) {
     const out = [];
     const check = (name, ok, detail) => out.push({ name, ok: !!ok, detail });
-    data = data || loadData();
     if (!data) {
       check("07-eew-jma.json is available", false, "could not load shared/data/07-eew-jma.json");
       return out;

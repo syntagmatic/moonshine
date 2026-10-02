@@ -59,7 +59,7 @@ async function jma2001() {
     return execFileSync("unzip", ["-p", path.join(RAW, name + ".zip")], { maxBuffer: 1 << 26 }).toString("utf8");
   };
   const T = (await unzip("tjma2001")).trim().split("\n").map(l => l.trim().split(/\s+/));
-  const hs = [...new Set(T.map(p => +p[4]))].sort((a, b) => a - b).filter(h => h <= 700);
+  const hs = [...new Set(T.map(p => +p[4]))].sort((a, b) => a - b).filter(h => h <= 700 && (h <= 100 || (h <= 200 ? h % 10 === 0 : h % 20 === 0))); // thinned above 100 km: the page's events are shallower and the checks hold
   const ds = [...new Set(T.map(p => +p[5]))].sort((a, b) => a - b).filter(d => d <= 1500);
   const at = new Map(T.map(p => [p[4] + "," + p[5], [+p[1], +p[3]]]));
   const grid = k => hs.map(h => ds.map(d => Math.round(at.get(h + "," + d)[k] * 100)));
