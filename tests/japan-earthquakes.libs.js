@@ -9,7 +9,7 @@ var JAPAN_TEST_LIBS = [
   { file: "completeness.js", global: "Completeness" },
   { file: "03-aftershock.js", global: "Aftershock", data: "03-etas-fit.json" },
   { file: "04-gr.js", global: "GutenbergRichter" },
-  { file: "05-renewal.js", global: "Renewal" },
-  { file: "07-eew.js", global: "EEW" }
+  { file: "05-renewal.js", global: "Renewal", data: "05-renewal.json" },
+  { file: "07-eew.js", global: "EEW", data: "07-eew-jma.json" }
 ];
 if (typeof module !== "undefined" && module.exports) module.exports = JAPAN_TEST_LIBS;
