@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reading the Matrix · Connectomes</title>
+<script src="../lib/motion.js"></script>
+<script src="../vendor/js/d3.v7.min.js"></script>
+<link rel="stylesheet" href="../vendor/katex@0.16.11/katex.min.css">
+<script src="../vendor/katex@0.16.11/katex.min.js"></script>
+<link href="../vendor/fonts/sans-serif-mono/fonts.css" rel="stylesheet">
+<script src="shared/graph.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  color-scheme: light dark;
+  --article-width: 740px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem;
+  --line-height: 1.6;
+  --text: #1c1d24;
+  --text-2: #50525e;
+  --accent: #2b62a8;
+  --accent-light: #dde8f6;
+  --bg: #fafaf8;
+  --fig-bg: #ffffff;
+  --border: #e3e2de;
+  /* Series roles, fixed across all eight articles:
+     observed data = ink (--text); null models and expected values = --c-null;
+     sensory / inter / motor neurons = --c-sensory / --c-inter / --c-motor;
+     gap junctions = --c-gap; neuropeptides = --c-pep. Validated for colour
+     vision deficiency in both themes. */
+  --c-null: #7c8597;
+  --c-null-light: #e6e8ee;
+  --c-sensory: #00928a;
+  --c-inter: #b9780a;
+  --c-motor: #b8405e;
+  --c-gap: #6b55c4;
+  --c-pep: #5d8a2b;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --text: #e6e5e0; --text-2: #a8a9b3;
+    --accent: #7aa7e6; --accent-light: #1f2b3d;
+    --bg: #15161a; --fig-bg: #1c1d22; --border: #33343b;
+    --c-null: #8b93a5; --c-null-light: #2a2d35;
+    --c-sensory: #21a198; --c-inter: #c2841a; --c-motor: #d6607e; --c-gap: #8e7ce0; --c-pep: #76a63f;
+  }
+}
+
+body {
+  font-family: var(--body-font); font-size: var(--body-size); line-height: var(--line-height);
+  color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased;
+}
+
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1rem 6rem; }
+h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+p { margin: 0 0 1rem; }
+a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+.subtitle { font-family: var(--heading-font); font-size: 1.15rem; color: var(--text-2); margin-bottom: 2rem; }
+.kicker { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-bottom: 0.5rem; }
+.kicker a { color: var(--text-2); }
+
+.figure { margin: 2rem 0; padding: 1.25rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; }
+.figure-wide { margin-left: -2rem; margin-right: -2rem; }
+@media (min-width: 1040px) { .figure-wide { margin-left: -7rem; margin-right: -7rem; } }
+.figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; line-height: 1.45; }
+.figure-label { font-weight: 600; color: var(--text); }
+.readout { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); min-height: 2.8em; font-variant-numeric: tabular-nums; margin: 0.4rem 0 0; line-height: 1.45; }
+.readout b { color: var(--text); font-weight: 600; }
+
+.controls { display: flex; align-items: center; gap: 0.5rem 1.25rem; flex-wrap: wrap; margin-bottom: 0.75rem; font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); }
+.controls label { display: inline-flex; align-items: center; gap: 0.4rem; }
+.controls input[type="range"] { width: 130px; max-width: 100%; accent-color: var(--accent); }
+.controls input[type="checkbox"] { accent-color: var(--accent); }
+.controls .val { font-variant-numeric: tabular-nums; color: var(--text); min-width: 2.4em; display: inline-block; }
+
+.panels { display: grid; gap: 0.75rem 1.25rem; align-items: start; }
+.p-3-2 { grid-template-columns: 3fr 2fr; }
+.p-mat { grid-template-columns: minmax(0, 1fr) 250px; }
+.panels > div { min-width: 0; }
+.panels h3 { font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600; color: var(--text); margin: 0 0 0.25rem; }
+.panels h3 span { font-weight: 400; color: var(--text-2); }
+.fig-body { position: relative; width: 100%; }
+.fig-body svg, .fig-body canvas { display: block; overflow: visible; }
+.tip { position: absolute; pointer-events: none; font-family: var(--heading-font); font-size: 0.78rem; background: var(--fig-bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; white-space: nowrap; display: none; z-index: 2; }
+
+/* Figure 1: the order list doubles as the order control. */
+.orders { display: flex; flex-direction: column; gap: 4px; font-family: var(--heading-font); }
+.ord { display: grid; grid-template-columns: 1fr auto; grid-template-rows: auto auto; gap: 0 0.5rem; text-align: left; font: inherit; font-size: 0.85rem; color: var(--text); background: var(--fig-bg); border: 1px solid var(--border); border-radius: 4px; padding: 4px 8px 5px; cursor: pointer; min-height: 40px; }
+.ord:hover { border-color: var(--accent); }
+.ord[aria-pressed="true"] { border-color: var(--text); box-shadow: inset 0 0 0 1px var(--text); }
+.ord .nm { font-weight: 600; }
+.ord .sp { font-variant-numeric: tabular-nums; color: var(--text-2); font-size: 0.8rem; align-self: end; }
+.ord .sub { font-size: 0.75rem; color: var(--text-2); }
+.ord .bar { grid-column: 1 / 3; height: 4px; background: var(--c-null-light); border-radius: 2px; margin-top: 3px; position: relative; overflow: hidden; }
+.ord .bar i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--text-2); border-radius: 2px; }
+.ord[aria-pressed="true"] .bar i { background: var(--text); }
+.orders-h { font-family: var(--heading-font); font-size: 0.8rem; color: var(--text-2); margin: 0 0 0.35rem; }
+
+svg text { font-family: var(--heading-font); }
+svg .axis text { font-size: 11px; fill: var(--text-2); }
+svg .axis line, svg .axis path { stroke: var(--border); }
+svg .axis-label { font-size: 11px; fill: var(--text-2); }
+svg .pt-lab { font-size: 11px; fill: var(--text); font-weight: 600; }
+svg .halo { paint-order: stroke; stroke: var(--fig-bg); stroke-width: 4px; stroke-linejoin: round; }
+svg .note { font-size: 12px; fill: var(--text-2); }
+svg .hm-lab { font-size: 11px; fill: var(--text-2); }
+svg .hm-val { font-size: 10.5px; font-variant-numeric: tabular-nums; pointer-events: none; }
+svg .hm-sel { fill: none; stroke: var(--text); stroke-width: 2; pointer-events: none; }
+svg .hm-cell { cursor: pointer; }
+svg .clique-edge { stroke: var(--text); stroke-width: 0.9; }
+svg .ring-edge { stroke: var(--text); stroke-width: 1.4; }
+svg .module { fill: var(--accent-light); }
+svg:focus-visible, :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.legend { display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; font-family: var(--heading-font); font-size: 0.8rem; color: var(--text-2); margin: 0.35rem 0 0; }
+.legend span { display: inline-flex; align-items: center; gap: 0.35rem; }
+.legend svg { overflow: visible; }
+
+.diagram { display: grid; grid-template-columns: 260px 1fr; gap: 0.5rem 1.25rem; align-items: center; }
+.diagram .controls { margin-bottom: 0.4rem; }
+
+.katex-display { overflow-x: auto; overflow-y: hidden; padding: 2px 0; }
+
+@media (max-width: 640px) {
+  h1 { font-size: 1.75rem; }
+  .figure { padding: 1rem 0.6rem; }
+  .figure-wide { margin-left: 0; margin-right: 0; }
+  .p-3-2, .p-mat, .diagram { grid-template-columns: 1fr; }
+  .orders { display: grid; grid-template-columns: 1fr 1fr; }
+  .ord .sub { display: none; }
+  .diagram svg { margin: 0 auto; }
+}
+</style>
+</head>
+<body>
+<div class="article">
+  <header>
+    <p class="kicker"><a href="index.html">Connectomes</a>, part 5 of 8</p>
+    <h1>Reading the Matrix</h1>
+    <p class="subtitle">An adjacency matrix looks like whatever order its rows are in, and a statistic computed from one can turn out to be degree under another name.</p>
+  </header>
+
+  <p>Most pictures of a connectome are matrices. Each neuron gets a row and a column, and the cell where row <i>i</i> meets column <i>j</i> is filled when <i>i</i> makes a synapse onto <i>j</i>. The picture is a faithful record of the graph, but it carries one extra choice that the graph doesn't contain: the order of the rows. Put the same neurons in a different order, moving each column with its row, and the graph is unchanged while the picture can go from noise to a clean diagonal band.</p>
+
+  <p>That makes a matrix figure an argument as much as a record. A block that looks like a module may be there because the rows were sorted by a label that already groups the neurons, and a diagonal band may mean the neurons were sorted by something their wiring follows. This article tries six orders on one graph and asks which one the wiring itself prefers. Then it turns to a statistic computed from the same matrix, average controllability, and checks it against the simplest thing a node has, its number of connections.</p>
+
+  <h2>Six orders of one graph</h2>
+
+  <p>The graph is the worm's chemical synapse network from the previous articles: 279 neurons of <i>C. elegans</i> and 2,194 ordered pairs joined by at least one synapse (Varshney and colleagues, 2011). To compare orders we need a number for how compact a picture is. The <b>edge span</b> is the distance between a connection's row and its column, averaged over every connection; in the picture it is how far the filled cells sit from the diagonal. If row <i>i</i> is placed at position <i>&pi;<sub>i</sub></i>,</p>
+  <div id="eq-span"></div>
+  <p>A random order puts the two ends of a connection at independent random positions, and two random positions among <i>n</i> are on average (<i>n</i>&nbsp;+&nbsp;1)/3 apart: 93 rows for the worm. An order that keeps connected neurons close does better.</p>
+
+  <p>Five of the orders come from labels: names in alphabetical order, neurons with the most partners first, sensory then inter then motor neurons, the position of each cell body along the body from head to tail, and a random shuffle. The sixth comes from the graph alone. Ask for one number <i>x<sub>i</sub></i> per neuron that keeps connected neurons as close as possible, measured by the sum of squared differences across connections, with the trivial answers ruled out:</p>
+  <div id="eq-fiedler"></div>
+  <p>Here <i>L</i> = <i>D</i> &minus; <i>A</i> is the graph Laplacian of the undirected graph, with the degrees on the diagonal of <i>D</i>, and the minimiser is the eigenvector of its second smallest eigenvalue, the <b>Fiedler vector</b>. Sorting neurons by it is spectral seriation: it minimises a relaxed version of edge span, with squared distances standing in for absolute ones and real numbers for positions. Varshney and colleagues used an eigenvector of this kind, from a normalised Laplacian, as one axis of their 2011 drawing of the worm.</p>
+
+  <div class="figure figure-wide" id="fig-order">
+    <div class="panels p-mat">
+      <div>
+        <div class="fig-body" id="or-body"><canvas tabindex="0" role="img" aria-label="Adjacency matrix of the worm's chemical synapses, with each neuron's cell-body position and cell type shown beside its row."></canvas><div class="tip"></div></div>
+        <div class="legend">
+          <span><svg width="12" height="12"><rect x="1" y="1" width="10" height="10" style="fill: var(--text)"></rect></svg>synapse, darker for more</span>
+          <span><svg width="12" height="12"><rect x="2" y="1" width="8" height="10" style="fill: var(--c-sensory)"></rect></svg>sensory</span>
+          <span><svg width="12" height="12"><rect x="2" y="1" width="8" height="10" style="fill: var(--c-inter)"></rect></svg>inter</span>
+          <span><svg width="12" height="12"><rect x="2" y="1" width="8" height="10" style="fill: var(--c-motor)"></rect></svg>motor</span>
+        </div>
+      </div>
+      <div>
+        <p class="orders-h">Order the rows by &middot; mean edge span in rows</p>
+        <div class="orders" id="or-list" role="group" aria-label="Row order"></div>
+        <p class="readout" id="or-ro" aria-live="polite"></p>
+      </div>
+    </div>
+    <p class="figure-caption"><span class="figure-label">Figure 1.</span> The chemical synapses of <i>C. elegans</i> (Varshney et al. 2011; 279 neurons, 2,194 connections), rows presynaptic and columns postsynaptic, in six orders. The strip at the left of each row shows where that neuron's cell body sits along the body, head at left and tail at right (from the same tables), and the narrow strip beside it its type (NemaNode). The spectral order uses the Fiedler vector of the undirected, unweighted graph, computed in the page, with its sign chosen so the head comes first. Pick an order to animate the rows into it; pick Random again for a new shuffle. Hover or tap a cell for the two neurons and the synapse count.</p>
+  </div>
+
+  <p>Alphabetical order already beats random, at about 71, because worm neuron names encode their class and side: AVAL sits next to AVAR, and the ventral cord motor classes VA, VB and VD sort near each other. Sorting by degree does little better than chance, about 80. Cell type does better, about 65, and body position better still, about 62: neurons of the same type, and neurons whose cell bodies are near each other, do tend to connect. The spectral order halves that, to 33, and its picture is a band hugging the diagonal with the long-range connections of a few hubs crossing it.</p>
+
+  <p>The order the wiring prefers looks a lot like the body. Watch the position strip as the rows move into spectral order: the dots drift from scatter into a rough diagonal, and the readout gives a rank correlation with body position of about 0.78. One end of the spectral order is the head's sensory and motor neurons (SIBDL, OLQVL, IL1VL, URAVL), the other the motor neurons of the posterior ventral cord (VB09, VD10, VD09). It is not a sensory-to-motor axis. Sensory neurons do sit earlier on average and motor neurons later, but mostly because sensory neurons are in the head and motor neurons in the cord: the head's own motor neurons (RME, RMD, SIA and SIB) sit near the head end, ahead of almost all the interneurons.</p>
+
+  <p>Where the two orders disagree is informative too. The neurons the spectral order moves farthest from their cell bodies are the ones with long processes. ALN and PLN have cell bodies in the tail, but every one of their chemical synapses is with a neuron whose cell body is in the head; the spectral order puts them among head neurons, where their partners are. The command interneurons AVA, whose cell bodies are in the head, go the other way, toward the ventral cord motor neurons that receive about four fifths of their synapses. A cell body is where a neuron keeps its nucleus, not where it connects, and the order computed from the connections finds where each neuron's wiring sits.</p>
+
+  <p>Spectral order is a computed answer with its own settings, not a neutral one. Weight the Laplacian by synapse count and the Fiedler vector changes character: it concentrates on a few neurons attached to the rest by only a handful of synapses, because cutting those off is the cheapest way to split a weighted graph, and the order it gives no longer follows the body (its rank correlation with body position falls to about 0). Normalising the Laplacian by degree, as is usual for weighted graphs, brings the body axis back. Even the order the graph prefers depends on how you ask it.</p>
+
+  <h2>A statistic that is mostly degree</h2>
+
+  <p>Matrices also feed statistics, and a new statistic deserves the same suspicion as a new picture. In 2015 Gu and colleagues brought a measure from control theory to brain networks. Treat the matrix as a linear system: activity at each node is passed along the connections at every time step, and an input can be injected at one node,</p>
+  <div id="eq-model"></div>
+  <p>where <i>e<sub>i</sub></i> is the input at node <i>i</i> and the matrix has been scaled so its largest eigenvalue is below 1 and activity dies away. The <b>average controllability</b> of node <i>i</i> is the trace of the controllability Gramian, which for this system is the total squared activity that a unit pulse at <i>i</i> produces over the time horizon <i>T</i>:</p>
+  <div id="eq-gram"></div>
+  <p>Nodes with high average controllability are said to be able to push the system into many easily reached states. The expansion shows what that number contains. The first term is 1 for every node: the pulse itself. The second is the sum of the squared weights of the node's connections, which for an unweighted graph is its degree. Later terms count longer walks, and the scaling makes them shrink with each step. So unless the later terms are large, average controllability is a restatement of degree.</p>
+
+  <div class="figure figure-wide" id="fig-control">
+    <div class="controls">
+      <label>Horizon <i>T</i> <input type="range" id="ac-t" min="0" max="7" step="1" value="7" aria-label="Time horizon in steps"><span class="val" id="ac-t-val"></span></label>
+      <label>Largest eigenvalue after scaling <input type="range" id="ac-r" min="0" max="6" step="1" value="5" aria-label="Largest eigenvalue of the scaled matrix"><span class="val" id="ac-r-val"></span></label>
+      <label><input type="checkbox" id="ac-bin"> Ignore weights</label>
+      <label><input type="checkbox" id="ac-gap" checked> Include gap junctions</label>
+    </div>
+    <div class="panels p-3-2">
+      <div>
+        <h3>Every neuron <span>average controllability against strength</span></h3>
+        <div class="fig-body" id="ac-sc"><svg tabindex="0" role="img" aria-label="Scatter plot of each worm neuron's average controllability against its strength, coloured by cell type."></svg><div class="tip"></div></div>
+        <div class="legend">
+          <span><svg width="12" height="12"><circle cx="6" cy="6" r="3.5" style="fill: var(--c-sensory)"></circle></svg>sensory</span>
+          <span><svg width="12" height="12"><circle cx="6" cy="6" r="3.5" style="fill: var(--c-inter)"></circle></svg>inter</span>
+          <span><svg width="12" height="12"><circle cx="6" cy="6" r="3.5" style="fill: var(--c-motor)"></circle></svg>motor</span>
+        </div>
+      </div>
+      <div>
+        <h3>Every setting <span>rank correlation with strength</span></h3>
+        <div class="fig-body" id="ac-hm"><svg role="img" aria-label="Rank correlation between average controllability and strength for each combination of horizon and scaling. Click a cell to choose that setting."></svg><div class="tip"></div></div>
+      </div>
+    </div>
+    <p class="readout" id="ac-ro" aria-live="polite"></p>
+    <p class="figure-caption"><span class="figure-label">Figure 2.</span> Average controllability (Gu et al. 2015) of the 279 worm neurons, computed in the page from the eigendecomposition of the symmetrised network: chemical synapses counted in both directions, plus gap junctions unless unchecked, weighted by synapse count unless weights are ignored. Strength is a neuron's total weight in that matrix (its degree when weights are ignored). The vertical axis shows the score minus the pulse's own 1, on a log scale; the correlations use the scores themselves. The matrix is scaled so its largest eigenvalue has the chosen size; the row marked 1 + ξ divides by one plus the largest eigenvalue, the scaling of later papers and of the standard code (Gu and colleagues divided by the mean edge weight). Click a cell of the grid to jump to that setting; hover a point for its neuron.</p>
+  </div>
+
+  <p>Start at a horizon of one step and every neuron scores exactly 1: the pulse never leaves its neuron. At two steps the score is 1 plus the scaled sum of squared weights, and with weights ignored the points fall on a single curve, a rank correlation of exactly 1 with degree. As the horizon grows the later terms join in, the cloud spreads, and the correlation falls, but slowly. Across the whole grid, horizons from 2 to infinite and eigenvalues from 0.5 to 0.999, the rank correlation never drops below about 0.6, and the ordinary correlation, the one usually reported, stays between about 0.8 and 0.93. Ignore weights and both stay above about 0.74. At the default setting the neurons that score highest are the command interneurons AVA, PVC and AVD, which are also among the neurons with the most synapses.</p>
+
+  <p>The lowest correlations sit in one corner: an infinite horizon with the largest eigenvalue scaled close to 1. That corner has its own explanation. When the leading eigenvalue is near 1 its term, 1/(1&nbsp;&minus;&nbsp;&lambda;<sup>2</sup>), dwarfs the others, and the score becomes the square of each node's entry in the leading eigenvector. That is eigenvector centrality, another standard measure of how connected a node is. Short horizons and small eigenvalues give degree; long horizons and large eigenvalues give eigenvector centrality. The scaling used in later papers and in the standard code, dividing by one plus the largest eigenvalue, puts that eigenvalue at 0.991 for this weighted network, close to the corner.</p>
+
+  <p>None of this was hidden. Gu and colleagues reported a correlation of 0.91 between average controllability and strength, both ranked, across 234 regions of the human brain, and explained it in their supplement with the same first-order expansion. In 2018 Tu and colleagues showed that randomised networks with no brain-like structure give the same relationship. The measure is exact and does what control theory says it does in a linear model. But a finding that high-controllability regions are special has to show that they are special beyond their degree. Before crediting a new statistic, plot it against degree.</p>
+
+  <h2>Modules smaller than the network can see</h2>
+
+  <p>The most common summary of a connectivity matrix is a partition into modules, usually found by maximising Newman and Girvan's modularity. For a partition into modules <i>s</i>, with <i>l<sub>s</sub></i> edges inside module <i>s</i>, <i>d<sub>s</sub></i> the total degree of its nodes, and <i>L</i> edges in all,</p>
+  <div id="eq-q"></div>
+  <p>The first term is the share of edges inside the module, and the second is the share expected if the same degrees were wired at random. Modularity is itself a comparison with the degree-preserving null of the previous article. It has a blind spot, found by Fortunato and Barthélemy in 2007, and a ring of cliques shows it cleanly.</p>
+
+  <div class="figure" id="fig-ring">
+    <div class="diagram">
+      <div class="fig-body" id="rg-body"><svg role="img" aria-label="A ring of five-node cliques joined by single edges, with the partition of higher modularity shaded."></svg></div>
+      <div>
+        <div class="controls">
+          <label>Cliques in the ring <input type="range" id="rg-m" min="8" max="40" step="2" value="30" aria-label="Number of cliques in the ring"><span class="val" id="rg-m-val"></span></label>
+        </div>
+        <p class="readout" id="rg-ro" aria-live="polite"></p>
+        <p class="figure-caption">Five-node cliques, every pair inside joined, each clique linked to the next by one edge. Shading shows whichever partition has the higher modularity: one module per clique, or adjacent cliques merged in pairs. Modularity is computed from the formula above.</p>
+      </div>
+    </div>
+  </div>
+
+  <p>No module could be clearer than a clique: every pair inside it is connected, and only two edges leave it. Yet past 22 cliques, modularity scores the partition that merges adjacent cliques in pairs above the one that keeps them separate. The algebra is short. Each clique of <i>k</i> nodes has <i>k</i>(<i>k</i>&nbsp;&minus;&nbsp;1)/2 edges inside it and one edge to each neighbour. Merging two adjacent cliques gains that one connecting edge as an internal edge and pays a larger expected term, and the gain wins when the number of cliques <i>m</i> exceeds <i>k</i>(<i>k</i>&nbsp;&minus;&nbsp;1)&nbsp;+&nbsp;2, which is 22 for five-node cliques. The cause is the null term. Its expected count of edges between two small modules shrinks as the network grows, until even a single edge between them is more than the null predicts, and modularity counts that edge as evidence the two belong together.</p>
+
+  <p>Fortunato and Barthélemy showed this is general: whether modularity can resolve a module depends on the size of the whole network, not on how well separated the module is. The rough threshold is a module with fewer internal edges than about the square root of 2<i>L</i>. For the worm's chemical graph, with 1,961 connections when direction is ignored, that is about 63 edges. Ten neurons all connected to each other make only 45. A partition of a connectome found by maximising modularity has a floor on the size of module it can report, set by the size of the network.</p>
+
+  <footer style="margin-top: 4rem; padding-top: 2rem; border-top: 1px solid var(--border); font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2);">
+    <p>Wiring: Varshney, Chen, Paniagua, Hall &amp; Chklovskii 2011 (PLoS Comput Biol 7, e1001066), from WormAtlas's NeuronConnect and NeuronType tables (the latter gives each cell body's position along the body); built on White, Southgate, Thomson &amp; Brenner 1986 (Phil Trans R Soc B 314, 1). Cell types: NemaNode. No licence is stated for the WormAtlas tables; cite the papers.</p>
+    <p>Spectral ordering: Fiedler 1973 (Czech Math J 23, 298); Atkins, Boman &amp; Hendrickson 1998 (SIAM J Comput 28, 297). Average controllability: Gu et al. 2015 (Nat Commun 6, 8414); its relation to degree in random networks: Tu et al. 2018 (NeuroImage 176, 83). Modularity: Newman &amp; Girvan 2004 (Phys Rev E 69, 026113); resolution limit: Fortunato &amp; Barth&eacute;lemy 2007 (PNAS 104, 36).</p>
+    <p><a href="index.html">Connectomes</a>, part 5 of 8. Previously: <a href="03-surprising-compared-to-what.html">Surprising Compared to What?</a></p>
+    <p>Built with <a href="https://github.com/enjalot/moonshine" style="color: var(--text-2);">moonshine</a>.</p>
+  </footer>
+</div>
+
+<script>
+// ── Shared helpers ──
+const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const narrow = () => matchMedia('(max-width: 640px)').matches;
+function responsive(el, render) {
+  let w = 0;
+  new ResizeObserver(() => {
+    if (el.clientWidth > 0 && el.clientWidth !== w) { w = el.clientWidth; render(w); }
+  }).observe(el);
+}
+const onTheme = f => matchMedia('(prefers-color-scheme: dark)').addEventListener('change', f);
+const fmt = (v, d) => v.toLocaleString('en', { minimumFractionDigits: d, maximumFractionDigits: d });
+const G = GraphLib;
+const ROLE_VAR = { s: '--c-sensory', i: '--c-inter', m: '--c-motor' };
+// Round before ranking so values equal in exact arithmetic tie (eigenvector round-off breaks them).
+const tidy = a => Float64Array.from(a, v => +v.toPrecision(10));
+
+const K = String.raw;
+function equations() {
+  const tex = (id, s) => katex.render(s, document.getElementById(id), { throwOnError: false, displayMode: true });
+  tex('eq-span', K`\text{span} \;=\; \frac{1}{|E|}\sum_{(i,j)\in E} \lvert \pi_i - \pi_j \rvert`);
+  tex('eq-fiedler', K`\min_{x}\; \sum_{\{i,j\}\in E} (x_i - x_j)^2 \;=\; x^\top L\, x \qquad \text{subject to } \textstyle\sum_i x_i = 0,\;\; \sum_i x_i^2 = 1`);
+  tex('eq-model', K`x(t+1) \;=\; A\,x(t) + e_i\,u(t)`);
+  tex('eq-gram', K`a_i \;=\; \sum_{t=0}^{T-1} \lVert A^t e_i \rVert^2 \;=\; 1 \;+\; \sum_j A_{ji}^2 \;+\; \sum_j \big(A^2\big)_{ji}^2 \;+\; \cdots`);
+  tex('eq-q', K`Q \;=\; \sum_s \left[\frac{l_s}{L} \;-\; \color{${css('--c-null')}}{\left(\frac{d_s}{2L}\right)^{2}}\right]`);
+}
+equations();
+onTheme(equations);
+
+d3.json('shared/data/worm-varshney.json').then(data => {
+  orderFigure(data);
+  controlFigure(data);
+});
+ringDiagram();
+
+// ── Figure 1: six orders of one matrix ──
+function orderFigure(data) {
+  const N = data.nodes, n = N.length, ap = N.map(d => d.ap);
+  const D = data.chem.map(e => [e[0], e[1]]), U = G.undirected(n, D), deg = G.degrees(n, U);
+  const wmax = d3.max(data.chem, e => e[2]);
+  let fv = G.fiedler(G.dense(n, U)).vector;
+  if (G.spearman(fv, ap) < 0) fv = fv.map(x => -x);
+  const ids = () => Array.from({ length: n }, (_, i) => i);
+  const byName = (a, b) => (N[a].name < N[b].name ? -1 : N[a].name > N[b].name ? 1 : 0);
+  const RK = { s: 0, i: 1, m: 2 };
+  let shuffleSeed = 1;
+  const shuffled = () => {
+    const r = G.rng(shuffleSeed), p = ids();
+    for (let i = n - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [p[i], p[j]] = [p[j], p[i]]; }
+    return p;
+  };
+  const ORDERS = [
+    { key: 'alpha', label: 'Alphabetical', sub: 'by name', make: () => ids().sort(byName) },
+    { key: 'degree', label: 'Degree', sub: 'most partners first', make: () => ids().sort((a, b) => deg[b] - deg[a] || byName(a, b)) },
+    { key: 'type', label: 'Cell type', sub: 'sensory, inter, motor; by class', make: () => ids().sort((a, b) => RK[N[a].role] - RK[N[b].role] || (N[a].cls < N[b].cls ? -1 : N[a].cls > N[b].cls ? 1 : 0) || byName(a, b)) },
+    { key: 'body', label: 'Body position', sub: 'cell body, head to tail', make: () => ids().sort((a, b) => ap[a] - ap[b] || byName(a, b)) },
+    { key: 'random', label: 'Random', sub: 'pick again to reshuffle', make: shuffled },
+    { key: 'spectral', label: 'Spectral', sub: 'Fiedler vector', make: () => ids().sort((a, b) => fv[a] - fv[b]) },
+  ];
+  const posOf = order => { const p = new Float64Array(n); order.forEach((v, i) => { p[v] = i; }); return p; };
+  const stats = ORDERS.map(o => { const ord = o.make(); return { span: G.edgeSpan(ord, D), rho: G.spearman(posOf(ord), ap) }; });
+
+  const body = document.getElementById('or-body'), canvas = body.querySelector('canvas'), tip = d3.select(body).select('.tip');
+  const ctx = canvas.getContext('2d');
+  const list = document.getElementById('or-list');
+  let cur = 5, order = ORDERS[cur].make(), P = posOf(order), anim = null, hover = null, geo = null;
+
+  const buttons = ORDERS.map((o, k) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'ord';
+    b.innerHTML = `<span class="nm">${o.label}</span><span class="sp"></span><span class="sub">${o.sub}</span><span class="bar"><i></i></span>`;
+    b.addEventListener('click', () => select(k));
+    list.appendChild(b);
+    return b;
+  });
+  function labels() {
+    buttons.forEach((b, k) => {
+      b.setAttribute('aria-pressed', k === cur ? 'true' : 'false');
+      b.querySelector('.sp').textContent = fmt(stats[k].span, 0);
+      b.querySelector('.bar i').style.width = (100 * stats[k].span / 100) + '%';
+    });
+    const s = stats[cur], o = ORDERS[cur];
+    document.getElementById('or-ro').innerHTML = `${o.label} order: mean edge span <b>${fmt(s.span, 1)}</b> rows, against ${fmt((n + 1) / 3, 1)} expected at random. ` +
+      `Rank correlation of row position with body position <b>${fmt(s.rho, 2)}</b>.`;
+  }
+
+  function select(k) {
+    if (k === 4 && cur === 4) { shuffleSeed++; }
+    const target = ORDERS[k].make();
+    if (k === 4) stats[4] = { span: G.edgeSpan(target, D), rho: G.spearman(posOf(target), ap) };
+    cur = k; labels();
+    const from = P.slice(), to = posOf(target);
+    order = target;
+    if (Motion.reduced()) { P = to; anim = null; draw(); return; }
+    const t0 = performance.now(), dur = 900;
+    const step = now => {
+      const t = Math.min(1, (now - t0) / dur), e = d3.easeCubicInOut(t);
+      for (let i = 0; i < n; i++) P[i] = from[i] + (to[i] - from[i]) * e;
+      draw();
+      anim = t < 1 ? requestAnimationFrame(step) : null;
+    };
+    if (anim) cancelAnimationFrame(anim);
+    anim = requestAnimationFrame(step);
+  }
+
+  function layout(w) {
+    const BW = narrow() ? 34 : 46, RS = 6, gap = 4, top = 16, bottom = 18;
+    const S = Math.max(160, Math.min(620, w - BW - RS - 2 * gap));
+    return { BW, RS, gap, top, bottom, S, mx: BW + gap + RS + gap, W: BW + RS + 2 * gap + S, H: top + S + bottom, cs: S / n };
+  }
+
+  function draw() {
+    if (!geo) return;
+    const { BW, RS, gap, top, S, mx, W, H, cs } = geo;
+    const ink = css('--text'), ink2 = css('--text-2'), border = css('--border'), bg = css('--fig-bg');
+    ctx.clearRect(0, 0, W, H);
+    ctx.font = `11px ${css('--heading-font')}`;
+    ctx.fillStyle = ink2; ctx.textBaseline = 'alphabetic';
+    ctx.textAlign = 'left'; ctx.fillText('head', 0, top - 5);
+    ctx.textAlign = 'right'; ctx.fillText('tail', BW, top - 5);
+    ctx.textAlign = 'left'; ctx.fillText('presynaptic rows, postsynaptic columns', mx, top - 5);
+    ctx.textAlign = 'left'; ctx.fillText('cell body', 0, top + S + 13);
+    ctx.textAlign = 'right'; ctx.fillText('mean edge span ' + fmt(stats[cur].span, 0), mx + S, top + S + 13);
+    // Matrix frame and diagonal.
+    ctx.fillStyle = bg; ctx.fillRect(mx, top, S, S);
+    ctx.strokeStyle = border; ctx.lineWidth = 1;
+    ctx.strokeRect(mx - 0.5, top - 0.5, S + 1, S + 1);
+    ctx.beginPath(); ctx.moveTo(mx, top); ctx.lineTo(mx + S, top + S); ctx.stroke();
+    ctx.strokeRect(-0.5 + 0.5, top - 0.5, BW, S + 1);
+    // Body position strip and type strip.
+    for (let i = 0; i < n; i++) {
+      const y = top + (P[i] + 0.5) * cs;
+      ctx.fillStyle = ink2;
+      ctx.fillRect(2 + ap[i] * (BW - 5) - 0.9, y - 0.9, 1.8, 1.8);
+      ctx.fillStyle = css(ROLE_VAR[N[i].role]);
+      ctx.fillRect(BW + gap, top + P[i] * cs, RS, Math.max(cs, 1));
+    }
+    // Hover crosshair.
+    if (hover) {
+      ctx.fillStyle = css('--accent-light');
+      ctx.fillRect(mx, top + P[hover.a] * cs, S, Math.max(cs, 1));
+      ctx.fillRect(mx + P[hover.b] * cs, top, Math.max(cs, 1), S);
+    }
+    // Synapses: ink, more opaque for more synapses.
+    ctx.fillStyle = ink;
+    const sz = Math.max(cs, 1.2);
+    for (const [a, b, w] of data.chem) {
+      ctx.globalAlpha = 0.4 + 0.6 * Math.log(w) / Math.log(wmax);
+      ctx.fillRect(mx + P[b] * cs, top + P[a] * cs, sz, sz);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function size(w) {
+    geo = layout(w);
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.round(geo.W * dpr); canvas.height = Math.round(geo.H * dpr);
+    canvas.style.width = geo.W + 'px'; canvas.style.height = geo.H + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    draw();
+  }
+
+  const wmap = new Map(data.chem.map(([a, b, w]) => [a * 65536 + b, w]));
+  function point(ev) {
+    if (!geo || anim) return;
+    const rect = canvas.getBoundingClientRect(), x = ev.clientX - rect.left, y = ev.clientY - rect.top;
+    const { top, S, mx, cs, BW } = geo;
+    const row = Math.floor((y - top) / cs);
+    if (row < 0 || row >= n) return clear();
+    const a = order[row];
+    if (x >= mx && x < mx + S) {
+      const b = order[Math.floor((x - mx) / cs)], w = wmap.get(a * 65536 + b) || 0;
+      hover = { a, b };
+      showTip(`${N[a].name} → ${N[b].name}: ${w ? w + (w === 1 ? ' synapse' : ' synapses') : 'no synapse'}`, x, y);
+    } else if (x < BW + 12) {
+      hover = null;
+      showTip(`${N[a].name}, ${({ s: 'sensory neuron', i: 'interneuron', m: 'motor neuron' })[N[a].role]}, cell body at ${fmt(ap[a], 2)} of the body length`, x, y);
+    } else return clear();
+    draw();
+  }
+  function showTip(html, x, y) {
+    tip.style('display', 'block').html(html);
+    const tw = tip.node().offsetWidth;
+    tip.style('left', Math.max(0, Math.min(geo.W - tw, x - tw / 2)) + 'px').style('top', Math.max(0, y - 32) + 'px');
+  }
+  function clear() { hover = null; tip.style('display', 'none'); draw(); }
+  canvas.addEventListener('pointermove', point);
+  canvas.addEventListener('pointerdown', point);
+  canvas.addEventListener('pointerleave', ev => { if (ev.pointerType !== 'touch') clear(); });
+
+  labels();
+  responsive(body, size);
+  onTheme(draw);
+}
+
+// ── Figure 2: average controllability against strength ──
+function controlFigure(data) {
+  const N = data.nodes, n = N.length;
+  const HOR = [1, 2, 3, 5, 10, 20, 50, Infinity];
+  const RHO = [0.5, 0.8, 0.9, 0.95, 0.99, 0.999];
+  const ctl = { t: document.getElementById('ac-t'), r: document.getElementById('ac-r'), bin: document.getElementById('ac-bin'), gap: document.getElementById('ac-gap') };
+  const cache = new Map();
+  function net(bin, gap) {
+    const key = `${bin}|${gap}`;
+    if (cache.has(key)) return cache.get(key);
+    const A = Array.from({ length: n }, () => new Float64Array(n));
+    const add = (a, b, w) => { A[a][b] += w; A[b][a] += w; };
+    data.chem.forEach(([a, b, w]) => add(a, b, w));
+    if (gap) data.gap.forEach(([a, b, w]) => add(a, b, w));
+    if (bin) A.forEach(r => r.forEach((x, j) => { r[j] = x > 0 ? 1 : 0; }));
+    const s = A.map(r => r.reduce((x, y) => x + y, 0)), eig = G.eigh(A);
+    const xi = Math.max(-eig.values[0], eig.values[n - 1]), gu = xi / (1 + xi);
+    // Scaling options: the fixed values plus division by 1 + xi (the standard code's), in order.
+    const rhos = RHO.map(v => ({ v, gu: false })).concat([{ v: gu, gu: true }]).sort((p, q) => p.v - q.v);
+    const grid = rhos.map(r => HOR.slice(1).map(T => G.spearman(tidy(G.avgControl(A, { rho: r.v, T, eig })), s)));
+    const o = { A, s, eig, xi, rhos, grid };
+    cache.set(key, o);
+    return o;
+  }
+  // Remember the scaling choice as "gu" (1 + xi) or a value, so toggles keep it.
+  let rhoChoice = 'gu';
+  function current() {
+    const X = net(ctl.bin.checked, ctl.gap.checked);
+    let ri = X.rhos.findIndex(r => (rhoChoice === 'gu' ? r.gu : !r.gu && r.v === rhoChoice));
+    if (ri < 0) ri = 0;
+    ctl.r.value = ri;
+    const T = HOR[+ctl.t.value], rho = X.rhos[ri];
+    const ac = G.avgControl(X.A, { rho: rho.v, T, eig: X.eig });
+    return { X, T, ri, rho, ac };
+  }
+
+  const sBody = document.getElementById('ac-sc'), sSvg = d3.select(sBody).select('svg'), sTip = d3.select(sBody).select('.tip');
+  const hBody = document.getElementById('ac-hm'), hSvg = d3.select(hBody).select('svg'), hTip = d3.select(hBody).select('.tip');
+  let sw = 0, hw = 0, st = null, pts = [], focus = -1;
+  const tLab = T => (T === Infinity ? '∞' : String(T));
+  const rLab = r => (r.gu ? `${fmt(r.v, 3)} (1+ξ)` : String(r.v));
+
+  function update() {
+    st = current();
+    ctl.t.nextElementSibling.textContent = tLab(st.T);
+    ctl.r.nextElementSibling.textContent = rLab(st.rho);
+    drawScatter(); drawHeat(); readout();
+  }
+  ctl.t.addEventListener('input', update);
+  ctl.r.addEventListener('input', () => {
+    const X = net(ctl.bin.checked, ctl.gap.checked), r = X.rhos[+ctl.r.value];
+    rhoChoice = r.gu ? 'gu' : r.v; update();
+  });
+  ctl.bin.addEventListener('change', update);
+  ctl.gap.addEventListener('change', update);
+
+  function drawScatter() {
+    const w = sw; if (!w || !st) return;
+    const M = { l: 44, r: 10, t: 10, b: 38 }, h = narrow() ? 270 : 320, iw = w - M.l - M.r, ih = h - M.t - M.b;
+    sSvg.attr('width', w).attr('height', h).selectAll('*').remove();
+    const g = sSvg.append('g').attr('transform', `translate(${M.l},${M.t})`);
+    const s = st.X.s, ac = st.ac, flat = st.T === 1;
+    const x = d3.scaleLog().domain(d3.extent(s)).nice().range([0, iw]);
+    const yv = Array.from(ac, v => v - 1);
+    const y = flat ? d3.scaleLinear().domain([0, 1]).range([ih, 0]) : d3.scaleLog().domain(d3.extent(yv)).nice().range([ih, 0]);
+    g.append('g').attr('class', 'axis').attr('transform', `translate(0,${ih})`).call(d3.axisBottom(x).ticks(Math.max(3, iw / 80), '~s').tickSizeOuter(0));
+    if (!flat) g.append('g').attr('class', 'axis').call(d3.axisLeft(y).ticks(5, '~g').tickSizeOuter(0));
+    g.append('text').attr('class', 'axis-label').attr('x', iw).attr('y', ih + 32).attr('text-anchor', 'end')
+      .text(ctl.bin.checked ? 'degree (partners), log scale' : (ctl.gap.checked ? 'strength (synapses plus gap junctions), log scale' : 'strength (synapses), log scale'));
+    g.append('text').attr('class', 'axis-label').attr('transform', 'rotate(-90)').attr('x', 0).attr('y', -34).attr('text-anchor', 'end').text('average controllability − 1, log scale');
+    pts = [];
+    for (let i = 0; i < n; i++) {
+      const cx = x(s[i]), cy = flat ? ih : y(yv[i]);
+      pts.push({ i, cx, cy, ax: cx + M.l, ay: cy + M.t });
+    }
+    g.selectAll('circle').data(pts).join('circle').attr('cx', d => d.cx).attr('cy', d => d.cy).attr('r', 3)
+      .style('fill', d => css(ROLE_VAR[N[d.i].role])).style('fill-opacity', 0.8);
+    if (flat) {
+      g.append('text').attr('class', 'note halo').attr('x', iw / 2).attr('y', ih / 2).attr('text-anchor', 'middle').text('Every neuron scores exactly 1');
+    } else {
+      const top = d3.range(n).sort((a, b) => ac[b] - ac[a]).slice(0, 2);
+      top.forEach((i, k) => g.append('text').attr('class', 'pt-lab halo').attr('x', pts[i].cx - 6).attr('y', pts[i].cy + (k ? 12 : -4)).attr('text-anchor', 'end').text(N[i].name));
+    }
+    if (focus >= 0) showPt(pts[focus]);
+  }
+
+  function drawHeat() {
+    const w = hw; if (!w || !st) return;
+    const X = st.X, cols = HOR.slice(1), rows = X.rhos;
+    const M = { l: 80, r: 4, t: 18, b: 30 }, cw = (w - M.l - M.r) / cols.length, ch = 26, h = M.t + rows.length * ch + M.b;
+    hSvg.attr('width', w).attr('height', h).selectAll('*').remove();
+    const g = hSvg.append('g').attr('transform', `translate(${M.l},${M.t})`);
+    const lo = css('--accent-light'), hi = css('--accent');
+    const col = d3.scaleSequential(d3.interpolateRgb(lo, hi)).domain([0.5, 1]);
+    g.append('text').attr('class', 'hm-lab').attr('x', -M.l).attr('y', -6).text('eigenvalue');
+    cols.forEach((T, j) => g.append('text').attr('class', 'hm-lab').attr('x', j * cw + cw / 2).attr('y', rows.length * ch + 14).attr('text-anchor', 'middle').text(tLab(T)));
+    g.append('text').attr('class', 'hm-lab').attr('x', (cols.length * cw) / 2).attr('y', rows.length * ch + 27).attr('text-anchor', 'middle').text('horizon T (steps)');
+    rows.forEach((r, i) => {
+      g.append('text').attr('class', 'hm-lab').attr('x', -6).attr('y', i * ch + ch / 2 + 4).attr('text-anchor', 'end').text(rLab(r));
+      cols.forEach((T, j) => {
+        const v = X.grid[i][j];
+        g.append('rect').attr('class', 'hm-cell').attr('x', j * cw + 1).attr('y', i * ch + 1).attr('width', cw - 2).attr('height', ch - 2)
+          .style('fill', col(Math.max(0.5, v)))
+          .on('click', () => { rhoChoice = r.gu ? 'gu' : r.v; ctl.t.value = j + 1; update(); })
+          .on('pointerenter', ev => {
+            hTip.style('display', 'block').html(`T = ${tLab(T)}, eigenvalue ${rLab(r)}: rank correlation ${fmt(v, 2)}`);
+            const tw = hTip.node().offsetWidth;
+            hTip.style('left', Math.max(0, Math.min(w - tw, M.l + j * cw + cw / 2 - tw / 2)) + 'px').style('top', (M.t + i * ch - 26) + 'px');
+          })
+          .on('pointerleave', () => hTip.style('display', 'none'));
+        g.append('text').attr('class', 'hm-val').attr('x', j * cw + cw / 2).attr('y', i * ch + ch / 2 + 4).attr('text-anchor', 'middle')
+          .style('fill', v > 0.78 ? css('--fig-bg') : css('--text')).text(fmt(v, 2));
+      });
+    });
+    if (st.T !== 1) {
+      g.append('rect').attr('class', 'hm-sel').attr('x', (+ctl.t.value - 1) * cw + 1).attr('y', st.ri * ch + 1).attr('width', cw - 2).attr('height', ch - 2);
+    }
+  }
+
+  function readout() {
+    const el = document.getElementById('ac-ro'), s = st.X.s, ac = st.ac;
+    const what = ctl.bin.checked ? 'degree' : 'strength';
+    if (st.T === 1) {
+      el.innerHTML = `With a horizon of one step the pulse never leaves its neuron, so every neuron's average controllability is exactly 1 and there is nothing to correlate.`;
+      return;
+    }
+    const top = d3.range(n).sort((a, b) => ac[b] - ac[a]).slice(0, 4).map(i => N[i].name).join(', ');
+    el.innerHTML = `Horizon ${tLab(st.T)}, largest eigenvalue ${fmt(st.rho.v, 3)}: rank correlation with ${what} <b>${fmt(G.spearman(tidy(ac), s), 2)}</b>, ordinary correlation <b>${fmt(G.pearson(ac, s), 2)}</b>. ` +
+      `Highest scores: ${top}.` + (st.T === 2 && ctl.bin.checked ? ' At two steps with weights ignored the score is 1 plus degree times the squared scale, so the ranks agree exactly.' : '');
+  }
+
+  function showPt(p) {
+    if (!p) { sTip.style('display', 'none'); return; }
+    const i = p.i, d = N[i];
+    sTip.style('display', 'block').html(`${d.name}: ${ctl.bin.checked ? 'degree' : 'strength'} ${fmt(st.X.s[i], 0)}, average controllability ${fmt(st.ac[i], 4)}`);
+    const tw = sTip.node().offsetWidth;
+    sTip.style('left', Math.max(0, Math.min(sw - tw, p.ax - tw / 2)) + 'px').style('top', (p.ay - 30) + 'px');
+  }
+  function nearest(ev) {
+    const [px, py] = d3.pointer(ev);
+    let best = null, bd = 144;
+    for (const p of pts) { const dd = (p.ax - px) ** 2 + (p.ay - py) ** 2; if (dd < bd) { bd = dd; best = p; } }
+    focus = best ? best.i : -1;
+    showPt(best);
+  }
+  sSvg.on('pointermove', nearest).on('pointerdown', nearest)
+    .on('pointerleave', ev => { if (ev.pointerType !== 'touch') { focus = -1; sTip.style('display', 'none'); } });
+  // Keyboard: arrows step through neurons in order of strength.
+  sSvg.on('keydown', ev => {
+    if (!/^Arrow(Left|Right)$/.test(ev.key) || !st) return;
+    ev.preventDefault();
+    const ord = d3.range(n).sort((a, b) => st.X.s[a] - st.X.s[b]);
+    const k = Math.max(0, Math.min(n - 1, ord.indexOf(focus) + (ev.key === 'ArrowRight' ? 1 : -1)));
+    focus = ord[focus < 0 ? 0 : k];
+    showPt(pts[focus]);
+  }).on('blur', () => { focus = -1; sTip.style('display', 'none'); });
+
+  responsive(sBody, w => { sw = w; drawScatter(); });
+  responsive(hBody, w => { hw = w; drawHeat(); });
+  onTheme(() => { drawScatter(); drawHeat(); });
+  update();
+}
+
+// ── Diagram: the resolution limit on a ring of cliques ──
+function ringDiagram() {
+  const k = 5, l = k * (k - 1) / 2, size = 260;
+  const svg = d3.select('#rg-body svg').attr('width', size).attr('height', size).attr('viewBox', `0 0 ${size} ${size}`);
+  const mCtl = document.getElementById('rg-m');
+  // Modularity of a partition of the ring into modules of c consecutive cliques.
+  function Q(m, c) {
+    const L = m * (l + 1);
+    let q = 0, left = m;
+    while (left > 0) {
+      const t = Math.min(c, left);
+      q += (t * l + (t - 1)) / L - ((t * (2 * l + 2)) / (2 * L)) ** 2;
+      left -= t;
+    }
+    return q;
+  }
+  function draw() {
+    const m = +mCtl.value;
+    mCtl.nextElementSibling.textContent = m;
+    const q1 = Q(m, 1), q2 = Q(m, 2), pairs = q2 > q1 + 1e-12;
+    svg.selectAll('*').remove();
+    // Clique radius: a third of the spacing, so merged pairs leave visible gaps.
+    const c = size / 2, R = size / 2 - 16, rc = Math.min(12, 0.3 * R * Math.sin(Math.PI / m) * 2);
+    const centre = j => { const a = 2 * Math.PI * j / m - Math.PI / 2; return [c + R * Math.cos(a), c + R * Math.sin(a)]; };
+    const vert = (j, v) => {
+      const [x, y] = centre(j), a0 = 2 * Math.PI * j / m - Math.PI / 2, a = a0 + 2 * Math.PI * v / k + Math.PI / k;
+      return [x + rc * Math.cos(a), y + rc * Math.sin(a)];
+    };
+    const mod = svg.append('g');
+    if (pairs) {
+      for (let j = 0; j < m; j += 2) {
+        const [x1, y1] = centre(j), [x2, y2] = centre(j + 1);
+        mod.append('line').attr('x1', x1).attr('y1', y1).attr('x2', x2).attr('y2', y2)
+          .style('stroke', css('--accent-light')).style('stroke-width', 2 * rc + 6).style('stroke-linecap', 'round');
+      }
+    } else {
+      for (let j = 0; j < m; j++) { const [x, y] = centre(j); mod.append('circle').attr('class', 'module').attr('cx', x).attr('cy', y).attr('r', rc + 3); }
+    }
+    const g = svg.append('g');
+    for (let j = 0; j < m; j++) {
+      for (let a = 0; a < k; a++) for (let b = a + 1; b < k; b++) {
+        const p = vert(j, a), q = vert(j, b);
+        g.append('line').attr('class', 'clique-edge').attr('x1', p[0]).attr('y1', p[1]).attr('x2', q[0]).attr('y2', q[1]);
+      }
+      // One edge to the next clique, between the facing vertices.
+      const p = vert(j, 1), q = vert((j + 1) % m, 3);
+      g.append('line').attr('class', 'ring-edge').attr('x1', p[0]).attr('y1', p[1]).attr('x2', q[0]).attr('y2', q[1]);
+    }
+    document.getElementById('rg-ro').innerHTML = `${m} cliques. Modularity with one module per clique <b>${fmt(q1, 4)}</b>; with adjacent pairs merged <b>${fmt(q2, 4)}</b>. ` +
+      (Math.abs(q2 - q1) < 1e-12 ? 'A tie: this is the threshold, k(k − 1) + 2 = 22.' : pairs ? 'Merging pairs scores higher, though each clique is as tight as a module can be.' : 'Separate cliques score higher.');
+  }
+  mCtl.addEventListener('input', draw);
+  onTheme(draw);
+  draw();
+}
+</script>
+</body>
+</html>

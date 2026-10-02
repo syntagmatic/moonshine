@@ -56,3 +56,34 @@ The deep-research report in `research/REPORT.md` is not a source; see
 | c302 is MIT licensed | S | GitHub openworm/c302 LICENSE on master |
 
 Source detail with quotes and URLs: `research/check/sources-03.md` (verification pass of 2026-10-01).
+
+## Article 5: Reading the Matrix
+
+Data: the same `worm-varshney.json`. Library additions in `shared/graph.js`: `eigh` (JAMA tred2/tql2), `fiedler`, `edgeSpan`, `avgControl`, `pearson`, `spearman`; `runChecks` covers them (path-graph Laplacian spectrum, A V = V L, Gramian summed directly, the T = 2 identity), and `dataChecks` pins the worm values against numpy 2.0.
+
+| Claim | Type | How we know |
+|---|---|---|
+| Random order: two ends of a connection (n + 1)/3 = 93.3 rows apart on average | D | E\|i - j\| for distinct uniform positions in 1..n is (n + 1)/3; 50 seeded shuffles average 93.3 (node) |
+| Edge spans: alphabetical 71, degree 80, cell type 65, body position 62, spectral 33 | C | figure 1 at runtime; node check with the same orders (71.0, 79.9, 65.4, 62.1, 33.0); numpy prototype 33.0 for the spectral order. Body and type orders break ties by name, so span depends slightly on tie order |
+| Spectral order from the unweighted undirected Laplacian; lambda2 0.8847 | C | `dataChecks` against numpy `eigh` (0.88470, span 33.023) |
+| Rank correlation with body position about 0.78 | C | `dataChecks` 0.7759 (scipy `spearmanr` 0.7759) |
+| Ends of the spectral order: SIBDL, OLQVL, IL1VL, URAVL ... VB09, VD10, VD09 | C | node check, first and last ten |
+| Sensory earlier, motor later on average; head motor classes RME, RMD, SIA, SIB near the head end, ahead of almost all interneurons | C | mean spectral rank sensory 95, inter 142, motor 179; within the head (ap < 0.25) sensory 71, motor 85, inter 120; each of the four classes' mean rank is ahead of 95 to 96% of interneurons |
+| ALN and PLN: cell bodies in the tail, all chemical synapses with head neurons; spectral order puts them among head neurons | C | ap 0.82 to 0.83; 19 of 19 and 22 of 22 synapses (in plus out) with neurons of ap < 0.25; 85 to 100% of their ten neighbours on each side in spectral order have ap < 0.25. PLM was cut: PLML lands among head neurons, PLMR at rank 207 |
+| AVA cell body in the head, placed toward the ventral cord; about four fifths of its synapses onto cord motor neurons | C | ap 0.13; spectral rank 196 and 212 of 279; output synapses onto VA/DA/VB/DB/VD/DD/AS: 121 of 143 (AVAL), 120 of 153 (AVAR) |
+| Weighted Laplacian Fiedler vector localises; rank correlation with body position about 0; normalised brings it back | C | numpy prototype: weighted unnormalised rho 0.008, span 45.7, low end PLML, HSNL, VC05, ASJL; normalised rho -0.75 (sign arbitrary), span 33.1 |
+| T = 1: every node scores 1; T = 2: 1 plus scaled squared weights, so exactly degree's ranks when unweighted | D | Gramian term t = 0 is e_i e_i^T (trace 1); t = 1 is A e_i e_i^T A^T (trace sum_j A_ji^2); `runChecks` T = 2 identity; figure 2 readout 1.00 (scores rounded to 10 digits before ranking) |
+| Default network (weighted, chemical both ways plus gap junctions) over the grid (T 2 to infinite, eigenvalue 0.5 to 0.999 plus Gu's): rank correlation 0.62 to 0.91, Pearson 0.81 to 0.93; unweighted both above 0.74 | C | node sweep of all four network variants: weighted+gap rho 0.619 to 0.905, r 0.808 to 0.928; weighted chem rho 0.660 to 0.900, r 0.773 to 0.922; binary+gap rho 0.739 to 0.999, r 0.899 to 1.000; binary chem rho 0.742 to 0.999, r 0.880 to 1.000 |
+| Default setting (Gu scaling, T infinite): r 0.82, rho 0.73; top scores AVAL, AVAR, PVCR, PVCL, AVDL, AVDR | C | `dataChecks` 0.8220 / 0.7339 equal to numpy; node top six |
+| Gu scaling puts the largest eigenvalue at 0.991 for this network | C | xi = 115.2, xi/(1 + xi) = 0.9914 (0.963 unweighted) |
+| Near-1 eigenvalue and infinite horizon: score becomes squared leading eigenvector entry (eigenvector centrality) | D, C | term 1/(1 - l^2) of the leading eigenvalue dominates as l -> 1; node check at c = 0.001: rank correlation with v1^2 1.000 for all four variants |
+| Ring of m k-cliques: merging adjacent pairs raises Q when m > k(k - 1) + 2; 22 for k = 5 | D | with l = k(k-1)/2 and L = m(l + 1): Q_single = l/(l+1) - 1/m, Q_pairs = (2l+1)/(2(l+1)) - 2/m; difference positive iff m > 2l + 2. Diagram computes Q both ways (tie at 22: 0.86364) |
+| sqrt(2 x 1961) = 62.6 | D | arithmetic |
+| Ten mutually connected neurons make 45 edges | D | 10 x 9 / 2 |
+| Gu et al. 2015: x(t+1) = Ax(t) + Bu(t); average controllability = trace of the infinite-horizon Gramian; 234 regions, 8 people x 3 DSI scans; r = 0.91 with strength between subject-averaged ranks; degree link derived in their supplement from (I - A^2)^-1 ~ I + A^2 | S | Nat Commun 6, 8414, Eq. 3, Results and Fig. 2b, Supp. Methods pp. 3-4. The paper normalises by the mean edge weight; A/(1 + lambda_max) is Tu et al.'s description and nctpy's default, so the page attributes it to later papers and the standard code |
+| Tu et al. 2018: randomised networks give the same controllability-degree relation; rank-fit R^2 0.75 to 0.92 on four human datasets | S | NeuroImage 176, 83, abstract and Table 2. Wu-Yan et al. (J Nonlinear Sci 30, 2020) reports no correlation with degree and defines average controllability as Trace(W^-1); cut from the page |
+| Fiedler 1973 (Czech Math J 23, 298); Atkins, Boman and Hendrickson 1998: minimise sum f_ij (x_i - x_j)^2 with sum x = 0, sum x^2 = 1 | S | SIAM J Comput 28, 297, Eq. 1 |
+| Varshney 2011 drew the worm with normalised Laplacian eigenvector 2 as an axis (Fig. 2a, against processing depth) | S | PLoS Comput Biol 7, e1001066, Fig. 2; the axis separates head and neck neurons from ventral cord motor neurons |
+| Newman and Girvan 2004 modularity; Fortunato and Barthelemy 2007: pairs of cliques beat single cliques iff (number) > (size)(size - 1) + 2, Eq. 20; sqrt(2L) bound, Eq. 21 | S | Phys Rev E 69, 026113; PNAS 104, 36 (paper writes n cliques of m nodes; the page uses m cliques of k nodes) |
+
+Source detail with quotes and URLs: `research/check/sources-05.md` (verification pass of 2026-10-02).

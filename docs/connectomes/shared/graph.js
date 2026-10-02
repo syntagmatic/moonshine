@@ -297,6 +297,174 @@
   function mean(a) { return a.reduce((s, x) => s + x, 0) / a.length; }
   function sd(a) { const m = mean(a); return Math.sqrt(a.reduce((s, x) => s + (x - m) * (x - m), 0) / (a.length - 1)); }
 
+  // ---- spectral ----
+
+  // Eigendecomposition of a symmetric matrix (rows of Float64Array or arrays):
+  // Householder reduction to tridiagonal form, then the implicit QL method
+  // (tred2 and tql2, as in JAMA). Returns eigenvalues ascending and V with
+  // V[i][j] = component i of eigenvector j.
+  function eigh(M) {
+    const n = M.length, V = M.map(r => Float64Array.from(r)), d = new Float64Array(n), e = new Float64Array(n);
+    for (let j = 0; j < n; j++) d[j] = V[n - 1][j];
+    for (let i = n - 1; i > 0; i--) {
+      let scale = 0, h = 0;
+      for (let k = 0; k < i; k++) scale += Math.abs(d[k]);
+      if (scale === 0) {
+        e[i] = d[i - 1];
+        for (let j = 0; j < i; j++) { d[j] = V[i - 1][j]; V[i][j] = 0; V[j][i] = 0; }
+      } else {
+        for (let k = 0; k < i; k++) { d[k] /= scale; h += d[k] * d[k]; }
+        let f = d[i - 1], g = Math.sqrt(h);
+        if (f > 0) g = -g;
+        e[i] = scale * g; h -= f * g; d[i - 1] = f - g;
+        for (let j = 0; j < i; j++) e[j] = 0;
+        for (let j = 0; j < i; j++) {
+          f = d[j]; V[j][i] = f; g = e[j] + V[j][j] * f;
+          for (let k = j + 1; k <= i - 1; k++) { g += V[k][j] * d[k]; e[k] += V[k][j] * f; }
+          e[j] = g;
+        }
+        f = 0;
+        for (let j = 0; j < i; j++) { e[j] /= h; f += e[j] * d[j]; }
+        const hh = f / (h + h);
+        for (let j = 0; j < i; j++) e[j] -= hh * d[j];
+        for (let j = 0; j < i; j++) {
+          f = d[j]; g = e[j];
+          for (let k = j; k <= i - 1; k++) V[k][j] -= f * e[k] + g * d[k];
+          d[j] = V[i - 1][j]; V[i][j] = 0;
+        }
+      }
+      d[i] = h;
+    }
+    for (let i = 0; i < n - 1; i++) {
+      V[n - 1][i] = V[i][i]; V[i][i] = 1;
+      const h = d[i + 1];
+      if (h !== 0) {
+        for (let k = 0; k <= i; k++) d[k] = V[k][i + 1] / h;
+        for (let j = 0; j <= i; j++) {
+          let g = 0;
+          for (let k = 0; k <= i; k++) g += V[k][i + 1] * V[k][j];
+          for (let k = 0; k <= i; k++) V[k][j] -= g * d[k];
+        }
+      }
+      for (let k = 0; k <= i; k++) V[k][i + 1] = 0;
+    }
+    for (let j = 0; j < n; j++) { d[j] = V[n - 1][j]; V[n - 1][j] = 0; }
+    V[n - 1][n - 1] = 1; e[0] = 0;
+
+    for (let i = 1; i < n; i++) e[i - 1] = e[i];
+    e[n - 1] = 0;
+    let f = 0, tst1 = 0;
+    const eps = Math.pow(2, -52);
+    for (let l = 0; l < n; l++) {
+      tst1 = Math.max(tst1, Math.abs(d[l]) + Math.abs(e[l]));
+      let m = l;
+      while (m < n - 1 && Math.abs(e[m]) > eps * tst1) m++;
+      if (m > l) {
+        do {
+          let g = d[l], p = (d[l + 1] - g) / (2 * e[l]), r = Math.hypot(p, 1);
+          if (p < 0) r = -r;
+          d[l] = e[l] / (p + r); d[l + 1] = e[l] * (p + r);
+          const dl1 = d[l + 1];
+          let h = g - d[l];
+          for (let i = l + 2; i < n; i++) d[i] -= h;
+          f += h;
+          p = d[m];
+          let c = 1, c2 = c, c3 = c, s = 0, s2 = 0;
+          const el1 = e[l + 1];
+          for (let i = m - 1; i >= l; i--) {
+            c3 = c2; c2 = c; s2 = s;
+            g = c * e[i]; h = c * p; r = Math.hypot(p, e[i]);
+            e[i + 1] = s * r; s = e[i] / r; c = p / r;
+            p = c * d[i] - s * g; d[i + 1] = h + s * (c * g + s * d[i]);
+            for (let k = 0; k < n; k++) {
+              h = V[k][i + 1]; V[k][i + 1] = s * V[k][i] + c * h; V[k][i] = c * V[k][i] - s * h;
+            }
+          }
+          p = -s * s2 * c3 * el1 * e[l] / dl1; e[l] = s * p; d[l] = c * p;
+        } while (Math.abs(e[l]) > eps * tst1);
+      }
+      d[l] += f; e[l] = 0;
+    }
+    for (let i = 0; i < n - 1; i++) {
+      let k = i, p = d[i];
+      for (let j = i + 1; j < n; j++) if (d[j] < p) { k = j; p = d[j]; }
+      if (k !== i) {
+        d[k] = d[i]; d[i] = p;
+        for (let j = 0; j < n; j++) { const t = V[j][i]; V[j][i] = V[j][k]; V[j][k] = t; }
+      }
+    }
+    return { values: d, vectors: V };
+  }
+
+  // Dense symmetric weight matrix from undirected [a, b, w] edges (w defaults to 1).
+  function dense(n, edges) {
+    const A = Array.from({ length: n }, () => new Float64Array(n));
+    for (const [a, b, w = 1] of edges) { A[a][b] += w; A[b][a] += w; }
+    return A;
+  }
+
+  // The Fiedler vector: eigenvector of the second smallest eigenvalue of the
+  // Laplacian L = D - A, or of the normalised Laplacian I - D^-1/2 A D^-1/2
+  // (returned as D^-1/2 times the eigenvector, the random-walk form). Sorting
+  // nodes by it minimises the relaxed sum of A_ij (x_i - x_j)^2 (spectral
+  // seriation, Atkins, Boman and Hendrickson 1998). The graph must be connected.
+  function fiedler(A, normalized = false) {
+    const n = A.length, k = A.map(r => r.reduce((s, x) => s + x, 0));
+    const L = A.map((r, i) => Float64Array.from(r, (x, j) => {
+      const v = (i === j ? k[i] : 0) - x;
+      return normalized ? (i === j ? 1 - x / k[i] : -x / Math.sqrt(k[i] * k[j])) : v;
+    }));
+    const { values, vectors } = eigh(L);
+    const f = Float64Array.from(vectors, (r, i) => normalized ? r[1] / Math.sqrt(k[i]) : r[1]);
+    return { vector: f, lambda2: values[1] };
+  }
+
+  // Mean |position(pre) - position(post)| over edges, positions given by an order
+  // (order[p] = node at position p).
+  function edgeSpan(order, edges) {
+    const pos = new Int32Array(order.length);
+    order.forEach((v, p) => { pos[v] = p; });
+    let s = 0;
+    for (const [a, b] of edges) s += Math.abs(pos[a] - pos[b]);
+    return s / edges.length;
+  }
+
+  // Average controllability (Gu et al. 2015) of every node for a symmetric
+  // weight matrix A: with A scaled to A / (c + xi), xi its largest |eigenvalue|,
+  // and x(t+1) = A x(t) + e_i u(t), the trace of the controllability Gramian over
+  // horizon T is sum_{t<T} |A^t e_i|^2 = sum_j V_ij^2 (1 - l_j^{2T}) / (1 - l_j^2);
+  // T = Infinity gives sum_j V_ij^2 / (1 - l_j^2). Pass rho instead of c to scale
+  // the largest |eigenvalue| to rho directly; pass eig = eigh(A) to reuse it.
+  function avgControl(A, { c = 1, rho, T = Infinity, eig } = {}) {
+    const n = A.length, { values, vectors } = eig || eigh(A);
+    const xi = Math.max(Math.abs(values[0]), Math.abs(values[n - 1]));
+    const scale = rho === undefined ? 1 / (c + xi) : rho / xi;
+    const g = Float64Array.from(values, l => {
+      const q = (l * scale) ** 2;
+      return T === Infinity ? 1 / (1 - q) : (q === 1 ? T : (1 - q ** T) / (1 - q));
+    });
+    return Float64Array.from(vectors, r => r.reduce((s, v, j) => s + v * v * g[j], 0));
+  }
+
+  function pearson(x, y) {
+    const n = x.length, mx = mean(x), my = mean(y);
+    let sxy = 0, sxx = 0, syy = 0;
+    for (let i = 0; i < n; i++) { const a = x[i] - mx, b = y[i] - my; sxy += a * b; sxx += a * a; syy += b * b; }
+    return sxx && syy ? sxy / Math.sqrt(sxx * syy) : NaN;
+  }
+  // Ranks with ties averaged.
+  function ranks(x) {
+    const idx = Array.from(x, (_, i) => i).sort((a, b) => x[a] - x[b]), r = new Float64Array(x.length);
+    for (let i = 0; i < idx.length;) {
+      let j = i;
+      while (j + 1 < idx.length && x[idx[j + 1]] === x[idx[i]]) j++;
+      for (let k = i; k <= j; k++) r[idx[k]] = (i + j) / 2 + 1;
+      i = j + 1;
+    }
+    return r;
+  }
+  const spearman = (x, y) => pearson(ranks(x), ranks(y));
+
   // ---- checks (node: require(...).runChecks()) ----
   function runChecks(log = console.log) {
     const res = [];
@@ -366,6 +534,42 @@
     const sr = swapReciprocal(n, D, rng(9));
     ok('reciprocal swap preserves degrees and mutual pairs', outDeg(sr) === outDeg(D) && mutualPairs(sr) === mutualPairs(D) && new Set(sr.map(([a, b]) => key(a, b))).size === D.length,
       mutualPairs(sr) + ' vs ' + mutualPairs(D));
+
+    // Spectral: path graph P_n has Laplacian eigenvalues 2 - 2cos(k pi / n), and
+    // its Fiedler vector is monotone along the path.
+    const P = []; for (let i = 0; i < 9; i++) P.push([i, i + 1]);
+    const AP = dense(10, P), LP = AP.map((row, i) => row.map((x, j) => (i === j ? row.reduce((s, y) => s + y, 0) : 0) - x));
+    const ev = eigh(LP).values;
+    ok('path P10 Laplacian eigenvalues 2 - 2cos(k pi/10)', ev.every((l, k) => near(l, 2 - 2 * Math.cos(k * Math.PI / 10), 1e-10)));
+    const fv = fiedler(AP).vector, mono = s => fv.every((x, i) => i === 0 || s * (x - fv[i - 1]) > 0);
+    ok('Fiedler vector of a path is monotone', mono(1) || mono(-1));
+    // Random symmetric matrix: A V = V diag(values), V orthonormal.
+    const R = Array.from({ length: 12 }, () => new Float64Array(12)), rr = rng(12);
+    for (let i = 0; i < 12; i++) for (let j = i; j < 12; j++) R[i][j] = R[j][i] = rr() * 2 - 1;
+    const E2 = eigh(R);
+    let err = 0;
+    for (let i = 0; i < 12; i++) for (let j = 0; j < 12; j++) {
+      let av = 0, vv = 0;
+      for (let k = 0; k < 12; k++) { av += R[i][k] * E2.vectors[k][j]; vv += E2.vectors[k][i] * E2.vectors[k][j]; }
+      err = Math.max(err, Math.abs(av - E2.values[j] * E2.vectors[i][j]), Math.abs(vv - (i === j ? 1 : 0)));
+    }
+    ok('eigh: A V = V L and V orthonormal', err < 1e-10, err.toExponential(1));
+    // Average controllability against the Gramian summed directly.
+    const W4 = dense(5, [[0, 1, 2], [1, 2, 1], [2, 3, 3], [3, 4, 1], [0, 4, 1], [1, 3, 2]]);
+    const xi = Math.max(...eigh(W4).values.map(Math.abs)), An = W4.map(r => r.map(x => x / (1 + xi)));
+    const direct = T => W4.map((_, i) => {
+      let v = W4.map((__, j) => (j === i ? 1 : 0)), s = 0;
+      for (let t = 0; t < T; t++) { s += v.reduce((a, x) => a + x * x, 0); v = An.map(r => r.reduce((a, x, j) => a + x * v[j], 0)); }
+      return s;
+    });
+    const ac3 = avgControl(W4, { T: 3 }), d3v = direct(3), acInf = avgControl(W4), d400 = direct(400);
+    ok('average controllability, T = 3, equals the summed Gramian', ac3.every((x, i) => near(x, d3v[i], 1e-12)));
+    ok('average controllability, T = infinity, equals the long sum', acInf.every((x, i) => near(x, d400[i], 1e-9)));
+    // T = 2 is 1 plus the squared weights of the node's column, scaled.
+    const ac2 = avgControl(W4, { T: 2 });
+    ok('T = 2 is 1 + sum of squared weights / (1 + xi)^2', ac2.every((x, i) => near(x, 1 + W4[i].reduce((s, w) => s + w * w, 0) / (1 + xi) ** 2, 1e-12)));
+    ok('rho = xi / (1 + xi) is the same as c = 1', avgControl(W4, { rho: xi / (1 + xi) }).every((x, i) => near(x, acInf[i], 1e-12)));
+    ok('Spearman with ties', near(spearman([1, 2, 2, 3], [1, 2, 3, 4]), 0.9486832980505138, 1e-12));
     return res;
   }
 
@@ -390,11 +594,21 @@
     const UG = undirected(n, D.concat(data.gap.map(e => [e[0], e[1]]))), k = degrees(n, UG);
     const club = data.nodes.filter((_, i) => k[i] >= 44).map(d => d.name).sort().join(',');
     ok('degree >= 44 with gap junctions is Towlson 2013\'s rich club', club === 'AVAL,AVAR,AVBL,AVBR,AVDL,AVDR,AVEL,AVER,DVA,PVCL,PVCR', club);
+    // Article 5, against numpy 2.0 (numpy.linalg.eigh, scipy.stats.spearmanr).
+    const ap = data.nodes.map(d => d.ap), F = fiedler(dense(n, U));
+    const ord = Array.from(F.vector.keys()).sort((a, b) => F.vector[a] - F.vector[b]);
+    ok('Laplacian lambda2 0.8847, spectral edge span 33.02 (numpy)', Math.abs(F.lambda2 - 0.88470) < 5e-5 && Math.abs(edgeSpan(ord, D) - 33.02) < 0.005,
+      F.lambda2.toFixed(5) + ', ' + edgeSpan(ord, D).toFixed(3));
+    ok('Fiedler vector rank correlation with body position 0.776 (numpy)', Math.abs(Math.abs(spearman(F.vector, ap)) - 0.77591) < 5e-5, spearman(F.vector, ap).toFixed(5));
+    const W = dense(n, data.chem.concat(data.gap)), s = W.map(r => r.reduce((x, y) => x + y, 0)), ac = avgControl(W);
+    ok('average controllability vs strength r 0.822, rho 0.734 (numpy, c = 1, T infinite)', Math.abs(pearson(ac, s) - 0.8222) < 5e-4 && Math.abs(spearman(ac, s) - 0.7338) < 5e-4,
+      pearson(ac, s).toFixed(4) + ', ' + spearman(ac, s).toFixed(4));
     return res;
   }
 
   return {
     dataChecks, rng, undirected, csr, degrees, clustering, transitivity, meanPath, nullER, distanceBins, nullSpatial, swap,
     mutualPairs, swapDirected, swapReciprocal, triadCensus, triadEdges, TRIADS, mean, sd, runChecks,
+    eigh, dense, fiedler, edgeSpan, avgControl, pearson, ranks, spearman,
   };
 });
