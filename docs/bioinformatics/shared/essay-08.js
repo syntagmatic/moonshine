@@ -28,7 +28,7 @@
 //   egger(y, se)  Egger's regression test: y/se on 1/se by least squares.
 //     -> {intercept, slope, seIntercept, t, df, p}
 //   clusterNames(BioCohort, cohort)  Part 6's four consensus clusters (BioCohort.consensus on
-//     BioCohort.features, k = 4), each named by its majority planted subtype A-D.
+//     BioCohort.features with essay 06's CpG offsets and options, k = 4), each named by its majority planted subtype A-D.
 //   chi2sf(x, df), tcdf(t, df), normInv(p), normPdf(x): distribution helpers.
 //   mulberry32(seed): the series' seeded generator.
 //   runChecks(print) -> [{name, ok, detail}]  against R survival (survfit, survdiff, coxph),
@@ -301,8 +301,10 @@
     [186, 50448, 141, 27197], [5, 2493, 3, 2338], [27, 16886, 29, 17825]];
 
   // Part 6's four consensus clusters of the shared cohort, each named by its majority planted subtype.
+  // Part 6's settings, copied from essay-06.js (CPG_OFFSETS, CC_OPTS) so both pages agree patient for patient.
+  const CPG_OFFSETS_06 = [-42, 221, 476, 659], CC_OPTS_06 = { reps: 50, frac: 0.8, seed: 90210 };
   function clusterNames(BC, co) {
-    const P = co.patients, lab = BC.consensus(BC.features(co).z, 4).labels, name = {};
+    const P = co.patients, lab = BC.consensus(BC.features(co, { cpgOffsets: CPG_OFFSETS_06 }).z, 4, CC_OPTS_06).labels, name = {};
     Array.from(new Set(lab)).forEach(k => {
       const c = {}; P.forEach((q, i) => { if (lab[i] === k) c[q.subtype] = (c[q.subtype] || 0) + 1; });
       name[k] = Object.keys(c).sort((a, b) => c[b] - c[a])[0];
@@ -367,12 +369,12 @@
       const c1 = coxMulti(tt2, ee2, P.map(q => [q.expr.CDKN1A]));
       const c2 = coxMulti(tt2, ee2, P.map((q, i) => [q.expr.CDKN1A, cl[i] === "B" ? 1 : 0, cl[i] === "C" ? 1 : 0, cl[i] === "D" ? 1 : 0]));
       const c3 = coxMulti(tt2, ee2, P.map(q => [q.tp53.status === "mutant" ? 1 : 0, q.expr.CDKN1A]));
-      add("coxMulti matches R coxph on the cohort (loglik -213.6327, -208.1251, -205.9177; TP53 coef -0.01081 se 0.3137)",
-        near(c1.loglik0, -213.6326657, 1e-5) && near(c1.loglik, -208.1251113, 1e-5) && near(c2.loglik, -205.9177032, 1e-5) &&
-        near(c2.beta[0], -0.83992503, 1e-5) && near(c3.beta[0], -0.0108105, 1e-5) && near(c3.se[0], 0.313699, 1e-5) && near(c3.beta[1], -0.4493665, 1e-5),
+      add("coxMulti matches R coxph on the cohort (loglik -213.6327, -208.1251, -204.6142; TP53 coef -0.01081 se 0.3137)",
+        near(c1.loglik0, -213.6326657, 1e-5) && near(c1.loglik, -208.1251113, 1e-5) && near(c2.loglik, -204.6142209, 1e-5) &&
+        near(c2.beta[0], -0.94508589, 1e-5) && near(c3.beta[0], -0.0108105, 1e-5) && near(c3.se[0], 0.313699, 1e-5) && near(c3.beta[1], -0.4493665, 1e-5),
         `${c1.loglik0.toFixed(4)}, ${c1.loglik.toFixed(4)}, ${c2.loglik.toFixed(4)}; TP53 ${c3.beta[0].toFixed(5)} (${c3.se[0].toFixed(5)})`);
       const lkc = logrankK(tt2, ee2, cl);
-      add("four-cluster log-rank matches R survdiff (chisq 5.9235, 3 df)", near(lkc.chi2, 5.923545, 1e-4), lkc.chi2.toFixed(5) + ", p " + lkc.p.toFixed(4));
+      add("four-cluster log-rank matches R survdiff (chisq 5.4687, 3 df)", near(lkc.chi2, 5.468686, 1e-4), lkc.chi2.toFixed(5) + ", p " + lkc.p.toFixed(4));
     }
     // the correction formula: Altman et al. 1994 say a minimum p of 0.002 over the 10th-90th
     // percentiles corresponds to about 0.05
