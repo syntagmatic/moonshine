@@ -1,7 +1,254 @@
 # Bioinformatics Visualization: claims ledger
 
-This series has not had a full fact-check. The rows below are only the leads
-flagged in plans/FACT-CHECK.md and settled on 2026-09-27.
+The 2026-10-03 quality pass audited every essay, rebuilt most figures on a shared palette, a shared simulated cohort and real GRCh38 locus data, and checked claims row by row. Its rows come first, grouped by the shared module or essay that makes the claim. Verdicts: correct (sourced) means read in the named primary source; computed means the page or a checked library calculates it; correct in kind means the direction or category is sourced and the magnitude is simulated.
+
+The older table at the end holds the fact-check leads settled on 2026-09-27. Most of the figures they describe were rebuilt in this pass, so they record history, not the pages as they stand.
+
+## 2026-10-03 quality pass
+
+### Shared locus data (63617a4)
+
+| Page | Claim | Verdict | Source or derivation | Fix |
+|---|---|---|---|---|
+| shared | CDKN1A canonical transcript ENST00000244741.10, MANE Select NM_000389.5, + strand, TSS chr6:36,678,714, exons 36,678,714-798 / 36,684,097-546 / 36,685,751-87,332, CDS 36,684,102-36,685,800 | real | Ensembl REST lookup (release 116, GRCh38.p14), retrieved 2026-10-03 | none |
+| shared | p21 is 164 aa and the CDS translates to it | real | Ensembl sequence/id ENSP for ENST00000244741; runChecks translates the genomic CDS | none |
+| shared | Genes in chr6:36,662,001-36,702,000: lncRNA ENSG00000301272, Y_RNA, PANDAR, LAP3P2, CDKN1A, DINOL, RAB44 | real | Ensembl overlap/region feature=gene | none |
+| shared | CDKN1A is in 6p21.2 | real | UCSC hg38 cytoBand; el-Deiry et al. 1993 Cell 75:817 abstract (PMID 8242752) | none |
+| shared | CpG island chr6 [36,678,467, 36,680,688): 2,221 bp, 204 CpG, obs/exp 0.81, TSS -246..+1975; second island [36,684,097, 36,684,358) at exon 2 | real | UCSC hg38 cpgIslandExt (table date 2022-10-18). Recomputed from the sequence with soft-masked bases as N: 204 CpG, o/e 0.815; G+C is 1496 vs the table's 1497 (perGc agrees). Unmasked there are 205 CpG. | 01 should say +1975 (audit wrote +1974 by counting a zero) |
+| shared | 5' p53 RE GAACATGTCCCAACATGTTG at chr6:36,676,449-36,676,468, -2265 from the Ensembl TSS | real | The sequence is el-Deiry et al. 1995 Cancer Res 55:2910 (GenBank U24170.1, at bases 2303-2322). It occurs exactly once in the hg38 window. 18/20 consensus matches. It lies inside exon 1 of ENST00000448526, the upstream-promoter transcript | none |
+| shared | 3' p53 RE GAAGAAGACTGGGCATGTCT at chr6:36,677,331-36,677,350, -1383 | real | U24170 bases 3189-3208; exactly once in hg38; 18/20 (G at position 4 of the first pentamer, as Resnick-Silverman notes) | none |
+| shared | Literature positions: "2.4 kb upstream" (el-Deiry 1993); -2281..-2262 and -1395..-1376 (Resnick-Silverman et al. 1998 Genes Dev 12:2102, PMC317007) | real, different +1 | Both Resnick-Silverman numbers imply the same +1, U24170 base 4584, which maps by exact 20-mers to hg38 36,678,729 (15 bp downstream of the Ensembl TSS). U24170 and hg38 also differ by indels: U24170 has 886 vs 882 bp between the sites and 1395 vs 1398 from the 3' site to +1. So hg38 offsets from that +1 are -2280 and -1398. The 1993 abstract says "upstream of WAF1 coding sequences", but the ATG is 7.6 kb downstream of the site, so "2.4 kb" only fits a transcription-start reference | Essays quote hg38 coordinates and say "relative to the Ensembl canonical TSS"; cite -2281/-1395 only as the published numbering |
+| shared | TP53 ENST00000269305 (MANE Select NM_000546.6), minus strand, 11 exons; exon 5 chr17:7,675,053-7,675,236 | real | Ensembl lookup | none |
+| shared | Codon 175 at chr17:7,675,087-7,675,089, CGC (+ strand GCG), Arg; c.524 = 7,675,088 | real | Ensembl map/cds 523..525; VEP ENST00000269305:c.524G>A gives cGc/cAc R/H at protein 175; ClinVar VCV000012374 GRCh38 17:7675088; Ensembl protein residue 175 = R | none |
+| shared | R175H: VCF 17 7675088 C T; BED chr17 7675087 7675088; rs28934578; ClinVar Pathogenic | real | Ensembl variation and VEP, NCBI ClinVar esummary | none |
+| shared | phyloP100way at c.524 is 6.2 (codon bases 0.4, 6.2, 3.9) | real | UCSC hg38 phyloP100way (data 2015-05-08), stored per base at 0.1 resolution | none |
+| shared | JASPAR MA0106.3 is the latest TP53 matrix (HT-SELEX, 18 columns) | real | jaspar.elixir.no/api/v1/matrix/MA0106/versions (versions .1-.3) | none |
+| shared | TSS ±10 kb: 5' RE best motif window (rel 0.954); 3' RE 6th (0.849); 5 windows ≥0.85 vs shuffled mean 1.0 | derived | BioLocus scan, bg = window GC 0.507, pseudo 0.8; 100 dinucleotide shuffles, seed 1 | numbers depend on bg, pseudocount and seed; 04 should state its own |
+
+### Shared palette and cohort (3c15a02)
+
+| Page | Claim | Verdict | Source or derivation | Fix |
+|---|---|---|---|---|
+| shared/cohort | Gene labels TP53, CDKN1A, MDM2, BAX, BBC3, MKI67, GAPDH, CDKN2A, ATM, RB1, PIK3CA, PTEN, BRCA1, MYC are approved HGNC symbols; BBC3 is PUMA | correct | HGNC REST fetch/symbol, retrieved 2026-10-03 (HGNC:11998, 1784, 6973, 959, 17868 alias PUMA, 7107, 4141, 1787, 795, 9884, 8975, 9588, 1100, 7553) | none |
+| shared/cohort | Copy-number loci TP53 17p13.1, MDM2 12q15, CDKN2A 9p21.3, MYC 8q24.21 | correct | HGNC REST location field, 2026-10-03; TP53, MDM2, MYC also UCSC cytoBand per audit-06 | none |
+| shared/cohort | Hotspots R175H, G245S, R249S, R282W structural; R248Q, R273H contact | correct | Olivier, Hollstein, Hainaut 2010 CSH Perspect Biol 2:a001008 (via audit-01) | none |
+| shared/cohort | Which hotspot a simulated hotspot mutation lands on is weighted by codon counts R248 1621, R273 1551, R175 1152, G245 745, R282 642, R249 573 | correct (weights only) | IARC TP53 database R13 codon counts (audit-01 B6). The counts cover every substitution at the codon; the amino-acid change shown is 01's label | none |
+| shared/cohort | About 30% of simulated TP53 mutations are at the six hotspots; 25% are truncating; other missense mostly in the DNA-binding domain (102-292) | approximate (simulation choice) | Real hotspot share is roughly a quarter to a third (audit-01, denominator not retrieved); Olivier 2010: 86% of mutations in codons 125-300 | captions say "simulated" |
+| shared/cohort | MDM2 amplification and TP53 mutation are mutually exclusive | strict in the simulation; real: rare co-occurrence | Momand et al. 1998 NAR 26:3453: 29 of 33 MDM2-amplified tumours TP53 wildtype | prose should say "rarely" for real tumours, "never" for this cohort |
+| shared/cohort | CDKN1A promoter methylation silences p21 in TP53-intact tumours | correct (as a route) | Roman-Gomez et al. 2002 Blood 99:2291 (via audit-01) | none |
+| shared/cohort (01: "MDM2, another p53 target"; 01 Fig 4 readout: "p53 switches on CDKN1A (arrest), BAX (apoptosis) and MDM2") | CDKN1A, MDM2, BAX and BBC3 are p53 transcriptional targets (low when p53 is inactive) | correct (sourced) | Abstracts: el-Deiry et al. 1993 Cell 75:817 (PMID 8242752): "a gene whose expression is directly induced by p53"; Barak et al. 1993 EMBO J 12:461 (PMID 8440237): "we suggest that the mdm2 gene is a target for activation by wt p53"; Miyashita and Reed 1995 Cell 80:293 (PMID 7834749): "bax is a p53 primary-response gene"; Nakano and Vousden 2001 Mol Cell 7:683 (PMID 11463392): "PUMA ... as a target for activation by p53". All four are also in Fischer 2017 Table 1 (CDKN1A 16/16 datasets, MDM2 15, BAX 11, BBC3 7) | none |
+| shared/cohort (01: "TP53 mRNA itself does not move (68% and 68%): R175H changes the protein, not how much of the gene is transcribed") | Missense TP53 leaves TP53 mRNA unchanged; truncating mutations lower it (NMD) | correct in kind | Donehower et al. 2019 Cell Rep 28:1370, PMC7546539, Results section "P53 RNA and protein expression are highly variable and dependent on mutation type" (Fig. S4B, C): RNA in tumors with truncating mutations "was reduced compared to either WT or missense MUT TP53 tumors ... likely due to nonsense-mediated mRNA decay". Missense tumors showed p53 RNA "modestly increased relative to that in WT", so the model's "unchanged" is a simplification. The page's mechanistic sentence still holds, and its 68%/68% is simulated | none (the page states it as a simulation result. If cohort.js is ever touched, its comment could say "about unchanged (real tumours: a modest rise, Donehower 2019)") |
+| shared/cohort | CpG island at CDKN1A TSS -246..+1975 (promoter convention) | correct | UCSC cpgIslandExt hg38 [36,678,467, 36,680,688), Ensembl TSS 36,678,714; asserted by BioLocus (locus.json) | none |
+| shared/cohort (01: "The upstream CpGs are methylated in every patient, as CpG-poor DNA usually is") | CpG-poor sequence outside islands is mostly methylated in every sample; islands are mostly unmethylated unless silenced | correct (sourced) | Bird 2002 itself could not be read (genesdev.cshlp.org returns 403). Same author, open access: Deaton and Bird 2011 Genes Dev 25:1010, PMC3093116, introduction, paragraph 1: "The globally methylated, CpG-poor genomic landscape is punctuated, however, by CpG islands (CGIs) ... frequent absence of DNA methylation". The same paper on silencing: "DNA methylation is associated with stable long-term silencing of CGI promoters" (Fig. 4B legend), and on tumors: "The CGIs of several tumor suppressor genes acquire cancer-specific methylation" | cite Deaton and Bird 2011 alongside or instead of Bird 2002 if this claim is ever cited |
+| shared/cohort | TP53-mutant tumours have higher TMB | correct in direction; magnitudes simulated | PMC9542347, PMC7546539 (via audit-08) | none |
+| shared/cohort | RECIST: CR = all target lesions gone (-100%), PR <= -30%, PD >= +20% or a new lesion | correct for target lesions; nadir reduces to baseline for best change | Eisenhauer et al. 2009 Eur J Cancer 45:228 (via audit-08) | 08 caption: "from nadir" |
+| shared/cohort | Consensus clustering and PAC | method | Monti et al. 2003 Mach Learn 52:91; Senbabaoglu, Michailidis and Li 2014 Sci Rep 4:6207 | none |
+| shared/palette | Up/down pair distinguishable under protanopia and deuteranopia | computed | Machado, Oliveira and Fernandes 2009 CVD matrices at severity 1, OKLab distance; runChecks | none |
+| shared/palette | Oncoprint colour grammar (missense green, truncating near-black, amplification red, deep deletion blue) follows cBioPortal | colours by convention; exact hexes are ours | cBioPortal OncoPrint legend (via audit-06) | 06 footer: "colours follow cBioPortal" |
+
+### Essay 01
+
+| Page | Claim | Verdict | Source or derivation | Fix |
+|---|---|---|---|---|
+| 01 | TP53 mutated in 37% of tumours; 4,225 mutations in 3,839 of 10,443 sequenced samples | real, computed in page | cBioPortal API, 32 TCGA PanCancer Atlas studies, `{study}_sequenced` sample lists, entrezGeneId 7157, retrieved 2026-10-03 (scripts/bio-01-tp53-mutations.mjs) | done |
+| 01 | TP53 is "the most often mutated of the known cancer genes" | correct (sourced) | Kandoth et al. 2013 Nature 502:333, PMC3927368, section "Significantly mutated genes", subsection "Common mutations": "The most frequently mutated gene in the Pan-Cancer cohort is TP53 (42% of samples)". Abstract: 3,281 tumours, 12 tumour types | none |
+| 01 | Missense: 97% in DBD 102-292, 32% at six hotspots; all classes 85% and 21%; truncating 62% and 0% | real, computed | essay-01.json, BioEssay01.mutationSummary; checked in runChecks | done (replaces invented 45%) |
+| 01 | Tallest codons R273 (269), R248 (226), R175 (167); R175H commonest single change (150, then R273C 125) | real, computed, checked | essay-01.json; runChecks asserts both | done |
+| 01 | Domains TAD 1-44, DNA-binding 102-292, oligomerization 325-356, basic 368-387; zinc ligands 176, 179, 238, 242 | real | UniProt P04637 REST features, 2026-10-03 | done (audit B9) |
+| 01 | R175 neighbours zinc ligands C176 and H179; R175H unfolds that region | correct | UniProt binding sites; Cho et al. 1994 Science 265:346 (audit row) | none |
+| 01 | Oncoprint: TP53 40, MDM2 12, none both; CDKN1A 1; 11 of 48 quiet patients below CDKN1A median 5.475, all subtype C | simulated, computed in page | BioCohort default (fingerprint 6e3ed479) | done |
+| 01 | Real tumours: 29 of 33 MDM2-amplified tumours TP53 wildtype; simulation never co-occurs | correct | Momand et al. 1998 NAR 26:3453 (audit row) | "rarely" real, "never" here |
+| 01 | Mutant p53 accumulation: loss of MDM2 induction is one reason, not sufficient; R172H unstable in normal tissue, builds up in some tumours or when MDM2 or p16 is lost | correct | Terzian et al. 2008 Genes Dev 22:1337 (audit row) | done (audit B5); HSP90 left out |
+| 01 ("Like most human genes, CDKN1A starts inside a CpG island") | Most human genes start in a CpG island | correct (sourced) | Saxonov, Berg and Brutlag 2006 PNAS 103:1412, PMC1345710, abstract: "Seventy-two percent of promoters belong to the class with high CpG content (HCG)". Results (text with Fig. 2): "The most straightforward explanation ... is that all of the HCG promoters contain CGIs, and all of the LCG promoters lack them". Deaton and Bird 2011 (PMC3093116) says the same: "Approximately 70% of annotated gene promoters are associated with a CGI" | none |
+| 01 | CDKN1A promoter methylation with low p21 mRNA in ALL | correct | Roman-Gomez et al. 2002 Blood 99:2291 (audit row) | "acute lymphoblastic leukaemia" |
+| 01 | Window chr6:36,676,114-36,680,713 (-2600..+2000 of Ensembl TSS 36,678,714) holds 224 CpGs | real, computed | BioLocus cpgs0 on hg38 | done |
+| 01 | Island -246..+1975; 2 kb before it has 16 CpGs; island begins 1,117 bp past RE3's end | real, computed | BioLocus (UCSC cpgIslandExt, cpgStats0) | done |
+| 01 | p53 REs at -2265 and -1383, neither contains a CpG | real | BioLocus p53Sites (el-Deiry 1995, U24170); cpgs0 over each site = 0 | done |
+| 01 | Upstream CpG-poor DNA methylated in every patient; island unmethylated except route C | simulated (real in kind) | BioCohort.betaAt; Bird 2002 Genes Dev 16:6 (foundation row) | labelled simulated |
+| 01 | Methylated group: 18 patients, 6 partial; extents +820 to +1830; island beta 0.60 over +1..+500 (others 0.08-0.09); CDKN1A means A 5.04, B 5.29, C 5.37, D 7.21 | simulated, computed in page | BioCohort | done (audit B3, B4) |
+| 01 | Patient P062: no alteration, CDKN1A 4.44 vs median 5.47, island beta 0.80 | simulated, computed in page | BioCohort | done (audit C6: views agree on one patient) |
+| 01 ("the kinase ATM phosphorylates both proteins, MDM2 lets go, and p53 builds up"; Fig 4) | Pathway: MDM2 -\| TP53 at rest; on damage ATM -\| MDM2, and TP53 -> CDKN1A/BAX/MDM2; R175H blocks all three | correct (sourced) | Maya et al. 2001 Genes Dev 15:1067 (PMID 11331603) abstract: Mdm2 undergoes "rapid ATM-dependent phosphorylation prior to p53 accumulation" at Ser395, and phosphorylated Mdm2 is "less capable of promoting ... degradation". Banin et al. 1998 Science 281:1674 (PMID 9733514) and Canman et al. 1998 Science 281:1677 (PMID 9733515) abstracts: ATM phosphorylates p53 on Ser15. "MDM2 lets go": Shieh et al. 1997 Cell 91:325 (PMID 9363941) abstract: Ser15 phosphorylation "leads to reduced interaction of p53 with ... MDM2". R175H: Kato et al. 2003 PNAS 100:8424, PMC166245, Results with Fig. 4 call R175H a "completely inactive" mutant. The yeast panel included the WAF1, MDM2 and BAX p53 sites (Methods, "Plasmids") | none |
+| 01 | Single cells: malignant CDKN1A 50% -> 19% (-31 points, 95% CI -42 to -19), MDM2 41% -> 10%, TP53 68% both; controls move at most 12 points, all intervals include 0; half-widths about 20 (40 cells) and 7 (400 cells) | simulated, computed in page | BioEssay01.simulateCells seed 1; Newcombe 1998 Stat Med 17:873 method 10, checked against statsmodels 0.14 and Newcombe's Table II | done (audit A1, B1, B2) |
+| 01 | Seed 1 is typical: same control picture in 64 of seeds 1-100 (68% of 1-300); intervals for unchanged cells cover 0 in 96.3% | computed | runChecks | none |
+
+### Essay 02
+
+| Page | Claim | Verdict | Source or derivation | Fix |
+|---|---|---|---|---|
+| 02 | Window chr6:36,662,001-36,702,000, 7 Ensembl genes, 2 protein coding (CDKN1A, RAB44) | real, computed in page | BioLocus regions.cdkn1a (Ensembl overlap, release 116) | none |
+| 02 | CDKN1A exon 1 chr6:36,678,714-36,678,798 = BED chr6 36678713 36678798, 85 bases | real, computed | BioLocus; Ensembl slice in essay-02.json (85 bases); runChecks | none |
+| 02 | PANDAR and DINOL are minus-strand lncRNAs inside the CDKN1A promoter, named for DNA-damage induction | real | Ensembl gene descriptions ("promoter of CDKN1A antisense DNA damage activated RNA", "damage induced long noncoding RNA") | none |
+| 02 | About 1.2 CpG per 100 bp outside islands | computed | page, from hg38 sequence (BioLocus) | none |
+| 02 ("far below what its base composition predicts, because methylated cytosines in CpGs tend to mutate to thymine") | Methylated CpG cytosines tend to mutate to T, depleting CpG | correct (sourced) | Bird 1980 Nucleic Acids Res 8:1499 (PMID 6253938) abstract: "5-methylcytosine (5mC) tends to mutate abnormally frequently to T. This tendency is the likely cause of the CpG deficiency in heavily methylated genomes." Also Deaton and Bird 2011, introduction: "CpG-deficient owing to the mutagenic properties of methylcytosine" | none |
+| 02 | Island rule >= 200 bp, GC >= 50%, obs/exp >= 0.6 | real | UCSC cpgIslandExt description (Gardiner-Garden and Frommer 1987); audit-02 B6 | none |
+| 02 | Main island TSS -246..+1,975 | real, computed | BioLocus (cpgIslandExt; Ensembl TSS 36,678,714, promoter convention) | none |
+| 02 | p53 REs 2,265 and 1,383 bp upstream of the Ensembl TSS; 20 bp each | real, computed | L.p53Sites() (el-Deiry 1995 U24170 sequences in hg38) | none |
+| 02 | phyloP means: exon 1 -0.52; exon 2 CDS 1.32; RE3 1.76 (halves 0.79 / 2.73); LAP3P2 2.38 over 1,454 bp | real, computed | UCSC phyloP100way via BioLocus | none |
+| 02 | 50% of window is repeat (soft-masked) | real, computed | UCSC soft-mask runs (RepeatMasker + TRF) via BioLocus | none |
+| 02 | phyloP from 100 vertebrates; positive = slower than neutral | real | UCSC phyloP100way track description | none |
+| 02 | CDKN1A-201: ATG 5 bp into exon 2; stop ends 50 bp into exon 3; 3' UTR 1,532; introns 5,298 and 1,204; mRNA 2,117; CDS 495; 164 aa | real, computed | Ensembl models via BioLocus; translation in page | none |
+| 02 | CDKN1A-204 starts 2,273 bp upstream; its exon 1 holds the 5' RE; all 3 transcripts give the same 164 aa | real, computed | BioLocus transcripts; R.translate per transcript | none |
+| 02 | MANE Select is agreed by Ensembl and NCBI | real | MANE project (Morales et al. 2022 Nature 604:310) | none |
+| 02 | Reads are 100-150 bases | approximate, general | typical Illumina short-read lengths | none |
+| 02 | 39 simulated reads, 42% carry-chance, about 1 base in 144 miscalled (set 0.6%), 13 of 28 carry T at c.524 | simulated, computed | BioEssay02.simulateReads seed 175; counts from pileup() | none |
+| 02 | R175H VCF 17 7675088 C T, BED chr17 7675087 7675088; VCF-as-BED lands on 7,675,089 G, BED-as-1-based on 7,675,087 G; 0 of 28 reads differ at each | real (coords), computed (reads) | locus.json r175h (Ensembl VEP, ClinVar VCV000012374); Ensembl slice in essay-02.json; runChecks | none |
+| 02 | c.524G>A: CGC (Arg) to CAC (His); TP53 minus strand | real | Ensembl -1 slice CGC (essay-02.json); runChecks | none |
+| 02 | phyloP c.524 6.2; exon 5 mean 3.06; flanking introns -0.09 | real, computed | UCSC phyloP100way via BioLocus | none |
+| 02 | IGV split-screen multi-locus view; IGV colours discordant mates by chromosome; UCSC multi-region | real | igv.org user guide; Thorvaldsdottir et al. 2013 Brief Bioinform 14:178 (audit-02 B3) | none |
+
+### Essay 03
+
+| Page | Claim | Verdict | Source or derivation | Fix |
+|---|---|---|---|---|
+| 03 | Chromosome lengths (24 human, 6 human + 17 mouse in Fig 4) | correct | UCSC hg38.chrom.sizes, mm39.chrom.sizes (audit a03/hg38.sizes, mm39.sizes), now to 0.001 Mb | none |
+| 03 | 68 netMm39 blocks spanning at least 3 Mb of human chr1-6, on 17 mouse chromosomes | correct | audit synteny-check.txt (UCSC API, level-1 fills); asserted in BioEssay03.runChecks | wording "spanning" |
+| 03 | Crossing pairs 1,454 (clockwise numeric), 824 (top to bottom), 670 (barycentre sorted), 591 (sorted and flipped) of 2,278 | computed | BioEssay03: brute force = merge-sort inversion count = circle chord geometry, and equal to the audit's independent prototype | spans filled from the library |
+| 03 | 36 of the 591 crossings join blocks on the same mouse chromosome (49 / 115 / 115 in the other layouts) | computed | BioEssay03.crossings(...).sameMouse | live readout |
+| 03 | Two ribbons cross exactly when, in the dot plot, one block sits above and to the right of the other | correct by construction | both halves read top to bottom; chord interleave = order disagreement on two parallel axes; checked against circle geometry | none |
+| 03 | Mouse 1 takes blocks from human 1, 2, 5 and 6; human 1 sends blocks to mouse 4, 3, 1, 8, 13 | computed | from BLOCKS | spans |
+| 03 | First half of human 4 runs in order along mouse 5 (five blocks) | correct | asserted in runChecks (mouse starts 35.6, 38.5, 59.9, 73.6, 79.4) | none |
+| 03 | Rowley 1973 found the material missing from 22q on the end of 9q, so a translocation rather than a deletion; she could not see anything moving from 9 to 22 | correct in kind | Rowley 1973 Nature 243:290, opening summary paragraph (public on nature.com/articles/243290a0; the body is paywalled). It says the Ph1 "represents a deletion of the long arm of chromosome 22 (22q−)", citing refs 1 and 2: the identification as chromosome 22 was Caspersson et al. 1970 Exp Cell Res 63:238 (PMID 5276176), not Rowley. The 9q+ material is "approximately equal to the amount missing ... suggesting that there may be a hitherto undetected translocation". Rowley proposed the translocation; she did not show it. The claim about 9 to 22 is not in any text I could read. The only open evidence is indirect: de Klein et al. 1982 (PMID 6960256) call their result "a direct demonstration of a reciprocal exchange". The page has three problems: it credits Rowley with identifying chromosome 22 ("found"), it states the translocation as established ("had moved"), and it gives Rowley an unverified reason ("too small to see") | rewrite (see edit 1) |
+| 03 | 1982: ABL moves from chromosome 9 to the Philadelphia chromosome | correct | de Klein et al., "A cellular oncogene is translocated to the Philadelphia chromosome in chronic myelocytic leukaemia", Nature 300:765-767 (1982) (Crossref) | added |
+| 03 ("where it was later found joined to BCR") | ABL1 was later found joined to BCR | correct (sourced) | Groffen et al. 1984 Cell 36:93 (PMID 6319012) abstract: Ph breakpoints cluster within 5.8 kb on chromosome 22, the "breakpoint cluster region" (bcr). The joining itself: Shtivelman et al. 1985 Nature 315:550 (PMID 2989692) abstract, "the transfer of the abl cellular oncogene from chromosome 9 into the bcr gene of chromosome 22 ... a fused transcript of the two genes". Also Heisterkamp et al. 1985 Nature 315:758 (PMID 2989703), "chimaeric bcr/abl mRNA". de Klein 1982 abstract supports the page's preceding sentence ("c-abl sequences are translocated from chromosome 9 to chromosome 22q-") | none (ledger: cite Shtivelman 1985 next to Groffen 1984) |
+| 03 | 17p loss removes one TP53 copy; TP53 mutation plus loss of the other copy is the commonest way a tumor loses p53 | correct in kind | Donehower et al., Cell Reports 28:1370 (2019), TCGA 10,225 patients: "More than 91% of cancers with TP53 mutations show loss of both functional TP53 alleles" (by mutation, deletion or copy-neutral LOH) | new sentence |
+| 03 | Over 91% of TP53-mutant tumors lost the second working copy, in a survey of more than ten thousand tumors | correct | Donehower et al. 2019 (above) | new |
+| 03 | 17p arm ends at the centromere at 22.7 Mb (planted loss covers 0-22.7) | correct | UCSC cytoBandIdeo chr17 acen 22.7-27.4 (page's own band table) | none |
+| 03 | Swapped segments: 9q from ABL1 to qter 7.6 Mb, 22q from BCR to qter 27.6 Mb | computed, approximate | chrom.sizes minus Ensembl gene midpoints (ABL1 130.8, BCR 23.2); real breakpoints lie inside the genes, so true lengths differ by up to about 0.1 Mb | caption says breakpoints are at gene midpoints |
+| 03 | Chromosome 22 gets 77 degrees in Fig 3, 5.4 in Fig 1 | computed | page layout | spans |
+| 03 | Figure 1 SV counts: 30, of which 28 random; 8 translocations (16 ends), chromosomes 3, 4, 12 carry 2 each | computed (simulated) | seeded generator, seed 20260417 | spans |
+| 03 (Fig 1 caption: "Event sizes are exaggerated (2 to 40 Mb) so they show at genome scale") | Simulated SV sizes of 2-40 Mb are exaggerated; most real somatic SVs are smaller | correct in kind | Menghi et al. 2018 Cancer Cell 34:197 (PMID 30017478) abstract: tandem-duplication spans have modes of 11 kb, 231 kb and 1.7 Mb. Li et al. 2020 Nature 578:112 (PCAWG SV), PMC7025897, section on SV signatures: deletion signatures split at "small (<50-kb)" and "large (>500-kb)", and fragile-site deletions "peaked at around 100 kb". All typical sizes are below the simulated 2 Mb floor. No source I read gives a single "most SVs < 1 Mb" figure, so the ledger's "well under 1 Mb" is unsourced. The page doesn't make that claim | none |
+| 03 | Human and mouse lineages split roughly 75 to 90 million years ago | correct (range) | Mouse Genome Sequencing Consortium, Nature 420:520 (2002): about 75 Myr; TimeTree places human-Glires near 90 Mya | unchanged |
+| 03 | MYC event: tandem duplication 124.5-131.0 Mb with log2 1.5 copy gain | simulated, at the real locus | MYC midpoint 127.7 (Ensembl); three copies = log2(3/2) | caption/readout say simulated extent |
+
+### Essay 04
+
+| Page | Claim | Verdict | Source or derivation | Fix |
+|---|---|---|---|---|
+| 04 | Gene models: CDKN1A ENST00000244741 exons, exon 1 85 bp UTR, CDS from +5.4 kb; PANDAR, LAP3P2, DINOL in window | real | BioLocus (Ensembl release 116); spans computed in page | done |
+| 04 | REs at -2265 and -1383, 882 bp apart, 1.4 to 2.3 kb upstream; each 18/20 consensus | real | BioLocus p53Sites, consensusMatches; spans | done |
+| 04 | Simulated reads: RE5 70, RE3 36, intron 22 expected fragments; R175H 10%; promoter open chromatin 2.2-fold, sd 250 bp; 22 fragments/kb; fragments 200 +- 50 bp; seed 4221 | simulated (choices) | page constants, essay-04.js DEFAULTS | captions say simulated |
+| 04 | WT peak 76 fragments vs about 5 flanks; FWHM 200 bp | computed | page spans from the simulation | done |
+| 04 | Caller: lambda_local = max(lambda_BG, 1k, 5k, 10k) from input; Poisson; BH | correct (sourced) | Zhang et al. 2008 Genome Biol 9:R137, PMC2592715, Results section "Peak detection": "λlocal = max(λBG, [λ1k,] λ5k, λ10k) where λ1k, λ5k and λ10k are λ estimated from the 1 kb, 5 kb or 10 kb window centered at the peak location in the control sample". MACS1 estimated FDR empirically by a ChIP/control swap, not by BH. BH is MACS2's method: MACS 2.2.9.1 README, `-q/--qvalue`: "Q-values are calculated from p-values using the Benjamini-Hochberg procedure". MACS2 defaults to only 1 kb and 10 kb windows (README `--slocal`, `--llocal`). The page's "in the spirit of MACS" covers both differences | none |
+| 04 ("The default, q ≤ 0.05, is MACS2's default cutoff") | q <= 0.05 is MACS2's default cutoff | correct (sourced) | MACS 2.2.9.1 bin/macs2 line 247: `add_argument("-q", "--qvalue", ..., default = 0.05, help = "Minimum FDR (q-value) cutoff for peak detection. DEFAULT: 0.05...")`. README, `-q/--qvalue`: "Default is 0.05" | none |
+| 04 | Fig 2 thresholds 7.55 / 16.1 / 50.9; promoter call below 0.95; R175H max 0.29 | computed | caption spans from callPeaks; probe.cjs | done |
+| 04 | Poisson tail and BH match scipy | computed | essay-04 runChecks vs scipy 1.13.1 poisson.logsf, false_discovery_control | done |
+| 04 | ENCODE: caller run loose, IDR across replicates; >= 10 M uniquely mapped reads per replicate; FRiP >= 1%, 787 of 1,052 data sets | real | Landt et al. 2012 Genome Res 22:1813 (PMC3431496) text | done |
+| 04 | Fig 3 verdicts at 10%: 10 lost; first mutant call at 20%; about 35% for both replicates at half; 100% all kept | computed (simulated) | page scan of the slider (p3-result spans) | done |
+| 04 | Zhu 2015: GOF mutants R273H, R248Q, R249S (not R175H) bind KMT2A, KMT2D, KAT6A promoters; WT p53 does not, WT binds CDKN1A, MDM2, BBC3; mutant peaks enriched for ETS motifs; mutants interact with ETS2 | real | Zhu et al. 2015 Nature 525:206 (PMID 26331536, PMC4568559) | prose says "the authors propose" ETS2 recruits |
+| 04 | HGNC symbols BBC3 (PUMA), PMAIP1 (NOXA), KMT2A (MLL1), KMT2D (MLL2), KAT6A (MOZ) | real | HGNC (audit lookup for BBC3/PMAIP1); Zhu 2015 abstract gives the KMT2A/KMT2D/KAT6A aliases | done |
+| 04 | p53 RE = two RRRCWWGYYY separated by 0-13 bp | real | el-Deiry et al. 1992 Nat Genet 1:45 (via audit B8) | done |
+| 04 | JASPAR MA0106.3, 18 columns, in-vitro selection | real | BioLocus jaspar block (HT-SELEX) | done |
+| 04 | Motif ranks: RE5 1st 22.3 bits (next 14.1), RE3 6th 8.5; above it +5829, +3931, -5863, -5324 | computed from real data | BioLocus scan, bg GC 0.507, pseudo 0.8 | done |
+| 04 | ReMap 2022: 115 TP53 data sets with a peak in chr6:36,662,001-36,702,000; support 87 / 38 / 63 / 3 / 0 / 0 | real | UCSC ReMapTFs (reMap2022.bb) via api.genome.ucsc.edu, 2026-10-03, sha256 9cd9481726730248; independent Python count matches (runChecks) | done |
+| 04 | "mostly from cells with wildtype p53, many treated" | real (characterisation) | biosample names in essay-04.json: about 15 of 115 are mutant, null or engineered lines (MOLM-13 mutants, K-562, SaOS-2, MDA-MB-231, Calu-1) | done |
+| 04 | +3931 match is a bound intron-1 site (audit said no reported binding) | corrected | ReMap: 63 of 115 data sets | done |
+| 04 | Shuffle null: 0.85 -> 5 vs 1.0 (1/100 reach); 0.80 -> 15 vs 8.9 (5/100); default 0.845 -> 7 vs 1.4 (0/100) | computed | BioLocus dinucShuffle seeds 1-100 | depends on seeds; stated |
+| 04 | R175 in the zinc-held loops; R248/R273 contact DNA | real | Cho et al. 1994 Science 265:346 (audit) | unchanged |
+| 04 ("open chromatin breaks more easily during shearing"; "every sample, pulled down or not, has extra fragments from open chromatin") | Open chromatin is over-represented in input (shearing) | correct (sourced) | Auerbach et al. 2009 PNAS 106:14926, PMC2736440. Abstract: sonication of cross-linked chromatin maps "locations of high chromatin accessibility in promoter regions". Results, section "Sonicated Chromatin Fragments Reveal Peaks over Promoter Regions": peaks appear in input ("purified without immunoprecipitation ('Input' or 'Sono-Seq' DNA)"), and fragments are "size-selected for regions prone to physical breakage" (introduction) | none |
+
+### Essay 05
+
+| Page | Claim | Verdict | Source or derivation | Fix |
+|---|---|---|---|---|
+| 05 | The moderated t-test is limma's (Smyth 2004), with the abundance trend of limma-trend (Law et al. 2014) | correct (computed) | essay-05.js fitFDist/analyze vs limma 3.68.5 eBayes(lmFit(y, ~group), trend = TRUE) on seeds 35 (2, 3, 8 reps), 11 and 2 (3 reps): d0 equal to 1e-6, p to 1e-10; runChecks against essay-05.json | replaces the 2026-09-27 "as in limma-trend (Ritchie 2015)" row; citations Smyth 2004 SAGMB 3:3 doi 10.2202/1544-6115.1027, Law 2014 Genome Biol 15:R29 |
+| 05 | "d0 = 18.9" (default) and "over 200 experiments with three replicates its median was 19.7, and in 11 of them it was infinite" | correct (computed) | the d0 span is live; median and count from BioEssay05.seedSummary(3, seeds 1-200) | none |
+| 05 | "same d0 and p-values as limma 3.68.5 ... to at least ten significant digits" | correct | scripts/bio-05-limma-ref.mjs output: worst \|log10 p\| difference 1e-11 over all 2,000 genes in each run | none |
+| 05 | A plain t-test "found 4.9 genes on average over 200 simulated experiments, and none at all in 49 of them" (3 reps) | correct (computed) | seedSummary(3, 1-200).plainNMean 4.935, plainZero 49; plainT matches R's pooled t (lmFit coefficient / stdev.unscaled / sigma, pt) to 1e-13 | replaces audit row "almost nothing ... overstated" (the audit's 31.8 counted zero-variance genes as p = 1e-16) |
+| 05 | FC-only list: live "59 of the 209" at default; "26.8% of the list on average over 200 experiments" | correct (computed) | span live; seedSummary(3).fcFDPMean 0.2681 | replaces "around a third" |
+| 05 | At 3 reps "every gene with q ≤ 0.05 already has \|log2 FC\| ≥ 1.08", so "both" repeats "q only" | correct (computed, live) | span computed; over 200 seeds q-only 104.58 vs both 104.54 | none |
+| 05 | At 8 reps, q finds 186 of 221 changed genes, 48 estimated under twofold, and \|log2 FC\| ≥ 1 cuts 195 to 140 (default) | correct (computed, live) | span computed; 200 seeds: q-only 184.0 vs both 142.0 | replaces "finds most ... trimming" |
+| 05 | BH 1995: FDR ≤ q for independent tests; proof gives (m0/m)q | correct (sourced) | Benjamini and Hochberg, JRSS B 57:289-300 (1995), doi 10.1111/j.2517-6161.1995.tb02031.x | citation added |
+| 05 | "a p-value cutoff of 0.05 would let through about 90 unchanged genes" | correct (derived) | 0.05 x ~1,790 unchanged genes = 89.5; live Fig 3 readout at default: 95 | none |
+| 05 | Storey pi0 at lambda = 0.5: "here 0.900, against a true 0.889" | correct (computed, live) | Storey, JRSS B 64:479-498 (2002), doi 10.1111/1467-9868.00346; 200-seed mean 0.893 vs 0.895 | citation added |
+| 05 | Over 200 runs at 3 reps, q = 0.05: mean unchanged share 2.6%, 25 of 200 above 5%, worst 9.2%, 25 with none; at 8 reps 3.8% | correct (computed) | seedSummary(3 and 8, seeds 1-200): qFDPMean 0.02590 / 0.03833; qFDPAbove 25; qFDPMax 0.0924; qFDPZero 25. Recomputed by runChecks | replaces the 2026-09-27 row (3.4%, 7/30), which does not reproduce (audit B1) |
+| 05 | Null genes: p < 0.001 in 0.047% of tests at 3 reps (nominal 0.1%) | correct (computed) | seedSummary(3).null001 0.000472 (8 reps: 0.00074) | none |
+| 05 | Power: 48.5% at 3 reps, 84.4% at 8, 7.1% at 2; CDKN1A missed in 105 of 200 runs at 2 reps | correct (computed) | seedSummary qPowerMean 0.4850 / 0.8444 / 0.0712; cdkn1aCalled at 2 reps 95/200 | replaces "about a quarter" |
+| 05 ("CDKN1A, MDM2, BAX and seven others are direct p53 targets from a census of such genes (Fischer, 2017)"; footer "Table 1") | All ten named genes are in Fischer's Table 1 | correct (sourced; checked by hand) | Fischer 2017 Oncogene 36:3943, PMC5511239, Table 1 "Top 116 genes identified as activated p53 targets in at least 6 out of 16 genome-wide data sets". Parsed from the PMC XML into sources/fischer2017-table1.json, which has 116 genes. Datasets per gene: CDKN1A 16, RRM2B 16, MDM2 15, GADD45A 13, DDB2 13, ZMAT3 12, BAX 11, SESN1 10, TP53I3 10, BBC3 7. Only CDKN1A and RRM2B appear in all 16. Essay 04's other genes are also in the table: BTG2 13, TIGAR 13, PMAIP1 6 | none |
+| 05 | CDKN1A planted "sixfold" fall | correct (derived) | 2^2.6 = 6.06 | none |
+| 05 | "about 20,000 protein-coding genes" | correct (sourced) | Ensembl 116 / GENCODE 50: 19,878 protein-coding (audit) | wording fixed |
+| 05 | DESeq2/edgeR shrink dispersions toward a mean-dispersion trend; DESeq2 shrinks low-count fold changes; independent filtering is on by default | correct in kind | Love et al. 2014 Genome Biol 15:550, PMC4302049. Background: edgeR "moderates the dispersion estimate ... toward a local estimate from genes with similar expression strength". "Empirical Bayes shrinkage for dispersion estimation": "We then shrink the gene-wise dispersion estimates toward the values predicted by the curve". "Empirical Bayes shrinkage for fold-change estimation": MAP LFCs "biased toward zero in a manner that removes the problem of exaggerated LFCs for low counts". "Automatic independent filtering": genes "that have little or no chance of being detected" are omitted, with the threshold chosen by default. Current software differs on one point. DESeq2 NEWS 1.16.0: "DESeq() and nbinomWaldTest() the default setting will be betaPrior=FALSE, and the recommended pipeline will be to use lfcShrink() for producing shrunken LFC". So fold-change shrinkage is now a separate step and the default results do not shrink. Independent filtering is still the default (R/results.R line 313, `independentFiltering=TRUE`). Bourgon et al. 2010 PNAS 107:9546 (PMID 20460310) abstract describes the method | reword (see edit 2) |
+| 05 | TREAT tests against a fold-change threshold | correct (sourced) | McCarthy and Smyth, Bioinformatics 25:765 (2009), doi 10.1093/bioinformatics/btp053 | new |
+| 05 | Fig 3 strip: 50 reruns (seeds 1-50) at current reps and q | computed live | readout at default: mean 3.0%, 9 of 50 above q | none |
+
+### Essay 06
+
+| Page | Claim | Verdict | Source or derivation | Fix |
+|---|---|---|---|---|
+| 06 | Fig 1 matrix simulated; 10 up, 10 down, 10 no-pattern genes, 5 control / 5 treated, shuffled then named | by construction | BioEssay06.geneMatrix (seed 6) | caption says simulated |
+| 06 | Correlation distance with average linkage is the standard pairing for expression data (Eisen et al. 1998) | correct | Eisen, Spellman, Brown, Botstein, PNAS 95:14863 (1998), doi 10.1073/pnas.95.25.14863 | cited |
+| 06 | Fig 1 tree: up genes one pure branch at 1 - r = 0.23; 9 of 10 down genes at 0.31; top column split = condition | computed | page spans; runChecks; heights equal scipy linkage(average, correlation) to 2e-16 | none |
+| 06 | Default cut 0.60: up and down groups whole, carrying 1 and 2 no-pattern genes; other 7 single or small | computed | page spans from cutTree | none |
+| 06 | Gene baselines log2 4.2 to 10.5 outweigh the treatment (+-2) | computed | page spans | none |
+| 06 | Cohort: 100 patients, A 40 / B 12 / C 18 (6 partial) / D 30; C TP53-wildtype, no MDM2 amp | by construction | BioCohort default (fingerprint 6e3ed479) | none |
+| 06 | MDM2 protein marks p53 for destruction; CDKN1A promoter methylation silences it while p53 is intact | correct (as routes) | foundation ledger (Momand 1998; Roman-Gomez 2002) | none |
+| 06 | 50 lowest-CDKN1A patients: 32 A, 7 B, 11 C | computed | page spans | none |
+| 06 | Partial C: beta 0.33, CDKN1A 6.14; D 0.08 / 7.21; full C 0.72 / 4.98 (means) | computed | page spans (beta = mean of the 4 CpGs) | none |
+| 06 | Four CpGs at -42, +221, +476, +659 from the Ensembl canonical TSS (chr6:36,678,672 / 934 / 36,679,189 / 372) are CG dinucleotides in the island | real | locus.json (UCSC hg38), scripts/bio-06-reference.mjs; runChecks re-reads in node | none |
+| 06 | Consensus: 80% subsamples, k-means (k-means++, best of 3), 50 reps, seed 90210, average linkage on 1 - M | method | BioCohort.consensus; Monti et al. 2003 Mach Learn 52:91 | none |
+| 06 | 15 features: 6 expression, 4 CpG, 4 CN, TP53 mutation call; continuous z-scored and capped at 3 SD | by construction | BioCohort.features | none |
+| 06 | PAC = share of pairs with consensus in (0.1, 0.9) | correct | Senbabaoglu, Michailidis, Li, Sci Rep 4:6207 (2014), doi 10.1038/srep06207; runChecks hand example | none |
+| 06 | Cohort PAC lowest at k = 4 (0.024); 92/100 in the cluster named after their planted subtype | computed | page spans; runChecks | none |
+| 06 | Blocks A mean 0.98 (min 0.72), D 0.97 (min 0.81); B, full C, D recovered whole; P010, P020 (A) join D | computed | page spans; runChecks | none |
+| 06 | All 6 partial C join D; mean consensus 0.93 with D, 0.05 with full C | computed | page spans; runChecks | none |
+| 06 | At k = 5 the extra cluster is 5 TP53-mutant tumours | computed | page span | none |
+| 06 | Gaussian noise with the cohort's covariance: best k = 2 in 10/20 draws; draw 15 PAC 0.040 at k = 2 | computed | page spans (seeds 1..20); runChecks asserts some draw < 0.1 at k = 2 | none |
+| 06 | Cohort PAC at k = 4 below all 20 noise draws (0.25 to 0.51); at k = 2 inside the noise range | computed | page spans; runChecks | none |
+| 06 | Consensus clustering finds stable-looking clusters in unimodal data | correct | Senbabaoglu et al. 2014 | cited |
+| 06 | Feature-shuffled cohort PAC above 0.58 at every k | computed | page span; runChecks (> 0.5) | none |
+| 06 | 08 follows these patients and splits survival by subtype | cross-page | 08 working tree line 126 (another agent's commit) | re-check after 08 lands |
+| 06 | Oncoprint colours follow cBioPortal | colours by convention | foundation ledger | footer reworded |
+
+### Essay 07
+
+| Page | Claim | Verdict | Source or derivation | Fix |
+|---|---|---|---|---|
+| 07 | 500 simulated cells, 100 of each of five types, 24 genes; four genes (PTPRC, ACTB, MALAT1, B2M) in every cell | correct (generator) | essay-07.js simulateCells/fraction; runChecks "500 cells x 24 genes, 100 per type" | captions say simulated |
+| 07 | Gradients: naive (CCR7) to memory (S100A4) T cells; classical (CD14) to non-classical (FCGR3A) monocytes | correct (markers); levels simulated | Seurat PBMC3k marker table (IL7R/CCR7 naive CD4 T, IL7R/S100A4 memory, CD14/LYZ, FCGR3A/MS4A7, GNLY/NKG7, MS4A1, FCER1A/CST3) | none |
+| 07 | Library size differs 17-fold; 39% of the matrix is zero | computed (span) | page from SIM; lognormal median 2000, sd 0.45 | none |
+| 07 | Normalization log(1 + 10,000 x count / library size) is Seurat's default, and the Scanpy tutorials do the same | correct | satijalab.org/seurat/reference/normalizedata (LogNormalize, scale.factor 10000, log1p); scanpy PBMC3k tutorial normalize_total(target_sum=1e4), log1p (fetched 2026-10-03) | none |
+| 07 | Raw counts: within-type 24-gene distance correlates with library-size difference r = 0.74; normalized 0.00 | computed (span) | page; Pearson over within-type pairs, distance against abs(log lib_i/lib_j) | none |
+| 07 | t-SNE settings: perplexity 30, early exaggeration 12 for 250 iterations, momentum 0.5 then 0.8, lr = max(n/12/4, 50) = 50, 1,000 iterations, min gain 0.01; scikit-learn's default init is PCA | correct | scikit-learn 1.6.1 sklearn/manifold/_t_sne.py lines 602-617, 818, 835, 874-877, 1082, 1112, 1173 | none |
+| 07 | KL changes 0.3% over the final 100 iterations (0.626 to 0.624) | computed (span) | page; check: KL 1000 vs 2000 iterations 0.6240 vs 0.6162; sklearn exact from same start 0.6189 | none |
+| 07 | Every browser draws the same map | verified Chromium = node; by construction elsewhere | runChecks fingerprints 6f2f2a7a (cells), f4593058 (moons) pass in node and in Chromium's test runner; dmath avoids implementation-approximated Math functions | host check in Firefox/Safari |
+| 07 | 100% of each cell's 10 map neighbors share its type; 100% in 24 genes | computed (span) | page groupScore | none |
+| 07 | t-SNE: van der Maaten and Hinton 2008 | correct | JMLR 9:2579-2605 | none |
+| 07 | Fig 2 at noise 0.3: PCA 100%, t-SNE all-12 94% | computed (span) | page; default seed 1, perplexity 30 | none |
+| 07 | PC2 becomes a noise direction at noise 0.40; PCA drops to 72%; 50% at 0.9 | computed (span) | page PCA sweep 0.2-0.9; abs(r(PC2, moon height)) 0.78 at 0.35, 0.01 at 0.40 | none |
+| 07 | Height has the smaller variance of the moon dimensions; largest sample variance of 10 noise dims over 200 points is about 1.5x their true variance | correct (derived) | moon-x var 0.75, height 0.245; Marchenko-Pastur edge (1 + sqrt(10/200))^2 = 1.497 | none |
+| 07 | t-SNE all-12: 82% at 0.4, 78% at 0.5, 61% at 0.9 (perplexity 30, first start) | correct (deterministic) | node grid (scratchpad p07/grid2.js) equals browser bit for bit; interact-*.txt shows 82/78/61 | none |
+| 07 | Below the step, t-SNE on top 2 PCs scores 98-100% at every perplexity 5-80 | correct | grid noise 0.2-0.35 x perplexity {5,15,30,50,80} x seeds 1-3: min 98.15% | none |
+| 07 | From 0.4 to 0.5, top-2-PC input 72-74%, all-12 74-88% | correct | same grid | none |
+| 07 | Averaged over 3 starts, all-12 beats top-2-PC from 0.4 to 0.5 at every perplexity, at 0.5/80 by about one point | correct | grid mean differences 1.2 (0.5, p80) to 14.3 points | none |
+| 07 | Pipelines run t-SNE/UMAP on top 10 to 50 PCs | correct | Seurat PBMC3k dims 1:10; scanpy pp.neighbors n_pcs default 50 (audit) | none |
+| 07 | Distances between islands and island sizes not trustworthy | correct | Wattenberg, Viegas, Johnson, Distill 2016 | cited inline |
+| 07 | T-cell island's long axis follows the gradient, r = 0.89 | computed (span) | page; abs Pearson of first PC of the island's 2-D coords against simulated s | none |
+| 07 | 47% of a cell's 10 nearest in 24 genes are among its 10 nearest on the map; about the same in B (no gradient) as T | computed (span) / measured | page; per type (node): T 0.49, NK 0.45, B 0.46, Mono 0.51, DC 0.45 | none |
+| 07 | Recall at k = 10: t-SNE 47%, PCA 19%; at k = 100, 99%; curves cross at k = 124 | computed (span) | page recallCurve; library check matches numpy on the same layouts | none |
+| 07 | Pairwise rank correlation PCA 0.88, t-SNE 0.47; type centers 0.95 and -0.19 | computed (span) | page; scipy spearmanr reference in essay-07.json | none |
+| 07 | Monocyte and dendritic share LYZ and CST3; closest pair of types in 24 genes; still closest on PCA, fifth of ten on t-SNE | correct (generator); computed | fraction table; page rankOf over 10 centroid distances | none |
+| 07 | Random layout recall about k/499; 124,750 pairs | correct (arithmetic) | n = 500 | none |
+| 07 | Around 20,000 genes | correct (protein-coding) | GENCODE 50: 19,442 protein-coding (audit) | none |
+
+### Essay 08
+
+| Page | Claim | Verdict | Source or derivation | Fix |
+|---|---|---|---|---|
+| 08 | All counts, medians, p-values, HRs, band widths, weights, I², τ², LOO and Egger numbers in prose and captions | computed in page | `data-n` spans filled from BioCohort and BioEssay08 at load; methods checked in essay-08.js runChecks against R survival (survfit log-log, survdiff, coxph Breslow), R lm, scipy, and the BCG DL example | none |
+| 08 | Median CDKN1A split: p 0.014, HR 1.97 (1.13 to 3.43); GAPDH p 0.25; 4 clusters p 0.141 (3 df); routes vs intact p 0.057, HR 1.80 (0.98 to 3.32) | correct | R survival on temp/bio-audit/f08/cohort.csv with clusters.txt from 06's settings (cohort-ref.R) | none |
+| 08 | Given CDKN1A, adding clusters is not significant (LR p 0.071); TP53 HR 0.99 (p 0.97) | correct | R coxph: loglik −208.1251 vs −204.6142, 3 df; TP53 coef −0.0108, se 0.3137 | none |
+| 08 ("Altman, Lausen, Sauerbrei and Schumacher (1994) showed what that does to the p-value ... a marker with no effect at all reaches p < 0.05 much more often than one time in twenty") | The minimum p over cuts from the 10th to 90th percentile is far too small; a null marker reaches p < 0.05 much more often than 1 in 20 | correct (sourced) | Citation details confirmed in PubMed 8182763: J Natl Cancer Inst 1994 Jun 1;86(11):829-35, doi 10.1093/jnci/86.11.829, authors in the page's order. The full text is closed, so the result is confirmed through its first author. Altman 1998 Br J Cancer 78:556-557 (letter, PMC2063091, Europe PMC scanned text) summarizes Altman et al. 1994: "(a) because of multiple testing the false-positive rate is around 40% rather than the nominal 5%; (b) the P-value is far too small (P = 0.002 corresponds to a genuine P = 0.05)". The 10% to 90% range: Hollander, Sauerbrei and Schumacher, Freiburg preprint pre73, pp. 15-16: "the simple formula given by Altman et al. (1994) ... all values between the 10%- and 90%-quantile". Altman and Royston 2006 BMJ 332:1080 (PMC1458573) say the minimum-P cutpoint "runs a high risk of a spuriously significant result", citing the 1994 paper. The page's permutation rate (43%) matches "around 40%" | none (the page could quote "around 40%" with Altman 1998 as the source, but doesn't need to) |
+| 08 ("a smallest p of 0.002 over this range corresponds to about …") | Correction formula; 0.002 corresponds to about 0.05 | correct (sourced) | Altman 1998 (above): "P = 0.002 corresponds to a genuine P = 0.05". Formula from Hollander et al. pre73, eq. 3 (Lausen and Schumacher 1992). Recomputed: z = 3.090, φ(z) = 0.003367, (z − 1/z) log(81) φ(z) = 0.0409, plus 4φ(z)/z = 0.0044, total 0.045 | none |
+| 08 | Permutation 5% point of the minimum p is about 0.0015; corrected CDKN1A p 0.029, GAPDH 0.18 | computed; Monte Carlo | B = 2,000, seeds 81/82; across seeds CDKN1A corrected 0.019 to 0.030, q05 0.0014 to 0.0026 at B = 1,000 (narrower at 4,000) | "about" in prose |
+| 08 | RECIST: PR −30%, PD +20% from nadir or new lesion, CR = all target lesions gone | correct | Eisenhauer et al. 2009 Eur J Cancer 45:228 (via audit-08, foundation ledger) | none |
+| 08 | TP53-mutant tumors have higher TMB in real cohorts; tobacco raises TMB and causes TP53 mutations | correct | PMC9542347, PMC7546539; Pfeifer et al. 2002 Oncogene 21:7435 (via audit-08) | none |
+| 08 | I² = share of variation from real differences | correct | Higgins and Thompson 2002 Stat Med 21:1539 | none |
+| 08 | DerSimonian-Laird τ² added to every study's variance flattens weights | correct (method) | DerSimonian and Laird 1986 Control Clin Trials 7:177; checked on the BCG trials (τ² 0.3088, pooled −0.7141) | none |
+| 08 | Funnel asymmetry has causes other than publication bias, heterogeneity among them | correct | Sterne et al. 2011 BMJ 343:d4002 (via audit-08) | none |
+| 08 | Egger intercept sign: bias toward strong negative effects gives a negative intercept | derivation | Egger et al. 1997 BMJ 315:629: y/se on 1/se; small studies with spuriously large negative effects have large negative y/se at small 1/se, so the intercept is negative | none |
+| 08 | Response depends on p53 activity, survival on CDKN1A and stage; censoring non-informative | simulation choice | BioCohort truth model (cohort.js header) | prose says "in this simulation" |
+| 08 | Meta-analysis studies A to H | simulated | generic names, invented n and true effects (unchanged generator, seed 20260411) | none |
+
+## 2026-09-27 fact-check leads (superseded where the figure was rebuilt)
 
 | Page | Claim | Verdict | Source or derivation | Fix |
 |---|---|---|---|---|
