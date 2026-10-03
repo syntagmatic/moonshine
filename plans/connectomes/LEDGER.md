@@ -15,6 +15,7 @@ The deep-research report in `research/REPORT.md` is not a source; see
 | `docs/connectomes/shared/data/worm-varshney.json` | WormAtlas `NeuronConnect.xls` (edges; rows S and Sp give the 2,194 directed chemical pairs, 6,394 synapses; EJ rows give 514 gap-junction pairs, 887 junctions) and `NeuronType.xls` (279 neurons, soma position 0 to 1 along the body), both from Varshney et al. 2011; 3D cell-body positions from OpenWorm `c302_A_Full.net.nml`; roles (s/i/m) from NemaNode `/api/cells` (AVH, AVK, RID are "n" only there and are set to interneuron). Fetched 2026-10-01. | `scripts/connectomes/fetch-worm.py` |
 | `docs/connectomes/shared/data/worm-anchors.json` | WormAtlas `NeuronFixedPoints.xls` (Chen, Hall & Chklovskii 2006): 650 rows `Neuron, Landmark, Landmark Position, Weight`; VC06 (not among the 279) dropped, leaving 649 anchors on 199 neurons; landmarks "Sensory"/"SensoryNB" are sensory endings (weight 1), the rest body-wall muscles plus MANAL (weights are the M_il of Chen et al. Eq. 3, some fractional). Fetched 2026-10-01. | `scripts/connectomes/fetch-wire.py` |
 | `docs/connectomes/shared/data/macaque-fln.json` | FLNe: Markov et al. 2014 Cereb Cortex supplementary table (`Cercor_2012 Table.xls`, core-nets.org via the Internet Archive, 1,989 rows, 39 injections, 29 targets); distances: Markov et al. 2014 J Comp Neurol Table 2 (`JCN_2013 Table.xls`, 628 pathways into 11 targets). Nine area spellings mapped (8L, ENTORHINAL, PERIRHINAL, PIRIFORM, SUBICULUM, TEMPORAL_POLE, INSULA, Parainsula, CORE); after mapping every distance pathway has FLNe and vice versa. Repeat injections (V1 5, V2 3, V4 2) averaged with 0 for an unlabelled injection (16 pathways affected). Same fit as the INM-6 multi-area-model CSV copy. | `scripts/connectomes/fetch-wire.py` |
+| `docs/connectomes/shared/data/larva-winding.json` | Winding et al. 2023 (Science 379, eadd9330), Europe PMC author manuscript PMC7614541 (CC BY): Data S1 `ad_connectivity_matrix.csv` (axon to dendrite, 2,952 neurons, rows presynaptic; 63,545 connections, 234,958 synapses) as a delta-encoded CSR, and Data S2 cell types. Seed sets: the authors' CATMAID meta-annotations `mw olfactory` ... `mw respiratory` (public L1 CNS project), asserted equal to S2's modality labels. Output flags from `mw dVNC`, `mw dSEZ`, `mw RGN` (182, 184, 54 in the matrix; 20 of the DN-SEZ are typed CN, LHN, MBON or MB-FBN in S2). Fetched 2026-10-02. | `scripts/connectomes/fetch-larva.py` |
 
 ## Article 3: Surprising Compared to What?
 
@@ -128,3 +129,46 @@ Data: the same `worm-varshney.json`. Library additions in `shared/graph.js`: `ei
 | Newman and Girvan 2004 modularity; Fortunato and Barthelemy 2007: pairs of cliques beat single cliques iff (number) > (size)(size - 1) + 2, Eq. 20; sqrt(2L) bound, Eq. 21 | S | Phys Rev E 69, 026113; PNAS 104, 36 (paper writes n cliques of m nodes; the page uses m cliques of k nodes) |
 
 Source detail with quotes and URLs: `research/check/sources-05.md` (verification pass of 2026-10-02).
+
+
+## Article 6: Which Way Signals Flow
+
+Data: `worm-varshney.json`, `larva-winding.json`. Library additions in `shared/graph.js`: `springRank` (conjugate gradient), `flowStats`, `randomDirections`, `cascade`, `decodeCSR`, `firstHop`; `runChecks` covers them (path graph, dense solve, undirected = both directions, pair totals kept, p = 1 cascade = BFS with stop nodes, one-connection crossing probability, first hop, CSR decode) and `flowChecks` pins the shipped data against numpy (`tests/connectomes.html`, 73/73).
+
+| Claim | Type | How we know |
+|---|---|---|
+| 233 reciprocal pairs, about four times what the degrees produce | C | article 3 ledger (62 under degree-preserving rewiring, ratio 3.8) |
+| SpringRank energy, Eq. 3 and 5, alpha as a spring to the origin, alpha matters less as networks get denser; sparse solvers handle millions of edges in seconds | S | De Bacco et al. 2018 Sci Adv 4, eaar8260 (`research/check/sources-06.md`) |
+| Direction-shuffling null keeps A_ij + A_ji | S | same, "Statistical significance" section |
+| 89% of synapses run down; energy 0.198 (alpha 0, chemical) | C | `flowChecks` 0.8896, 0.1976 equal to numpy; figure 1 readout |
+| Shuffled: 58% down, energy 0.48 | C | node, 100 graphs: 0.5803 +/- 0.0049, 0.4784 +/- 0.0018; figure readout over 20 graphs 58.0%, 0.478 |
+| 101 sensory, 73 inter, 105 motor neurons | C | node count of NemaNode roles in the shipped file |
+| 3 of 105 motor neurons above the median interneuron; interneuron outranks motor neuron 94% of the time; sensory outranks inter 71%; 12 of 73 interneurons above the median sensory neuron | C | node: AUC 0.935, 0.710 (pairwise comparison), counts 3 and 12 |
+| AIN and AIM near the top with almost no chemical input | C | AINL 0 input synapses (rank 5), AINR 2 (11), AIML 4 (12), AIMR 2 (8) |
+| AVA, AVB, AVE rank 171st to 187th of 279 | C | AVAL 187, AVAR 183, AVBL 171, AVBR 182, AVEL 176, AVER 173 |
+| Head motor RMD, SIA, SIB lower still, with the cord motor neurons | C | class mean ranks RMD 210, SIA 199, SIB 222; VB 214, DB 223, VA 227 (AVA 185) |
+| Spectral order of part 5 put them with head neurons | C | article 5 ledger |
+| VD and DD at the bottom; 84% of their input synapses from cord motor neurons (VA, VB, DA, DB, AS, VD, DD); most output in NMJs listed separately | C | class mean ranks VD 252, DD 272; 866 of 1,027 input synapses; WormAtlas NeuronConnect.xls has 153 NMJ rows (VD09 28, DD03 32 NMJs; DD05 1) not in the chemical graph |
+| 11% of synapses run up (706 of 6,394; 438 of 2,194 connections) | C | node |
+| Heaviest up: AVAL -> PVCL 10 (also AVAR -> PVCL 7, AVAL -> PVCR 6), SMD and RMD -> RIA; RIA sends SMD/RMD 174 synapses, gets 46 | C | node list of upward edges by weight; class sums |
+| PLML: one chemical synapse, no inputs, three gap junctions; rank 1 at alpha 0, 21 at alpha 1, 85 at alpha 3, 80 with gap junctions | C | node and figure readout |
+| Large alpha: s -> (d_out - d_in) / alpha; that order sends 77% down; rank correlation with the alpha = 0 order about 0.6 | D, C | Eq. 5 with alpha dominant; node: 0.7740 (limit), 0.777 at alpha 1000; Spearman 0.595 at alpha 1000, 0.580 at 1e5 (numpy 0.573 with ties in d_out - d_in) |
+| Gap junctions: range 4.2 to 3.1, 88% down; DVB 71st to 138th | C | node: 4.196 vs 3.064; 0.8833 (`flowChecks`); DVB ranks |
+| Gap junction both ways = level-pulling spring | D | (s_i - s_j - 1)^2 + (s_j - s_i - 1)^2 = 2(s_i - s_j)^2 + 2 |
+| 3,016 neurons (480 input, 2,536 brain), about 548,000 synapses | S | Winding et al. 2023 |
+| Released matrix 2,952 neurons; a-d 63,545 connections, 234,958 synapses; a-d is most of the network | C, S | `flowChecks`; all-all has 110,677 connections and 352,611 synapses (`research/check/datasets.md`); paper: "dominant synaptic network" |
+| Cascade definition: p = 0.05 per synapse, each neuron active once, outputs stop, 1,000 runs, 8 hops, reached in most runs; a-d graph | S | paper methods and code (`sources-06.md`) |
+| Brain is ten times larger than the worm's 279 | D | 3,016 / 279 = 10.8 |
+| Olfactory and external gustatory reach more than 450 brain neurons within two hops; mean hop 3.4 and 3.3 | C | figure default (seeds k + 1): 471 and 475; 3.39 and 3.33 (numpy 3.382, 3.332) |
+| Proprioceptive, mechano II/III, respiratory last at about 6 hops | C | 6.03, 6.09, 6.02 (numpy 6.052, 6.085, 6.009) |
+| Median hop to DN-VNC 4 for smell and taste, 6 for proprioception and respiration | C | figure readout; equal in numpy |
+| Paper: shortest paths for olfaction and gustation, longest for ascending somatosensory; DN-VNC in 3 to 6 hops, rarely more than 8 | S | Winding et al. 2023 |
+| Paper 12% unimodal (8 hops); page 11.7% | S, C | paper text; `flowChecks` (numpy 11.8%). Their pipeline uses pair averaging and UpSet exclusions; ours is "exactly one modality" without pairing |
+| p 0.025: 23.6%; p 0.1: 5.4%; threshold 0.75: 17.3%; 0.25: 6.2%; grid range 3.1% to 23.9%; olfactory mean hop 2.8 to 3.9 | C | node runs of the page's cascade at each setting (seeds k + 1); figure readout at p 0.1 gives 5.4% |
+| Olfactory and both gustatory the three shallowest at all nine settings; respiratory, proprio, mechano II/III always among the four deepest | C | node: mean hop of reached brain neurons per modality, p in {0.025, 0.05, 0.1} x threshold in {0.25, 0.5, 0.75} |
+| Paper's lowest-order layering: 545 (21%) 2nd, 1,410 (56%) 3rd, 377 (15%) 4th, 16 (<1%) 5th; none more than 4 hops | S | Winding et al. 2023 results |
+| At published settings some neurons are first reached only at hop 7 or 8 | C | earliest hop over modalities, default: 13 at hop 7, 4 at hop 8 |
+| Five-hop pathway shown functional; no 6- to 8-hop pathway tested | S | Winding et al. 2023 |
+| Independent cascade model: Goldenberg, Libai & Muller 2001 | S | Winding et al. ref. 120 |
+
+Source detail with quotes: `research/check/sources-06.md` (verification pass of 2026-10-02).

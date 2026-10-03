@@ -21,6 +21,10 @@
 //                  swap among themselves and stay one-way, mutual pairs swap among
 //                  themselves (Milo et al. 2002's null)
 //
+// Flow: SpringRank (De Bacco, Larremore and Moore 2018) by conjugate gradient, the
+// share of weight running down a ranking, their direction-shuffling null, and the
+// signal cascade of Winding et al. 2023 on a CSR graph.
+//
 // The whole library is one factory so a page can rebuild it inside a Worker
 // from GraphLib.factory.toString(). Works in the browser (window.GraphLib)
 // and in node (module.exports).
@@ -576,6 +580,136 @@
     return { internal: internal / alpha, external };
   }
 
+  // ---- flow: SpringRank and signal cascades ----
+
+  // SpringRank (De Bacco, Larremore and Moore 2018). Every directed edge [i, j, w]
+  // is w springs of rest length 1 pulling s_i one unit above s_j; alpha pulls every
+  // node toward 0. The ranks minimise
+  //   1/2 sum w (s_i - s_j - 1)^2 + alpha/2 sum s_i^2,
+  // so [D_out + D_in - (A + A^T) + alpha I] s = d_out - d_in (their Eq. 5). Undirected
+  // edges (gap junctions) go in both directions, which nets to a spring of rest length 0
+  // and stiffness 2w. The matrix is a sparse Laplacian plus alpha I; conjugate gradient
+  // from 0 stays orthogonal to the constant vector, so alpha = 0 gives the mean-zero
+  // solution of their Eq. 3. Returns { s, iters }.
+  function springRank(n, edges, { alpha = 0, undirected: und = [], tol = 1e-12, maxIter = 10000 } = {}) {
+    const all = edges.concat(und.flatMap(([a, b, w]) => [[a, b, w], [b, a, w]]));
+    const diag = new Float64Array(n).fill(alpha), rhs = new Float64Array(n), nb = new Map();
+    for (const [i, j, w] of all) {
+      diag[i] += w; diag[j] += w; rhs[i] += w; rhs[j] -= w;
+      const k = key(Math.min(i, j), Math.max(i, j));
+      nb.set(k, (nb.get(k) || 0) + w);
+    }
+    const off = new Int32Array(n + 1);
+    for (const k of nb.keys()) { off[Math.floor(k / 65536) + 1]++; off[k % 65536 + 1]++; }
+    for (let i = 0; i < n; i++) off[i + 1] += off[i];
+    const col = new Int32Array(off[n]), val = new Float64Array(off[n]), fill = off.slice(0, n);
+    for (const [k, w] of nb) {
+      const a = Math.floor(k / 65536), b = k % 65536;
+      col[fill[a]] = b; val[fill[a]++] = w; col[fill[b]] = a; val[fill[b]++] = w;
+    }
+    const mul = (x, y) => {
+      for (let i = 0; i < n; i++) {
+        let t = diag[i] * x[i];
+        for (let k = off[i]; k < off[i + 1]; k++) t -= val[k] * x[col[k]];
+        y[i] = t;
+      }
+    };
+    const s = new Float64Array(n), r = Float64Array.from(rhs), p = Float64Array.from(rhs), q = new Float64Array(n);
+    const dot = (x, y) => { let t = 0; for (let i = 0; i < n; i++) t += x[i] * y[i]; return t; };
+    let rr = dot(r, r), it = 0;
+    const stop = tol * tol * Math.max(rr, 1e-300);
+    for (; it < maxIter && rr > stop; it++) {
+      mul(p, q);
+      const a = rr / dot(p, q);
+      for (let i = 0; i < n; i++) { s[i] += a * p[i]; r[i] -= a * q[i]; }
+      const rn = dot(r, r);
+      for (let i = 0; i < n; i++) p[i] = r[i] + (rn / rr) * p[i];
+      rr = rn;
+    }
+    if (alpha === 0) { const m = mean(s); for (let i = 0; i < n; i++) s[i] -= m; }
+    return { s, iters: it };
+  }
+
+  // Share of the weight of directed edges [i, j, w] that runs from a higher s to a
+  // lower one ("down" the ranking), and the SpringRank energy per unit weight,
+  // 1/(2M) sum w (s_i - s_j - 1)^2 (their test statistic, without the alpha term).
+  function flowStats(s, edges) {
+    let down = 0, tot = 0, h = 0;
+    for (const [i, j, w] of edges) { tot += w; if (s[i] > s[j]) down += w; h += w * (s[i] - s[j] - 1) ** 2; }
+    return { down: down / tot, energy: h / (2 * tot) };
+  }
+
+  // Their null for the energy test: keep the number of edges between every pair,
+  // A_ij + A_ji, and give each one a direction by a fair coin.
+  function randomDirections(edges, r) {
+    const pair = new Map();
+    for (const [i, j, w] of edges) { const k = key(Math.min(i, j), Math.max(i, j)); pair.set(k, (pair.get(k) || 0) + w); }
+    const out = [];
+    for (const [k, t] of pair) {
+      const a = Math.floor(k / 65536), b = k % 65536;
+      let f = 0;
+      for (let u = 0; u < t; u++) if (r() < 0.5) f++;
+      if (f) out.push([a, b, f]);
+      if (t - f) out.push([b, a, t - f]);
+    }
+    return out;
+  }
+
+  // Signal cascade (Winding et al. 2023; their code: mwinding/connectome_tools,
+  // traverse/cascade.py). Seeds are active at hop 0. At each hop every active node
+  // that is not a stop node tries each out-edge [i -> j, w synapses] once, succeeding
+  // with probability 1 - (1 - p)^w (each synapse transmits with p); targets active at
+  // an earlier hop are dropped, so a node is active at most once per run. Stop nodes
+  // (brain outputs) become active but do not pass the signal on. g: { n, off, to, w }
+  // with to decoded (absolute column indices). Returns hits, a Float64Array n x hops
+  // (hops = 9 for levels 0..8) of the share of runs in which node v was active at hop h,
+  // at hits[v * hops + h].
+  function cascade(g, seeds, stop, { p = 0.05, runs = 1000, hops = 9, seed = 1 } = {}) {
+    const { n, off, to, w } = g, r = rng(seed);
+    const q = Float64Array.from(w, x => 1 - (1 - p) ** x);
+    const hits = new Float64Array(n * hops), seen = new Int32Array(n).fill(-1);
+    let cur = new Int32Array(n), nxt = new Int32Array(n);
+    for (let run = 0; run < runs; run++) {
+      let nc = 0;
+      for (const s of seeds) if (seen[s] !== run) { seen[s] = run; cur[nc++] = s; }
+      for (let h = 0; h < hops && nc; h++) {
+        let nn = 0;
+        for (let k = 0; k < nc; k++) {
+          const v = cur[k];
+          hits[v * hops + h]++;
+          if (stop[v]) continue;
+          for (let e = off[v]; e < off[v + 1]; e++) {
+            const t = to[e];
+            if (seen[t] === run) continue; // active now, earlier, or already hit this hop
+            if (r() < q[e]) { seen[t] = run; nxt[nn++] = t; }
+          }
+        }
+        [cur, nxt] = [nxt, cur]; nc = nn;
+      }
+    }
+    for (let i = 0; i < hits.length; i++) hits[i] /= runs;
+    return hits;
+  }
+
+  // Decode the delta-encoded CSR of larva-winding.json into absolute column indices.
+  function decodeCSR({ off, to, w }) {
+    const n = off.length - 1, col = new Int32Array(to.length);
+    for (let i = 0; i < n; i++) for (let k = off[i], j = 0; k < off[i + 1]; k++) { j = k === off[i] ? to[k] : j + to[k]; col[k] = j; }
+    return { n, off: Int32Array.from(off), to: col, w: Int32Array.from(w) };
+  }
+
+  // The hop at which each node counts as reached: the first h >= 1 at which the share
+  // of runs that have reached it by hop h is at least theta (the paper's threshold is
+  // half the runs, summed over hops 1..8). -1 if never.
+  function firstHop(hits, n, hops, theta, from = 1) {
+    const out = new Int8Array(n).fill(-1);
+    for (let v = 0; v < n; v++) {
+      let c = 0;
+      for (let h = from; h < hops; h++) { c += hits[v * hops + h]; if (c >= theta - 1e-12) { out[v] = h; break; } }
+    }
+    return out;
+  }
+
   // ---- checks (node: require(...).runChecks()) ----
   function runChecks(log = console.log) {
     const res = [];
@@ -706,6 +840,48 @@
     ok('linfit slope 2.2, intercept 0.7, R^2 1 - 1.8 / 26', near(lf.slope, 2.2, 1e-12) && near(lf.intercept, 0.7, 1e-12) && near(lf.r2, 1 - 1.8 / 26, 1e-12), lf.r2.toFixed(6));
     ok('rho = xi / (1 + xi) is the same as c = 1', avgControl(W4, { rho: xi / (1 + xi) }).every((x, i) => near(x, acInf[i], 1e-12)));
     ok('Spearman with ties', near(spearman([1, 2, 2, 3], [1, 2, 3, 4]), 0.9486832980505138, 1e-12));
+
+    // SpringRank: a directed path relaxes every spring, heights 1, 0, -1, energy 0, all down.
+    const sp = springRank(3, [[0, 1, 1], [1, 2, 1]]).s;
+    ok('SpringRank of a path is 1, 0, -1 with zero energy', [1, 0, -1].every((v, i) => near(sp[i], v, 1e-10)) && near(flowStats(sp, [[0, 1, 1], [1, 2, 1]]).energy, 0, 1e-20) && flowStats(sp, [[0, 1, 1], [1, 2, 1]]).down === 1);
+    // Random weighted digraph: conjugate gradient equals a dense solve of Eq. 5, and an
+    // undirected edge equals the same edge listed in both directions.
+    const rs = rng(21), E6 = [], U6 = [];
+    for (let a = 0; a < 15; a++) for (let b = 0; b < 15; b++) if (a !== b && rs() < 0.25) E6.push([a, b, 1 + Math.floor(rs() * 6)]);
+    for (let a = 0; a < 15; a++) for (let b = a + 1; b < 15; b++) if (rs() < 0.1) U6.push([a, b, 1 + Math.floor(rs() * 3)]);
+    const Q6 = new Float64Array(225), b6 = new Float64Array(15);
+    for (const [a, b, w] of E6) { Q6[a * 15 + a] += w; Q6[b * 15 + b] += w; Q6[a * 15 + b] -= w; Q6[b * 15 + a] -= w; b6[a] += w; b6[b] -= w; }
+    for (let i = 0; i < 15; i++) Q6[i * 16] += 0.7;
+    cholSolve(Q6, b6, 15);
+    const cg = springRank(15, E6, { alpha: 0.7 }).s;
+    ok('SpringRank by conjugate gradient equals the dense solve (alpha 0.7)', cg.every((v, i) => near(v, b6[i], 1e-9)));
+    const both = springRank(15, E6.concat(U6.flatMap(([a, b, w]) => [[a, b, w], [b, a, w]])), { alpha: 0.7 }).s;
+    ok('undirected edges equal edges in both directions', springRank(15, E6, { alpha: 0.7, undirected: U6 }).s.every((v, i) => near(v, both[i], 1e-9)));
+    const pairTot = e => { const m = new Map(); e.forEach(([a, b, w]) => { const k = key(Math.min(a, b), Math.max(a, b)); m.set(k, (m.get(k) || 0) + w); }); return Array.from(m).sort((x, y) => x[0] - y[0]).join(); };
+    ok('random directions keep each pair\'s total', pairTot(randomDirections(E6, rng(3))) === pairTot(E6));
+    // Cascade with p = 1: every connection transmits, so hops are BFS layers, each node
+    // active once, and stop nodes are reached but pass nothing on.
+    const C7 = [[0, 1, 1], [0, 2, 3], [1, 3, 1], [2, 3, 1], [3, 4, 2], [2, 5, 1], [5, 6, 1], [4, 0, 1]];
+    const csr7 = (n, e) => {
+      const off = new Int32Array(n + 1); e.forEach(([a]) => off[a + 1]++);
+      for (let i = 0; i < n; i++) off[i + 1] += off[i];
+      const f = off.slice(0, n), to = new Int32Array(e.length), w = new Int32Array(e.length);
+      e.slice().sort((x, y) => x[0] - y[0] || x[1] - y[1]).forEach(([a, b, c]) => { to[f[a]] = b; w[f[a]++] = c; });
+      return { n, off, to, w };
+    };
+    const g7 = csr7(7, C7), stop7 = [0, 0, 0, 0, 0, 1, 0];
+    const h7 = cascade(g7, [0], stop7, { p: 1, runs: 3, hops: 5 });
+    const want = [0, 1, 1, 2, 3, 2, -1]; // 6 sits behind stop node 5; 0 is never re-activated by 4
+    ok('cascade at p = 1 is breadth-first layers with stop nodes', want.every((hh, v) => Array.from({ length: 5 }, (_, h) => h7[v * 5 + h]).every((x, h) => x === (h === hh ? 1 : 0))));
+    // One connection of w synapses is crossed with probability 1 - (1 - p)^w.
+    const h8 = cascade(csr7(2, [[0, 1, 4]]), [0], [0, 0], { p: 0.1, runs: 40000, hops: 2, seed: 5 });
+    const pw = 1 - 0.9 ** 4;
+    ok('cascade crosses a 4-synapse connection with probability 1 - 0.9^4', Math.abs(h8[3] - pw) < 4 * Math.sqrt(pw * (1 - pw) / 40000), h8[3].toFixed(4) + ' vs ' + pw.toFixed(4));
+    // firstHop: cumulative share reaching theta.
+    const fh = firstHop(Float64Array.from([1, 0, 0, 0, 0.3, 0.3, 0, 0.1, 0.4]), 3, 3, 0.5);
+    ok('first hop by cumulative share', fh[0] === -1 && fh[1] === 2 && fh[2] === 2);
+    const dc = decodeCSR({ off: [0, 2, 3, 3], to: [1, 1, 0], w: [5, 6, 7] });
+    ok('delta-encoded CSR decodes', Array.from(dc.to).join() === '1,2,0' && Array.from(dc.w).join() === '5,6,7');
     return res;
   }
 
@@ -772,9 +948,47 @@
     return res;
   }
 
+  // Article 6's data: SpringRank of the worm against numpy 2.0 (dense lstsq / solve of
+  // Eq. 3 and 5), and the larval cascades against an independent numpy implementation
+  // of Winding et al.'s cascade (1,000 runs per modality, a different random stream, so
+  // compared within Monte Carlo error).
+  function flowChecks(worm, larva, log = console.log) {
+    const res = [];
+    const ok = (name, pass, detail = '') => { res.push({ name, pass }); log((pass ? 'pass ' : 'FAIL ') + name + (detail ? ': ' + detail : '')); };
+    const n = worm.nodes.length, E = worm.chem;
+    const s0 = springRank(n, E).s, f0 = flowStats(s0, E);
+    ok('worm SpringRank: s of ADAL, ADAR, ADEL 0.627137, 0.407969, 0.870302 (numpy)', [0.627137, 0.407969, 0.870302].every((v, i) => Math.abs(s0[i] - v) < 5e-7));
+    ok('89.0% of synapses run down, energy 0.1976 per synapse (numpy)', Math.abs(f0.down - 0.8896) < 5e-5 && Math.abs(f0.energy - 0.1976) < 5e-5, f0.down.toFixed(4) + ', ' + f0.energy.toFixed(4));
+    const sg = springRank(n, E, { undirected: worm.gap }).s, s1 = springRank(n, E, { alpha: 1 }).s;
+    ok('with gap junctions s(ADAL) 0.518246, down 0.8833; alpha 1 s(ADAL) 0.580123 (numpy)', Math.abs(sg[0] - 0.518246) < 5e-7 && Math.abs(flowStats(sg, E).down - 0.8833) < 5e-5 && Math.abs(s1[0] - 0.580123) < 5e-7);
+    const L = larva, g = decodeCSR(L.ad), syn = g.w.reduce((a, b) => a + b, 0);
+    ok('larva: 2,952 neurons, 63,545 axon-to-dendrite connections, 234,958 synapses', g.n === 2952 && g.to.length === 63545 && syn === 234958);
+    const seeds = L.modalities.map((_, k) => L.mod.flatMap((m, i) => (m === k ? [i] : [])));
+    ok('seed neurons per modality as in the authors\' CATMAID annotations', seeds.map(s => s.length).join() === '42,131,107,85,4,6,29,12,12,2,8,26');
+    ok('420 output neurons: 182 DN-VNC, 184 DN-SEZ, 54 RGN', [0, 1, 2].map(k => L.out.filter(o => o === k).length).join() === '182,184,54');
+    const ty = L.type.map(t => L.types[t]), stop = L.out.map(o => o >= 0);
+    const brain = Array.from({ length: g.n }, (_, i) => i).filter(i => L.mod[i] < 0 && ty[i] !== 'sensory' && ty[i] !== 'ascending');
+    const tot = [1835.2, 1955.7, 1844.7, 1527.3, 1596.3, 1588.5, 1628.2, 1620.9, 1627.5, 1323.9, 1363.2, 1368.6];
+    const mh = [3.382, 3.332, 3.900, 5.486, 4.974, 5.095, 4.901, 4.677, 4.861, 6.085, 6.052, 6.009];
+    const fh = [], dev = [];
+    seeds.forEach((sd, k) => {
+      const h = cascade(g, sd, stop, { seed: k + 1 }), f = firstHop(h, g.n, 9, 0.5);
+      let t = 0; for (const v of h) t += v;
+      let s = 0, c = 0; for (const i of brain) if (f[i] > 0) { s += f[i]; c++; }
+      fh.push(f); dev.push([Math.abs(t - tot[k]) / tot[k], Math.abs(s / c - mh[k])]);
+    });
+    ok('cascades: expected activations within 1.5%, mean hop within 0.05 of numpy, all 12 modalities', dev.every(([a, b]) => a < 0.015 && b < 0.05),
+      'worst ' + (100 * Math.max(...dev.map(d => d[0]))).toFixed(2) + '%, ' + Math.max(...dev.map(d => d[1])).toFixed(3));
+    let reached = 0, uni = 0;
+    for (const i of brain) { const k = fh.filter(f => f[i] > 0).length; if (k) reached++; if (k === 1) uni++; }
+    ok('2,476 brain neurons; one modality only for 11.7% of those reached (numpy 11.8%)', brain.length === 2476 && Math.abs(100 * uni / reached - 11.8) < 0.5, (100 * uni / reached).toFixed(1) + '%');
+    return res;
+  }
+
   return {
-    dataChecks, rng, undirected, csr, degrees, clustering, transitivity, meanPath, nullER, distanceBins, nullSpatial, swap,
+    dataChecks, flowChecks, rng, undirected, csr, degrees, clustering, transitivity, meanPath, nullER, distanceBins, nullSpatial, swap,
     mutualPairs, swapDirected, swapReciprocal, triadCensus, triadEdges, TRIADS, mean, sd, runChecks,
     eigh, dense, fiedler, edgeSpan, avgControl, pearson, ranks, spearman, linfit, cholSolve, placement, pinPrice, wireCost, wireChecks,
+    springRank, flowStats, randomDirections, cascade, decodeCSR, firstHop,
   };
 });

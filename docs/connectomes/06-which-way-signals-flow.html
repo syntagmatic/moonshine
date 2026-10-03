@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Which Way Signals Flow · Connectomes</title>
+<script src="../lib/motion.js"></script>
+<script src="../vendor/js/d3.v7.min.js"></script>
+<link rel="stylesheet" href="../vendor/katex@0.16.11/katex.min.css">
+<script src="../vendor/katex@0.16.11/katex.min.js"></script>
+<link href="../vendor/fonts/sans-serif-mono/fonts.css" rel="stylesheet">
+<script src="shared/graph.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  color-scheme: light dark;
+  --article-width: 740px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem;
+  --line-height: 1.6;
+  --text: #1c1d24;
+  --text-2: #50525e;
+  --accent: #2b62a8;
+  --accent-light: #dde8f6;
+  --bg: #fafaf8;
+  --fig-bg: #ffffff;
+  --border: #e3e2de;
+  /* Series roles, fixed across all eight articles:
+     observed data = ink (--text); null models and expected values = --c-null;
+     sensory / inter / motor neurons = --c-sensory / --c-inter / --c-motor;
+     gap junctions = --c-gap; neuropeptides = --c-pep. Validated for colour
+     vision deficiency in both themes. In the fly, input neurons take the sensory
+     hue and brain output neurons the motor hue. */
+  --c-null: #7c8597;
+  --c-null-light: #e6e8ee;
+  --c-sensory: #00928a;
+  --c-inter: #b9780a;
+  --c-motor: #b8405e;
+  --c-gap: #6b55c4;
+  --c-pep: #5d8a2b;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --text: #e6e5e0; --text-2: #a8a9b3;
+    --accent: #7aa7e6; --accent-light: #1f2b3d;
+    --bg: #15161a; --fig-bg: #1c1d22; --border: #33343b;
+    --c-null: #8b93a5; --c-null-light: #2a2d35;
+    --c-sensory: #21a198; --c-inter: #c2841a; --c-motor: #d6607e; --c-gap: #8e7ce0; --c-pep: #76a63f;
+  }
+}
+
+body {
+  font-family: var(--body-font); font-size: var(--body-size); line-height: var(--line-height);
+  color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased;
+}
+
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1rem 6rem; }
+h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+p { margin: 0 0 1rem; }
+a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+.subtitle { font-family: var(--heading-font); font-size: 1.15rem; color: var(--text-2); margin-bottom: 2rem; }
+.kicker { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-bottom: 0.5rem; }
+.kicker a { color: var(--text-2); }
+
+.figure { margin: 2rem 0; padding: 1.25rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; }
+.figure-wide { margin-left: -2rem; margin-right: -2rem; }
+@media (min-width: 1040px) { .figure-wide { margin-left: -7rem; margin-right: -7rem; } }
+.figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; line-height: 1.45; }
+.figure-label { font-weight: 600; color: var(--text); }
+.readout { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); min-height: 2.8em; font-variant-numeric: tabular-nums; margin: 0.4rem 0 0; line-height: 1.45; }
+.readout b { color: var(--text); font-weight: 600; }
+
+.controls { display: flex; align-items: center; gap: 0.5rem 1.25rem; flex-wrap: wrap; margin-bottom: 0.75rem; font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); }
+.controls label { display: inline-flex; align-items: center; gap: 0.4rem; }
+.controls input[type="range"] { width: 130px; max-width: 100%; accent-color: var(--accent); }
+.controls input[type="checkbox"] { accent-color: var(--accent); }
+.controls select { font: inherit; color: var(--text); background: var(--fig-bg); border: 1px solid var(--border); border-radius: 4px; padding: 1px 4px; }
+.controls .val { font-variant-numeric: tabular-nums; color: var(--text); min-width: 2.4em; display: inline-block; }
+
+.panels { display: grid; gap: 0.75rem 1.25rem; align-items: start; }
+.p-3-2 { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
+.p-heat { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
+.panels > div { min-width: 0; }
+.panels h3 { font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600; color: var(--text); margin: 0 0 0.25rem; }
+.panels h3 span { font-weight: 400; color: var(--text-2); }
+.fig-body { position: relative; width: 100%; }
+.fig-body svg { display: block; overflow: visible; }
+.tip { position: absolute; pointer-events: none; font-family: var(--heading-font); font-size: 0.78rem; background: var(--fig-bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; white-space: nowrap; display: none; z-index: 2; }
+
+svg text { font-family: var(--heading-font); }
+svg .axis text { font-size: 11px; fill: var(--text-2); }
+svg .axis line, svg .axis path { stroke: var(--border); }
+svg .axis-label { font-size: 11px; fill: var(--text-2); }
+svg .col-head { font-size: 12px; fill: var(--text); font-weight: 600; }
+svg .col-sub { font-size: 11px; fill: var(--text-2); }
+svg .pt-lab { font-size: 11px; fill: var(--text); font-weight: 600; }
+svg .halo { paint-order: stroke; stroke: var(--fig-bg); stroke-width: 4px; stroke-linejoin: round; }
+svg .note { font-size: 11px; fill: var(--text-2); }
+svg .hm-lab { font-size: 11.5px; fill: var(--text); }
+svg .hm-sub { font-size: 11px; fill: var(--text-2); }
+svg .hm-val { font-size: 10.5px; font-variant-numeric: tabular-nums; pointer-events: none; }
+svg .hm-row { cursor: pointer; }
+svg .hm-sel { fill: none; stroke: var(--text); stroke-width: 1.5; pointer-events: none; }
+svg:focus-visible, :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.legend { display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; font-family: var(--heading-font); font-size: 0.8rem; color: var(--text-2); margin: 0.35rem 0 0; }
+.legend span { display: inline-flex; align-items: center; gap: 0.35rem; }
+.legend svg { overflow: visible; }
+.legend [hidden] { display: none; }
+
+.katex-display { overflow-x: auto; overflow-y: hidden; padding: 2px 0; }
+
+@media (max-width: 640px) {
+  h1 { font-size: 1.75rem; }
+  .figure { padding: 1rem 0.6rem; }
+  .figure-wide { margin-left: 0; margin-right: 0; }
+  .p-3-2, .p-heat { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="article">
+  <header>
+    <p class="kicker"><a href="index.html">Connectomes</a>, part 6 of 8</p>
+    <h1>Which Way Signals Flow</h1>
+    <p class="subtitle">A ranking and a simulated spread both turn a recurrent wiring diagram into layers running from the senses to the outputs. The layers hold up; where one ends and the next begins is a setting of the method.</p>
+  </header>
+
+  <p>The textbook nervous system runs one way. Sensory neurons pass what they detect to interneurons, interneurons pass it to motor neurons, and motor neurons move the body. A connectome doesn't look like that. In the worm's chemical synapse network, 233 pairs of neurons synapse onto each other in both directions, about four times as many as their numbers of connections would produce at random (part 3 of this series), and there are longer loops beyond the reciprocal pairs. A wiring diagram is recurrent, and the layers of the textbook have to be read out of it by some method.</p>
+
+  <p>This article tries two. The first ranks every neuron of the worm so that connections run downhill as often as possible, solving one linear system. The second follows a probabilistic signal from each sense through the 3,016 neurons of a larval fruit fly's brain and records how many steps it takes to arrive. Both find a direction from senses to outputs, well beyond what chance gives. Both also have a dial, and turning it moves neurons from one layer to the next.</p>
+
+  <h2>A spring on every synapse</h2>
+
+  <p>SpringRank, introduced by De Bacco, Larremore and Moore in 2018, gives each neuron <i>i</i> a real number <i>s<sub>i</sub></i>, its height in the hierarchy. Each synapse from <i>i</i> to <i>j</i> is a spring that wants <i>i</i> exactly one unit above <i>j</i>, and the heights are the ones that leave the springs, all together, with the least energy. With <i>A<sub>ij</sub></i> synapses from <i>i</i> to <i>j</i>,</p>
+  <div id="eq-h"></div>
+  <p>The second term is an optional extra spring of stiffness <i>&alpha;</i> pulling every neuron toward zero. Setting the gradient to zero gives a linear system whose matrix is a graph Laplacian, the same kind of matrix that gave the spectral order in part 5, plus <i>&alpha;</i> on the diagonal:</p>
+  <div id="eq-lin"></div>
+  <p>where <i>D</i><sub>out</sub> and <i>D</i><sub>in</sub> hold each neuron's output and input synapse counts. The right side is each neuron's surplus of outputs over inputs. The matrix is sparse, with one off-diagonal entry per connected pair, so the solve takes a few milliseconds for the worm and seconds for networks with millions of edges. With <i>&alpha;</i> = 0 only differences in height are fixed, and the solution is chosen with mean zero.</p>
+
+  <p>A ranking says nothing on its own: any graph can be ranked. De Bacco and colleagues test it against a null that keeps the number of edges between every pair of nodes and gives each edge a random direction. If the real directions line up with a hierarchy, the real network's springs relax much further than the shuffled ones.</p>
+
+  <div class="figure figure-wide" id="fig-spring">
+    <div class="controls">
+      <label>Regularisation <i>&alpha;</i> <input type="range" id="sr-a" min="0" max="11" step="1" value="0" aria-label="Regularisation alpha"><span class="val" id="sr-a-val"></span></label>
+      <label><input type="checkbox" id="sr-gap"> Gap junctions as springs of rest length zero</label>
+      <label>Neuron <select id="sr-pick" aria-label="Pick a neuron"></select></label>
+    </div>
+    <div class="panels p-3-2">
+      <div>
+        <h3>Every neuron <span>at its SpringRank height, by cell type</span></h3>
+        <div class="fig-body" id="sr-main"><svg tabindex="0" role="img" aria-label="The 279 worm neurons placed at their SpringRank heights in three columns, sensory, inter and motor, with the picked neuron's connections drawn."></svg><div class="tip"></div></div>
+        <div class="legend">
+          <span><svg width="22" height="10"><line x1="1" y1="5" x2="21" y2="5" style="stroke: var(--text); stroke-width: 2"></line></svg>synapses running down</span>
+          <span><svg width="22" height="10"><line x1="1" y1="5" x2="21" y2="5" style="stroke: var(--accent); stroke-width: 2"></line></svg>running up</span>
+          <span id="sr-gap-key" hidden><svg width="22" height="10"><line x1="1" y1="5" x2="21" y2="5" style="stroke: var(--c-gap); stroke-width: 2; stroke-dasharray: 3 2"></line></svg>gap junctions</span>
+        </div>
+      </div>
+      <div>
+        <h3>Every connection <span>height of sender minus receiver, share of synapses</span></h3>
+        <div class="fig-body" id="sr-hist"><svg role="img" aria-label="Histogram of the height difference across each chemical connection, weighted by synapse count, with the same for direction-shuffled networks as an outline."></svg><div class="tip"></div></div>
+        <div class="legend">
+          <span><svg width="12" height="12"><rect x="1" y="1" width="10" height="10" rx="1" style="fill: var(--text)"></rect></svg>down</span>
+          <span><svg width="12" height="12"><rect x="1" y="1" width="10" height="10" rx="1" style="fill: var(--accent)"></rect></svg>up</span>
+          <span><svg width="22" height="10"><path d="M1 8 H8 V2 H15 V6 H21" style="fill: none; stroke: var(--c-null); stroke-width: 1.5"></path></svg>directions shuffled</span>
+        </div>
+      </div>
+    </div>
+    <p class="readout" id="sr-ro" aria-live="polite"></p>
+    <p class="figure-caption"><span class="figure-label">Figure 1.</span> SpringRank (De Bacco et al. 2018) of the worm's 279 neurons, solved in the page by conjugate gradient on the chemical synapse network of Varshney et al. 2011 (2,194 connections, 6,394 synapses). Within each column neurons are spread sideways only so they don't overlap. Click or tap a neuron, or pick one from the list, to draw its connections: the line width is the synapse count, ink when the synapses run from the higher neuron to the lower and blue when they run up. The histogram on the right counts every chemical synapse by the height of its sender minus that of its receiver; the outline is the mean over 20 networks with each synapse given a random direction and ranked the same way. Gap junctions have no direction, so when they are included they enter the ranking as springs that pull two neurons level, and the shares count chemical synapses only. Cell types from NemaNode.</p>
+  </div>
+
+  <p>The worm has a hierarchy. At the default setting 89% of its chemical synapses run from a higher neuron to a lower one, against 58% when every synapse's direction is shuffled, and the springs' energy per synapse is 0.20 against 0.48 for the shuffled networks, which never come close. The columns show what the hierarchy is made of. Sensory neurons sit high and motor neurons low, and the boundary between interneurons and motor neurons is sharp: only 3 of the 105 motor neurons rank above the middle interneuron, and a randomly chosen interneuron outranks a randomly chosen motor neuron 94% of the time. The boundary between sensory neurons and interneurons is not. A random sensory neuron outranks a random interneuron only 71% of the time, and 12 of the 73 interneurons sit above the middle sensory neuron, AIN and AIM near the very top because they receive almost no chemical synapses at all.</p>
+
+  <p>Pick a neuron and the hierarchy's details come out. The command interneurons AVA, AVB and AVE rank between 171st and 187th of 279, down among the motor neurons they synapse onto. The head motor neurons RMD, SIA and SIB sit lower still, with the motor neurons of the ventral cord. That is the opposite of the spectral order in part 5, which grouped them with the head's sensory neurons by where they connect; SpringRank, which reads direction, groups them by what they do. At the bottom are the VD and DD motor neurons of the ventral cord, which get 84% of their input synapses from the other cord motor neurons and send most of their own output to muscle, in neuromuscular junctions that WormAtlas lists separately and that this neuron-to-neuron graph leaves out. The 11% of synapses that run up the hierarchy include some heavy connections. The heaviest are AVA's synapses onto PVC, another command interneuron, and the head motor neurons SMD and RMD synapsing back onto the interneuron RIA, which sends them 174 synapses and gets 46 in return.</p>
+
+  <p>Now raise <i>&alpha;</i>. At zero, a neuron attached by a single synapse can float wherever that one spring puts it, and PLML, a touch receptor neuron with one chemical synapse in this reconstruction and no inputs, ranks first. An <i>&alpha;</i> of 1 moves it to 21st and 3 to 85th, while the well-connected neurons barely move: regularisation exists for weakly attached nodes, and De Bacco and colleagues note that it matters less as a network gets denser. Push it further and the order changes character. As <i>&alpha;</i> grows the heights shrink toward zero in proportion to each neuron's own surplus of outputs over inputs, the right side of the equation, so the ranking forgets the rest of the graph. That local ranking still sends 77% of synapses down, but the full solve sends 89%, and the two orders have a rank correlation of only about 0.6. Most of the hierarchy is in how neurons are arranged relative to each other, not in any one neuron's balance of inputs and outputs.</p>
+
+  <p>Gap junctions, the worm's electrical synapses, conduct both ways, so a pair joined by one gets a spring in each direction, which together pull the two neurons level. Including them squeezes the range of heights from 4.2 units to 3.1 and leaves the share running down at 88%. The neurons that move are the ones with many gap junctions and few chemical synapses. DVB falls from 71st to 138th, and PLML, whose three gap junctions outnumber its one chemical synapse, from first to 80th.</p>
+
+  <h2>Hops from each sense</h2>
+
+  <p>The worm's 279 neurons make a small ranking problem. The brain of a first-instar <i>Drosophila</i> larva is ten times larger: Winding and colleagues reconstructed 3,016 neurons and about 548,000 synapses from electron microscopy in 2023, 480 of them input neurons and 2,536 brain neurons. Their released matrix holds 2,952 of the neurons, and it splits every synapse by compartment. Connections from an axon onto a dendrite, the classic direction of transmission, make up most of the network; this article uses them alone, 63,545 connections carrying 234,958 synapses, as Winding and colleagues did for their cascades.</p>
+
+  <p>Instead of ranking, they let a signal spread. Start with every neuron of one sensory modality active. At each step every active neuron gets one chance to activate each neuron it synapses onto, and each synapse transmits independently with probability <i>p</i>, so a connection of <i>w</i> synapses is crossed with probability</p>
+  <div id="eq-casc"></div>
+  <p>Each neuron can be active only once in a run, so the signal can't circle, and the brain's output neurons (descending neurons to the nerve cord and to the subesophageal zone, and neurons onto the ring gland) receive the signal but don't pass it on. Winding and colleagues chose <i>p</i> = 0.05, ran each cascade 1,000 times for up to eight steps, and counted a neuron as receiving the signal when it was reached in most runs. A neuron's layer for a modality is then the number of hops it took to get there. The figure runs the same model in a background thread.</p>
+
+  <div class="figure figure-wide" id="fig-cascade">
+    <div class="controls">
+      <label>Each synapse transmits with <i>p</i> <input type="range" id="cs-p" min="0.01" max="0.15" step="0.005" value="0.05" aria-label="Transmission probability per synapse"><span class="val" id="cs-p-val"></span></label>
+      <label>Reached when hit in at least <input type="range" id="cs-t" min="0.05" max="0.95" step="0.05" value="0.5" aria-label="Share of runs needed to count a neuron as reached"><span class="val" id="cs-t-val"></span></label>
+    </div>
+    <div class="panels p-heat">
+      <div>
+        <h3>Every modality <span>brain neurons first reached at each hop</span></h3>
+        <div class="fig-body" id="cs-heat"><svg tabindex="0" role="img" aria-label="Heatmap: for each sensory modality, the number of brain neurons first reached at each hop from one to eight, with the number never reached and the mean hop. Click a row to choose that modality."></svg><div class="tip"></div></div>
+      </div>
+      <div>
+        <h3 id="cs-bar-h">One modality</h3>
+        <div class="fig-body" id="cs-bars"><svg role="img" aria-label="Stacked bars for the chosen modality: brain neurons first reached at each hop, split into output neurons and the rest."></svg><div class="tip"></div></div>
+        <div class="legend">
+          <span><svg width="12" height="12"><rect x="1" y="1" width="10" height="10" rx="1" style="fill: var(--c-inter)"></rect></svg>other brain neurons</span>
+          <span><svg width="12" height="12"><rect x="1" y="1" width="10" height="10" rx="1" style="fill: var(--c-motor)"></rect></svg>output neurons</span>
+        </div>
+      </div>
+    </div>
+    <p class="readout" id="cs-ro" aria-live="polite"></p>
+    <p class="figure-caption"><span class="figure-label">Figure 2.</span> Signal cascades (Winding et al. 2023) through the axon-to-dendrite network of the first-instar larval brain, 1,000 runs per modality and setting, computed in a worker when the page loads and again when <i>p</i> changes; the threshold applies instantly to the stored runs. Each row starts from one modality's input neurons (count beside the name): sensory neurons that enter the brain directly, and below the line the ascending neurons that bring somatosensory signals up from the nerve cord. A neuron's hop is the first at which the share of runs that have reached it passes the threshold. Columns count the 2,476 neurons of the matrix that are not input neurons; "never" counts those not reached within eight hops. Output neurons are those the authors annotate as descending or ring-gland neurons in their public CATMAID project (420 in the matrix). Hover a cell for its count; click a row to show it on the right.</p>
+  </div>
+
+  <p>At the published settings the senses separate by depth. Smell and taste arrive first: olfactory and external gustatory cascades each reach more than 450 brain neurons within two hops, and the neurons they reach take 3.3 to 3.4 hops on average. The proprioceptive and class II/III mechanosensory signals that ascend from the nerve cord, and the respiratory signal, arrive last, at about 6 hops. The descending neurons to the nerve cord, through which the brain reaches the body's motor circuits, follow the same pattern: half of those reached from smell or taste are reached within 4 hops, and from proprioception or respiration within 6. Winding and colleagues likewise found smell and taste to have the shortest paths to the outputs and the ascending somatosensory signals the longest, and that signals reached these descending neurons in 3 to 6 hops and rarely more than 8.</p>
+
+  <p>They also found that most brain neurons are multimodal, reached by signals from more than one sense, and that very few, 12% with eight-hop cascades, are reached from only one. The page gets 11.7% at their settings. Now move <i>p</i>. At 0.025 nearly a quarter of the reached neurons are single-modality, and at 0.1 one in twenty. The threshold does the same in the other direction: requiring a neuron to be hit in three quarters of runs rather than half makes 17% of them single-modality, and a quarter of runs makes 6%. Across <i>p</i> from 0.025 to 0.1 and thresholds from a quarter to three quarters, the share runs from 3% to 24%, and the mean hop of the olfactory cascade from 2.8 to 3.9. The order of the senses does not move: smell and the two kinds of taste are the three shallowest at every one of those settings, and the respiratory and the proprioceptive and class II/III mechanosensory signals are always among the four deepest.</p>
+
+  <p>The cascade model is one of several ways to assign layers, and Winding and colleagues also used another. Giving each neuron the order of its shortest path from any input neuron, they put 21% of brain neurons at second order, 56% at third, 15% at fourth and fewer than 1% at fifth, with no brain neuron more than four hops from an input. At the published settings the cascades reach some of the same neurons only at the seventh or eighth hop. Both describe the same wiring under different definitions of a step. The paper is explicit about what hasn't been tested: a five-hop pathway, from class IV multidendritic sensory neurons to dopaminergic neurons of the mushroom body, has been shown to work in the living larva, and no six-, seven- or eight-hop pathway has.</p>
+
+  <footer style="margin-top: 4rem; padding-top: 2rem; border-top: 1px solid var(--border); font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2);">
+    <p>Worm wiring: Varshney, Chen, Paniagua, Hall &amp; Chklovskii 2011 (PLoS Comput Biol 7, e1001066), from WormAtlas's NeuronConnect and NeuronType tables, built on White, Southgate, Thomson &amp; Brenner 1986 (Phil Trans R Soc B 314, 1). Cell types: NemaNode. No licence is stated for the WormAtlas tables; cite the papers. SpringRank and its direction-shuffling test: De Bacco, Larremore &amp; Moore 2018 (Sci Adv 4, eaar8260).</p>
+    <p>Larval brain: Winding, Pedigo, Barnes et al. 2023 (Science 379, eadd9330), supplementary Data S1 (axon-to-dendrite matrix, 2,952 neurons) and Data S2 (cell types) from the Europe PMC author manuscript (CC BY); modality and output-neuron sets from the authors' annotations in the public L1 CNS CATMAID project (Virtual Fly Brain). The cascade follows their code (mwinding/connectome_tools); it adapts the independent cascade model of Goldenberg, Libai &amp; Muller 2001 (Marketing Letters 12, 211). Synapse counts as a proxy for synaptic strength: Barnes, Bonn&eacute;ry &amp; Cardona 2022.</p>
+    <p><a href="index.html">Connectomes</a>, part 6 of 8. Previously: <a href="05-reading-the-matrix.html">Reading the Matrix</a></p>
+    <p>Built with <a href="https://github.com/enjalot/moonshine" style="color: var(--text-2);">moonshine</a>.</p>
+  </footer>
+</div>
+
+<script>
+// ── Shared helpers ──
+const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const narrow = () => matchMedia('(max-width: 640px)').matches;
+function responsive(el, render) {
+  let w = 0;
+  new ResizeObserver(() => {
+    if (el.clientWidth > 0 && el.clientWidth !== w) { w = el.clientWidth; render(w); }
+  }).observe(el);
+}
+const onTheme = f => matchMedia('(prefers-color-scheme: dark)').addEventListener('change', f);
+const fmt = (v, d) => v.toLocaleString('en', { minimumFractionDigits: d, maximumFractionDigits: d });
+const G = GraphLib;
+const ROLE_VAR = { s: '--c-sensory', i: '--c-inter', m: '--c-motor' };
+const ROLE_NAME = { s: 'sensory neuron', i: 'interneuron', m: 'motor neuron' };
+function placeTip(tip, body, html, x, y) {
+  tip.style('display', 'block').html(html);
+  const tw = tip.node().offsetWidth, W = body.clientWidth;
+  tip.style('left', Math.max(0, Math.min(W - tw, x - tw / 2)) + 'px').style('top', Math.max(0, y - 34) + 'px');
+}
+
+// Each figure owns one worker, rebuilt from the library's source so the page
+// also works opened as a file. Starting a new job terminates the old one.
+function jobRunner(main, onMessage) {
+  const src = `const GraphLib = (${G.factory.toString()})();\n(${main.toString()})();`;
+  const url = URL.createObjectURL(new Blob([src], { type: 'text/javascript' }));
+  let w = null;
+  return msg => {
+    if (w) w.terminate();
+    w = new Worker(url);
+    w.onmessage = e => onMessage(e.data);
+    w.postMessage(msg);
+  };
+}
+
+const K = String.raw;
+function equations() {
+  const tex = (id, s) => katex.render(s, document.getElementById(id), { throwOnError: false, displayMode: true });
+  tex('eq-h', K`H(s) \;=\; \tfrac12 \sum_{i,j} A_{ij}\,\big(s_i - s_j - 1\big)^2 \;+\; \tfrac{\alpha}{2}\sum_i s_i^2`);
+  tex('eq-lin', K`\big[\,D_\text{out} + D_\text{in} - (A + A^\top) + \alpha I\,\big]\, s \;=\; \big(D_\text{out} - D_\text{in}\big)\,\mathbf 1`);
+  tex('eq-casc', K`P(i \to j) \;=\; 1 - (1 - p)^{\,w_{ij}}`);
+}
+equations();
+onTheme(equations);
+
+d3.json('shared/data/worm-varshney.json').then(springFigure);
+d3.json('shared/data/larva-winding.json').then(cascadeFigure);
+
+// ── Figure 1: SpringRank on the worm ──
+function springFigure(data) {
+  const N = data.nodes, n = N.length, chem = data.chem, gap = data.gap;
+  const ALPHA = [0, 0.01, 0.03, 0.1, 0.3, 1, 3, 10, 30, 100, 300, 1000];
+  const COLS = ['s', 'i', 'm'], COL_NAME = { s: 'sensory', i: 'inter', m: 'motor' };
+  const ctl = { a: document.getElementById('sr-a'), gap: document.getElementById('sr-gap'), pick: document.getElementById('sr-pick') };
+  const mBody = document.getElementById('sr-main'), mSvg = d3.select(mBody).select('svg'), mTip = d3.select(mBody).select('.tip');
+  const hBody = document.getElementById('sr-hist'), hSvg = d3.select(hBody).select('svg'), hTip = d3.select(hBody).select('.tip');
+  let sel = N.findIndex(d => d.name === 'AVAL'), mw = 0, hw = 0, cur = null, pos = null, prevPos = null;
+
+  // Partners of every neuron, chemical in and out, and gap junctions.
+  const ins = N.map(() => []), outs = N.map(() => []), gaps = N.map(() => []);
+  chem.forEach(([a, b, w]) => { outs[a].push([b, w]); ins[b].push([a, w]); });
+  gap.forEach(([a, b, w]) => { gaps[a].push([b, w]); gaps[b].push([a, w]); });
+
+  N.map((d, i) => i).sort((a, b) => (N[a].name < N[b].name ? -1 : 1)).forEach(i => {
+    const o = document.createElement('option'); o.value = i; o.textContent = N[i].name; ctl.pick.appendChild(o);
+  });
+
+  const solved = new Map(), nulls = new Map();
+  function solve() {
+    const key = ctl.a.value + '|' + ctl.gap.checked;
+    if (!solved.has(key)) {
+      const s = G.springRank(n, chem, { alpha: ALPHA[+ctl.a.value], undirected: ctl.gap.checked ? gap : [] }).s;
+      const order = Array.from(s.keys()).sort((a, b) => s[b] - s[a]), rank = new Int32Array(n);
+      order.forEach((v, k) => { rank[v] = k + 1; });
+      solved.set(key, { key, s, rank, st: G.flowStats(s, chem), hist: hist(s, chem) });
+    }
+    return solved.get(key);
+  }
+  // Synapse-weighted histogram of s_pre - s_post; bins of 0.25 from -1.5 to 4.5, ends clamped.
+  const B0 = -1.5, BW = 0.25, NB = 24;
+  function hist(s, edges) {
+    const h = new Float64Array(NB); let t = 0;
+    for (const [i, j, w] of edges) { const b = Math.max(0, Math.min(NB - 1, Math.floor((s[i] - s[j] - B0) / BW))); h[b] += w; t += w; }
+    return h.map(v => v / t);
+  }
+  // Direction-shuffled networks at the same setting: 20 graphs, computed a few at a
+  // time after the controls settle so dragging stays smooth.
+  let nullJob = 0;
+  function nullsFor(c) {
+    if (nulls.has(c.key)) return;
+    const job = ++nullJob, r = G.rng(7), alpha = ALPHA[+ctl.a.value], und = ctl.gap.checked ? gap : [];
+    const down = [], energy = [], h = new Float64Array(NB);
+    const step = () => {
+      if (job !== nullJob) return;
+      for (let k = 0; k < 4 && down.length < 20; k++) {
+        const R = G.randomDirections(chem, r), s = G.springRank(n, R, { alpha, undirected: und }).s, st = G.flowStats(s, R);
+        down.push(st.down); energy.push(st.energy); hist(s, R).forEach((v, b) => { h[b] += v / 20; });
+      }
+      if (down.length < 20) { setTimeout(step, 0); return; }
+      nulls.set(c.key, { down: G.mean(down), downSd: G.sd(down), energy: G.mean(energy), hist: h });
+      if (cur && cur.key === c.key) { drawHist(); readout(); }
+    };
+    setTimeout(step, 120);
+  }
+
+  // Beeswarm within each column: sort by height, take the nearest free sideways slot.
+  function layout(c, g) {
+    const r = g.r, d = 2 * r + 0.6, P = new Array(n);
+    COLS.forEach((role, ci) => {
+      const cx = g.colX(ci), half = g.colW / 2 - r - 2, placed = [];
+      const idx = N.map((_, i) => i).filter(i => N[i].role === role).sort((a, b) => c.s[b] - c.s[a]);
+      for (const i of idx) {
+        const y = g.y(c.s[i]);
+        let x = cx;
+        for (let k = 0; k < 200; k++) {
+          const off = (k % 2 ? 1 : -1) * Math.ceil(k / 2) * d * 0.55;
+          if (Math.abs(off) > half) { x = cx + Math.sign(off) * half; break; }
+          const xx = cx + off;
+          if (!placed.some(([px, py]) => (px - xx) ** 2 + (py - y) ** 2 < d * d)) { x = xx; break; }
+        }
+        placed.push([x, y]);
+        P[i] = [x, y];
+      }
+    });
+    return P;
+  }
+
+  let geo = null;
+  function geometry(w) {
+    const M = { l: 40, r: 8, t: 34, b: 8 }, h = narrow() ? 400 : 470;
+    const iw = w - M.l - M.r, ih = h - M.t - M.b, colW = iw / 3;
+    const y = d3.scaleLinear().domain([-2.3, 2.4]).range([ih, 0]);
+    return { M, w, h, iw, ih, colW, y, colX: ci => colW * (ci + 0.5), r: narrow() ? 3 : 3.6 };
+  }
+
+  function drawMain(animate) {
+    if (!mw || !cur) return;
+    geo = geometry(mw);
+    const { M, w, h, iw, ih, colW, y, r } = geo;
+    prevPos = pos; pos = layout(cur, geo);
+    mSvg.attr('width', w).attr('height', h).selectAll('*').remove();
+    const g = mSvg.append('g').attr('transform', `translate(${M.l},${M.t})`);
+    g.append('g').attr('class', 'axis').call(d3.axisLeft(y).ticks(6).tickSize(-iw)).call(a => a.select('.domain').remove())
+      .call(a => a.selectAll('line').attr('stroke-opacity', 0.6));
+    g.append('text').attr('class', 'axis-label').attr('transform', 'rotate(-90)').attr('x', -ih / 2).attr('y', -30).attr('text-anchor', 'middle').text('height s');
+    COLS.forEach((role, ci) => {
+      const cnt = N.filter(d => d.role === role).length;
+      g.append('text').attr('class', 'col-head').attr('x', geo.colX(ci)).attr('y', -18).attr('text-anchor', 'middle').text(COL_NAME[role]);
+      g.append('text').attr('class', 'col-sub').attr('x', geo.colX(ci)).attr('y', -5).attr('text-anchor', 'middle').text(cnt + ' neurons');
+    });
+    const ink = css('--text'), acc = css('--accent'), gapC = css('--c-gap'), s = cur.s;
+    // The picked neuron's connections, behind the dots.
+    const lines = g.append('g').attr('fill', 'none');
+    const wmax = 40, lw = w => 0.8 + 3.2 * Math.sqrt(Math.min(w, wmax) / wmax);
+    const P = pos[sel];
+    const partner = [];
+    for (const [j, w] of outs[sel]) { partner.push({ j, w, down: s[sel] > s[j], kind: 'out' }); }
+    for (const [j, w] of ins[sel]) { partner.push({ j, w, down: s[j] > s[sel], kind: 'in' }); }
+    if (ctl.gap.checked) for (const [j, w] of gaps[sel]) partner.push({ j, w, kind: 'gap' });
+    partner.sort((a, b) => a.w - b.w);
+    for (const e of partner) {
+      const Q = pos[e.j];
+      lines.append('line').attr('x1', P[0]).attr('y1', P[1]).attr('x2', Q[0]).attr('y2', Q[1])
+        .attr('stroke', e.kind === 'gap' ? gapC : e.down ? ink : acc).attr('stroke-width', lw(e.w))
+        .attr('stroke-opacity', e.kind === 'gap' ? 0.8 : e.down ? 0.42 : 0.85).attr('stroke-dasharray', e.kind === 'gap' ? '3 2' : null);
+    }
+    const dots = g.append('g').selectAll('circle').data(N).join('circle')
+      .attr('r', (d, i) => (i === sel ? r + 1.6 : r))
+      .attr('fill', d => css(ROLE_VAR[d.role]))
+      .attr('stroke', (d, i) => (i === sel ? ink : css('--fig-bg'))).attr('stroke-width', (d, i) => (i === sel ? 2 : 0.8));
+    const moved = animate && prevPos && !Motion.reduced();
+    if (moved) {
+      dots.attr('cx', (d, i) => prevPos[i][0]).attr('cy', (d, i) => prevPos[i][1])
+        .transition().duration(350).ease(d3.easeCubicOut).attr('cx', (d, i) => pos[i][0]).attr('cy', (d, i) => pos[i][1]);
+      lines.attr('opacity', 0).transition().delay(300).duration(150).attr('opacity', 1);
+    } else dots.attr('cx', (d, i) => pos[i][0]).attr('cy', (d, i) => pos[i][1]);
+    dots.filter((d, i) => i === sel).raise();
+    // Labels: the picked neuron and its heaviest few partners.
+    const labs = g.append('g').attr('opacity', moved ? 0 : 1);
+    if (moved) labs.transition().delay(300).duration(150).attr('opacity', 1);
+    const top = partner.filter(e => e.kind !== 'gap').sort((a, b) => b.w - a.w).slice(0, narrow() ? 3 : 5).map(e => e.j);
+    // Labels on the same side of the same column are pushed apart vertically.
+    const lab = [sel].concat(top.filter(v => v !== sel)).map(i => {
+      const [x, yy] = pos[i];
+      return { i, x, y: yy + 4, left: x > iw - 40, col: Math.floor(x / colW) };
+    }).sort((a, b) => a.y - b.y);
+    for (let k = 1; k < lab.length; k++) for (let j = 0; j < k; j++) {
+      const a = lab[j], b = lab[k];
+      if (a.col === b.col && a.left === b.left && b.y - a.y < 12) b.y = a.y + 12;
+    }
+    for (const l of lab) {
+      labs.append('text').attr('class', 'pt-lab halo').attr('x', l.x + (l.left ? -7 : 7)).attr('y', l.y)
+        .attr('text-anchor', l.left ? 'end' : 'start').style('font-weight', l.i === sel ? 700 : 600).text(N[l.i].name);
+    }
+  }
+
+  function drawHist() {
+    if (!hw || !cur) return;
+    const w = hw, h = narrow() ? 220 : 260, M = { l: 38, r: 8, t: 12, b: 36 }, iw = w - M.l - M.r, ih = h - M.t - M.b;
+    hSvg.attr('width', w).attr('height', h).selectAll('*').remove();
+    const g = hSvg.append('g').attr('transform', `translate(${M.l},${M.t})`);
+    const nl = nulls.get(cur.key);
+    const x = d3.scaleLinear().domain([B0, B0 + NB * BW]).range([0, iw]);
+    const ymax = Math.max(d3.max(cur.hist), nl ? d3.max(nl.hist) : 0);
+    const y = d3.scaleLinear().domain([0, ymax * 1.08]).nice().range([ih, 0]);
+    g.append('g').attr('class', 'axis').call(d3.axisLeft(y).ticks(4).tickFormat(d3.format('.0%')).tickSize(-iw)).call(a => a.select('.domain').remove())
+      .call(a => a.selectAll('line').attr('stroke-opacity', 0.6));
+    g.append('g').attr('class', 'axis').attr('transform', `translate(0,${ih})`).call(d3.axisBottom(x).ticks(6).tickSizeOuter(0));
+    g.append('text').attr('class', 'axis-label').attr('x', iw / 2).attr('y', ih + 30).attr('text-anchor', 'middle').text('height of sender minus receiver');
+    const ink = css('--text'), acc = css('--accent');
+    const bars = Array.from(cur.hist, (v, b) => ({ b, v, x0: B0 + b * BW }));
+    g.append('g').selectAll('rect').data(bars).join('rect')
+      .attr('x', d => x(d.x0) + 1).attr('width', d => Math.max(0, x(d.x0 + BW) - x(d.x0) - 2))
+      .attr('y', d => y(d.v)).attr('height', d => ih - y(d.v)).attr('rx', 1.5)
+      .attr('fill', d => (d.x0 >= 0 ? ink : acc)).attr('fill-opacity', d => (d.x0 >= 0 ? 0.85 : 1));
+    // Rest length of a spring, and zero.
+    g.append('line').attr('x1', x(0)).attr('x2', x(0)).attr('y1', 0).attr('y2', ih).attr('stroke', css('--text-2')).attr('stroke-width', 1);
+    g.append('line').attr('x1', x(1)).attr('x2', x(1)).attr('y1', 0).attr('y2', ih).attr('stroke', css('--text-2')).attr('stroke-dasharray', '2 3');
+    g.append('text').attr('class', 'note halo').attr('x', x(1) + 4).attr('y', 10).text('rest length 1');
+    if (nl) {
+      const pts = [];
+      nl.hist.forEach((v, b) => { pts.push([x(B0 + b * BW), y(v)], [x(B0 + (b + 1) * BW), y(v)]); });
+      g.append('path').attr('d', d3.line()(pts)).attr('fill', 'none').attr('stroke', css('--c-null')).attr('stroke-width', 1.75);
+    }
+    const hit = g.append('g').selectAll('rect').data(bars).join('rect')
+      .attr('x', d => x(d.x0)).attr('width', d => x(d.x0 + BW) - x(d.x0)).attr('y', 0).attr('height', ih).attr('fill', 'transparent');
+    hit.on('pointerenter pointermove', (ev, d) => {
+      const [px, py] = d3.pointer(ev, hBody);
+      const lo = d.b === 0 ? 'below ' + fmt(B0 + BW, 2) : d.b === NB - 1 ? 'above ' + fmt(d.x0, 2) : fmt(d.x0, 2) + ' to ' + fmt(d.x0 + BW, 2);
+      placeTip(hTip, hBody, `${lo}: <b>${fmt(100 * d.v, 1)}%</b> of synapses` + (nl ? `, shuffled ${fmt(100 * nl.hist[d.b], 1)}%` : ''), px, py);
+    }).on('pointerleave', () => hTip.style('display', 'none'));
+  }
+
+  function readout() {
+    if (!cur) return;
+    const nl = nulls.get(cur.key), s = cur.s, i = sel;
+    const inW = d3.sum(ins[i], e => e[1]), outW = d3.sum(outs[i], e => e[1]);
+    const inAbove = d3.sum(ins[i].filter(([j]) => s[j] > s[i]), e => e[1]), outBelow = d3.sum(outs[i].filter(([j]) => s[j] < s[i]), e => e[1]);
+    let t = `<b>${fmt(100 * cur.st.down, 1)}%</b> of chemical synapses run down` +
+      (nl ? ` (directions shuffled: ${fmt(100 * nl.down, 1)}%, sd ${fmt(100 * nl.downSd, 1)})` : ' (shuffled networks computing)') +
+      `; spring energy per synapse <b>${fmt(cur.st.energy, 3)}</b>` + (nl ? ` against ${fmt(nl.energy, 3)}` : '') + '. ';
+    t += `<b>${N[i].name}</b>, ${ROLE_NAME[N[i].role]}, ranks ${cur.rank[i]} of ${n} at height ${fmt(s[i], 2)}: ` +
+      (inW ? `${inW} input synapse${inW > 1 ? 's' : ''}, ${fmt(100 * inAbove / inW, 0)}% from above` : 'no input synapses') + '; ' +
+      (outW ? `${outW} output synapse${outW > 1 ? 's' : ''}, ${fmt(100 * outBelow / outW, 0)}% to neurons below` : 'no output synapses') +
+      (gaps[i].length ? `; gap junctions with ${gaps[i].length} neuron${gaps[i].length > 1 ? 's' : ''}` : '') + '.';
+    document.getElementById('sr-ro').innerHTML = t;
+  }
+
+  function update(animate) {
+    const a = ALPHA[+ctl.a.value];
+    ctl.a.nextElementSibling.textContent = a === 0 ? '0' : String(a);
+    document.getElementById('sr-gap-key').hidden = !ctl.gap.checked;
+    ctl.pick.value = sel;
+    cur = solve();
+    drawMain(animate); drawHist(); readout();
+    nullsFor(cur);
+  }
+  ctl.a.addEventListener('input', () => update(true));
+  ctl.gap.addEventListener('change', () => update(true));
+  ctl.pick.addEventListener('change', () => { sel = +ctl.pick.value; update(false); });
+
+  // Pointer: nearest neuron within 14 px picks on click, shows a tip on hover.
+  function nearest(ev) {
+    if (!pos || !geo) return -1;
+    const [px, py] = d3.pointer(ev, mSvg.node()), x = px - geo.M.l, y = py - geo.M.t;
+    let best = -1, bd = 14 * 14;
+    pos.forEach(([a, b], i) => { const d = (a - x) ** 2 + (b - y) ** 2; if (d < bd) { bd = d; best = i; } });
+    return best;
+  }
+  mSvg.on('pointermove', ev => {
+    const i = nearest(ev);
+    if (i < 0) { mTip.style('display', 'none'); return; }
+    const [px, py] = d3.pointer(ev, mBody);
+    placeTip(mTip, mBody, `${N[i].name}, ${ROLE_NAME[N[i].role]}: rank ${cur.rank[i]}, height ${fmt(cur.s[i], 2)}`, px, py);
+  }).on('pointerleave', () => mTip.style('display', 'none'))
+    .on('click', ev => { const i = nearest(ev); if (i >= 0) { sel = i; update(false); } });
+  mSvg.on('keydown', ev => {
+    // Arrow keys step through neurons by rank.
+    if (ev.key !== 'ArrowUp' && ev.key !== 'ArrowDown') return;
+    ev.preventDefault();
+    const order = Array.from(cur.s.keys()).sort((a, b) => cur.s[b] - cur.s[a]), k = order.indexOf(sel);
+    sel = order[Math.max(0, Math.min(n - 1, k + (ev.key === 'ArrowDown' ? 1 : -1)))];
+    update(false);
+  });
+
+  responsive(mBody, w => { mw = w; drawMain(false); });
+  responsive(hBody, w => { hw = w; drawHist(); });
+  onTheme(() => { drawMain(false); drawHist(); });
+  update(false);
+}
+
+// ── Figure 2: cascades through the larval brain ──
+function cascadeWorker() {
+  self.onmessage = e => {
+    const { g, seeds, stop, p, runs, order } = e.data;
+    for (const k of order) {
+      const hits = GraphLib.cascade(g, seeds[k], stop, { p, runs, seed: k + 1 });
+      self.postMessage({ k, hits }, [hits.buffer]);
+    }
+  };
+}
+
+function cascadeFigure(L) {
+  const g = G.decodeCSR(L.ad), n = g.n, HOPS = 9, RUNS = 1000;
+  const stop = Uint8Array.from(L.out, o => (o >= 0 ? 1 : 0));
+  const ty = L.type.map(t => L.types[t]);
+  const brain = Array.from({ length: n }, (_, i) => i).filter(i => L.mod[i] < 0 && ty[i] !== 'sensory' && ty[i] !== 'ascending');
+  const M = L.modalities, mi = name => M.indexOf(name);
+  // Display order: sensory neurons entering the brain, then ascending neurons from the nerve cord.
+  const ROWS = [
+    ['olfactory', 'olfactory'], ['gustatory-external', 'taste, external'], ['gustatory-pharyngeal', 'taste, pharyngeal'],
+    ['gut', 'gut'], ['respiratory', 'respiratory'], ['thermo-warm', 'warm'], ['thermo-cold', 'cold'], ['visual', 'visual'],
+    ['noci', 'nociceptive'], ['mechano-Ch', 'mechano, Ch'], ['mechano-II/III', 'mechano, II/III'], ['proprio', 'proprioceptive'],
+  ].map(([key, label]) => ({ k: mi(key), label, ascending: ['noci', 'mechano-Ch', 'mechano-II/III', 'proprio'].includes(key) }));
+  const seeds = M.map((_, k) => Array.from({ length: n }, (_, i) => i).filter(i => L.mod[i] === k));
+  const ctl = { p: document.getElementById('cs-p'), t: document.getElementById('cs-t') };
+  const hBody = document.getElementById('cs-heat'), hSvg = d3.select(hBody).select('svg'), hTip = d3.select(hBody).select('.tip');
+  const bBody = document.getElementById('cs-bars'), bSvg = d3.select(bBody).select('svg'), bTip = d3.select(bBody).select('.tip');
+  let hits = new Array(M.length).fill(null), done = 0, sel = mi('olfactory'), hw = 0, bw = 0, tab = null, runP = 0.05;
+
+  const run = jobRunner(cascadeWorker, msg => {
+    hits[msg.k] = msg.hits; done++;
+    tabulate(); drawHeat(); drawBars(); readout();
+  });
+  function start() {
+    runP = +ctl.p.value;
+    hits = new Array(M.length).fill(null); done = 0;
+    const order = [sel].concat(ROWS.map(r => r.k).filter(k => k !== sel));
+    run({ g: { n, off: g.off, to: g.to, w: g.w }, seeds, stop, p: runP, runs: RUNS, order });
+    tabulate(); drawHeat(); drawBars(); readout();
+  }
+
+  // For each finished modality: brain neurons first reached at hops 1..8, outputs among them, never.
+  function tabulate() {
+    const theta = +ctl.t.value;
+    tab = M.map((_, k) => {
+      if (!hits[k]) return null;
+      const fh = G.firstHop(hits[k], n, HOPS, theta);
+      const c = new Array(HOPS).fill(0), o = new Array(HOPS).fill(0), dn = [];
+      let never = 0, sum = 0, got = 0;
+      for (const i of brain) {
+        const h = fh[i];
+        if (h < 1) { never++; continue; }
+        c[h]++; got++; sum += h;
+        if (stop[i]) o[h]++;
+        if (L.out[i] === 0) dn.push(h);
+      }
+      dn.sort((a, b) => a - b);
+      return { fh, c, o, never, mean: got ? sum / got : NaN, got, dnReached: dn.length, dnMedian: dn.length ? d3.quantileSorted(dn, 0.5) : NaN };
+    });
+  }
+
+  function drawHeat() {
+    if (!hw || !tab) return;
+    const w = hw, nar = narrow(), LW = nar ? 128 : 150, RW = nar ? 76 : 92, rh = nar ? 22 : 24, top = 22, gapY = 14;
+    const cw = (w - LW - RW) / 8, h = top + ROWS.length * rh + gapY + 4;
+    hSvg.attr('width', w).attr('height', h).selectAll('*').remove();
+    const ycell = r => top + r * rh + (ROWS[r].ascending ? gapY : 0);
+    const maxv = d3.max(tab, t => (t ? d3.max(t.c.slice(1)) : 0)) || 1;
+    const bg = css('--fig-bg'), acc = css('--accent'), ink = css('--text'), muted = css('--c-null-light');
+    const color = d3.scaleSequential(d3.interpolateRgb(bg, acc)).domain([0, maxv]);
+    const g = hSvg.append('g');
+    for (let hh = 1; hh < HOPS; hh++) g.append('text').attr('class', 'hm-sub').attr('x', LW + (hh - 0.5) * cw).attr('y', 14).attr('text-anchor', 'middle').text(hh);
+    g.append('text').attr('class', 'hm-sub').attr('x', LW - 8).attr('y', 14).attr('text-anchor', 'end').text('hop');
+    g.append('text').attr('class', 'hm-sub').attr('x', LW + 8 * cw + 6).attr('y', 14).text('never');
+    g.append('text').attr('class', 'hm-sub').attr('x', w - 6).attr('y', 14).attr('text-anchor', 'end').text('mean');
+    g.append('line').attr('x1', 0).attr('x2', w).attr('y1', top + 8 * rh + gapY / 2).attr('y2', top + 8 * rh + gapY / 2).attr('stroke', css('--border'));
+    ROWS.forEach((row, r) => {
+      const t = tab[row.k], y0 = ycell(r), rg = g.append('g').attr('class', 'hm-row');
+      rg.append('rect').attr('x', 0).attr('y', y0).attr('width', w).attr('height', rh).attr('fill', 'transparent');
+      rg.append('text').attr('class', 'hm-lab').attr('x', 6).attr('y', y0 + rh / 2 + 4).style('font-weight', row.k === sel ? 700 : 400).text(row.label);
+      rg.append('text').attr('class', 'hm-sub').attr('x', LW - 8).attr('y', y0 + rh / 2 + 4).attr('text-anchor', 'end').text(seeds[row.k].length);
+      for (let hh = 1; hh < HOPS; hh++) {
+        const v = t ? t.c[hh] : null;
+        rg.append('rect').attr('x', LW + (hh - 1) * cw + 1).attr('y', y0 + 1).attr('width', cw - 2).attr('height', rh - 2).attr('rx', 2)
+          .attr('fill', v === null ? muted : color(v));
+        if (v !== null && v > 0 && cw > 26) rg.append('text').attr('class', 'hm-val').attr('x', LW + (hh - 0.5) * cw).attr('y', y0 + rh / 2 + 3.5)
+          .attr('text-anchor', 'middle').attr('fill', v > 0.55 * maxv ? bg : ink).text(v);
+      }
+      rg.append('text').attr('class', 'hm-val').attr('x', LW + 8 * cw + 6).attr('y', y0 + rh / 2 + 3.5).attr('fill', css('--text-2')).text(t ? t.never : '');
+      rg.append('text').attr('class', 'hm-val').attr('x', w - 6).attr('y', y0 + rh / 2 + 3.5).attr('text-anchor', 'end').attr('fill', ink).text(t && t.got ? fmt(t.mean, 1) : '');
+      rg.on('click', () => { sel = row.k; drawHeat(); drawBars(); readout(); })
+        .on('pointermove', ev => {
+          const [px, py] = d3.pointer(ev, hBody), hh = Math.floor((px - LW) / cw) + 1;
+          let html = `<b>${row.label}</b>, ${seeds[row.k].length} input neurons`;
+          if (t && hh >= 1 && hh < HOPS) html += `: ${t.c[hh]} brain neurons first reached at hop ${hh}, ${t.o[hh]} of them outputs`;
+          else if (t && hh >= HOPS) html += `: ${t.never} brain neurons never reached`;
+          else if (!t) html += ': computing';
+          placeTip(hTip, hBody, html, px, py);
+        }).on('pointerleave', () => hTip.style('display', 'none'));
+    });
+    const rs = ROWS.findIndex(r => r.k === sel);
+    g.append('rect').attr('class', 'hm-sel').attr('x', 0.75).attr('y', ycell(rs) + 0.75).attr('width', w - 1.5).attr('height', rh - 1.5).attr('rx', 3);
+  }
+
+  function drawBars() {
+    if (!bw || !tab) return;
+    const row = ROWS.find(r => r.k === sel), t = tab[sel];
+    document.getElementById('cs-bar-h').innerHTML = `${row.label} <span>neurons first reached at each hop</span>`;
+    const w = bw, h = narrow() ? 220 : 280, Mg = { l: 40, r: 8, t: 10, b: 34 }, iw = w - Mg.l - Mg.r, ih = h - Mg.t - Mg.b;
+    bSvg.attr('width', w).attr('height', h).selectAll('*').remove();
+    const g = bSvg.append('g').attr('transform', `translate(${Mg.l},${Mg.t})`);
+    const x = d3.scaleBand().domain(d3.range(1, HOPS)).range([0, iw]).padding(0.25);
+    const ymax = Math.max(100, d3.max(tab, tt => (tt ? d3.max(tt.c) : 0)) || 0);
+    const y = d3.scaleLinear().domain([0, ymax]).nice().range([ih, 0]);
+    g.append('g').attr('class', 'axis').call(d3.axisLeft(y).ticks(5).tickSize(-iw)).call(a => a.select('.domain').remove())
+      .call(a => a.selectAll('line').attr('stroke-opacity', 0.6));
+    g.append('g').attr('class', 'axis').attr('transform', `translate(0,${ih})`).call(d3.axisBottom(x).tickSizeOuter(0));
+    g.append('text').attr('class', 'axis-label').attr('x', iw / 2).attr('y', ih + 30).attr('text-anchor', 'middle').text('hop');
+    if (!t) { g.append('text').attr('class', 'note').attr('x', iw / 2).attr('y', ih / 2).attr('text-anchor', 'middle').text('computing'); return; }
+    const outC = css('--c-motor'), intC = css('--c-inter');
+    for (let hh = 1; hh < HOPS; hh++) {
+      const o = t.o[hh], rest = t.c[hh] - o, x0 = x(hh), bwid = x.bandwidth();
+      if (o > 0) g.append('rect').attr('x', x0).attr('width', bwid).attr('y', y(o)).attr('height', ih - y(o)).attr('fill', outC);
+      if (rest > 0) g.append('rect').attr('x', x0).attr('width', bwid).attr('y', y(t.c[hh])).attr('height', Math.max(0, y(o) - y(t.c[hh]) - (o > 0 ? 2 : 0))).attr('rx', 2).attr('fill', intC);
+      g.append('rect').attr('x', x0 - 2).attr('width', bwid + 4).attr('y', 0).attr('height', ih).attr('fill', 'transparent')
+        .on('pointermove', ev => { const [px, py] = d3.pointer(ev, bBody); placeTip(bTip, bBody, `hop ${hh}: ${t.c[hh]} neurons, ${o} of them outputs`, px, py); })
+        .on('pointerleave', () => bTip.style('display', 'none'));
+    }
+  }
+
+  function readout() {
+    const ro = document.getElementById('cs-ro');
+    if (!tab) return;
+    const row = ROWS.find(r => r.k === sel), t = tab[sel];
+    let s = done < M.length ? `Running cascades at p = ${fmt(runP, 3)}: ${done} of ${M.length} modalities done. ` : '';
+    if (t) s += `<b>${row.label}</b> (${seeds[sel].length} input neurons): ${t.got.toLocaleString('en')} of ${brain.length.toLocaleString('en')} brain neurons reached, mean hop <b>${fmt(t.mean, 1)}</b>; ` +
+      `descending neurons to the nerve cord reached ${t.dnReached} of ${L.out.filter(o => o === 0).length}` + (t.dnReached ? `, median hop <b>${t.dnMedian}</b>` : '') + '. ';
+    if (done === M.length) {
+      let reached = 0, uni = 0;
+      for (const i of brain) { const k = tab.filter(tt => tt.fh[i] > 0).length; if (k) reached++; if (k === 1) uni++; }
+      s += `From any modality: ${reached.toLocaleString('en')} reached, <b>${fmt(100 * uni / reached, 1)}%</b> of them (${uni}) from only one.`;
+    }
+    ro.innerHTML = s;
+  }
+
+  ctl.p.addEventListener('input', () => { ctl.p.nextElementSibling.textContent = fmt(+ctl.p.value, 3); });
+  ctl.p.addEventListener('change', start);
+  ctl.t.addEventListener('input', () => {
+    ctl.t.nextElementSibling.textContent = fmt(100 * +ctl.t.value, 0) + '% of runs';
+    tabulate(); drawHeat(); drawBars(); readout();
+  });
+  ctl.p.nextElementSibling.textContent = fmt(+ctl.p.value, 3);
+  ctl.t.nextElementSibling.textContent = fmt(100 * +ctl.t.value, 0) + '% of runs';
+  responsive(hBody, w => { hw = w; drawHeat(); });
+  responsive(bBody, w => { bw = w; drawBars(); });
+  onTheme(() => { drawHeat(); drawBars(); });
+  start();
+}
+</script>
+</body>
+</html>
