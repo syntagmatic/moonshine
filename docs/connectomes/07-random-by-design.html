@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Random by Design? · Connectomes</title>
+<script src="../lib/motion.js"></script>
+<script src="../vendor/js/d3.v7.min.js"></script>
+<link rel="stylesheet" href="../vendor/katex@0.16.11/katex.min.css">
+<script src="../vendor/katex@0.16.11/katex.min.js"></script>
+<link href="../vendor/fonts/sans-serif-mono/fonts.css" rel="stylesheet">
+<script src="shared/graph.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  color-scheme: light dark;
+  --article-width: 740px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem;
+  --line-height: 1.6;
+  --text: #1c1d24;
+  --text-2: #50525e;
+  --accent: #2b62a8;
+  --accent-light: #dde8f6;
+  --bg: #fafaf8;
+  --fig-bg: #ffffff;
+  --border: #e3e2de;
+  /* Series roles, fixed across all eight articles:
+     observed data = ink (--text); null models and expected values = --c-null;
+     sensory / inter / motor neurons = --c-sensory / --c-inter / --c-motor;
+     gap junctions = --c-gap; neuropeptides = --c-pep. Validated for colour
+     vision deficiency in both themes. In the fly, input neurons take the sensory
+     hue and brain output neurons the motor hue. */
+  --c-null: #7c8597;
+  --c-null-light: #e6e8ee;
+  --c-sensory: #00928a;
+  --c-inter: #b9780a;
+  --c-motor: #b8405e;
+  --c-gap: #6b55c4;
+  --c-pep: #5d8a2b;
+  /* This article: a diverging pair (cool below the null, warm above; neutral
+     midpoint) that figure 2 reuses for its two odours. Validated in both themes. */
+  --c-cool: #2b62a8;
+  --c-warm: #c4492c;
+  --c-mid: #f0efec;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --text: #e6e5e0; --text-2: #a8a9b3;
+    --accent: #7aa7e6; --accent-light: #1f2b3d;
+    --bg: #15161a; --fig-bg: #1c1d22; --border: #33343b;
+    --c-null: #8b93a5; --c-null-light: #2a2d35;
+    --c-sensory: #21a198; --c-inter: #c2841a; --c-motor: #d6607e; --c-gap: #8e7ce0; --c-pep: #76a63f;
+    --c-cool: #5f8fd6; --c-warm: #e0704f; --c-mid: #34353b;
+  }
+}
+
+body {
+  font-family: var(--body-font); font-size: var(--body-size); line-height: var(--line-height);
+  color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased;
+}
+
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1rem 6rem; }
+h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+p { margin: 0 0 1rem; }
+a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+.subtitle { font-family: var(--heading-font); font-size: 1.15rem; color: var(--text-2); margin-bottom: 2rem; }
+.kicker { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-bottom: 0.5rem; }
+.kicker a { color: var(--text-2); }
+
+.figure { margin: 2rem 0; padding: 1.25rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; }
+.figure-wide { margin-left: -2rem; margin-right: -2rem; }
+@media (min-width: 1040px) { .figure-wide { margin-left: -7rem; margin-right: -7rem; } }
+.figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; line-height: 1.45; }
+.figure-label { font-weight: 600; color: var(--text); }
+.readout { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); min-height: 2.8em; font-variant-numeric: tabular-nums; margin: 0.4rem 0 0; line-height: 1.45; }
+.readout b { color: var(--text); font-weight: 600; }
+
+.controls { display: flex; align-items: center; gap: 0.5rem 1.25rem; flex-wrap: wrap; margin-bottom: 0.75rem; font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); }
+.controls label { display: inline-flex; align-items: center; gap: 0.4rem; }
+.controls input[type="range"] { width: 150px; max-width: 100%; accent-color: var(--accent); }
+.controls select { font: inherit; color: var(--text); background: var(--fig-bg); border: 1px solid var(--border); border-radius: 4px; padding: 1px 4px; max-width: 13rem; }
+.controls .val { font-variant-numeric: tabular-nums; color: var(--text); min-width: 7.5em; display: inline-block; }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
+.seg button { font: inherit; color: var(--text-2); background: var(--fig-bg); border: 0; padding: 2px 9px; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--border); }
+.seg button[aria-pressed="true"] { background: var(--accent-light); color: var(--text); font-weight: 600; }
+
+.panels { display: grid; gap: 0.75rem 1.25rem; align-items: start; }
+.p-3-2 { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
+.panels > div { min-width: 0; }
+.panels h3 { font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600; color: var(--text); margin: 0 0 0.25rem; }
+.panels h3 span { font-weight: 400; color: var(--text-2); }
+.fig-body { position: relative; width: 100%; }
+.fig-body svg, .fig-body canvas { display: block; }
+.fig-body svg { overflow: visible; }
+.fig-body canvas + svg { position: absolute; left: 0; top: 0; }
+.tip { position: absolute; pointer-events: none; font-family: var(--heading-font); font-size: 0.78rem; background: var(--fig-bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; white-space: nowrap; display: none; z-index: 2; }
+
+svg text { font-family: var(--heading-font); }
+svg .axis text { font-size: 11px; fill: var(--text-2); }
+svg .axis line, svg .axis path { stroke: var(--border); }
+svg .axis-label { font-size: 11px; fill: var(--text-2); }
+svg .gl { font-size: 9px; fill: var(--text-2); }
+svg .gl-core { fill: var(--text); font-weight: 600; }
+svg .note { font-size: 11px; fill: var(--text-2); }
+svg .pt-lab { font-size: 11px; fill: var(--text); font-weight: 600; }
+svg .halo { paint-order: stroke; stroke: var(--fig-bg); stroke-width: 4px; stroke-linejoin: round; }
+svg:focus-visible, :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.legend { display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; font-family: var(--heading-font); font-size: 0.8rem; color: var(--text-2); margin: 0.35rem 0 0; }
+.legend span { display: inline-flex; align-items: center; gap: 0.35rem; }
+.legend svg { overflow: visible; }
+
+.katex-display { overflow-x: auto; overflow-y: hidden; padding: 2px 0; }
+
+@media (max-width: 640px) {
+  h1 { font-size: 1.75rem; }
+  .figure { padding: 1rem 0.6rem; }
+  .figure-wide { margin-left: 0; margin-right: 0; }
+  .p-3-2 { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="article">
+  <header>
+    <p class="kicker"><a href="index.html">Connectomes</a>, part 7 of 8</p>
+    <h1>Random by Design?</h1>
+    <p class="subtitle">The fly's mushroom body was the textbook case of a brain wired at random. A full reconstruction says almost, and how much structure is left over depends on how much of the calyx's geometry the null is allowed to keep.</p>
+  </header>
+
+  <p>Every odour a fruit fly smells is first sorted into about fifty channels. Each olfactory receptor neuron expresses, with few exceptions, one kind of odorant receptor and sends its axon to one glomerulus of the antennal lobe, and projection neurons carry each glomerulus's signal on to the mushroom body, the fly's centre for learned smells. There they meet about 2,200 Kenyon cells on each side of the brain. A Kenyon cell's dendrites end in a handful of claws, each wrapped around a single bouton of a single projection neuron, so each Kenyon cell listens to a few glomeruli out of fifty. Which few?</p>
+
+  <p>In 2013 Caron and colleagues traced the inputs of 200 Kenyon cells, one per fly, by dye-filling the boutons inside each cell's claws. Each cell had 2 to 11 claws, 7 on average, and the combinations of glomeruli looked random: they showed no organisation by odour tuning, anatomy or developmental origin, and no pair of glomeruli converged more often than in a shuffle that kept each cell's number of inputs and each glomerulus's share of them. Random wiring fitted the theory, too. A layer that mixes a few random inputs and keeps only its most active cells makes odours easier to tell apart while similar odours still get similar codes, and Dasgupta, Stevens and Navlakha later described that step as a hashing algorithm. The mushroom body became the standard example of a brain area wired at random on purpose.</p>
+
+  <p>Testing that claim is a null-model question of exactly the kind in part 3: random compared with what, and keeping what fixed? This article reruns the test on the electron-microscopy reconstruction of Zheng and colleagues, who traced 1,356 Kenyon cells in one fly brain, and then asks what the random wiring, or the almost-random wiring the fly actually has, does for odours.</p>
+
+  <h2>Which inputs share a Kenyon cell</h2>
+
+  <p>Zheng and colleagues picked Kenyon cells at random where their axons bundle together, traced each one back to all its claws, and identified the projection neuron bouton inside every claw: about 62% of all the claws on the right side of the brain. Their released table lists 6,468 inputs from projection neurons of 54 glomeruli onto 1,354 of the cells, 4.8 per cell. (The other 9% or so of the claws, with input from other kinds of neuron or too few synapses to identify, are not in it.)</p>
+
+  <p>The question is whether two glomeruli land on the same Kenyon cell more often than chance. Zheng's "conditional input" answers it pair by pair. With <i>n<sub>kj</sub></i> claws of Kenyon cell <i>k</i> from glomerulus <i>j</i>, take the cells that get at least one claw from glomerulus <i>i</i> and count their claws from <i>j</i>:</p>
+  <div id="eq-ci"></div>
+  <p>where <i>m<sub>i</sub></i> is the number of cells with input from <i>i</i>, taken off the diagonal so that it counts only the extra claws from the same glomerulus. A count means little alone: glomeruli with many boutons appear on many cells. So each <i>C<sub>ij</sub></i> becomes a z-score against shuffled wirings. The first shuffle swaps glomerulus labels among all claws, so every Kenyon cell keeps its number of claws and every glomerulus its number of claws, the bipartite version of the degree-preserving null of part 3. It is the shuffle Caron and colleagues used, and Zheng's "random claw" model. The second does the same swaps but only among claws in the same patch of the calyx: the figure cuts the 6,468 claws into spatial cells by k-means on their positions, and a label can only move to another claw of its own cell.</p>
+
+  <div class="figure figure-wide" id="fig-co">
+    <div class="controls">
+      <label>Shuffle labels within <input type="range" id="co-k" min="0" max="8" step="1" value="0" aria-label="Number of spatial cells to shuffle within"><span class="val" id="co-k-val"></span></label>
+      <label>Kenyon cells <select id="co-cls" aria-label="Kenyon cell class">
+        <option value="all">all</option><option value="0">γ only</option><option value="1">α′β′ only</option><option value="2">αβ only</option>
+      </select></label>
+    </div>
+    <div class="panels p-3-2">
+      <div>
+        <h3>Every pair of glomeruli <span>row given, column co-occurring, z against the shuffle</span></h3>
+        <div class="fig-body" id="co-heat"><svg tabindex="0" role="img" aria-label="A 54 by 54 heatmap of z-scores: for each pair of glomeruli, how much more often than in the shuffled wirings Kenyon cells with input from the row glomerulus also receive input from the column glomerulus. Arrow keys move the selected cell."></svg><div class="tip"></div></div>
+        <div class="legend" id="co-legend"></div>
+      </div>
+      <div>
+        <h3>The calyx <span>every claw, seen from the front</span></h3>
+        <div class="fig-body" id="co-map"><canvas></canvas><svg role="img" aria-label="Map of the 6,468 claws in the mushroom body calyx, projected onto the frontal plane, with the core-community claws and the two selected glomeruli marked."></svg></div>
+        <div class="legend">
+          <span><svg width="12" height="12"><circle cx="6" cy="6" r="3" style="fill: var(--c-warm)"></circle></svg>core community</span>
+          <span><svg width="12" height="12"><circle cx="6" cy="6" r="3" style="fill: var(--c-null)"></circle></svg>other claws</span>
+          <span><svg width="12" height="12"><circle cx="6" cy="6" r="3.6" style="fill: var(--text)"></circle></svg><span id="co-key-row">row</span></span>
+          <span><svg width="12" height="12"><circle cx="6" cy="6" r="3.4" style="fill: none; stroke: var(--text); stroke-width: 1.4"></circle></svg><span id="co-key-col">column</span></span>
+        </div>
+      </div>
+    </div>
+    <p class="readout" id="co-ro" aria-live="polite"></p>
+    <p class="figure-caption"><span class="figure-label">Figure 1.</span> Conditional input (Zheng et al. 2022) for the 6,468 projection-neuron inputs onto 1,354 Kenyon cells traced in the right mushroom body of the FAFB brain, as z-scores against 1,000 shuffled wirings computed in a worker for each setting. Glomeruli are in the order of Zheng's Figure 3B, with their ten-glomerulus "core community" first (outlined, names in bold); a dot marks the glomeruli whose projection neurons they class as responding mainly to food odours. With one cell the shuffle runs over the whole calyx; with more, labels move only among claws in the same k-means cell of claw positions. Choosing a class of Kenyon cells keeps only their claws, in the data and in the shuffles. The map projects claw positions (centroids of each claw's synapses) onto the frontal plane, dorsal up; the circle shows the median distance from a claw to its cell's centre. Hover a square for its counts; click one, or use the arrow keys, to show its two glomeruli on the map.</p>
+  </div>
+
+  <p>Against the whole-calyx shuffle the wiring is not random. A block of glomeruli converges: the ten that Zheng and colleagues called the core community, DM1, DM2, DM3, DM4, DL2v, DP1m, VA2, VA4, VM2 and VM3, have a mean pairwise z of about 3, and every one of them carries food odours by their classification. Across all 2,862 ordered pairs the z-scores spread with a standard deviation of 1.46 rather than 1 (Zheng's figure gives 1.47). With a cruder null that ignores which boutons the claws actually grab, drawing each claw's glomerulus in proportion to its number of boutons, the core block reaches a z above 6. Caron's 200 cells, with about three inputs identified per cell, were too few to see it, and when Zheng and colleagues thinned their own data to that size the community disappeared too.</p>
+
+  <p>Some of the excess is the mixture of cell types. Kenyon cells come in three classes, &gamma;, &alpha;&prime;&beta;&prime; and &alpha;&beta;, and the &alpha;&beta; and &alpha;&prime;&beta;&prime; cells take 36 to 40% of their claws from the core glomeruli against 19% for &gamma; cells. Pool them and the core glomeruli turn up together simply because they all favour the same cells. Within any single class the core block's mean z drops to between 1.2 and 1.6. Li and colleagues found the same dependence on cell class in the second fly connectome, the hemibrain.</p>
+
+  <p>Now restrict the shuffle in space. With ten cells, whose claws lie a median 8 micrometres from the cell's centre, the core block falls to about 1.8; with fifty, about 1.0; with a hundred, about 0.8. Geometry absorbs most of the excess. But the slider has the same catch as the distance bins of part 3. A shuffle within small cells keeps more of the real wiring by construction, because neighbouring claws often grip the same bouton. The whole-calyx shuffle leaves 2.4% of claws on their own glomerulus, and only by chance; the 50-cell shuffle leaves 16%, the 100-cell one 25%, and with 400 cells 72% of the labels never move. Zheng's own local null, in which each claw picks one of the five boutons nearest to it, works at that fine scale. Rebuilt here from the synapse positions it leaves the core block near 1 and a quarter of the claws on their own glomerulus. Li and colleagues, shuffling the hemibrain's claws within a radius, point out the limit: at radius zero the model is the data.</p>
+
+  <p>So the honest reading is narrower than "geometry explains it". Within a few micrometres, which bouton a claw grabs looks like a random draw from the boutons around it. The structure lies in where the boutons and the claws are: food glomeruli's axons cluster in parts of the calyx, and the dendrites of &alpha;&beta; and &alpha;&prime;&beta;&prime; cells grow into those parts. Zheng and colleagues found the Kenyon cells with the most core input grouped into four clusters, consistent with the four neuroblasts that make the mushroom body. That is a developmental programme for territories, not a wiring diagram for individual cells, and a null that keeps the territories cannot say why they are where they are.</p>
+
+  <h2>What random wiring is good for</h2>
+
+  <p>Dasgupta and colleagues read the circuit as a hash function. Fifty channels project to some 2,000 Kenyon cells, each summing about six of them; a single inhibitory neuron, APL, feeds back onto all the Kenyon cells and silences all but the most active 5%, which become the odour's tag. Two odours that excite similar channels excite similar Kenyon cells, so their tags overlap, and something learned about one carries over to the other. Computer scientists call a hash with that property locality-sensitive, and their random projections do the same job.</p>
+
+  <p>The real responses exist to test it with. In 2006 Hallem and Carlson recorded how neurons expressing each of 24 odorant receptors responded to 110 odours; 23 of those receptors map to one glomerulus each in Zheng's data. Feed each odour's change in firing through the traced claws, glomerulus by glomerulus, and give every Kenyon cell a drive</p>
+  <div id="eq-tag"></div>
+  <p>the summed responses of the glomeruli its claws hold. The tag is the 68 cells with the largest drive, 5% of 1,354. Scaling an odour's responses up or down leaves its tag unchanged, so the normalisation the antennal lobe applies on the way doesn't matter here; the 31 glomeruli Hallem and Carlson didn't record contribute nothing.</p>
+
+  <div class="figure figure-wide" id="fig-tag">
+    <div class="controls">
+      <span class="seg" role="group" aria-label="Wiring">
+        <button type="button" data-w="0" aria-pressed="true">Real wiring</button><button type="button" data-w="1" aria-pressed="false">Claws shuffled</button><button type="button" data-w="2" aria-pressed="false">Uniform random</button>
+      </span>
+      <label><select id="tg-a" aria-label="First odour"></select></label>
+      <label><select id="tg-b" aria-label="Second odour"></select></label>
+    </div>
+    <div class="panels p-3-2">
+      <div>
+        <h3>Every pair of odours <span>response correlation against tag overlap</span></h3>
+        <div class="fig-body" id="tg-sc"><canvas></canvas><svg tabindex="0" role="img" aria-label="Scatter of all 5,995 pairs of the 110 odours: the correlation of their receptor responses against the share of Kenyon cells their tags have in common, with binned means for the real and shuffled wiring and the 5% chance level."></svg><div class="tip"></div></div>
+        <div class="legend">
+          <span><svg width="22" height="10"><line x1="1" y1="5" x2="21" y2="5" style="stroke: var(--text); stroke-width: 2"></line></svg>real wiring, mean</span>
+          <span><svg width="22" height="10"><line x1="1" y1="5" x2="21" y2="5" style="stroke: var(--c-null); stroke-width: 2; stroke-dasharray: 4 3"></line></svg>20 shuffled wirings, mean</span>
+          <span><svg width="22" height="10"><line x1="1" y1="5" x2="21" y2="5" style="stroke: var(--c-null); stroke-width: 1"></line></svg>chance, 5%</span>
+        </div>
+      </div>
+      <div>
+        <h3 id="tg-h">Two odours</h3>
+        <div class="fig-body" id="tg-pair"><svg role="img" aria-label="For the two chosen odours: their responses in the 23 recorded glomeruli as paired bars, and the 1,354 Kenyon cells as a grid by class with each odour's tag marked."></svg><div class="tip"></div></div>
+        <div class="legend">
+          <span><svg width="12" height="12"><rect x="1" y="1" width="10" height="10" rx="1" style="fill: var(--c-cool)"></rect></svg><span id="tg-key-a">first odour</span></span>
+          <span><svg width="12" height="12"><rect x="1" y="1" width="10" height="10" rx="1" style="fill: var(--c-warm)"></rect></svg><span id="tg-key-b">second odour</span></span>
+          <span><svg width="12" height="12"><rect x="1" y="1" width="10" height="10" rx="1" style="fill: var(--text)"></rect></svg>in both tags</span>
+        </div>
+      </div>
+    </div>
+    <p class="readout" id="tg-ro" aria-live="polite"></p>
+    <p class="figure-caption"><span class="figure-label">Figure 2.</span> Hallem and Carlson's 2006 receptor responses (110 odours at 10<sup>&minus;2</sup> dilution, change from spontaneous firing in spikes per second, 23 receptors after dropping Or33b, which shares its neurons with two others) passed through Zheng's traced claws to 1,354 Kenyon cells, keeping the top 5% (68 cells) as each odour's tag; ties at the cutoff are broken at random. Similarity is the correlation of two odours' 23 responses. "Claws shuffled" swaps glomerulus labels among all claws, the whole-calyx shuffle of Figure 1; "uniform random" gives every claw a glomerulus drawn uniformly from the 54, the textbook model. The lines are means in bins of 0.1, the dashed one over 20 shuffled wirings. Click a dot or pick two odours to compare; the bars show their responses in the recorded glomeruli, core-community glomeruli in bold, and the grid shows the Kenyon cells by class, in the order of their skeleton ids.</p>
+  </div>
+
+  <p>The tags do what the hashing view predicts. Odour pairs whose receptor responses correlate above 0.8 share about two thirds of their tag; pairs below 0.2 share 12%, against 5% for two random sets of 68 cells. Across all 5,995 pairs the rank correlation between response similarity and tag overlap is 0.88. Ethyl acetate and methyl acetate, whose responses correlate at 0.76, share 62% of their tags; methanol and ethanol, at 0.94, share 77%.</p>
+
+  <p>Swap the wiring and almost nothing changes. Shuffled claws give a rank correlation of 0.88 again, the uniform random wiring of the textbook 0.87, and the similar pairs overlap just as much. The difference is at the dissimilar end, and it is small: unrelated odours share 12% of their tags with the real wiring, 10% with shuffled claws and 9% with uniform wiring, so the real circuit tells dissimilar odours apart slightly less well than a random one. Zheng and colleagues found the same in a simulated discrimination task: worse than random unless the signal ran through the overconvergent glomeruli. The cost is not spread evenly. Pairs of odours that both put most of their response into core-community glomeruli overlap 4.5 points more than with shuffled wiring, pairs that barely use them about 2 points more; ethyl acetate and acetic acid share 40% of their tags in the real wiring against 26% in shuffled ones.</p>
+
+  <p>Li and colleagues reached a similar verdict on the hemibrain with a different measure: the spatial structure lowers the dimension of the Kenyon cell representation only modestly, though they left open that it might matter for particular kinds of odour. This model has its own limits. It passes receptor neuron firing straight to the projection neurons, ignores how many synapses each claw makes and how the cells' thresholds differ, and sees only the 23 recorded glomeruli and the 62% of claws that were traced; 154 of the 1,354 Kenyon cells have no claw on a recorded glomerulus and never fire. Within those limits, the tags of the real wiring behave like those of a random one, with a little extra overlap among odours that the food glomeruli carry. Whether a fly uses that overlap, to generalise between fruity smells, say, is a question for behaviour experiments, not for the wiring diagram.</p>
+
+  <footer style="margin-top: 4rem; padding-top: 2rem; border-top: 1px solid var(--border); font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2);">
+    <p>Mushroom body wiring: Zheng, Li, Fisher et al. 2022 (Curr Biol 32, 3334), from the authors' repository bocklab/pn_kc (MIT licence): the claw table, the bouton table with their glomerulus categories and core community, and every projection-neuron-to-Kenyon-cell synapse with its position in the FAFB volume (Zheng et al. 2018, Cell 174, 730). Three glomeruli carry FAFB's older names in that release and are given current names here (VC3l as VC3, VC3m as VC5, VC5 as VM6). Earlier tracing: Caron, Ruta, Abbott &amp; Axel 2013 (Nature 497, 113). The hemibrain analyses: Li, Lindsey, Marin et al. 2020 (eLife 9, e62576).</p>
+    <p>Odour responses: Hallem &amp; Carlson 2006 (Cell 125, 143), via the drosolf package (tom-f-oconnell/drosolf), checked against the DoOR database copy (CC BY-SA 4.0). The fly hash: Dasgupta, Stevens &amp; Navlakha 2017 (Science 358, 793).</p>
+    <p><a href="index.html">Connectomes</a>, part 7 of 8. Previously: <a href="06-which-way-signals-flow.html">Which Way Signals Flow</a></p>
+    <p>Built with <a href="https://github.com/enjalot/moonshine" style="color: var(--text-2);">moonshine</a>.</p>
+  </footer>
+</div>
+
+<script>
+// ── Shared helpers ──
+const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const narrow = () => matchMedia('(max-width: 640px)').matches;
+function responsive(el, render) {
+  let w = 0;
+  new ResizeObserver(() => {
+    if (el.clientWidth > 0 && el.clientWidth !== w) { w = el.clientWidth; render(w); }
+  }).observe(el);
+}
+const onTheme = f => matchMedia('(prefers-color-scheme: dark)').addEventListener('change', f);
+const fmt = (v, d) => v.toLocaleString('en', { minimumFractionDigits: d, maximumFractionDigits: d });
+const G = GraphLib;
+function placeTip(tip, body, html, x, y) {
+  tip.style('display', 'block').html(html);
+  const tw = tip.node().offsetWidth, W = body.clientWidth;
+  tip.style('left', Math.max(0, Math.min(W - tw, x - tw / 2)) + 'px').style('top', Math.max(0, y - 34) + 'px');
+}
+function sizeCanvas(cv, w, h) {
+  const dpr = window.devicePixelRatio || 1;
+  cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+  cv.style.width = w + 'px'; cv.style.height = h + 'px';
+  const ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h);
+  return ctx;
+}
+
+// Each figure owns one worker, rebuilt from the library's source so the page
+// also works opened as a file. Starting a new job terminates the old one.
+function jobRunner(main, onMessage) {
+  const src = `const GraphLib = (${G.factory.toString()})();\n(${main.toString()})();`;
+  const url = URL.createObjectURL(new Blob([src], { type: 'text/javascript' }));
+  let w = null;
+  return msg => {
+    if (w) w.terminate();
+    w = new Worker(url);
+    w.onmessage = e => onMessage(e.data);
+    w.postMessage(msg);
+  };
+}
+
+const K = String.raw;
+function equations() {
+  const tex = (id, s) => katex.render(s, document.getElementById(id), { throwOnError: false, displayMode: true });
+  tex('eq-ci', K`C_{ij} \;=\; \sum_{k\,:\,n_{ki}>0} n_{kj} \;-\; [\,i=j\,]\, m_i, \qquad z_{ij} \;=\; \frac{C_{ij} - \operatorname{mean}_\text{shuffled}(C_{ij})}{\operatorname{sd}_\text{shuffled}(C_{ij})}`);
+  tex('eq-tag', K`d_k(\text{odour}) \;=\; \sum_{\text{claws } c \text{ of } k} r_{\,g(c)}(\text{odour})`);
+}
+equations();
+onTheme(equations);
+
+d3.json('shared/data/fly-mushroom.json').then(D => { coFigure(D); tagFigure(D); });
+
+// ── Figure 1: conditional input against whole-calyx and local shuffles ──
+function coWorker() {
+  self.onmessage = e => {
+    const L = GraphLib, { g, k, nK, nG, x, y, z, K, runs } = e.data;
+    const ci = L.clawIndex(k, nK), obs = L.condInput(g, ci, nG);
+    let cell = null, radius = null;
+    if (K > 1) {
+      const km = L.kmeans(x, y, z, K, L.rng(K));
+      cell = km.cell;
+      const d = [];
+      for (let c = 0; c < g.length; c++) d.push(Math.hypot(x[c] - km.cx[cell[c]], y[c] - km.cy[cell[c]], z[c] - km.cz[cell[c]]));
+      d.sort((a, b) => a - b); radius = d[d.length >> 1];
+    }
+    const cg = L.cellGroups(cell || new Int32Array(g.length), K, g);
+    const nl = L.condNull(g, ci, nG, (h, r) => L.permuteWithin(h, cg.groups, r), runs, L.rng(1));
+    self.postMessage({ obs, mean: nl.mean, sd: nl.sd, kept: cg.kept, radius });
+  };
+}
+
+function coFigure(D) {
+  const nG = D.glom.length, nK = D.kcClass.length, C = D.claw, m = C.g.length;
+  const CELLS = [1, 2, 5, 10, 20, 50, 100, 200, 400], RUNS = 1000;
+  const core = D.core.flatMap((v, i) => (v ? [i] : [])), nCore = core.length;
+  const ctl = { k: document.getElementById('co-k'), cls: document.getElementById('co-cls') };
+  const hBody = document.getElementById('co-heat'), hSvg = d3.select(hBody).select('svg'), hTip = d3.select(hBody).select('.tip');
+  const mBody = document.getElementById('co-map'), mCanvas = mBody.querySelector('canvas'), mSvg = d3.select(mBody).select('svg');
+  const results = new Map();
+  let sel = [0, 6], hw = 0, mw = 0, pending = null;
+
+  const labels = () => ({ g: ctl.cls.value === 'all' ? Int32Array.from(C.g) : Int32Array.from(C.g, (v, c) => (D.kcClass[C.k[c]] === +ctl.cls.value ? v : -1)) });
+  const key = () => ctl.k.value + '|' + ctl.cls.value;
+  const run = jobRunner(coWorker, msg => {
+    const z = new Float64Array(nG * nG);
+    for (let e = 0; e < z.length; e++) z[e] = msg.sd[e] > 0 ? (msg.obs[e] - msg.mean[e]) / msg.sd[e] : NaN;
+    results.set(pending, { ...msg, z });
+    if (pending === key()) { drawHeat(); drawMap(); readout(); }
+  });
+  function update() {
+    const K = CELLS[+ctl.k.value];
+    ctl.k.nextElementSibling.textContent = K === 1 ? 'the whole calyx' : `${K} spatial cells`;
+    if (!results.has(key())) {
+      pending = key();
+      const { g } = labels();
+      run({ g, k: Int32Array.from(C.k), nK, nG, x: C.x, y: C.y, z: C.z, K, runs: RUNS });
+    }
+    drawHeat(); drawMap(); readout();
+  }
+
+  // Number of KCs with input from each glomerulus, for the readout.
+  function kcsWith(g) {
+    const s = Array.from({ length: nG }, () => new Set());
+    for (let c = 0; c < m; c++) if (g[c] >= 0) s[g[c]].add(C.k[c]);
+    return s.map(x => x.size);
+  }
+
+  function coreMean(z) {
+    let s = 0, n = 0;
+    for (const i of core) for (const j of core) if (i !== j && Number.isFinite(z[i * nG + j])) { s += z[i * nG + j]; n++; }
+    return s / n;
+  }
+
+  function drawHeat() {
+    if (!hw) return;
+    const res = results.get(key()), nar = narrow(), LW = nar ? 6 : 36, TW = nar ? 6 : 36;
+    const cs = Math.max(4, Math.floor((hw - LW - 4) / nG)), w = LW + cs * nG, h = TW + cs * nG;
+    hSvg.attr('width', w).attr('height', h).selectAll('*').remove();
+    const cool = css('--c-cool'), warm = css('--c-warm'), mid = css('--c-mid'), ink = css('--text'), none = css('--c-null-light');
+    const col = d3.scaleDiverging([-6, 0, 6], d3.interpolateRgbBasis([cool, mid, warm])).clamp(true);
+    const g = hSvg.append('g').attr('transform', `translate(${LW},${TW})`);
+    if (res) {
+      const cells = [];
+      for (let i = 0; i < nG; i++) for (let j = 0; j < nG; j++) cells.push([i, j]);
+      g.append('g').selectAll('rect').data(cells).join('rect')
+        .attr('x', d => d[1] * cs).attr('y', d => d[0] * cs).attr('width', cs - (cs > 6 ? 0.5 : 0)).attr('height', cs - (cs > 6 ? 0.5 : 0))
+        .attr('fill', d => { const v = res.z[d[0] * nG + d[1]]; return Number.isFinite(v) ? col(v) : none; });
+    } else {
+      g.append('rect').attr('width', cs * nG).attr('height', cs * nG).attr('fill', none);
+      g.append('text').attr('class', 'note').attr('x', cs * nG / 2).attr('y', cs * nG / 2).attr('text-anchor', 'middle').text('shuffling');
+    }
+    // Core community outline and labels.
+    g.append('rect').attr('width', cs * nCore).attr('height', cs * nCore).attr('fill', 'none').attr('stroke', ink).attr('stroke-width', 1.5);
+    if (!nar) {
+      const fs = Math.min(9, cs + 0.5);
+      D.glom.forEach((name, i) => {
+        const isCore = D.core[i];
+        g.append('text').attr('class', 'gl' + (isCore ? ' gl-core' : '')).attr('x', -8).attr('y', i * cs + cs / 2 + 3).attr('text-anchor', 'end').style('font-size', fs + 'px').text(name);
+        g.append('text').attr('class', 'gl' + (isCore ? ' gl-core' : '')).attr('transform', `translate(${i * cs + cs / 2 + 3},-8) rotate(-90)`).style('font-size', fs + 'px').text(name);
+        if (D.cat[i] === 0) {
+          g.append('circle').attr('cx', -4).attr('cy', i * cs + cs / 2).attr('r', 1.4).attr('fill', ink);
+          g.append('circle').attr('cx', i * cs + cs / 2).attr('cy', -4).attr('r', 1.4).attr('fill', ink);
+        }
+      });
+    }
+    g.append('rect').attr('x', sel[1] * cs - 1).attr('y', sel[0] * cs - 1).attr('width', cs + 2).attr('height', cs + 2).attr('fill', 'none').attr('stroke', ink).attr('stroke-width', 1.5);
+    g.append('rect').attr('width', cs * nG).attr('height', cs * nG).attr('fill', 'transparent').style('cursor', 'pointer')
+      .on('pointermove', ev => {
+        const [px, py] = d3.pointer(ev, g.node()), i = Math.floor(py / cs), j = Math.floor(px / cs);
+        if (i < 0 || j < 0 || i >= nG || j >= nG) return;
+        const [bx, by] = d3.pointer(ev, hBody);
+        placeTip(hTip, hBody, res ? cellText(res, i, j) : `${D.glom[i]}, ${D.glom[j]}: shuffling`, bx, by);
+      })
+      .on('pointerleave', () => hTip.style('display', 'none'))
+      .on('click', ev => {
+        const [px, py] = d3.pointer(ev, g.node());
+        sel = [Math.min(nG - 1, Math.floor(py / cs)), Math.min(nG - 1, Math.floor(px / cs))];
+        drawHeat(); drawMap(); readout();
+      });
+    // Colour key.
+    const leg = d3.select('#co-legend').html('');
+    const ks = leg.append('span'), kw = 120;
+    const ksvg = ks.append('svg').attr('width', kw + 50).attr('height', 14);
+    const grad = ksvg.append('defs').append('linearGradient').attr('id', 'co-grad');
+    [-6, -3, 0, 3, 6].forEach(v => grad.append('stop').attr('offset', (v + 6) / 12).attr('stop-color', col(v)));
+    ksvg.append('text').attr('x', 0).attr('y', 11).attr('class', 'note').text('z −6');
+    ksvg.append('rect').attr('x', 30).attr('y', 2).attr('width', kw - 30).attr('height', 10).attr('rx', 2).attr('fill', 'url(#co-grad)');
+    ksvg.append('text').attr('x', kw + 4).attr('y', 11).attr('class', 'note').text('+6');
+    ks.append('span').text('fewer or more shared cells than shuffled');
+    if (nar) return;
+    const kd = leg.append('span');
+    kd.append('svg').attr('width', 8).attr('height', 8).append('circle').attr('cx', 4).attr('cy', 4).attr('r', 1.6).attr('fill', ink);
+    kd.append('span').text('food glomerulus');
+  }
+
+  function cellText(res, i, j) {
+    const e = i * nG + j, z = res.z[e];
+    return `given <b>${D.glom[i]}</b>, claws from <b>${D.glom[j]}</b>: ${res.obs[e]}, shuffled ${fmt(res.mean[e], 1)} ± ${fmt(res.sd[e], 1)}` +
+      (Number.isFinite(z) ? `, z ${z > 0 ? '+' : ''}${fmt(z, 1)}` : '');
+  }
+
+  // Map: frontal projection (x across, y down = ventral).
+  const xr = d3.extent(C.x), yr = d3.extent(C.y);
+  function drawMap() {
+    if (!mw) return;
+    const w = mw, pad = 10, sc = (w - 2 * pad) / (xr[1] - xr[0]), h = Math.round((yr[1] - yr[0]) * sc + 2 * pad);
+    const px = v => pad + (v - xr[0]) * sc, py = v => pad + (v - yr[0]) * sc;
+    const ctx = sizeCanvas(mCanvas, w, h);
+    mSvg.attr('width', w).attr('height', h).selectAll('*').remove();
+    const { g } = labels(), grey = css('--c-null'), warm = css('--c-warm'), ink = css('--text'), bg = css('--fig-bg');
+    const r = w < 360 ? 1.1 : 1.4;
+    ctx.globalAlpha = 0.35; ctx.fillStyle = grey;
+    for (let c = 0; c < m; c++) if (g[c] >= 0 && !D.core[g[c]]) { ctx.beginPath(); ctx.arc(px(C.x[c]), py(C.y[c]), r, 0, 7); ctx.fill(); }
+    ctx.globalAlpha = 0.7; ctx.fillStyle = warm;
+    for (let c = 0; c < m; c++) if (g[c] >= 0 && D.core[g[c]]) { ctx.beginPath(); ctx.arc(px(C.x[c]), py(C.y[c]), r, 0, 7); ctx.fill(); }
+    ctx.globalAlpha = 1;
+    const [si, sj] = sel;
+    if (sj !== si) {
+      ctx.strokeStyle = ink; ctx.lineWidth = 1.3;
+      for (let c = 0; c < m; c++) if (g[c] === sj) { ctx.beginPath(); ctx.arc(px(C.x[c]), py(C.y[c]), 3.2, 0, 7); ctx.stroke(); }
+    }
+    ctx.fillStyle = ink; ctx.strokeStyle = bg; ctx.lineWidth = 0.8;
+    for (let c = 0; c < m; c++) if (g[c] === si) { ctx.beginPath(); ctx.arc(px(C.x[c]), py(C.y[c]), 2.6, 0, 7); ctx.fill(); ctx.stroke(); }
+    // Scale bar and typical cell.
+    const sb = mSvg.append('g').attr('transform', `translate(${pad},${h - 8})`);
+    sb.append('line').attr('x2', 10 * sc).attr('stroke', ink).attr('stroke-width', 2);
+    sb.append('text').attr('class', 'note').attr('x', 10 * sc + 5).attr('y', 4).text('10 µm');
+    const res = results.get(key());
+    if (res && res.radius) {
+      const cx = w - pad - res.radius * sc - 2, cy = pad + res.radius * sc + 2;
+      mSvg.append('circle').attr('cx', cx).attr('cy', cy).attr('r', res.radius * sc).attr('fill', 'none').attr('stroke', ink).attr('stroke-dasharray', '3 2');
+      mSvg.append('text').attr('class', 'note halo').attr('x', cx - res.radius * sc - 4).attr('y', cy + 4).attr('text-anchor', 'end').text('typical cell');
+    }
+    document.getElementById('co-key-row').textContent = D.glom[si];
+    document.getElementById('co-key-col').textContent = sj === si ? '(same)' : D.glom[sj];
+  }
+
+  function readout() {
+    const res = results.get(key()), ro = document.getElementById('co-ro');
+    const K = CELLS[+ctl.k.value], { g } = labels(), nc = g.reduce((s, v) => s + (v >= 0), 0);
+    if (!res) { ro.innerHTML = `Shuffling ${fmt(nc, 0)} claws 1,000 times${K > 1 ? ` within ${K} spatial cells` : ''}…`; return; }
+    let hi = 0, tot = 0;
+    for (let i = 0; i < nG; i++) for (let j = 0; j < nG; j++) if (i !== j && Number.isFinite(res.z[i * nG + j])) { tot++; if (res.z[i * nG + j] > 3) hi++; }
+    const kc = kcsWith(g), [si, sj] = sel;
+    ro.innerHTML = `Core community: mean z <b>${fmt(coreMean(res.z), 2)}</b> over its 90 pairs; ${hi} of ${fmt(tot, 0)} pairs above z = 3. ` +
+      `The shuffle leaves <b>${fmt(100 * res.kept, 1)}%</b> of claws on their own glomerulus` +
+      (res.radius ? `; claws lie a median ${fmt(res.radius, 1)} µm from their cell's centre. ` : '. ') +
+      `Selected: ${kc[si]} cells with input from ${D.glom[si]}; ` + cellText(res, si, sj) + '.';
+  }
+
+  hBody.querySelector('svg').addEventListener('keydown', ev => {
+    const d = { ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] }[ev.key];
+    if (!d) return;
+    ev.preventDefault();
+    sel = [Math.max(0, Math.min(nG - 1, sel[0] + d[0])), Math.max(0, Math.min(nG - 1, sel[1] + d[1]))];
+    drawHeat(); drawMap(); readout();
+  });
+  ctl.k.addEventListener('input', update);
+  ctl.cls.addEventListener('change', update);
+  responsive(hBody, w => { hw = w; drawHeat(); });
+  responsive(mBody, w => { mw = w; drawMap(); });
+  onTheme(() => { drawHeat(); drawMap(); });
+  update();
+}
+
+// ── Figure 2: odour tags through the real and shuffled wiring ──
+function tagFigure(D) {
+  const nG = D.glom.length, nK = D.kcClass.length, O = D.odour, nO = O.name.length, size = Math.round(0.05 * nK);
+  const g0 = Int32Array.from(D.claw.g), ci = G.clawIndex(Int32Array.from(D.claw.k), nK);
+  const gl = O.gl.map(n => D.glom.indexOf(n)), resp = new Float64Array(nO * nG);
+  O.d.forEach((row, o) => row.forEach((v, j) => { resp[o * nG + gl[j]] = v; }));
+  const nP = nO * (nO - 1) / 2, pi = (a, b) => (a > b ? pi(b, a) : a * nO - a * (a + 1) / 2 + (b - a - 1));
+  const sim = new Float64Array(nP), pairs = [];
+  for (let a = 0; a < nO; a++) for (let b = a + 1; b < nO; b++) { sim[pi(a, b)] = G.pearson(O.d[a], O.d[b]); pairs.push([a, b]); }
+  const simArr = Array.from(sim), rU = G.rng(12);
+  const WIRING = [g0, G.permuteLabels(g0, G.rng(11)), Int32Array.from(g0, () => Math.floor(rU() * nG))];
+  const tags = WIRING.map(g => G.kcTags(g, ci, resp, nO, nG, size, G.rng(5)));
+  const overlaps = T => { const v = new Float64Array(nP); for (const [a, b] of pairs) v[pi(a, b)] = G.tagOverlap(T[a], T[b]) / size; return v; };
+  const ov = tags.map(overlaps);
+  // Means over 20 shuffled and 20 uniform wirings, computed a few at a time after load.
+  const avg = [null, new Float64Array(nP), new Float64Array(nP)], rhos = [null, [], []], NAV = 20;
+  let navDone = 0;
+  const stats = v => {
+    let lo = 0, nlo = 0, hi = 0, nhi = 0;
+    for (let p = 0; p < nP; p++) { if (sim[p] < 0.2) { lo += v[p]; nlo++; } if (sim[p] > 0.8) { hi += v[p]; nhi++; } }
+    return { rho: G.spearman(simArr, Array.from(v)), lo: lo / nlo, hi: hi / nhi };
+  };
+  const realStats = stats(ov[0]);
+  let avgStats = null;
+  (function more() {
+    if (navDone >= NAV) {
+      // Overlap shares average linearly; the rank correlation is averaged over wirings.
+      avgStats = [realStats, { ...stats(avg[1]), rho: G.mean(rhos[1]) }, { ...stats(avg[2]), rho: G.mean(rhos[2]) }];
+      drawScatter(); readout(); return;
+    }
+    const s = navDone + 1, r = G.rng(500 + s);
+    const T1 = G.kcTags(G.permuteLabels(g0, G.rng(100 + s)), ci, resp, nO, nG, size, G.rng(s));
+    const T2 = G.kcTags(Int32Array.from(g0, () => Math.floor(r() * nG)), ci, resp, nO, nG, size, G.rng(s));
+    const o1 = overlaps(T1), o2 = overlaps(T2);
+    for (let p = 0; p < nP; p++) { avg[1][p] += o1[p] / NAV; avg[2][p] += o2[p] / NAV; }
+    rhos[1].push(G.spearman(simArr, Array.from(o1))); rhos[2].push(G.spearman(simArr, Array.from(o2)));
+    navDone++;
+    setTimeout(more, 0);
+  })();
+
+  const BX0 = -0.4, BW = 0.1, NB = 14;
+  const binMeans = v => {
+    const s = new Float64Array(NB), n = new Int32Array(NB);
+    for (let p = 0; p < nP; p++) { const b = Math.min(NB - 1, Math.max(0, Math.floor((sim[p] - BX0) / BW))); s[b] += v[p]; n[b]++; }
+    return Array.from(s, (t, b) => (n[b] >= 5 ? [BX0 + (b + 0.5) * BW, t / n[b]] : null)).filter(Boolean);
+  };
+
+  // Odour pickers, grouped by chemical class.
+  const sa = document.getElementById('tg-a'), sb = document.getElementById('tg-b');
+  for (const s of [sa, sb]) O.classes.forEach((cl, c) => {
+    const og = document.createElement('optgroup'); og.label = cl;
+    O.name.map((n, o) => [n, o]).filter(([, o]) => O.cls[o] === c).forEach(([n, o]) => { const op = document.createElement('option'); op.value = o; op.textContent = n; og.appendChild(op); });
+    s.appendChild(og);
+  });
+  let wi = 0, A = O.name.indexOf('ethyl acetate'), B = O.name.indexOf('methyl acetate'), sw = 0, pw = 0, prev = null;
+  sa.value = A; sb.value = B;
+
+  const scBody = document.getElementById('tg-sc'), scCanvas = scBody.querySelector('canvas'), scSvg = d3.select(scBody).select('svg'), scTip = d3.select(scBody).select('.tip');
+  const pBody = document.getElementById('tg-pair'), pSvg = d3.select(pBody).select('svg'), pTip = d3.select(pBody).select('.tip');
+  let geo = null, delaunay = null, anim = null;
+
+  function drawScatter(animate) {
+    if (!sw) return;
+    const w = sw, h = narrow() ? 300 : 380, M = { l: 40, r: 10, t: 10, b: 38 }, iw = w - M.l - M.r, ih = h - M.t - M.b;
+    const x = d3.scaleLinear().domain([-0.4, 1]).range([0, iw]), y = d3.scaleLinear().domain([0, 1]).range([ih, 0]);
+    geo = { M, x, y, w, h };
+    scSvg.attr('width', w).attr('height', h).selectAll('*').remove();
+    const g = scSvg.append('g').attr('transform', `translate(${M.l},${M.t})`);
+    g.append('g').attr('class', 'axis').call(d3.axisLeft(y).ticks(5).tickFormat(d3.format('.0%')).tickSize(-iw)).call(a => a.select('.domain').remove())
+      .call(a => a.selectAll('line').attr('stroke-opacity', 0.6));
+    g.append('g').attr('class', 'axis').attr('transform', `translate(0,${ih})`).call(d3.axisBottom(x).ticks(7)).call(a => a.select('.domain').remove());
+    g.append('text').attr('class', 'axis-label').attr('x', iw / 2).attr('y', ih + 32).attr('text-anchor', 'middle').text('correlation of the two odours’ receptor responses');
+    g.append('text').attr('class', 'axis-label').attr('transform', 'rotate(-90)').attr('x', -ih / 2).attr('y', -32).attr('text-anchor', 'middle').text('share of tag in common');
+    const ink = css('--text'), nullC = css('--c-null');
+    g.append('line').attr('x1', 0).attr('x2', iw).attr('y1', y(0.05)).attr('y2', y(0.05)).attr('stroke', nullC).attr('stroke-width', 1);
+    const line = d3.line().x(d => x(d[0])).y(d => y(d[1]));
+    if (avg[1] && navDone >= NAV) g.append('path').attr('d', line(binMeans(avg[1]))).attr('fill', 'none').attr('stroke', nullC).attr('stroke-width', 2).attr('stroke-dasharray', '4 3');
+    g.append('path').attr('d', line(binMeans(ov[0]))).attr('fill', 'none').attr('stroke', ink).attr('stroke-width', 2);
+    // Dots on canvas, under the svg.
+    const target = ov[wi], from = animate && prev && !Motion.reduced() ? prev : null;
+    prev = target;
+    const ctx = sizeCanvas(scCanvas, w, h);
+    const paint = t => {
+      ctx.clearRect(0, 0, w, h); ctx.fillStyle = ink; ctx.globalAlpha = 0.22;
+      for (let p = 0; p < nP; p++) {
+        const v = from ? from[p] + (target[p] - from[p]) * t : target[p];
+        ctx.beginPath(); ctx.arc(M.l + x(sim[p]), M.t + y(v), 1.6, 0, 7); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    };
+    if (anim) anim.stop();
+    if (from) anim = d3.timer(el => { const t = Math.min(1, el / 450); paint(d3.easeCubicOut(t)); if (t >= 1) anim.stop(); });
+    else paint(1);
+    delaunay = d3.Delaunay.from(simArr, d => M.l + x(d), (_, p) => M.t + y(target[p]));
+    // The chosen pair.
+    const p = pi(A, B);
+    g.append('circle').attr('cx', x(sim[p])).attr('cy', y(target[p])).attr('r', 6).attr('fill', 'none').attr('stroke', css('--fig-bg')).attr('stroke-width', 4);
+    g.append('circle').attr('cx', x(sim[p])).attr('cy', y(target[p])).attr('r', 6).attr('fill', 'none').attr('stroke', ink).attr('stroke-width', 2);
+    if (A !== B) g.append('text').attr('class', 'pt-lab halo').attr('x', x(sim[p]) + (x(sim[p]) > iw - 140 ? -10 : 10)).attr('y', y(target[p]) - 9)
+      .attr('text-anchor', x(sim[p]) > iw - 140 ? 'end' : 'start').text(`${O.name[A]} / ${O.name[B]}`);
+  }
+
+  function nearestPair(ev) {
+    const [mx, my] = d3.pointer(ev, scBody);
+    const p = delaunay.find(mx, my), x = geo.M.l + geo.x(sim[p]), y = geo.M.t + geo.y(ov[wi][p]);
+    return Math.hypot(mx - x, my - y) < 14 ? p : -1;
+  }
+  scSvg.on('pointermove', ev => {
+    if (!delaunay) return;
+    const p = nearestPair(ev);
+    if (p < 0) { scTip.style('display', 'none'); return; }
+    const [a, b] = pairs[p], [mx, my] = d3.pointer(ev, scBody);
+    placeTip(scTip, scBody, `<b>${O.name[a]}</b> / <b>${O.name[b]}</b>: r ${fmt(sim[p], 2)}, ${Math.round(ov[wi][p] * size)} of ${size} cells shared`, mx, my);
+  }).on('pointerleave', () => scTip.style('display', 'none'))
+    .on('click', ev => {
+      const p = nearestPair(ev);
+      if (p < 0) return;
+      [A, B] = pairs[p]; sa.value = A; sb.value = B;
+      drawScatter(); drawPair(); readout();
+    });
+
+  function drawPair() {
+    if (!pw) return;
+    const w = pw, T = tags[wi], ta = new Set(T[A]), tb = new Set(T[B]);
+    document.getElementById('tg-h').innerHTML = `${O.name[A]} and ${O.name[B]} <span>responses, then tags</span>`;
+    document.getElementById('tg-key-a').textContent = O.name[A];
+    document.getElementById('tg-key-b').textContent = O.name[B];
+    const cool = css('--c-cool'), warm = css('--c-warm'), ink = css('--text'), faint = css('--c-null-light');
+    // Bars: glomeruli in the order of Figure 1.
+    const cols = Array.from(gl.keys()).sort((a, b) => gl[a] - gl[b]);
+    const bh = 120, M = { l: 34, r: 4, t: 6 }, iw = w - M.l - M.r, lab = 34;
+    const vals = cols.flatMap(j => [O.d[A][j], O.d[B][j]]);
+    const y = d3.scaleLinear().domain([Math.min(-30, d3.min(vals)), Math.max(60, d3.max(vals))]).nice().range([bh, 0]);
+    const x = d3.scaleBand().domain(cols).range([0, iw]).paddingInner(0.25);
+    // Tag grid by Kenyon cell class.
+    const groups = [0, 1, 2, 3].map(c => Array.from({ length: nK }, (_, v) => v).filter(v => D.kcClass[v] === c));
+    const per = Math.max(20, Math.floor(iw / 5.2)), cell = iw / per;
+    let gy = 0;
+    const gpos = groups.map(gr => { const y0 = gy; gy += Math.ceil(gr.length / per) * cell + 16; return y0; });
+    const top = M.t + bh + lab + 18, h = top + gy;
+    pSvg.attr('width', w).attr('height', h).selectAll('*').remove();
+    const g = pSvg.append('g').attr('transform', `translate(${M.l},${M.t})`);
+    g.append('g').attr('class', 'axis').call(d3.axisLeft(y).ticks(4).tickSize(-iw)).call(a => a.select('.domain').remove()).call(a => a.selectAll('line').attr('stroke-opacity', 0.6));
+    g.append('text').attr('class', 'axis-label').attr('transform', 'rotate(-90)').attr('x', -bh / 2).attr('y', -26).attr('text-anchor', 'middle').text('spikes/s');
+    const bw = x.bandwidth() / 2;
+    cols.forEach(j => {
+      [[O.d[A][j], cool, 0], [O.d[B][j], warm, bw]].forEach(([v, c, dx]) => {
+        g.append('rect').attr('x', x(j) + dx).attr('width', Math.max(1, bw - 0.5)).attr('y', Math.min(y(0), y(v))).attr('height', Math.abs(y(v) - y(0))).attr('fill', c);
+      });
+      g.append('text').attr('class', 'gl' + (D.core[gl[j]] ? ' gl-core' : '')).attr('transform', `translate(${x(j) + bw + 3},${bh + 6}) rotate(-90)`).attr('text-anchor', 'end')
+        .style('font-size', '9px').text(O.gl[j]);
+      g.append('rect').attr('x', x(j)).attr('width', x.step()).attr('y', 0).attr('height', bh).attr('fill', 'transparent')
+        .on('pointermove', ev => { const [mx, my] = d3.pointer(ev, pBody); placeTip(pTip, pBody, `${O.gl[j]} (${O.rec[j]}): ${O.name[A]} ${O.d[A][j] > 0 ? '+' : ''}${O.d[A][j]}, ${O.name[B]} ${O.d[B][j] > 0 ? '+' : ''}${O.d[B][j]} spikes/s`, mx, my); })
+        .on('pointerleave', () => pTip.style('display', 'none'));
+    });
+    g.append('line').attr('x1', 0).attr('x2', iw).attr('y1', y(0)).attr('y2', y(0)).attr('stroke', ink).attr('stroke-opacity', 0.5);
+    const tg = pSvg.append('g').attr('transform', `translate(${M.l},${top})`);
+    groups.forEach((gr, c) => {
+      tg.append('text').attr('class', 'note').attr('x', 0).attr('y', gpos[c] - 4).text(`${D.kcClasses[c]} (${gr.length})`);
+      gr.forEach((v, q) => {
+        const inA = ta.has(v), inB = tb.has(v);
+        tg.append('rect').attr('x', (q % per) * cell).attr('y', gpos[c] + Math.floor(q / per) * cell).attr('width', cell - 0.8).attr('height', cell - 0.8)
+          .attr('fill', inA && inB ? ink : inA ? cool : inB ? warm : faint);
+      });
+    });
+  }
+
+  function readout() {
+    const p = pi(A, B), shared = Math.round(ov[wi][p] * size), ro = document.getElementById('tg-ro');
+    const WN = ['the real wiring', 'this shuffled wiring', 'this uniform wiring'];
+    let s = A === B ? `Pick two different odours. ` : `<b>${O.name[A]}</b> and <b>${O.name[B]}</b>: responses correlate at r = ${fmt(sim[p], 2)}; their tags share <b>${shared}</b> of ${size} Kenyon cells (${fmt(100 * ov[wi][p], 0)}%) with ${WN[wi]}` +
+      (navDone >= NAV ? (wi ? `; ${fmt(100 * ov[0][p], 0)}% with the real wiring` : '') + `, ${fmt(100 * avg[1][p], 0)}% averaged over 20 shuffled wirings. ` : '. ');
+    if (avgStats) {
+      const [r, sh, un] = avgStats;
+      s += `All ${fmt(nP, 0)} pairs: rank correlation of similarity and overlap <b>${fmt(r.rho, 2)}</b> real, ${fmt(sh.rho, 2)} shuffled, ${fmt(un.rho, 2)} uniform; ` +
+        `pairs with r below 0.2 share ${fmt(100 * r.lo, 1)}%, ${fmt(100 * sh.lo, 1)}% and ${fmt(100 * un.lo, 1)}%; above 0.8, ${fmt(100 * r.hi, 0)}%, ${fmt(100 * sh.hi, 0)}% and ${fmt(100 * un.hi, 0)}%.`;
+    } else s += `Averaging over shuffled wirings: ${navDone} of ${NAV}.`;
+    ro.innerHTML = s;
+  }
+
+  document.querySelectorAll('#fig-tag .seg button').forEach(bt => bt.addEventListener('click', () => {
+    wi = +bt.dataset.w;
+    document.querySelectorAll('#fig-tag .seg button').forEach(b => b.setAttribute('aria-pressed', String(b === bt)));
+    drawScatter(true); drawPair(); readout();
+  }));
+  sa.addEventListener('change', () => { A = +sa.value; drawScatter(); drawPair(); readout(); });
+  sb.addEventListener('change', () => { B = +sb.value; drawScatter(); drawPair(); readout(); });
+  responsive(scBody, w => { sw = w; drawScatter(); });
+  responsive(pBody, w => { pw = w; drawPair(); });
+  onTheme(() => { drawScatter(); drawPair(); });
+  readout();
+}
+</script>
+</body>
+</html>

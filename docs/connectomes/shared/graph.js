@@ -25,6 +25,10 @@
 // share of weight running down a ranking, their direction-shuffling null, and the
 // signal cascade of Winding et al. 2023 on a CSR graph.
 //
+// Mushroom body: Zheng et al. 2022's conditional input of glomeruli onto Kenyon
+// cells, claw-label shuffles over the whole calyx or within spatial cells (k-means),
+// and Kenyon cell tags (top fraction of summed glomerular responses, Dasgupta et al. 2017).
+//
 // The whole library is one factory so a page can rebuild it inside a Worker
 // from GraphLib.factory.toString(). Works in the browser (window.GraphLib)
 // and in node (module.exports).
@@ -710,6 +714,133 @@
     return out;
   }
 
+  // ---- Mushroom body: claws, conditional input, shuffles, odour tags ----
+  // A wiring is a claw list: g[c] is the glomerulus (PN type) whose bouton claw c
+  // ensheathes and k[c] the Kenyon cell it belongs to. clawIndex groups claws by KC.
+  function clawIndex(k, nK) {
+    const off = new Int32Array(nK + 1);
+    for (const v of k) off[v + 1]++;
+    for (let i = 0; i < nK; i++) off[i + 1] += off[i];
+    const pos = off.slice(0, nK), idx = new Int32Array(k.length);
+    for (let c = 0; c < k.length; c++) idx[pos[k[c]]++] = c;
+    return { off, idx };
+  }
+
+  // Zheng et al. 2022's conditional input (their get_raw_inputs): row i, column j counts
+  // the claws from glomerulus j on the KCs that have at least one claw from i. On the
+  // diagonal one claw from i per such KC is not counted, so C[i][i] is the extra claws
+  // from i. Claws whose g is negative are left out. Returns Float64Array nG x nG.
+  function condInput(g, ci, nG, out) {
+    const C = out || new Float64Array(nG * nG), { off, idx } = ci, seen = new Int32Array(nG).fill(-1);
+    C.fill(0);
+    for (let v = 0; v + 1 < off.length; v++) {
+      for (let a = off[v]; a < off[v + 1]; a++) {
+        const i = g[idx[a]];
+        if (i < 0 || seen[i] === v) continue;
+        seen[i] = v;
+        for (let b = off[v]; b < off[v + 1]; b++) { const j = g[idx[b]]; if (j >= 0) C[i * nG + j]++; }
+        C[i * nG + i]--;
+      }
+    }
+    return C;
+  }
+
+  // Shuffles of the glomerulus labels over claws. permuteLabels is Zheng's random claw
+  // model and Caron et al. 2013's shuffle: every KC keeps its number of claws and every
+  // glomerulus its number of claws (both degree sequences of the bipartite claw graph).
+  // permuteWithin does the same inside each group of claws (a spatial cell), so labels
+  // only move between nearby claws. Claws with g < 0 stay put.
+  function permuteWithin(g, groups, r) {
+    const h = Int32Array.from(g);
+    for (const G of groups) {
+      for (let a = G.length - 1; a > 0; a--) {
+        const b = Math.floor(r() * (a + 1)), t = h[G[a]];
+        h[G[a]] = h[G[b]]; h[G[b]] = t;
+      }
+    }
+    return h;
+  }
+  const permuteLabels = (g, r) => permuteWithin(g, [Int32Array.from(g.keys()).filter(c => g[c] >= 0)], r);
+
+  // Mean and SD (ddof 0, as numpy's std in Zheng's code) of the conditional input over
+  // `runs` shuffles. shuffle(g, r) returns a new label array.
+  function condNull(g, ci, nG, shuffle, runs, r) {
+    const N = nG * nG, mean = new Float64Array(N), m2 = new Float64Array(N), C = new Float64Array(N);
+    for (let t = 1; t <= runs; t++) {
+      condInput(shuffle(g, r), ci, nG, C);
+      for (let e = 0; e < N; e++) { const d = C[e] - mean[e]; mean[e] += d / t; m2[e] += d * (C[e] - mean[e]); }
+    }
+    return { mean, sd: m2.map(v => Math.sqrt(v / runs)) };
+  }
+
+  // Lloyd's k-means on 3D points (x, y, z arrays) with k-means++ seeding. Returns the
+  // cell of every point and the centres.
+  function kmeans(x, y, z, K, r, iters = 25) {
+    const m = x.length, cell = new Int32Array(m), d2 = new Float64Array(m).fill(Infinity);
+    const cx = new Float64Array(K), cy = new Float64Array(K), cz = new Float64Array(K);
+    const dist = (p, c) => (x[p] - cx[c]) ** 2 + (y[p] - cy[c]) ** 2 + (z[p] - cz[c]) ** 2;
+    let p0 = Math.floor(r() * m);
+    for (let c = 0; c < K; c++) {
+      cx[c] = x[p0]; cy[c] = y[p0]; cz[c] = z[p0];
+      let tot = 0;
+      for (let p = 0; p < m; p++) { const d = dist(p, c); if (d < d2[p]) d2[p] = d; tot += d2[p]; }
+      let u = r() * tot;
+      for (p0 = 0; p0 < m - 1; p0++) { u -= d2[p0]; if (u <= 0) break; }
+    }
+    for (let it = 0; it < iters; it++) {
+      let moved = 0;
+      for (let p = 0; p < m; p++) {
+        let best = 0, bd = Infinity;
+        for (let c = 0; c < K; c++) { const d = dist(p, c); if (d < bd) { bd = d; best = c; } }
+        if (cell[p] !== best || it === 0) { moved++; cell[p] = best; }
+      }
+      const sx = new Float64Array(K), sy = new Float64Array(K), sz = new Float64Array(K), n = new Int32Array(K);
+      for (let p = 0; p < m; p++) { const c = cell[p]; sx[c] += x[p]; sy[c] += y[p]; sz[c] += z[p]; n[c]++; }
+      for (let c = 0; c < K; c++) if (n[c]) { cx[c] = sx[c] / n[c]; cy[c] = sy[c] / n[c]; cz[c] = sz[c] / n[c]; }
+      if (!moved) break;
+    }
+    return { cell, cx, cy, cz };
+  }
+
+  // Claw indices per cell, and the expected share of claws whose label a within-cell
+  // shuffle leaves unchanged: sum over cells and glomeruli of n_cg^2 / n_c, over all claws.
+  function cellGroups(cell, K, g) {
+    const groups = Array.from({ length: K }, () => []);
+    for (let c = 0; c < cell.length; c++) if (g[c] >= 0) groups[cell[c]].push(c);
+    let kept = 0, m = 0;
+    for (const G of groups) {
+      const cnt = new Map();
+      for (const c of G) cnt.set(g[c], (cnt.get(g[c]) || 0) + 1);
+      for (const v of cnt.values()) kept += v * v / G.length;
+      m += G.length;
+    }
+    return { groups: groups.filter(G => G.length).map(G => Int32Array.from(G)), kept: kept / m };
+  }
+
+  // Kenyon cell tags, the fly hash of Dasgupta, Stevens & Navlakha 2017: a KC's drive for
+  // an odour is the sum over its claws of the response of the claw's glomerulus
+  // (resp: nO x nG, zero where a glomerulus has no data); the tag is the `size` KCs
+  // with the largest drive, ties at the cutoff broken at random. Returns sorted Int32Arrays.
+  function kcTags(g, ci, resp, nO, nG, size, r) {
+    const nK = ci.off.length - 1, { off, idx } = ci, drive = new Float64Array(nK), key = new Float64Array(nK);
+    const order = Int32Array.from({ length: nK }, (_, v) => v), tags = [];
+    for (let o = 0; o < nO; o++) {
+      for (let v = 0; v < nK; v++) {
+        let s = 0;
+        for (let a = off[v]; a < off[v + 1]; a++) { const j = g[idx[a]]; if (j >= 0) s += resp[o * nG + j]; }
+        drive[v] = s; key[v] = r();
+      }
+      order.sort((a, b) => drive[b] - drive[a] || key[a] - key[b]);
+      tags.push(order.slice(0, size).sort());
+    }
+    return tags;
+  }
+  function tagOverlap(A, B) {
+    let i = 0, j = 0, c = 0;
+    while (i < A.length && j < B.length) { if (A[i] === B[j]) { c++; i++; j++; } else if (A[i] < B[j]) i++; else j++; }
+    return c;
+  }
+
   // ---- checks (node: require(...).runChecks()) ----
   function runChecks(log = console.log) {
     const res = [];
@@ -882,6 +1013,35 @@
     ok('first hop by cumulative share', fh[0] === -1 && fh[1] === 2 && fh[2] === 2);
     const dc = decodeCSR({ off: [0, 2, 3, 3], to: [1, 1, 0], w: [5, 6, 7] });
     ok('delta-encoded CSR decodes', Array.from(dc.to).join() === '1,2,0' && Array.from(dc.w).join() === '5,6,7');
+
+    {
+      // Conditional input by hand: KC 0 has claws from glomeruli 0, 0, 1; KC 1 from 1, 2.
+      // Given 0 (KC 0): one more claw from 0, one from 1. Given 1 (both KCs): 2 from 0,
+      // none more from 1, 1 from 2. Given 2 (KC 1): 1 from 1.
+      const mg = [0, 0, 1, 1, 2], mk = [0, 0, 0, 1, 1], cix = clawIndex(mk, 2);
+      ok('conditional input on a two-KC example', Array.from(condInput(mg, cix, 3)).join() === '1,1,0,2,0,1,0,1,0');
+      const rl = rng(3), big = Int32Array.from({ length: 400 }, (_, c) => c % 7), sh = permuteLabels(big, rl);
+      const hist = a => Array.from({ length: 7 }, (_, j) => a.filter(v => v === j).length).join();
+      ok('label shuffle keeps every glomerulus\'s claw count', hist(sh) === hist(big) && sh.some((v, c) => v !== big[c]));
+      const grp = [Int32Array.from({ length: 200 }, (_, c) => c), Int32Array.from({ length: 200 }, (_, c) => 200 + c)];
+      const sw = permuteWithin(big, grp, rl);
+      ok('within-cell shuffle keeps each cell\'s labels', hist(sw.slice(0, 200)) === hist(big.slice(0, 200)) && hist(sw.slice(200)) === hist(big.slice(200)));
+      // Two separated blobs of 50 points: k-means with K = 2 splits them exactly.
+      const bx = [], by = [], bz = [];
+      for (let p = 0; p < 100; p++) { bx.push((p < 50 ? 0 : 20) + rl()); by.push(rl()); bz.push(rl()); }
+      const km = kmeans(bx, by, bz, 2, rl), c0 = km.cell[0];
+      ok('k-means separates two blobs', km.cell.every((c, p) => (p < 50) === (c === c0)));
+      // Kept share: one cell holding labels [0, 0, 1, 1] keeps (4 + 4) / 4 / 4 = 0.5.
+      ok('expected share of labels a within-cell shuffle keeps', near(cellGroups([0, 0, 0, 0], 1, [0, 0, 1, 1]).kept, 0.5, 1e-12));
+      // Tags: drive = claws x response; KC 2 (two claws on glomerulus 1) beats KC 0 and 1.
+      const tg = kcTags([0, 1, 1, 1, 0], clawIndex([0, 1, 2, 2, 1], 3), Float64Array.from([1, 5]), 1, 2, 1, rl);
+      ok('tag takes the most driven KC', tg[0].length === 1 && tg[0][0] === 2);
+      // Ties at the cutoff are broken at random: three tied KCs, tag of one, each about a third.
+      const tie = [0, 0, 0];
+      for (let t = 0; t < 3000; t++) tie[kcTags([0, 0, 0], clawIndex([0, 1, 2], 3), Float64Array.from([1]), 1, 1, 1, rl)[0][0]]++;
+      ok('ties at the cutoff broken at random', tie.every(v => Math.abs(v - 1000) < 100), tie.join());
+      ok('tag overlap counts shared KCs', tagOverlap(Int32Array.from([1, 4, 6, 9]), Int32Array.from([2, 4, 9, 11])) === 2);
+    }
     return res;
   }
 
@@ -985,10 +1145,41 @@
     return res;
   }
 
+  // Article 7's data (fly-mushroom.json): counts against Zheng et al. 2022, and the
+  // shuffles and tags against independent numpy code (scratch prototypes of 2026-10-03;
+  // Monte Carlo values compared within their noise).
+  function mushroomChecks(mb, log = console.log) {
+    const res = [];
+    const ok = (name, pass, detail = '') => { res.push({ name, pass }); log((pass ? 'pass ' : 'FAIL ') + name + (detail ? ': ' + detail : '')); };
+    const nG = mb.glom.length, nK = mb.kcClass.length, C = mb.claw, g = Int32Array.from(C.g), ci = clawIndex(Int32Array.from(C.k), nK);
+    const core = mb.core.flatMap((v, i) => (v ? [i] : []));
+    ok('6,468 claw inputs, 1,354 KCs, 54 glomeruli, 10 core-community glomeruli', g.length === 6468 && nK === 1354 && nG === 54 && core.length === 10);
+    ok('1,916 claws from core-community glomeruli (Zheng et al. 2022: 1,916)', g.filter(v => mb.core[v]).length === 1916);
+    ok('KC classes 568 γ, 240 α′β′, 476 αβ, 70 unclassified', [0, 1, 2, 3].map(c => mb.kcClass.filter(v => v === c).length).join() === '568,240,476,70');
+    const obs = condInput(g, ci, nG);
+    const coreZ = nl => { let s = 0; for (const i of core) for (const j of core) if (i !== j) s += (obs[i * nG + j] - nl.mean[i * nG + j]) / nl.sd[i * nG + j]; return s / 90; };
+    const dn = condNull(g, ci, nG, permuteLabels, 1000, rng(1)), off = [];
+    for (let i = 0; i < nG; i++) for (let j = 0; j < nG; j++) { const z = (obs[i * nG + j] - dn.mean[i * nG + j]) / dn.sd[i * nG + j]; if (i !== j && Number.isFinite(z)) off.push(z); }
+    const zsd = Math.sqrt(off.reduce((a, x) => a + x * x, 0) / off.length - mean(off) ** 2), cz = coreZ(dn);
+    ok('whole-calyx shuffle: core block mean z 2.95, z spread 1.47 (numpy; Zheng 1.47)', Math.abs(cz - 2.95) < 0.1 && Math.abs(zsd - 1.47) < 0.03, cz.toFixed(2) + ', ' + zsd.toFixed(2));
+    const km = kmeans(C.x, C.y, C.z, 50, rng(50)), cg = cellGroups(km.cell, 50, g);
+    const ln = condNull(g, ci, nG, (h, r) => permuteWithin(h, cg.groups, r), 1000, rng(1)), lz = coreZ(ln);
+    ok('50 cells: 15.93% of labels kept, core z 1.00 (numpy on the same cells)', Math.abs(cg.kept - 0.1593) < 5e-5 && Math.abs(lz - 1.0) < 0.12, (100 * cg.kept).toFixed(2) + '%, ' + lz.toFixed(2));
+    const O = mb.odour, nO = O.name.length, resp = new Float64Array(nO * nG);
+    O.d.forEach((row, o) => row.forEach((v, j) => { resp[o * nG + mb.glom.indexOf(O.gl[j])] = v; }));
+    ok('110 odours x 23 receptors, Or33b dropped, every receptor on a traced glomerulus', nO === 110 && O.rec.length === 23 && !O.rec.includes('Or33b') && O.gl.every(x => mb.glom.includes(x)));
+    const T = kcTags(g, ci, resp, nO, nG, 68, rng(5)), sim = [], ov = [];
+    for (let a = 0; a < nO; a++) for (let b = a + 1; b < nO; b++) { sim.push(pearson(O.d[a], O.d[b])); ov.push(tagOverlap(T[a], T[b]) / 68); }
+    const rho = spearman(sim, ov), mo = mean(ov);
+    ok('real-wiring tags: rank correlation 0.88, mean overlap 0.254 (numpy 0.881, 0.254)', Math.abs(rho - 0.881) < 0.01 && Math.abs(mo - 0.254) < 0.005, rho.toFixed(3) + ', ' + mo.toFixed(3));
+    return res;
+  }
+
   return {
-    dataChecks, flowChecks, rng, undirected, csr, degrees, clustering, transitivity, meanPath, nullER, distanceBins, nullSpatial, swap,
+    dataChecks, flowChecks, mushroomChecks, rng, undirected, csr, degrees, clustering, transitivity, meanPath, nullER, distanceBins, nullSpatial, swap,
     mutualPairs, swapDirected, swapReciprocal, triadCensus, triadEdges, TRIADS, mean, sd, runChecks,
     eigh, dense, fiedler, edgeSpan, avgControl, pearson, ranks, spearman, linfit, cholSolve, placement, pinPrice, wireCost, wireChecks,
     springRank, flowStats, randomDirections, cascade, decodeCSR, firstHop,
+    clawIndex, condInput, permuteWithin, permuteLabels, condNull, kmeans, cellGroups, kcTags, tagOverlap,
   };
 });

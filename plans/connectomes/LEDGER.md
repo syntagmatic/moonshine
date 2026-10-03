@@ -16,6 +16,7 @@ The deep-research report in `research/REPORT.md` is not a source; see
 | `docs/connectomes/shared/data/worm-anchors.json` | WormAtlas `NeuronFixedPoints.xls` (Chen, Hall & Chklovskii 2006): 650 rows `Neuron, Landmark, Landmark Position, Weight`; VC06 (not among the 279) dropped, leaving 649 anchors on 199 neurons; landmarks "Sensory"/"SensoryNB" are sensory endings (weight 1), the rest body-wall muscles plus MANAL (weights are the M_il of Chen et al. Eq. 3, some fractional). Fetched 2026-10-01. | `scripts/connectomes/fetch-wire.py` |
 | `docs/connectomes/shared/data/macaque-fln.json` | FLNe: Markov et al. 2014 Cereb Cortex supplementary table (`Cercor_2012 Table.xls`, core-nets.org via the Internet Archive, 1,989 rows, 39 injections, 29 targets); distances: Markov et al. 2014 J Comp Neurol Table 2 (`JCN_2013 Table.xls`, 628 pathways into 11 targets). Nine area spellings mapped (8L, ENTORHINAL, PERIRHINAL, PIRIFORM, SUBICULUM, TEMPORAL_POLE, INSULA, Parainsula, CORE); after mapping every distance pathway has FLNe and vice versa. Repeat injections (V1 5, V2 3, V4 2) averaged with 0 for an unlabelled injection (16 pathways affected). Same fit as the INM-6 multi-area-model CSV copy. | `scripts/connectomes/fetch-wire.py` |
 | `docs/connectomes/shared/data/larva-winding.json` | Winding et al. 2023 (Science 379, eadd9330), Europe PMC author manuscript PMC7614541 (CC BY): Data S1 `ad_connectivity_matrix.csv` (axon to dendrite, 2,952 neurons, rows presynaptic; 63,545 connections, 234,958 synapses) as a delta-encoded CSR, and Data S2 cell types. Seed sets: the authors' CATMAID meta-annotations `mw olfactory` ... `mw respiratory` (public L1 CNS project), asserted equal to S2's modality labels. Output flags from `mw dVNC`, `mw dSEZ`, `mw RGN` (182, 184, 54 in the matrix; 20 of the DN-SEZ are typed CN, LHN, MBON or MB-FBN in S2). Fetched 2026-10-02. | `scripts/connectomes/fetch-larva.py` |
+| `docs/connectomes/shared/data/fly-mushroom.json` | Zheng et al. 2022 (Curr Biol 32, 3334), repository bocklab/pn_kc (MIT): claw table `STable_201001_bouton_claw_table.csv` and `tables/200704-bouton_table` (revision 2f7414a), synapse records `data/pre_post_info/pn_all_kc` (master 96fb0de). 6,468 rows (6,466 claw ids; two claws list two PNs each), 54 glomeruli in Zheng's Fig. 3B order, KC class from `kc_names`, claw position = centroid of that KC's synapses from that PN (k-means split for the 241 pairs with several claws). FAFB names VC3l, VC3m, VC5 renamed VC3, VC5, VM6 (hemibrain_olf_data README; lineages adPN/lvPN agree). Odours: Hallem & Carlson 2006 via drosolf (commit 2ff3591) `Hallem_Carlson_2006.csv` and `hc_data.csv` (chemical classes); Or33b dropped. Fetched 2026-10-03; byte-identical to the 2026-10-01 cache. | `scripts/connectomes/fetch-mushroom.py` |
 
 ## Article 3: Surprising Compared to What?
 
@@ -172,3 +173,47 @@ Data: `worm-varshney.json`, `larva-winding.json`. Library additions in `shared/g
 | Independent cascade model: Goldenberg, Libai & Muller 2001 | S | Winding et al. ref. 120 |
 
 Source detail with quotes: `research/check/sources-06.md` (verification pass of 2026-10-02).
+
+
+## Article 7: Random by Design?
+
+Data: `fly-mushroom.json`. Library additions in `shared/graph.js`: `clawIndex`, `condInput`, `permuteWithin`, `permuteLabels`, `condNull`, `kmeans`, `cellGroups`, `kcTags`, `tagOverlap`; `runChecks` covers them (hand-worked conditional input, shuffles keep label counts overall and per cell, k-means splits two blobs, kept share, tags and random tie-breaking) and `mushroomChecks` pins the shipped data (`tests/connectomes.html`, 88/88). Numpy prototypes in the session scratchpad (z2 to z6, h1, h2) were written independently from the raw repository files.
+
+| Claim | Type | How we know |
+|---|---|---|
+| About fifty input channels (ORN types / glomeruli); about 2,200 KCs per side; claws each wrap one PN bouton; KC needs several coactive inputs | S | Zheng et al. 2022 introduction (51 glomeruli, ~2,200 KCs); Dasgupta et al. 2017 (50 ORN types) |
+| ORNs express, with few exceptions, one odorant receptor | S | standard; Or33b's co-expression with Or47a and Or85a is the exception in this data (data-fly.md, DoOR mappings) |
+| Caron et al. 2013: 200 KCs one per fly; 2 to 11 claws, 7 on average; no organisation by tuning, anatomy or origin; pairs no more frequent than the shuffle keeping inputs per KC | S | Caron, Ruta, Abbott & Axel 2013 (PMC4148081): abstract; "average = 7, n = 200"; "consistent with expectations from the shuffled data set" |
+| Caron: about three inputs identified per KC | S | 665 connections in 200 KCs (their methods); "on average 3 glomerular inputs were identified per KC" |
+| Dasgupta et al.: 50 PNs to 2,000 KCs, each summing about 6 random PNs; APL leaves the top 5%; locality-sensitive hashing; random projections in LSH | S | Dasgupta, Stevens & Navlakha 2017, bioRxiv 180471 v1 text |
+| Zheng: KCs sampled at random in the pedunculus, all claws traced, 1,356 KCs, 7,102 claws, ~62% of right-side claws, 5.2 claws per KC; ~9% of claws from non-uniglomerular or unidentified input excluded | S | Zheng et al. 2022 results and methods (PMC9413950) |
+| Released table: 6,468 inputs, 54 glomeruli, 1,354 KCs, 4.8 per KC | C | `mushroomChecks`; 6468 / 1354 = 4.78 |
+| Conditional input definition (row given, minus one claw per KC on the diagonal) | S | Zheng methods and `get_raw_inputs` in bocklab/pn_kc `mushroom_2to3/detect_community.py` |
+| Whole-calyx label shuffle = Caron's shuffle = Zheng's random claw model | S | Caron methods (permuted list of 665 glomeruli, drawn per KC); Zheng `shuffle_glom_kc_iterate` |
+| Core community: DM1, DM2, DM3, DM4, DL2v, DP1m, VA2, VA4, VM2, VM3; all "Food" in their categories | S | bouton table `community` and `significance` columns (Zheng Table S1/S2 via repo); caption of Fig. 3B |
+| 1,916 claws from core glomeruli | C, S | `mushroomChecks`; Zheng Fig. 3C caption 1,916 |
+| Core block mean z 2.95 against the whole-calyx shuffle | C | `mushroomChecks` (1,000 shuffles); numpy 2.95 from the raw files |
+| z spread 1.46 over 2,862 off-diagonal pairs; Zheng 1.47 | C, S | page/node 1.46, numpy 1.47; random bouton model 2.10 (numpy). Zheng Fig. 4D text lists "-0.044 +/- 2.11 vs -0.058 +/- 1.47" after naming random claw first; our computation of both shows 1.47 is the random claw (whole-calyx) shuffle, so the text lists them in the other order |
+| Cruder null (glomerulus drawn in proportion to boutons): core block z above 6 | C | numpy 6.18 (1,000 runs, bouton counts from the bouton table); core-claw count 1,407.5 +/- 33.7 vs paper 1,421.7 +/- 35.7 (paper's bouton weights differ slightly; not quoted) |
+| Caron's sample too small; Zheng subsampled their data to that size and lost the community | S | Zheng "Comparison with other PN-to-KC datasets" |
+| αβ and α′β′ KCs take 36 to 40% of claws from core glomeruli, γ 19% | C | node: α′β′ 0.359, αβ 0.402, γ 0.186 |
+| Within one class the core block mean z is 1.2 to 1.6 | C | figure readout: γ 1.19, α′β′ 1.55, αβ 1.32 (node same) |
+| Li et al. 2020 found dependence on KC class in the hemibrain | S | Li et al. 2020 eLife (PMC7909955) Fig. 13 text |
+| 10 cells: median 8.2 µm from cell centre, core z about 1.8; 50 cells about 1.0; 100 about 0.8 | C | figure readouts at the page's seeds: 1.78, 1.02, 0.77; five other k-means seeds give 1.68 to 2.12, 0.95 to 1.11, 0.72 to 0.97; numpy on the page's own cells 1.77 and 1.00 |
+| Kept share: whole calyx 2.4%, 50 cells 16%, 100 cells 25%, 400 cells 72% | C | `cellGroups` expected share: 2.43, 15.93, 25.3, 71.8; numpy 0.1593 on the same 50 cells |
+| Zheng's local random: each claw to one of its five nearest boutons | S | Zheng results and methods (their code excludes the observed bouton, the text includes it) |
+| Rebuilt local null: core block near 1, a quarter of claws on their own glomerulus | C | numpy approximation with bouton centroids from k-means of each PN's synapses into its bouton count: core z 1.04, 25.9% kept, core claws 1,845 vs paper 1,890.6 |
+| Li: shuffle within radius r, data = model at r = 0; effects noticeable beyond about 10 µm; modest effect on dimension; might matter for specific odour categories | S | Li et al. 2020, Fig. 14 text |
+| Core PN axons clustered; αβ/α′β′ dendrites in those territories; four KC clusters consistent with four neuroblasts | S | Zheng "Spatial structure of the PN-to-KC network", Fig. 6 |
+| Hallem & Carlson: 24 receptors, 110 odours, 10^-2 dilution, change from spontaneous | S, C | drosolf table (checked: 1,426 CAS-matched values of 62 odours across all 23 receptors equal DoOR's `Hallem.2006.EN` minus the spontaneous rate, which also matches); H&C abstract (over 100 odours, inhibition widespread) |
+| 23 receptors on 23 glomeruli in Zheng's data; 31 unrecorded glomeruli | C | `mushroomChecks`; 54 - 23 |
+| 154 of 1,354 KCs have no claw on a recorded glomerulus; never in a real-wiring tag; every odour drives at least 68 KCs above zero | C | node |
+| Scaling an odour's responses leaves its tag unchanged | D | top-k of c x d equals top-k of d for c > 0 |
+| r > 0.8: about two thirds shared (68%); r < 0.2: 12% (11.6%); chance 5%; rank correlation 0.88 | C | figure readout; `mushroomChecks` 0.880 / numpy 0.881 |
+| Ethyl acetate / methyl acetate r 0.76, 62%; methanol / ethanol r 0.94, 77% | C | node (real wiring, deterministic apart from ties) |
+| Shuffled 0.88, uniform 0.87; r < 0.2: 9.6% and 9.1% (node over 30: 9.6, 9.0) | C | figure readout over 20 wirings each |
+| Zheng: discrimination worse than random unless signal through overconvergent PNs | S | Zheng Fig. 7 text |
+| Pairs both > 50% of positive response in core glomeruli: +4.5 points over shuffled; both < 20%: +1.8 | C | node, 10 real tie-breaks vs 30 shuffles (66 and 2,755 pairs) |
+| Ethyl acetate / acetic acid 40% real, 26% over 20 shuffles | C | figure readout (node over 30 shuffles: 27%) |
+
+Source detail: `research/check/sources-07.md` (verification pass of 2026-10-03).
