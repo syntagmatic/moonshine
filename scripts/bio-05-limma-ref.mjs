@@ -5,7 +5,7 @@
 //   2. The many-seed summaries the essay's prose quotes (computed in JS; runChecks recomputes).
 // Needs R with limma. If limma is not in the default library, set R_LIBS to a library that
 // has it (e.g. `Rscript -e 'BiocManager::install("limma", lib = "<dir>")'`).
-// Usage: R_LIBS=temp/bio-audit/f05/rlib node scripts/bio-05-limma-ref.mjs
+// Usage: R_LIBS=temp/bio-audit/f05/rlib node scripts/bio-05-limma-ref.mjs, then node scripts/bio-05-gsea-ref.mjs
 import { createRequire } from "node:module";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync, readFileSync } from "node:fs";
@@ -71,16 +71,21 @@ for (const cfg of RUNS) {
 const summaries = [];
 for (const reps of [2, 3, 5, 8]) {
   const seeds = []; for (let s = 1; s <= 200; s++) seeds.push(s);
-  const sm = E.seedSummary(reps, seeds, 0.05, 1);
+  const sm = E.seedSummary(reps, seeds, 0.05, 1, reps === 5 ? 0 : 1000);   // GSEA of the p53 set, 1,000 permutations
   delete sm.rows;
   summaries.push(Object.assign({ seedFrom: 1 }, sm));
-  console.log(`reps ${reps}: d0 ${sm.d0Median.toFixed(1)}, q-only FDP mean ${(100 * sm.qFDPMean).toFixed(2)}% (${sm.qFDPAbove}/200 above 5%, ${sm.qFDPZero} at 0, max ${(100 * sm.qFDPMax).toFixed(1)}%), power ${(100 * sm.qPowerMean).toFixed(1)}%, q-only ${sm.qNMean.toFixed(1)} vs both ${sm.bothNMean.toFixed(1)}, fc-only FDP ${(100 * sm.fcFDPMean).toFixed(1)}%, plain t ${sm.plainNMean.toFixed(1)} (${sm.plainTPMean.toFixed(1)} true, ${sm.plainZero} zero), null P(p<.05) ${sm.null05.toFixed(4)} P(p<.001) ${sm.null001.toFixed(5)}, pi0 ${sm.pi0Mean.toFixed(3)} vs ${sm.truePi0Mean.toFixed(3)}, max -log10 q median ${sm.maxNlqMedian.toFixed(1)}, CDKN1A called ${sm.cdkn1aCalled}/200`);
+  console.log(`reps ${reps}: d0 ${sm.d0Median.toFixed(1)}, q-only FDP mean ${(100 * sm.qFDPMean).toFixed(2)}% (${sm.qFDPAbove}/200 above 5%, ${sm.qFDPZero} at 0, max ${(100 * sm.qFDPMax).toFixed(1)}%), power ${(100 * sm.qPowerMean).toFixed(1)}%, q-only ${sm.qNMean.toFixed(1)} vs both ${sm.bothNMean.toFixed(1)}, fc-only FDP ${(100 * sm.fcFDPMean).toFixed(1)}%, plain t ${sm.plainNMean.toFixed(1)} (${sm.plainTPMean.toFixed(1)} true, ${sm.plainZero} zero), null P(p<.05) ${sm.null05.toFixed(4)} P(p<.001) ${sm.null001.toFixed(5)}, pi0 ${sm.pi0Mean.toFixed(3)} vs ${sm.truePi0Mean.toFixed(3)}, max -log10 q median ${sm.maxNlqMedian.toFixed(1)}, CDKN1A called ${sm.cdkn1aCalled}/200, p53 set members called ${sm.setCalledMean.toFixed(2)} (none in ${sm.setCalledZero})` +
+    (sm.gsea ? `, GSEA max p ${sm.gsea.pMax.toFixed(4)}, median NES ${sm.gsea.nesMedian.toFixed(2)}, uncalled members: max p ${sm.gsea.restMaxP.toFixed(4)}, p <= 0.01 in ${sm.gsea.restBelow01}/200, mean k ${sm.gsea.restKMean.toFixed(1)}` : ""));
 }
 
+const outFile = path.join(root, "docs/bioinformatics/shared/data/essay-05.json");
+let prev = {}; try { prev = JSON.parse(readFileSync(outFile, "utf8")); } catch (e) { /* first run */ }
 const out = {
   about: "Essay 05 reference values. limma: output of limma " + limmaVersion + " eBayes(lmFit(y, ~group), trend = TRUE) on the simulated log2(count + 0.5) matrices of BioEssay05.simulate; summaries: many-seed results at q 0.05, |log2 FC| >= 1 computed by BioEssay05.seedSummary. Written by scripts/bio-05-limma-ref.mjs.",
   limma: { version: limmaVersion, runs },
   summaries
 };
-writeFileSync(path.join(root, "docs/bioinformatics/shared/data/essay-05.json"), JSON.stringify(out) + "\n");
+// Keep the gseapy reference written by scripts/bio-05-gsea-ref.mjs (rerun that script after this one).
+if (prev.gsea) out.gsea = prev.gsea;
+writeFileSync(outFile, JSON.stringify(out) + "\n");
 console.log("wrote docs/bioinformatics/shared/data/essay-05.json");

@@ -10,11 +10,13 @@
 // 2,000 genes. Each gene: baseline mean count mu = exp(ln 60 + 1.6 Z); with probability 0.1
 // a true log2 change of +-(0.6 + |Z|) (sign 50/50); counts are negative binomial with mean
 // mu (wildtype) or mu 2^lfc (knockout) and variance mu + 0.08 mu^2 (gamma-Poisson mixture).
-// Ten slots carry real p53 target genes (P53_TARGETS) with a planted fall in the knockout.
-// Their sizes and baselines are our choice (simulated); the genes are real direct p53
-// targets, all in the 116 high-confidence targets of Fischer 2017 (Oncogene 36:3943, Table 1).
-// The random draws for those slots are still consumed, so the other 1,990 genes do not depend
-// on the planting. Each gene's counts come from its own seeded stream, so changing the
+// 116 slots carry the real p53 target genes of Fischer 2017 (Oncogene 36:3943, Table 1: the
+// genes activated by p53 in at least 6 of 16 genome-wide data sets; P53_SET). Ten of them
+// (P53_TARGETS) get a fixed baseline and a clear planted fall in the knockout. The other 106
+// keep the baseline drawn for their slot and get a small fixed fall, 0.2 to 0.6 log2 units
+// (SET_FALL_MIN/MAX): the case gene-set enrichment is for (Mootha et al. 2003). All sizes
+// are our choice (simulated). The random draws for those slots are still consumed, so the
+// other 1,884 genes do not depend on the planting. Each gene's counts come from its own seeded stream, so changing the
 // replicate count keeps the same genes and adds or removes samples (3 reps = first 3 of 8).
 // Expression on the test scale is log2(count + 0.5); A = the gene's mean over all 2n samples.
 //
@@ -29,7 +31,12 @@
 //
 // ---- API -------------------------------------------------------------------------
 //   BioEssay05.N_GENES, FRAC_DE, DISPERSION, DEFAULT_SEED (35), DEFAULT_REPS (3)
-//   BioEssay05.P53_TARGETS     [{symbol, slot, mu, lfc}]
+//   BioEssay05.P53_TARGETS     [{symbol, slot, mu, lfc}]  the ten named, clearly planted targets
+//   BioEssay05.P53_SET         [{symbol, tableSymbol, datasets, slot, lfc, named}] all 116 of Table 1
+//   BioEssay05.gsea(genes, slots, {nPerm, seed, weight}) preranked GSEA on the moderated t
+//        -> {es, nes, p, pRaw, peak, leading, positions, running, nPerm, nNull, k}
+//   BioEssay05.gseaES(w, positions, N) running-sum extremes from hit positions
+//   BioEssay05.gseaRunning(w, isHit) the full running sum;  gseaNull(w, k, nPerm, seed)
 //   BioEssay05.simulate({seed, reps}) -> {seed, reps, genes, counts?}
 //        gene: {i, id, symbol|null, mu, isDE, trueLfc, A, M, s2}
 //        opts.keepCounts: also return counts {wt: [[...]], ko: [[...]]} per gene
@@ -67,6 +74,41 @@
     { symbol: "BBC3",    mu: 8,   lfc: -1.3 }
   ].map((t, k) => Object.assign({ slot: 17 + 199 * k }, t));
   const TARGET_BY_SLOT = new Map(P53_TARGETS.map(t => [t.slot, t]));
+
+  // Fischer 2017 Table 1, in the table's order: symbol and the number of the 16 genome-wide
+  // data sets that found it. Parsed from the PMC XML (PMC5511239) and checked against
+  // HGNC: four symbols have been renamed since (FAM198B -> GASK1B, FAM212B -> INKA2,
+  // FAM210B -> MIMS2, WDR63 -> DNAI3); the current symbol is used, the printed one kept.
+  const FISCHER_TABLE1 = ("CDKN1A:16 HSPA4L:9 PLCL2:7 RRM2B:16 ISCU:9 PRKAB1:7 MDM2:15 PHLDA3:9 PTP4A1:7 GDF15:14 " +
+    "SERPINB5:9 SPATA18:7 SUSD6:14 SLC12A4:9 TGFA:7 BTG2:13 TRAF4:9 TLR3:7 DDB2:13 TRIM22:9 ZNF219:7 " +
+    "GADD45A:13 CCDC90B:8 ZNF337:7 PLK3:13 CES2:8 ZNF79:7 TIGAR:13 DYRK3:8 ARHGEF3:6 RPS27L:12 " +
+    "FAM13C:8 CD82:6 TNFRSF10B:12 GASK1B:8 CDIP1:6 TRIAP1:12 INKA2:8 CERS5:6 ZMAT3:12 KITLG:8 CSF1:6 " +
+    "BAX:11 NADSYN1:8 DUSP14:6 BLOC1S2:11 NTPCR:8 EPS8L2:6 PGF:11 ORAI3:8 MIMS2:6 POLH:11 SESN2:8 " +
+    "FUCA1:6 PPM1D:11 SLC30A1:8 GRHL3:6 PSTPIP2:11 TM7SF3:8 HHAT:6 SULF2:11 TMEM68:8 IER5:6 XPC:11 " +
+    "DNAI3:8 IGDCC4:6 AEN:10 ZNF561:8 IKBIP:6 ANKRA2:10 ACER2:7 LAPTM5:6 FAS:10 ANXA4:7 MAST4:6 " +
+    "GPR87:10 APOBEC3C:7 MICALL1:6 NINJ1:10 ASCC3:7 PADI4:6 PLK2:10 ASTN2:7 PANK1:6 SERTAD1:10 ATF3:7 " +
+    "PMAIP1:6 SESN1:10 BBC3:7 PRDM1:6 TP53I3:10 CPE:7 RAP2B:6 TP53INP1:10 DCP1B:7 RNF19B:6 ABCA12:9 " +
+    "EDA2R:7 RRAD:6 CCNG1:9 ENC1:7 SAC3D1:6 CMBL:9 EPHA2:7 SYTL1:6 CYFIP2:9 FDXR:7 TNFRSF10D:6 " +
+    "DRAM1:9 FOSL1:7 TSPAN11:6 FBXO22:9 LIF:7 VWCE:6 FBXW7:9 PGPEP1:7").split(" ").map(x => x.split(":"));
+  const RENAMED = { GASK1B: "FAM198B", INKA2: "FAM212B", MIMS2: "FAM210B", DNAI3: "WDR63" };
+  const SET_FALL_MIN = 0.2, SET_FALL_MAX = 0.6;
+  // The 106 unnamed members: slots on a stride of 19 (skipping the ten named slots), and
+  // falls spread evenly over [0.2, 0.6] in a scrambled order, the same in every experiment.
+  const P53_SET = (function () {
+    const named = new Map(P53_TARGETS.map(t => [t.symbol, t])), used = new Set(TARGET_BY_SLOT.keys()), out = [];
+    let j = 0, c = 0;
+    const others = FISCHER_TABLE1.filter(r => !named.has(r[0]));
+    for (const [sym, n] of FISCHER_TABLE1) {
+      const t = named.get(sym), base = { symbol: sym, tableSymbol: RENAMED[sym] || sym, datasets: +n };
+      if (t) { out.push(Object.assign(base, { slot: t.slot, lfc: t.lfc, named: true })); continue; }
+      let slot; do { slot = (5 + 19 * c++) % N_GENES; } while (used.has(slot));
+      used.add(slot);
+      const r = (37 * j++) % others.length;
+      out.push(Object.assign(base, { slot, lfc: -(SET_FALL_MIN + (SET_FALL_MAX - SET_FALL_MIN) * r / (others.length - 1)), named: false }));
+    }
+    return out;
+  })();
+  const SET_BY_SLOT = new Map(P53_SET.filter(m => !m.named).map(m => [m.slot, m]));
 
   // ---- Random numbers -------------------------------------------------------------
   function mulberry32(s) {
@@ -261,15 +303,15 @@
       let mu = Math.exp(Math.log(60) + 1.6 * S.norm());
       let isDE = rng() < FRAC_DE;
       let trueLfc = isDE ? (rng() < 0.5 ? -1 : 1) * (0.6 + Math.abs(S.norm()) * 1.0) : 0;
-      const tgt = TARGET_BY_SLOT.get(g);
-      if (tgt) { mu = tgt.mu; isDE = true; trueLfc = tgt.lfc; }
+      const tgt = TARGET_BY_SLOT.get(g) || SET_BY_SLOT.get(g);
+      if (tgt) { if (tgt.mu) mu = tgt.mu; isDE = true; trueLfc = tgt.lfc; }
       const C = makeSampler(mulberry32(geneSeed(seed, g))), a = [], b = [];
       for (let r = 0; r < n; r++) { a.push(C.negbin(mu, DISPERSION)); b.push(C.negbin(mu * Math.pow(2, trueLfc), DISPERSION)); }
       const la = a.map(v => Math.log2(v + 0.5)), lb = b.map(v => Math.log2(v + 0.5));
       const ma = mean(la), mb = mean(lb);
       const s2 = (ssq(la, ma) + ssq(lb, mb)) / (2 * n - 2);   // pooled variance, df 2n - 2
       genes.push({ i: g, id: tgt ? tgt.symbol : "gene " + String(g + 1).padStart(4, "0"), symbol: tgt ? tgt.symbol : null,
-        mu, isDE, trueLfc, A: (ma + mb) / 2, M: mb - ma, s2 });
+        inSet: !!tgt, mu, isDE, trueLfc, A: (ma + mb) / 2, M: mb - ma, s2 });
       if (counts) { counts.wt.push(a); counts.ko.push(b); }
     }
     return { seed, reps: n, genes, counts };
@@ -340,8 +382,83 @@
     return { n, tp, fp: n - tp, nDE, fdp: n ? (n - tp) / n : 0, power: nDE ? tp / nDE : 0 };
   }
 
+  // ---- Gene-set enrichment (preranked GSEA, Subramanian et al. 2005) ----------------------
+  // Genes are ranked by the moderated t, largest first (rank 0 = most raised in the knockout).
+  // Walking down the list, a set member adds w_j / N_R (w_j = |t_j|^weight, N_R the members'
+  // total weight) and every other gene subtracts 1 / (N - k); the enrichment score ES is the
+  // running sum's largest deviation from zero (the min when |min| >= |max|, as gseapy does).
+  // Significance: gene-set permutation, as in GSEAPreranked, fgsea and gseapy prerank: random
+  // k-gene sets on the same ranked list. NES = ES / |mean null ES of the same sign|;
+  // p = (b + 1) / (n + 1), b of the n same-sign null scores at least as extreme (pRaw = b / n,
+  // gseapy's nominal p). Gene permutation treats genes as independent, which they are here.
+  function gseaOrder(genes) {
+    const order = genes.map((g, i) => i).sort((a, b) => genes[b].t - genes[a].t || a - b);
+    return { order, metric: order.map(i => genes[i].t) };
+  }
+  // Extremes of the running sum from the sorted hit positions (0-based ranks) alone.
+  function gseaES(w, pos, N) {
+    const k = pos.length; let NR = 0;
+    for (let i = 0; i < k; i++) NR += w[pos[i]];
+    const miss = 1 / (N - k); let cum = 0, maxv = 0, minv = 0, maxAt = -1, minAt = -1;
+    for (let i = 0; i < k; i++) {
+      const before = cum - (pos[i] - i) * miss;           // after the last miss before hit i
+      if (before < minv && pos[i] > i) { minv = before; minAt = pos[i] - 1; }
+      cum += w[pos[i]] / NR;
+      const after = cum - (pos[i] - i) * miss;
+      if (after > maxv) { maxv = after; maxAt = pos[i]; }
+    }
+    return Math.abs(maxv) > Math.abs(minv) ? { es: maxv, peak: maxAt } : { es: minv, peak: minAt };
+  }
+  function gseaRunning(w, isHit) {
+    const N = w.length; let k = 0, NR = 0;
+    for (let i = 0; i < N; i++) if (isHit[i]) { k++; NR += w[i]; }
+    const out = new Float64Array(N), miss = 1 / (N - k); let cum = 0;
+    for (let i = 0; i < N; i++) { cum += isHit[i] ? w[i] / NR : -miss; out[i] = cum; }
+    return out;
+  }
+  function gseaNull(w, k, nPerm, seed) {
+    const N = w.length, rng = mulberry32(seed), idx = new Int32Array(N), pos = new Int32Array(k), out = new Float64Array(nPerm);
+    for (let i = 0; i < N; i++) idx[i] = i;
+    for (let p = 0; p < nPerm; p++) {
+      for (let i = 0; i < k; i++) { const j = i + Math.floor(rng() * (N - i)), v = idx[i]; idx[i] = idx[j]; idx[j] = v; pos[i] = idx[i]; }
+      pos.sort();
+      out[p] = gseaES(w, pos, N).es;
+    }
+    return out;
+  }
+  const gseaNullCache = new Map();
+  function gsea(genes, slots, opts) {
+    opts = opts || {};
+    const nPerm = opts.nPerm || 10000, seed = opts.seed == null ? 2005 : opts.seed, weight = opts.weight == null ? 1 : opts.weight;
+    const { order, metric } = opts.ranked || gseaOrder(genes), N = metric.length;
+    const w = metric.map(v => Math.pow(Math.abs(v), weight));
+    const rankOf = new Int32Array(N); order.forEach((g, r) => { rankOf[g] = r; });
+    const positions = slots.map(s => rankOf[s]).sort((a, b) => a - b), k = positions.length;
+    const obs = gseaES(w, positions, N);
+    // The null depends only on the ranked list and k, so the page can reuse it across set variants.
+    const key = opts.cacheKey != null ? opts.cacheKey + ":" + k + ":" + nPerm + ":" + seed + ":" + weight : null;
+    let nul = key && gseaNullCache.get(key);
+    if (!nul) { nul = gseaNull(w, k, nPerm, seed); if (key) { if (gseaNullCache.size > 40) gseaNullCache.clear(); gseaNullCache.set(key, nul); } }
+    let nSame = 0, sum = 0, b = 0;
+    for (const v of nul) {
+      if (obs.es < 0 ? v < 0 : v >= 0) { nSame++; sum += v; if (obs.es < 0 ? v <= obs.es : v >= obs.es) b++; }
+    }
+    const nes = nSame ? obs.es / Math.abs(sum / nSame) : NaN;
+    const isHit = new Uint8Array(N); positions.forEach(r => { isHit[r] = 1; });
+    const leading = positions.filter(r => obs.es < 0 ? r > obs.peak : r <= obs.peak).map(r => order[r]);
+    return { es: obs.es, peak: obs.peak, nes, p: (b + 1) / (nSame + 1), pRaw: nSame ? b / nSame : NaN, b, nNull: nSame,
+      nPerm, k, N, positions, leading, order, metric, running: gseaRunning(w, isHit), nullES: nul };
+  }
+  // Set slots for the page's two variants: all 116 members, or those not called at q.
+  function setSlots(genes, opts) {
+    opts = opts || {};
+    return P53_SET.map(m => m.slot).filter(s => !(opts.dropCalled && genes[s].q <= (opts.q == null ? 0.05 : opts.q)));
+  }
+
   // Many-seed summary at one replicate count (q and fc thresholds as on the page).
-  function seedSummary(reps, seeds, q, fc) {
+  // With gseaPerm > 0, also preranked GSEA of the p53 set: all members, and without the members
+  // called at q.
+  function seedSummary(reps, seeds, q, fc, gseaPerm) {
     q = q == null ? 0.05 : q; fc = fc == null ? 1 : fc;
     const rows = [];
     for (const seed of seeds) {
@@ -356,7 +473,13 @@
         null001: nulls.filter(x => x.p < 0.001).length / nulls.length,
         pi0: storeyPi0(g.map(x => x.p)), truePi0: nulls.length / g.length,
         maxNlq: Math.max(...g.map(x => x.nlq)),
-        cdkn1aQ: g[P53_TARGETS[0].slot].q });
+        cdkn1aQ: g[P53_TARGETS[0].slot].q,
+        setCalled: P53_SET.filter(m => g[m.slot].q <= q).length });
+      if (gseaPerm) {
+        const row = rows[rows.length - 1], ranked = gseaOrder(g), o = { nPerm: gseaPerm, ranked };
+        const all = gsea(g, setSlots(g), o), rest = gsea(g, setSlots(g, { dropCalled: true, q }), o);
+        Object.assign(row, { gseaP: all.p, gseaNES: all.nes, restP: rest.p, restK: rest.k });
+      }
     }
     const avg = k => mean(rows.map(r => r[k]));
     const med = k => { const s = rows.map(r => r[k]).sort((a, b) => a - b), h = s.length >> 1; return s.length % 2 ? s[h] : (s[h - 1] + s[h]) / 2; };
@@ -368,7 +491,11 @@
       bothFDPMean: avg("bothFDP"), plainNMean: avg("plainN"), plainTPMean: avg("plainTP"),
       plainZero: rows.filter(r => r.plainN === 0).length, null05: avg("null05"), null001: avg("null001"),
       pi0Mean: avg("pi0"), truePi0Mean: avg("truePi0"), maxNlqMedian: med("maxNlq"),
-      cdkn1aCalled: rows.filter(r => r.cdkn1aQ <= q).length, rows
+      cdkn1aCalled: rows.filter(r => r.cdkn1aQ <= q).length, setCalledMean: avg("setCalled"),
+      setCalledZero: rows.filter(r => r.setCalled === 0).length,
+      gsea: gseaPerm ? { nPerm: gseaPerm, pMax: Math.max(...rows.map(r => r.gseaP)), nesMedian: med("gseaNES"),
+        restMaxP: Math.max(...rows.map(r => r.restP)), restBelow01: rows.filter(r => r.restP <= 0.01).length,
+        restKMean: avg("restK") } : null, rows
     };
   }
 
@@ -407,7 +534,8 @@
     // Simulation sanity.
     const sim = simulate({ seed: DEFAULT_SEED, reps: DEFAULT_REPS }), res = analyze(sim);
     const nDE = sim.genes.filter(x => x.isDE).length;
-    check("about 10% of genes changed", nDE > 150 && nDE < 260, nDE + " of " + N_GENES);
+    const nOther = sim.genes.filter(x => x.isDE && !x.inSet).length;
+    check("about 10% of the 1,884 genes outside the p53 set changed", nOther > 140 && nOther < 240, nOther + " of 1,884; " + nDE + " changed in all");
     check("the p53 targets sit in their slots", P53_TARGETS.every(t => sim.genes[t.slot].symbol === t.symbol && sim.genes[t.slot].isDE));
     check("BH q never below p and monotone in p", res.sorted.every((x, i) => x.q >= x.p - 1e-15 && (i === 0 || x.q >= res.sorted[i - 1].q - 1e-15)));
     {
@@ -420,6 +548,54 @@
       const nulls = res.genes.filter(x => !x.isDE), f05 = nulls.filter(x => x.p < 0.05).length / nulls.length;
       check("null genes: P(p < 0.05) within 0.03-0.07", f05 > 0.03 && f05 < 0.07, f05.toFixed(4));
     }
+
+    // The p53 set: Fischer 2017 Table 1 has 116 genes; the ten named targets are among them.
+    check("p53 set: 116 distinct genes in 116 distinct slots", P53_SET.length === 116 && new Set(P53_SET.map(m => m.symbol)).size === 116 && new Set(P53_SET.map(m => m.slot)).size === 116);
+    check("p53 set: the ten named targets are Table 1 genes", P53_TARGETS.every(t => P53_SET.some(m => m.symbol === t.symbol && m.named)));
+    check("p53 set: every member planted with a fall", sim.genes.filter(x => x.inSet).length === 116 && P53_SET.every(m => sim.genes[m.slot].isDE && sim.genes[m.slot].trueLfc < 0));
+    // GSEA by hand. Metric 3 2 1 -1 -2 -3, set = ranks 0 and 4 (weights 3 and 2, N_R = 5), a miss
+    // costs 1/4: running sum 0.6 0.35 0.1 -0.15 0.25 0, so ES = 0.6 at rank 0. Unweighted
+    // (weight 0, the Kolmogorov-Smirnov form): 0.5 0.25 0 -0.25 0.25 0, ES = 0.5.
+    {
+      const toy = [3, 2, 1, -1, -2, -3].map((t, i) => ({ i, t }));
+      const g1 = gsea(toy, [0, 4], { nPerm: 50 }), g0 = gsea(toy, [0, 4], { nPerm: 50, weight: 0 });
+      const want = [0.6, 0.35, 0.1, -0.15, 0.25, 0];
+      check("GSEA running sum and ES on a hand-worked example", Math.abs(g1.es - 0.6) < 1e-12 && g1.peak === 0 && want.every((v, i) => Math.abs(g1.running[i] - v) < 1e-12) && Math.abs(g0.es - 0.5) < 1e-12,
+        "ES " + g1.es + ", unweighted " + g0.es);
+      // -1 and -3 at ranks 3 and 5: sums -.25 -.5 -.75 -.5 -.75 0, ES -0.75 first reached at rank 2,
+      // so both members lie past the peak (the leading edge of a negative score).
+      const neg = gsea(toy, [3, 5], { nPerm: 50 });
+      check("GSEA negative ES, peak and leading edge", Math.abs(neg.es + 0.75) < 1e-12 && neg.peak === 2 && neg.leading.length === 2, "ES " + neg.es + " peak " + neg.peak);
+    }
+    // The fast hit-position ES equals the extreme of the full running sum on random sets.
+    {
+      const { order, metric } = gseaOrder(res.genes), w = metric.map(Math.abs), rng = mulberry32(99);
+      let worst = 0;
+      for (let rep = 0; rep < 50; rep++) {
+        const k = 5 + Math.floor(rng() * 200), hit = new Uint8Array(N_GENES), pos = [];
+        while (pos.length < k) { const r = Math.floor(rng() * N_GENES); if (!hit[r]) { hit[r] = 1; pos.push(r); } }
+        pos.sort((a, b) => a - b);
+        const run = gseaRunning(w, hit); let mx = 0, mn = 0; for (const v of run) { if (v > mx) mx = v; if (v < mn) mn = v; }
+        worst = Math.max(worst, Math.abs(gseaES(w, pos, N_GENES).es - (Math.abs(mx) > Math.abs(mn) ? mx : mn)));
+      }
+      check("GSEA ES from hit positions equals the running-sum extreme (50 random sets)", worst < 1e-12, "worst " + worst.toExponential(1));
+      const nul = gseaNull(w, 116, 4000, 3), mean = nul.reduce((a, b) => a + b, 0) / nul.length;
+      check("GSEA null of random sets is centered (mean ES of 4,000 random 116-gene sets near 0)", Math.abs(mean) < 0.02, mean.toFixed(4));
+    }
+    // gseapy prerank on the same ranked lists (scripts/bio-05-gsea-ref.mjs).
+    if (data && data.gsea) {
+      for (const ref of data.gsea.runs) {
+        const r = run(ref.seed, ref.reps);
+        const g = gsea(r.genes, setSlots(r.genes, { dropCalled: ref.set === "rest", q: 0.05 }), { nPerm: 10000 });
+        const lead = new Set(g.leading), sameLead = ref.lead.length === lead.size && ref.lead.every(i => lead.has(i));
+        let worstRun = 0; ref.runIdx.forEach((rk, k) => { worstRun = Math.max(worstRun, Math.abs(g.running[rk] - ref.runVal[k])); });
+        const tag = `(seed ${ref.seed}, ${ref.reps} reps, ${ref.set === "rest" ? "uncalled members" : "all 116"})`;
+        check("gseapy " + data.gsea.version + " ES and leading edge " + tag, rel(g.es, ref.es) < 1e-9 && g.k === ref.k && sameLead && worstRun < 1e-9,
+          "ES " + g.es.toFixed(6) + " vs " + ref.es.toFixed(6) + ", leading edge " + lead.size + (sameLead ? " same" : " differs vs " + ref.lead.length));
+        check("gseapy NES and p " + tag, Math.abs(g.nes - ref.nes) / Math.abs(ref.nes) < 0.03 && g.p < 0.01 && ref.p < 0.01,
+          "NES " + g.nes.toFixed(3) + " vs " + ref.nes.toFixed(3) + "; p " + g.p.toExponential(1) + " vs " + ref.p.toExponential(1) + " (" + ref.nPerm + " perms)");
+      }
+    } else check("gseapy reference present in essay-05.json", false, "run scripts/bio-05-gsea-ref.mjs");
 
     // limma reference (essay-05.json, written by scripts/bio-05-limma-ref.mjs from limma's own
     // eBayes(lmFit(...), trend = TRUE) on these simulated counts).
@@ -451,9 +627,10 @@
     if (data && data.summaries) {
       for (const ref of data.summaries) {
         const seeds = []; for (let s = ref.seedFrom; s < ref.seedFrom + ref.seeds; s++) seeds.push(s);
-        const sm = seedSummary(ref.reps, seeds, ref.q, ref.fc);
-        const keys = ["qFDPMean", "qFDPAbove", "qPowerMean", "fcFDPMean", "plainNMean", "plainZero", "qNMean", "bothNMean", "d0Median", "cdkn1aCalled"];
+        const sm = seedSummary(ref.reps, seeds, ref.q, ref.fc, ref.gsea ? ref.gsea.nPerm : 0);
+        const keys = ["qFDPMean", "qFDPAbove", "qPowerMean", "fcFDPMean", "plainNMean", "plainZero", "qNMean", "bothNMean", "d0Median", "cdkn1aCalled", "setCalledMean", "setCalledZero"];
         const bad = keys.filter(k => Math.abs(sm[k] - ref[k]) > 1e-9 * Math.max(1, Math.abs(ref[k])));
+        if (ref.gsea) ["pMax", "nesMedian", "restMaxP", "restBelow01", "restKMean"].forEach(k => { if (Math.abs(sm.gsea[k] - ref.gsea[k]) > 1e-9 * Math.max(1, Math.abs(ref.gsea[k]))) bad.push("gsea." + k); });
         check(`many-seed summary, ${ref.reps} reps over ${ref.seeds} seeds`, bad.length === 0, bad.length ? "differs: " + bad.join(", ") : "FDP " + (100 * sm.qFDPMean).toFixed(1) + "%, " + sm.qFDPAbove + " runs above q");
       }
     }
@@ -461,7 +638,8 @@
   }
 
   const api = {
-    N_GENES, FRAC_DE, DISPERSION, DEFAULT_SEED, DEFAULT_REPS, P53_TARGETS,
+    N_GENES, FRAC_DE, DISPERSION, DEFAULT_SEED, DEFAULT_REPS, P53_TARGETS, P53_SET, FISCHER_TABLE1, SET_FALL_MIN, SET_FALL_MAX,
+    gsea, gseaES, gseaRunning, gseaNull, gseaOrder, setSlots,
     mulberry32, makeSampler, simulate, analyze, run, plainT, fitFDist, nsDesign, lsFit,
     bh, bhCutoff, storeyPi0, pHistogram, passes, callStats, seedSummary,
     tTwoSided, lgamma, digamma, trigamma, tetragamma, trigammaInverse, runChecks
