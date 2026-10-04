@@ -6,7 +6,8 @@
 // lambda = max(lambda_BG, lambda_1k, lambda_5k, lambda_10k) from the control, an exact
 // Poisson upper tail in log space, Benjamini-Hochberg over every bin, then runs of called
 // bins with a summit at the bin of greatest pileup), a two-condition differential call
-// over replicates, and a counter of real ReMap TP53 peaks over a motif window.
+// over replicates, a counter of real ReMap TP53 peaks over a motif window, and the
+// sequence-logo arithmetic (information content per column, a PWM score split by position).
 // It knows nothing about the CDKN1A locus: the page passes real positions in from BioLocus.
 //
 // Works in the browser (window.BioEssay04) and in node (module.exports).
@@ -49,6 +50,19 @@
 //                                          pos0 +- o.half; verdict rules beside VERDICTS.
 //   remapSupport(data, start0, end0)    -> number of distinct ReMap experiments with a TP53
 //                                          peak overlapping [start0, end0)
+//   infoContent(pfm)                    -> {cols:[{n, freq:{A,C,G,T}, ic, smallSample, stack}],
+//                                          total, maxSmallSample}. Sequence-logo information
+//                                          content per column in bits against a uniform
+//                                          background, 2 - H, from raw frequencies (no
+//                                          pseudocount; Schneider and Stephens 1990).
+//                                          smallSample is the correction e(n) = 3 / (2 ln2 n)
+//                                          (Schneider et al. 1986), reported, not subtracted.
+//                                          stack: letters bottom to top, height = freq * ic.
+//   revcomp(s)                          -> reverse complement (A<->T, C<->G).
+//   siteLoss(pwm, site)                 -> {pos:[{base, score, best, bestBase, loss}], score, max,
+//                                          loss}: a PWM score taken apart by position. pwm has
+//                                          cols [{A,C,G,T}] (log-odds, as BioLocus.pwm); site is
+//                                          read in the matrix's orientation; loss = best - score.
 //   runChecks(print, data)              -> [{name, ok, detail}]
 (function (root) {
   "use strict";
@@ -298,6 +312,34 @@
     return Object.keys(seen).length;
   }
 
+  // ---------- motif logo ----------
+  var BASES = ["A", "C", "G", "T"], COMP = { A: "T", C: "G", G: "C", T: "A" };
+  function infoContent(pfm) {
+    var L = pfm.A.length, cols = [], total = 0, maxE = 0;
+    for (var i = 0; i < L; i++) {
+      var n = 0, H = 0, f = {};
+      BASES.forEach(function (b) { n += pfm[b][i]; });
+      BASES.forEach(function (b) { var p = pfm[b][i] / n; f[b] = p; if (p > 0) H -= p * Math.log(p) / Math.LN2; });
+      var ic = 2 - H, e = 3 / (2 * Math.LN2 * n);
+      var stack = BASES.map(function (b, k) { return { base: b, k: k, freq: f[b], height: f[b] * ic }; })
+        .sort(function (a, b) { return a.height - b.height || a.k - b.k; });
+      cols.push({ n: n, freq: f, ic: ic, smallSample: e, stack: stack });
+      total += ic; maxE = Math.max(maxE, e);
+    }
+    return { cols: cols, total: total, maxSmallSample: maxE };
+  }
+  function revcomp(s) { var o = ""; for (var i = s.length - 1; i >= 0; i--) o += COMP[s[i].toUpperCase()] || "N"; return o; }
+  function siteLoss(pwm, site) {
+    var pos = [], score = 0, max = 0;
+    for (var k = 0; k < pwm.cols.length; k++) {
+      var c = pwm.cols[k], b = site[k].toUpperCase(), best = -Infinity, bb = null;
+      BASES.forEach(function (x) { if (c[x] > best) { best = c[x]; bb = x; } });
+      pos.push({ base: b, score: c[b], best: best, bestBase: bb, loss: best - c[b] });
+      score += c[b]; max += best;
+    }
+    return { pos: pos, score: score, max: max, loss: max - score };
+  }
+
   // ---------- checks ----------
   function runChecks(print, data) {
     var res = [];
@@ -354,6 +396,38 @@
     check("diffSite: strong WT-only site with 10% mutant occupancy is lost or reduced", d1.verdict === "lost" || d1.verdict === "reduced", d1.verdict + ", lfc " + d1.lfc.toFixed(2));
     check("diffSite: mutant-only site is gained", d2.verdict === "gained", d2.verdict);
 
+    // Sequence logo: toy columns by hand, then JASPAR MA0106.3 against logomaker 0.8.7
+    // (transform_matrix counts -> information, pseudocount 0, uniform background).
+    var toy = infoContent({ A: [8, 4, 2, 7, 4], C: [0, 4, 2, 1, 2], G: [0, 0, 2, 1, 2], T: [0, 0, 2, 1, 0] });
+    var toyWant = [2, 1, 0, 0.6432203505529603, 0.5], toyErr = 0;
+    toy.cols.forEach(function (c, i) { toyErr = Math.max(toyErr, Math.abs(c.ic - toyWant[i])); });
+    check("infoContent: hand-computed columns (2, 1, 0, 0.6432, 0.5 bits)", toyErr < 1e-12, "max err " + toyErr.toExponential(1));
+    var MA0106_3 = { A: [7544, 10514, 45, 11931, 1710, 8, 244, 1228, 1145, 3851, 3584, 7104, 0, 12925, 1825, 327, 879, 1472],
+      C: [1037, 116, 19689, 204, 374, 2, 12014, 17286, 11875, 1474, 756, 26, 19350, 250, 118, 33, 3338, 9183],
+      G: [6563, 2433, 13, 653, 137, 20393, 109, 417, 2151, 9954, 17846, 8821, 4, 157, 89, 20549, 116, 825],
+      T: [2268, 735, 837, 739, 18893, 0, 7106, 2642, 3774, 2118, 1546, 190, 1, 1155, 17864, 68, 17859, 9120] };
+    var lmIC = [0.321211843, 0.976401095, 1.724754728, 1.308772748, 1.412609908, 1.993550539, 0.918363341, 1.027460847, 0.51286178,
+      0.385962661, 0.863822682, 0.912112691, 1.996361941, 1.390433732, 1.465527281, 1.835828272, 1.112600597, 0.502037873];
+    var lmCol1 = { A: 0.139169661, C: 0.019130294, G: 0.12107244, T: 0.041839447 };
+    var ma = infoContent(MA0106_3), icErr = 0, hErr = 0, stackErr = 0;
+    ma.cols.forEach(function (c, i) {
+      icErr = Math.max(icErr, Math.abs(c.ic - lmIC[i]));
+      var sum = c.stack.reduce(function (a, x) { return a + x.height; }, 0); stackErr = Math.max(stackErr, Math.abs(sum - c.ic));
+    });
+    ma.cols[0].stack.forEach(function (x) { hErr = Math.max(hErr, Math.abs(x.height - lmCol1[x.base])); });
+    check("infoContent: MA0106.3 per-column bits and column-1 letter heights match logomaker", icErr < 1e-8 && hErr < 1e-8 && stackErr < 1e-12,
+      "total " + ma.total.toFixed(2) + " bits; max err " + Math.max(icErr, hErr).toExponential(1));
+    check("small-sample correction for MA0106.3 is negligible (under 0.001 bits per column)", ma.maxSmallSample < 0.001,
+      "max e(n) " + ma.maxSmallSample.toExponential(2) + " bits");
+    // siteLoss: sum of losses is max - score, and a minus-strand window read as its reverse
+    // complement scores what the scanner's reverse-strand formula gives.
+    var tp = { cols: [{ A: 1.5, C: -2, G: 0.2, T: -1 }, { A: -3, C: 1.9, G: -0.5, T: 0.1 }, { A: 0.3, C: -1, G: -4, T: 1.2 }] };
+    var w = "GCA", sl = siteLoss(tp, w), lsum = sl.pos.reduce(function (a, x) { return a + x.loss; }, 0);
+    var revScore = 0; for (var kk = 0; kk < 3; kk++) revScore += tp.cols[2 - kk][COMP[w[kk]]];
+    check("siteLoss: losses sum to max - score; reverse-complement reading equals the reverse-strand score",
+      Math.abs(lsum - (sl.max - sl.score)) < 1e-12 && Math.abs(siteLoss(tp, revcomp(w)).score - revScore) < 1e-12 && Math.abs(sl.score - (0.2 + 1.9 + 0.3)) < 1e-12,
+      "score " + sl.score.toFixed(2) + ", max " + sl.max.toFixed(2));
+
     if (data && data.peaks) {
       var okRows = data.peaks.every(function (p) { return p[0] <= p[2] && p[2] < p[1] && p[3] >= 0 && p[3] < data.experiments.length; });
       check("ReMap data: summits inside peaks, experiment indices valid", okRows, data.peaks.length + " peaks, " + data.experiments.length + " experiments");
@@ -368,7 +442,8 @@
   var api = { mulberry32: mulberry32, poissonScore: poissonScore, bhScores: bhScores, biasField: biasField,
     simulateSample: simulateSample, localLambda: localLambda, scoreTrack: scoreTrack, callPeaks: callPeaks,
     simulateLocus: simulateLocus, windowCount: windowCount, diffSite: diffSite, VERDICTS: VERDICTS,
-    remapSupport: remapSupport, DEFAULTS: DEFAULTS, runChecks: runChecks };
+    remapSupport: remapSupport, infoContent: infoContent, revcomp: revcomp, siteLoss: siteLoss,
+    DEFAULTS: DEFAULTS, runChecks: runChecks };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.BioEssay04 = api;
 })(typeof self !== "undefined" ? self : this);
