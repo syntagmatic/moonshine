@@ -3,90 +3,100 @@
 // Two things live here so they can be checked outside the page:
 //   1. The real human-mouse synteny blocks of Figure 4 and the layout arithmetic that
 //      decides which ribbons cross: mouse chromosome order, orientation (flips), the
-//      crossing count, and the circle geometry the page draws from.
+//      crossing count, the exact minimum over all orders and flips, and the circle
+//      geometry the page draws from.
 //   2. The simulated structural-variant generator of Figure 1, whose intrachromosomal
 //      events must have their breakpoints exactly `size` apart.
 //
-// Browser global `BioEssay03`; `module.exports = api` under node. No fetch.
+// Browser global `BioEssay03`; `module.exports = api` under node. No fetch: the page
+// fetches data/essay-03.json and hands it to load(); runChecks(print, data) does the same.
 //
-// ---- Synteny data ------------------------------------------------------------------
-// UCSC hg38 netMm39 alignment net (GRCh38 against GRCm39), top-level fills on human
-// chr1-6 whose human span is at least 3 Mb; fetched from api.genome.ucsc.edu
-// (getData/track?genome=hg38;track=netMm39;chrom=chrN), positions in Mb rounded to 0.1.
-// The set was re-derived independently in the 2026-10 audit: 68 blocks, exact match.
+// ---- Synteny data (data/essay-03.json, built by scripts/bio-03-synteny.mjs) --------
+// UCSC hg38 netMm39 alignment net (GRCh38 against GRCm39), top-level (level-1) fills on
+// human chr1-22 and X whose human span is at least 3 Mb; positions in Mb rounded to 0.1,
+// chromosome sizes from hg38/mm39 chrom.sizes to 0.001 Mb.
 // Row: [human chr, start, end, mouse chr, start, end, strand of the mouse block].
 // Strand "-" means the mouse coordinate falls as the human coordinate rises.
+// Chromosomes are named by strings ("1".."22", "X").
 //
 // ---- Layouts -----------------------------------------------------------------------
-// The circle puts human chr1-6 on the right half, running clockwise (top to bottom),
-// and the mouse chromosomes on the left half. A layout says, for the left half, the
-// mouse chromosomes from top to bottom (`order`) and which of them run bottom to top
-// (`flip`). With both halves read top to bottom, two block chords cross exactly when the
-// blocks' order on the human side disagrees with their order on the mouse side, which is
-// the count of "inversions" between two parallel axes.
-//   "clockwise"  the common default and the page's old figure: mouse chromosomes in
-//                numeric order, placed clockwise like the human half, so on the left
-//                they run bottom to top (numeric order from the bottom, every chr flipped)
+// The circle puts the human chromosomes on the right half, in numeric order running
+// clockwise (top to bottom), and the mouse chromosomes on the left half. A layout says,
+// for the left half, the mouse chromosomes from top to bottom (`order`) and which of them
+// run bottom to top (`flip`). With both halves read top to bottom, two block chords cross
+// exactly when the blocks' order on the human side disagrees with their order on the
+// mouse side, which is the count of "inversions" between two parallel axes.
+//   "clockwise"  the common default: mouse chromosomes in numeric order, placed clockwise
+//                like the human half, so on the left they run bottom to top (numeric
+//                order from the bottom, every chr flipped)
 //   "aligned"    numeric order, every mouse chromosome running top to bottom
 //   "reordered"  aligned, with mouse chromosomes sorted by the length-weighted mean human
 //                position of their blocks (barycentre)
-//   "flipped"    reordered, then each mouse chromosome flipped when that lowers the count
-//                (greedy, three passes in barycentre order)
+//   "best"       the fewest crossings any order and flips of the mouse half can give.
+// The count splits exactly in two. A pair of blocks on two different mouse chromosomes
+// crosses or not depending only on which of the two chromosomes is drawn higher (each
+// chromosome's blocks sit inside its own stretch of the axis, so flipping moves nothing
+// across another chromosome). A pair on the same mouse chromosome depends only on that
+// chromosome's flip. So the best flips are chosen chromosome by chromosome, and the best
+// order is a linear ordering problem over the mouse chromosomes, solved exactly by
+// dynamic programming over subsets (2^n states; n = 20 here).
 //
 // ---- API ---------------------------------------------------------------------------
-//   BLOCKS, HUMAN_SIZES {1..6: Mb}, MOUSE_SIZES {n: Mb}  (hg38 / mm39 chrom.sizes, 0.001 Mb)
-//   blocks()                       [{i, h, hs, he, m, ms, me, strand, span}]
+//   load(data, {human}?)           install a data set (optionally only some human chrs);
+//                                  returns api. Everything below reads the loaded set.
+//   HUMAN, MOUSE                   chromosome names in numeric order (mouse: those used)
+//   HUMAN_SIZES, MOUSE_SIZES, HUMAN_TOTAL, MOUSE_TOTAL, BLOCKS (rows)
+//   blocks()                       [{i, h, hs, he, m, ms, me, strand, span}] in human order
 //   layout(kind)                   {kind, order: [m top to bottom], flip: {m: bool}}
 //   mouseAxis(layout)              block -> {y0, y1, mid}: position along the mouse side,
 //                                  top to bottom, of the block's ms end, me end and middle
-//   humanAxis(block)               {x0, x1, mid}: chr1-6 concatenated, top to bottom
+//   humanAxis(block)               {x0, x1, mid}: human chromosomes concatenated
 //   crossings(layout)              {total, sameMouse, pairs, perBlock[]} by brute force
 //   crossingsMergeSort(layout)     total only, by merge-sort inversion count (independent)
+//   pairCost()                     {W, within}: W[a][b] = crossings between the blocks of
+//                                  mouse a and b when a is drawn above b; within[m] =
+//                                  [unflipped, flipped] crossings inside mouse m
+//   layoutCost(layout)             total from pairCost (third independent count)
+//   bestFlips(), barycentreOrder(), bestOrder() -> {order, cost}, lowerBound()
 //   circleArcs(layout, opts)       per chromosome {species, n, size, c, s, a0, a1}: the
 //                                  drawn angle of position p is c + s * (p - size / 2)
 //                                  (radians, 0 at 12 o'clock, clockwise positive)
 //   chordsCross(a, b)              geometric test on two chords given as [angle, angle]
 //   circleCrossings(layout)        count of crossing block chords from circleArcs angles
-//   barycentreOrder(), greedyFlips(order)
 //   mulberry32(seed), generateSVs(chrs, rng), mappableRange(chr)
-//   runChecks(print) -> [{name, ok, detail}]
+//   runChecks(print, data) -> [{name, ok, detail}]
 (function (root) {
   "use strict";
 
-  const BLOCKS = [
-    [1,0.9,58.5,4,103.2,156.3,'-'], [1,58.7,67.1,4,94.8,103.2,'+'], [1,68.1,120.3,3,97.7,159.6,'-'], [1,146.1,158.2,3,86.9,98.0,'-'],
-    [1,158.5,207.4,1,130.4,174.3,'-'], [1,207.4,223.6,1,182.4,194.9,'-'], [1,223.6,227.5,1,179.7,182.4,'-'], [1,229.3,235.2,8,124.5,127.7,'+'],
-    [1,235.2,239.9,13,9.9,14.4,'-'], [1,240.1,247.0,1,174.3,179.7,'+'], [2,0.2,16.1,12,12.8,31.1,'-'], [2,16.2,26.1,12,3.3,12.8,'-'],
-    [2,28.8,51.5,17,71.9,92.0,'+'], [2,53.7,68.5,11,16.9,31.1,'-'], [2,68.5,88.9,6,70.7,87.6,'-'], [2,96.5,106.2,1,36.3,43.9,'+'],
-    [2,113.7,121.8,1,118.2,125.6,'-'], [2,132.4,137.9,1,125.6,130.3,'+'], [2,139.7,187.5,2,39.9,84.3,'+'], [2,189.6,195.7,1,46.9,53.4,'-'],
-    [2,195.7,241.8,1,53.4,93.8,'+'], [3,0.0,12.8,6,103.3,115.8,'+'], [3,16.3,20.2,17,50.3,54.0,'+'], [3,23.1,27.5,14,3.5,7.8,'+'],
-    [3,27.7,52.3,9,106.0,118.3,'-'], [3,52.3,64.0,14,8.3,31.0,'-'], [3,64.0,75.3,6,92.3,103.3,'+'], [3,75.8,90.3,16,62.7,75.3,'-'],
-    [3,93.8,125.6,16,33.0,62.8,'-'], [3,130.2,148.4,9,90.2,105.9,'-'], [3,149.3,168.1,3,57.2,75.9,'+'], [3,168.2,183.1,3,29.0,36.1,'+'],
-    [3,183.2,195.6,16,19.6,31.2,'+'], [4,4.2,8.8,5,35.6,38.5,'-'], [4,9.8,31.8,5,38.5,59.0,'+'], [4,32.8,49.1,5,59.9,73.6,'+'],
-    [4,51.8,58.8,5,73.6,79.3,'+'], [4,59.0,88.1,5,79.4,104.7,'+'], [4,88.6,94.3,6,58.8,65.1,'+'], [4,94.4,119.8,3,122.4,142.2,'-'],
-    [4,121.3,140.3,3,36.2,52.1,'+'], [4,140.3,190.0,8,41.9,84.2,'-'], [5,0.2,7.9,13,68.7,74.5,'-'], [5,8.9,42.9,15,3.3,32.8,'-'],
-    [5,50.3,96.8,13,74.8,117.5,'-'], [5,99.1,102.3,1,94.1,96.8,'+'], [5,103.4,110.7,17,59.2,65.8,'+'], [5,110.9,131.0,18,32.8,60.3,'+'],
-    [5,131.2,134.7,11,51.6,54.8,'-'], [5,134.7,137.8,13,55.8,58.3,'+'], [5,139.5,148.2,18,35.8,44.3,'+'], [5,151.0,155.0,11,54.8,58.1,'+'],
-    [5,155.8,172.5,11,32.3,47.8,'-'], [5,178.1,181.3,11,48.7,51.6,'-'], [6,0.2,20.1,13,30.7,48.6,'+'], [6,20.1,28.5,13,21.5,30.5,'-'],
-    [6,29.4,33.3,17,34.1,37.7,'-'], [6,33.4,39.1,17,27.1,31.2,'+'], [6,39.3,49.7,17,41.1,50.2,'-'], [6,52.8,55.9,9,75.6,78.2,'-'],
-    [6,60.2,73.2,1,21.5,33.7,'-'], [6,73.4,85.7,9,78.3,88.4,'+'], [6,87.1,99.8,4,21.4,34.9,'-'], [6,100.1,149.9,10,7.5,51.3,'-'],
-    [6,150.1,154.7,10,3.3,7.3,'+'], [6,154.7,159.0,17,3.2,7.2,'+'], [6,159.7,166.9,17,7.3,13.2,'-'], [6,167.2,170.6,17,13.3,15.7,'+']
-  ];
-  // hg38.chrom.sizes and mm39.chrom.sizes (UCSC), in Mb.
-  const HUMAN_SIZES = { 1: 248.956, 2: 242.194, 3: 198.296, 4: 190.215, 5: 181.538, 6: 170.806 };
-  const MOUSE_SIZES = { 1: 195.154, 2: 181.755, 3: 159.745, 4: 156.861, 5: 151.758, 6: 149.588,
-    8: 130.128, 9: 124.360, 10: 130.531, 11: 121.973, 12: 120.093, 13: 120.883, 14: 125.140,
-    15: 104.074, 16: 98.009, 17: 95.295, 18: 90.721 };
-  const MOUSE_NUMS = Object.keys(MOUSE_SIZES).map(Number).sort((a, b) => a - b);
-  const HUMAN_NUMS = [1, 2, 3, 4, 5, 6];
+  const chrKey = c => c === "X" ? 23 : c === "Y" ? 24 : Number(c);
+  const byChr = (a, b) => chrKey(a) - chrKey(b);
 
-  const B = BLOCKS.map(([h, hs, he, m, ms, me, strand], i) => ({ i, h, hs, he, m, ms, me, strand, span: he - hs }));
+  // The loaded data set. load() replaces every field.
+  let DATA = null, B = [], HUMAN = [], MOUSE = [], HUMAN_SIZES = {}, MOUSE_SIZES = {};
+  let HUMAN_TOTAL = 0, MOUSE_TOTAL = 0, hoff = {};
+  let LAYOUT_CACHE = {}, PAIR_CACHE = null, BEST_CACHE = null;
+
+  function load(data, opts) {
+    DATA = data;
+    const keep = opts && opts.human ? new Set(opts.human.map(String)) : null;
+    const rows = data.blocks.filter(r => !keep || keep.has(String(r[0])));
+    HUMAN = Object.keys(data.humanSizes).filter(h => !keep || keep.has(h)).sort(byChr);
+    MOUSE = [...new Set(rows.map(r => String(r[3])))].sort(byChr);
+    HUMAN_SIZES = Object.fromEntries(HUMAN.map(h => [h, data.humanSizes[h]]));
+    MOUSE_SIZES = Object.fromEntries(MOUSE.map(m => [m, data.mouseSizes[m]]));
+    hoff = {}; let o = 0;
+    for (const h of HUMAN) { hoff[h] = o; o += HUMAN_SIZES[h]; }
+    HUMAN_TOTAL = o;
+    MOUSE_TOTAL = MOUSE.reduce((s, m) => s + MOUSE_SIZES[m], 0);
+    B = rows.map(([h, hs, he, m, ms, me, strand]) => ({ h: String(h), hs, he, m: String(m), ms, me, strand, span: he - hs }))
+      .sort((a, b) => byChr(a.h, b.h) || a.hs - b.hs)
+      .map((b, i) => Object.assign(b, { i }));
+    LAYOUT_CACHE = {}; PAIR_CACHE = null; BEST_CACHE = null;
+    Object.assign(api, { HUMAN, MOUSE, HUMAN_SIZES, MOUSE_SIZES, HUMAN_TOTAL, MOUSE_TOTAL, BLOCKS: rows });
+    return api;
+  }
+
   function blocks() { return B.map(b => Object.assign({}, b)); }
-
-  const hoff = {};
-  { let o = 0; for (const h of HUMAN_NUMS) { hoff[h] = o; o += HUMAN_SIZES[h]; } }
-  const HUMAN_TOTAL = HUMAN_NUMS.reduce((s, h) => s + HUMAN_SIZES[h], 0);
-  const MOUSE_TOTAL = MOUSE_NUMS.reduce((s, m) => s + MOUSE_SIZES[m], 0);
   function humanAxis(b) { return { x0: hoff[b.h] + b.hs, x1: hoff[b.h] + b.he, mid: hoff[b.h] + (b.hs + b.he) / 2 }; }
 
   function mouseAxis(lay) {
@@ -127,48 +137,118 @@
     return sortCount(seq)[1];
   }
 
+  // The decomposition: W[a][b] counts block pairs (p on a, q on b) that cross when a is
+  // drawn above b, which is when q lies left of p in human; within[m] counts pairs inside m.
+  function pairCost() {
+    if (PAIR_CACHE) return PAIR_CACHE;
+    const W = {}, within = {};
+    const xs = m => B.filter(b => b.m === m).map(b => ({ x: humanAxis(b).mid, y: (b.ms + b.me) / 2 }));
+    const on = Object.fromEntries(MOUSE.map(m => [m, xs(m)]));
+    for (const a of MOUSE) {
+      W[a] = {};
+      for (const b of MOUSE) {
+        if (a === b) continue;
+        let n = 0; for (const p of on[a]) for (const q of on[b]) if (q.x < p.x) n++;
+        W[a][b] = n;
+      }
+      let up = 0, fl = 0; const bs = on[a];
+      for (let i = 0; i < bs.length; i++) for (let j = i + 1; j < bs.length; j++) {
+        const dx = bs[i].x - bs[j].x, dy = bs[i].y - bs[j].y;
+        if (dx * dy < 0) up++; if (dx * dy > 0) fl++;
+      }
+      within[a] = [up, fl];
+    }
+    return (PAIR_CACHE = { W, within });
+  }
+  function layoutCost(lay) {
+    const { W, within } = pairCost();
+    let n = 0;
+    lay.order.forEach((a, i) => {
+      n += within[a][lay.flip[a] ? 1 : 0];
+      for (let j = i + 1; j < lay.order.length; j++) n += W[a][lay.order[j]];
+    });
+    return n;
+  }
+  // Each chromosome's flip only touches its own pairs, so this is exact.
+  function bestFlips() {
+    const { within } = pairCost(), flip = {};
+    for (const m of MOUSE) if (within[m][1] < within[m][0]) flip[m] = true;
+    return flip;
+  }
+  // Sum over pairs of the cheaper of the two orders, plus the cheaper flip of each chr.
+  function lowerBound() {
+    const { W, within } = pairCost();
+    let n = 0;
+    MOUSE.forEach((a, i) => {
+      n += Math.min(within[a][0], within[a][1]);
+      for (let j = i + 1; j < MOUSE.length; j++) n += Math.min(W[a][MOUSE[j]], W[MOUSE[j]][a]);
+    });
+    return n;
+  }
+  // Exact linear ordering by dynamic programming over subsets: f[S] is the fewest
+  // between-chromosome crossings with the chromosomes in S drawn above all others. Adding c
+  // below S costs the sum of W[a][c] over a in S, read from two half-word tables.
+  function bestOrder(list) {
+    if (!list && BEST_CACHE) return BEST_CACHE;
+    const L = list || MOUSE;
+    const { W } = pairCost(), n = L.length, N = 1 << n;
+    const lo = Math.min(n, 10), hiBits = n - lo, LO = 1 << lo, HI = 1 << hiBits;
+    const tLo = [], tHi = [];
+    for (let c = 0; c < n; c++) {
+      const a = new Int32Array(LO), b = new Int32Array(HI);
+      for (let s = 1; s < LO; s++) { const k = 31 - Math.clz32(s & -s); a[s] = a[s & (s - 1)] + (k === c ? 0 : W[L[k]][L[c]]); }
+      for (let s = 1; s < HI; s++) { const k = 31 - Math.clz32(s & -s); b[s] = b[s & (s - 1)] + (k + lo === c ? 0 : W[L[k + lo]][L[c]]); }
+      tLo.push(a); tHi.push(b);
+    }
+    const f = new Int32Array(N).fill(0x7fffffff), last = new Int8Array(N).fill(-1);
+    f[0] = 0;
+    for (let S = 0; S < N; S++) {
+      const fs = f[S]; if (fs === 0x7fffffff) continue;
+      const sl = S & (LO - 1), sh = S >>> lo;
+      for (let c = 0; c < n; c++) {
+        if (S & (1 << c)) continue;
+        const T = S | (1 << c), v = fs + tLo[c][sl] + tHi[c][sh];
+        if (v < f[T]) { f[T] = v; last[T] = c; }
+      }
+    }
+    const order = []; let S = N - 1;
+    while (S) { const c = last[S]; order.unshift(L[c]); S &= ~(1 << c); }
+    const out = { order, cost: f[N - 1] };
+    if (!list) BEST_CACHE = out;
+    return out;
+  }
+
   function barycentreOrder() {
     const bary = {};
-    for (const m of MOUSE_NUMS) {
+    for (const m of MOUSE) {
       const bs = B.filter(b => b.m === m);
       bary[m] = bs.reduce((s, b) => s + humanAxis(b).mid * b.span, 0) / bs.reduce((s, b) => s + b.span, 0);
     }
-    return MOUSE_NUMS.slice().sort((a, b) => bary[a] - bary[b]);
+    return MOUSE.slice().sort((a, b) => bary[a] - bary[b]);
   }
 
-  function greedyFlips(order) {
-    let flip = {};
-    for (let pass = 0; pass < 3; pass++) for (const m of order) {
-      const base = crossingsMergeSort({ order, flip });
-      const t = Object.assign({}, flip); t[m] = !t[m];
-      if (crossingsMergeSort({ order, flip: t }) < base) flip = t;
-    }
-    return flip;
-  }
-
-  const LAYOUT_CACHE = {};
   function layout(kind) {
     if (LAYOUT_CACHE[kind]) return LAYOUT_CACHE[kind];
     let lay;
     if (kind === "clockwise") {
-      const flip = {}; MOUSE_NUMS.forEach(m => { flip[m] = true; });
-      lay = { kind, order: MOUSE_NUMS.slice().reverse(), flip };
-    } else if (kind === "aligned") lay = { kind, order: MOUSE_NUMS.slice(), flip: {} };
+      const flip = {}; MOUSE.forEach(m => { flip[m] = true; });
+      lay = { kind, order: MOUSE.slice().reverse(), flip };
+    } else if (kind === "aligned") lay = { kind, order: MOUSE.slice(), flip: {} };
     else if (kind === "reordered") lay = { kind, order: barycentreOrder(), flip: {} };
-    else if (kind === "flipped") { const order = barycentreOrder(); lay = { kind, order, flip: greedyFlips(order) }; }
+    else if (kind === "best") lay = { kind, order: bestOrder().order, flip: bestFlips() };
     else throw new Error("unknown layout " + kind);
     return (LAYOUT_CACHE[kind] = lay);
   }
 
-  // Circle geometry. Human: right half, 5 to 175 degrees, 2-degree gaps, clockwise.
-  // Mouse: left half, 355 down to 185 degrees, 1.2-degree gaps, `order` from the top.
+  // Circle geometry. Human: right half, 5 to 175 degrees, clockwise.
+  // Mouse: left half, 355 down to 185 degrees, `order` from the top.
   function circleArcs(lay, opts) {
-    const o = Object.assign({ hStart: 5, hEnd: 175, hGap: 2, mTop: 355, mBottom: 185, mGap: 1.2 }, opts || {});
+    const o = Object.assign({ hStart: 5, hEnd: 175, hGap: 0.8, mTop: 355, mBottom: 185, mGap: 0.8 }, opts || {});
     const rad = d => d * Math.PI / 180;
     const arcs = [];
-    const hAvail = rad(o.hEnd - o.hStart) - rad(o.hGap) * (HUMAN_NUMS.length - 1);
+    const hAvail = rad(o.hEnd - o.hStart) - rad(o.hGap) * (HUMAN.length - 1);
     let a = rad(o.hStart);
-    for (const h of HUMAN_NUMS) {
+    for (const h of HUMAN) {
       const size = HUMAN_SIZES[h], arc = hAvail * size / HUMAN_TOTAL;
       arcs.push({ species: "human", n: h, size, a0: a, a1: a + arc, c: a + arc / 2, s: arc / size });
       a += arc + rad(o.hGap);
@@ -246,18 +326,9 @@
   }
 
   // ---- Checks --------------------------------------------------------------------
-  function runChecks(print) {
+  function runChecks(print, data) {
     const res = [];
     const ok = (name, cond, detail) => { res.push({ name, ok: !!cond, detail: detail || "" }); };
-    ok("68 synteny blocks, each spanning at least 3 Mb of human sequence", B.length === 68 && B.every(b => b.span >= 3 - 1e-9), B.length + " blocks");
-    const mset = [...new Set(B.map(b => b.m))].sort((a, b) => a - b);
-    ok("blocks land on 17 mouse chromosomes (1-6, 8-18)", mset.join(",") === MOUSE_NUMS.join(","), mset.join(","));
-    const h3 = [...new Set(B.filter(b => b.h === 3).map(b => b.m))];
-    ok("human 3 splits across six mouse chromosomes", h3.length === 6, h3.sort((a, b) => a - b).join(","));
-    const h4 = B.filter(b => b.h === 4 && b.he <= 88.2);
-    ok("human 4, 0-88 Mb: five blocks on mouse 5 in increasing mouse order",
-      h4.length === 5 && h4.every(b => b.m === 5) && h4.every((b, k) => k === 0 || b.ms > h4[k - 1].ms), h4.map(b => b.ms).join(" "));
-    ok("every block lies inside its chromosome", B.every(b => b.he <= HUMAN_SIZES[b.h] + 0.05 && b.me <= MOUSE_SIZES[b.m] + 0.05 && b.hs >= 0 && b.ms >= 0));
 
     // Closed-form reference: reversing n parallel chords gives n(n-1)/2 crossings.
     ok("chord-crossing test against the closed form n(n-1)/2", (() => {
@@ -270,37 +341,90 @@
       return n === 0;
     })(), "5 chords, one side reversed: 10 = 5*4/2; same direction: 0");
 
-    // The audit's independent prototype (layout-proto.cjs) found these counts.
-    const expect = { clockwise: 1454, aligned: 824, reordered: 670, flipped: 591 };
-    for (const k of Object.keys(expect)) {
-      const lay = layout(k), bf = crossings(lay).total, ms = crossingsMergeSort(lay), geo = circleCrossings(lay);
-      ok(`${k}: brute force = merge sort = circle geometry = audit prototype`, bf === ms && ms === geo && geo === expect[k],
-        `${bf} / ${ms} / ${geo} / ${expect[k]}`);
-    }
-    ok("barycentre order matches the audit prototype", barycentreOrder().join(" ") === "4 12 1 2 3 6 14 16 9 5 11 8 17 15 13 18 10", barycentreOrder().join(" "));
-    ok("flipped layout leaves 36 crossings between blocks on the same mouse chromosome", crossings(layout("flipped")).sameMouse === 36, String(crossings(layout("flipped")).sameMouse));
+    if (!data && !DATA) ok("synteny checks need data/essay-03.json", false, "no data passed");
+    else {
+      data = data || DATA;
+      const fourWays = lay => [crossings(lay).total, crossingsMergeSort(lay), circleCrossings(lay), layoutCost(lay)];
+      const allEqual = a => a.every(v => v === a[0]);
 
-    // The old figure's reading rule: with mouse running clockwise, adjacent blocks whose
-    // order is kept cross and reversed ones nest; aligned, the opposite.
-    function adjacent(lay) {
-      const arcs = circleArcs(lay), H = {}, M = {};
-      arcs.forEach(a => { (a.species === "human" ? H : M)[a.n] = a; });
-      const c = { keptCross: 0, keptNest: 0, revCross: 0, revNest: 0 };
-      for (let i = 0; i + 1 < B.length; i++) {
-        const p = B[i], q = B[i + 1];
-        if (p.h !== q.h || p.m !== q.m) continue;
-        const cp = [angleAt(H[p.h], (p.hs + p.he) / 2), angleAt(M[p.m], (p.ms + p.me) / 2)];
-        const cq = [angleAt(H[q.h], (q.hs + q.he) / 2), angleAt(M[q.m], (q.ms + q.me) / 2)];
-        const x = chordsCross(cp, cq), kept = q.ms > p.ms;
-        c[(kept ? "kept" : "rev") + (x ? "Cross" : "Nest")]++;
+      // The first pass drew human chr1-6 only; the same rows must reproduce its numbers.
+      load(data, { human: ["1", "2", "3", "4", "5", "6"] });
+      ok("chr1-6 subset: the 68 blocks and 17 mouse chromosomes of the first pass", B.length === 68 && MOUSE.join(",") === "1,2,3,4,5,6,8,9,10,11,12,13,14,15,16,17,18",
+        B.length + " blocks; mouse " + MOUSE.join(","));
+      const old = { clockwise: 1454, aligned: 824, reordered: 670 };
+      for (const k of Object.keys(old)) {
+        const w = fourWays(layout(k));
+        ok(`chr1-6 ${k}: four counts agree with the audit prototype (${old[k]})`, allEqual(w) && w[0] === old[k], w.join(" / "));
       }
-      return c;
+      ok("chr1-6 barycentre order matches the audit prototype", barycentreOrder().join(" ") === "4 12 1 2 3 6 14 16 9 5 11 8 17 15 13 18 10", barycentreOrder().join(" "));
+      const oldFlip = crossings({ order: barycentreOrder(), flip: bestFlips() });
+      ok("chr1-6 sorted and flipped gives the first pass's 591, 36 inside one mouse chromosome", oldFlip.total === 591 && oldFlip.sameMouse === 36, oldFlip.total + ", " + oldFlip.sameMouse);
+      const sub = { best: crossings(layout("best")).total, lb: lowerBound(), dp: bestOrder().cost };
+      ok("chr1-6 fewest crossings: exact order and flips, at or above the pairwise bound", sub.best <= 591 && sub.best >= sub.lb,
+        `best ${sub.best}, bound ${sub.lb}, between-chromosome ${sub.dp}`);
+
+      // The old figure's reading rule: with mouse running clockwise, adjacent blocks whose
+      // order is kept cross and reversed ones nest; aligned, the opposite.
+      function adjacent(lay) {
+        const arcs = circleArcs(lay), H = {}, M = {};
+        arcs.forEach(a => { (a.species === "human" ? H : M)[a.n] = a; });
+        const c = { keptCross: 0, keptNest: 0, revCross: 0, revNest: 0 };
+        for (let i = 0; i + 1 < B.length; i++) {
+          const p = B[i], q = B[i + 1];
+          if (p.h !== q.h || p.m !== q.m) continue;
+          const cp = [angleAt(H[p.h], (p.hs + p.he) / 2), angleAt(M[p.m], (p.ms + p.me) / 2)];
+          const cq = [angleAt(H[q.h], (q.hs + q.he) / 2), angleAt(M[q.m], (q.ms + q.me) / 2)];
+          const x = chordsCross(cp, cq), kept = q.ms > p.ms;
+          c[(kept ? "kept" : "rev") + (x ? "Cross" : "Nest")]++;
+        }
+        return c;
+      }
+
+      // Genome-wide.
+      load(data);
+      ok("160 blocks on human 1-22 and X, each spanning at least 3 Mb of human sequence",
+        B.length === 160 && HUMAN.length === 23 && B.every(b => b.span >= 3 - 1e-9), B.length + " blocks on " + HUMAN.length + " human chromosomes");
+      ok("blocks land on all 20 mouse chromosomes (1-19 and X)", MOUSE.join(",") === "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,X", MOUSE.join(","));
+      ok("every block lies inside its chromosome", B.every(b => b.he <= HUMAN_SIZES[b.h] + 0.05 && b.me <= MOUSE_SIZES[b.m] + 0.05 && b.hs >= 0 && b.ms >= 0 && b.me > b.ms));
+      ok("human X blocks all land on mouse X", B.filter(b => b.h === "X").every(b => b.m === "X") && B.filter(b => b.m === "X").every(b => b.h === "X"),
+        B.filter(b => b.h === "X").length + " blocks");
+      const h3 = [...new Set(B.filter(b => b.h === "3").map(b => b.m))];
+      ok("human 3 splits across six mouse chromosomes", h3.length === 6, h3.sort(byChr).join(","));
+      const h4 = B.filter(b => b.h === "4" && b.he <= 88.2);
+      ok("human 4, 0-88 Mb: five blocks on mouse 5 in increasing mouse order",
+        h4.length === 5 && h4.every(b => b.m === "5") && h4.every((b, k) => k === 0 || b.ms > h4[k - 1].ms), h4.map(b => b.ms).join(" "));
+
+      // Counts from a separate prototype written for the genome-wide pass (temp/bio-audit/g03/proto.cjs).
+      const proto = { clockwise: 7529, aligned: 5191, reordered: 3965 };
+      for (const k of Object.keys(proto)) {
+        const w = fourWays(layout(k));
+        ok(`${k}: brute force = merge sort = circle geometry = pair table = prototype (${proto[k]})`, allEqual(w) && w[0] === proto[k], w.join(" / "));
+      }
+      const bw = fourWays(layout("best")), bestX = crossings(layout("best"));
+      const lb = lowerBound(), within = MOUSE.reduce((s, m) => s + Math.min(...pairCost().within[m]), 0);
+      ok("fewest crossings: four counts agree, equal to the exact order's cost plus the best flips", allEqual(bw) && bw[0] === bestOrder().cost + within,
+        bw.join(" / ") + " = " + bestOrder().cost + " + " + within);
+      ok("fewest crossings lies between the pairwise lower bound and the prototype's local search (3,605)", bw[0] >= lb && bw[0] <= 3605, `${lb} <= ${bw[0]} <= 3605`);
+      ok("same-chromosome crossings in the best layout equal the sum of each chromosome's better flip", bestX.sameMouse === within, bestX.sameMouse + " = " + within);
+      // Exhaustive check of the subset DP: every permutation of 7 mouse chromosomes.
+      const seven = ["1", "2", "3", "4", "5", "6", "7"], { W } = pairCost();
+      let brute = Infinity;
+      (function perm(a, k) {
+        if (k === a.length) { let c = 0; for (let i = 0; i < a.length; i++) for (let j = i + 1; j < a.length; j++) c += W[a[i]][a[j]]; if (c < brute) brute = c; return; }
+        for (let i = k; i < a.length; i++) { [a[k], a[i]] = [a[i], a[k]]; perm(a, k + 1); [a[k], a[i]] = [a[i], a[k]]; }
+      })(seven.slice(), 0);
+      const dp7 = bestOrder(seven);
+      ok("subset dynamic program = brute force over all 5,040 orders of mouse 1-7", dp7.cost === brute, dp7.cost + " = " + brute);
+      // Flips only change pairs inside one chromosome: a random flip set moves sameMouse, never the rest.
+      const rf = {}; MOUSE.forEach((m, k) => { if (k % 3 === 0) rf[m] = true; });
+      const a0 = crossings(layout("reordered")), a1 = crossings({ order: layout("reordered").order, flip: rf });
+      ok("flipping chromosomes changes only same-chromosome crossings", a0.total - a0.sameMouse === a1.total - a1.sameMouse,
+        `${a0.total - a0.sameMouse} = ${a1.total - a1.sameMouse}`);
+      const cw = adjacent(layout("clockwise")), al = adjacent(layout("aligned"));
+      ok("clockwise layout: every order-kept adjacent pair crosses and every reversed pair nests; aligned, the opposite",
+        cw.keptNest === 0 && cw.revCross === 0 && al.keptCross === 0 && al.revNest === 0 && cw.keptCross === al.keptNest && cw.revNest === al.revCross && cw.keptCross > 0,
+        "clockwise " + JSON.stringify(cw) + ", aligned " + JSON.stringify(al));
     }
-    const cw = adjacent(layout("clockwise")), al = adjacent(layout("aligned"));
-    ok("clockwise layout: all 12 order-kept adjacent pairs cross, all 11 reversed pairs nest",
-      cw.keptCross === 12 && cw.keptNest === 0 && cw.revCross === 0 && cw.revNest === 11, JSON.stringify(cw));
-    ok("aligned layout: the 12 order-kept pairs nest and the 11 reversed pairs cross",
-      al.keptCross === 0 && al.keptNest === 12 && al.revCross === 11 && al.revNest === 0, JSON.stringify(al));
 
     // SV generator.
     const chrs = [["chr1", 248.956], ["chr9", 138.395], ["chr14", 107.044], ["chr21", 46.71], ["chr22", 50.818], ["chrY", 57.227]]
@@ -319,8 +443,8 @@
   }
 
   const api = {
-    BLOCKS, HUMAN_SIZES, MOUSE_SIZES, MOUSE_NUMS, HUMAN_TOTAL, MOUSE_TOTAL,
-    blocks, humanAxis, mouseAxis, layout, crossings, crossingsMergeSort, barycentreOrder, greedyFlips,
+    load, byChr, blocks, humanAxis, mouseAxis, layout, crossings, crossingsMergeSort, pairCost, layoutCost,
+    bestFlips, barycentreOrder, bestOrder, lowerBound,
     circleArcs, angleAt, chordsCross, circleCrossings,
     mulberry32, mappableRange, generateSVs, runChecks
   };
