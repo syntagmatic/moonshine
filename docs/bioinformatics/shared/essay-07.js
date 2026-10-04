@@ -1,6 +1,7 @@
 // BioEssay07: the models behind essay 07, Dimensionality Reduction. Simulated single cells
 // (counts drawn from a library size, then normalized), PCA by Jacobi eigendecomposition, exact
-// t-SNE with scikit-learn's default optimizer settings, and the measures the essay plots:
+// t-SNE with scikit-learn's default optimizer settings, UMAP following umap-learn, and the
+// measures the essay plots:
 // neighbor recall against k, pairwise-distance rank correlation, centroid-distance ranks.
 // Browser global `BioEssay07`, and `module.exports` under node. No fetch, no Math.random.
 //
@@ -41,6 +42,14 @@
 //   spearman(a, b)               rank correlation (average ranks for ties)
 //   pearson(a, b)
 //   centroids(X, labels, g)      per-group mean rows
+//   umapSettings(n)              umap-learn defaults: 15 neighbors, min_dist 0.1, spread 1, 500 epochs
+//                                (n <= 10,000), 5 negative samples, init "spectral" | "random" | array
+//   fitAB(spread, minDist)       { a, b } by Levenberg-Marquardt, as find_ab_params
+//   smoothKnn(knnD, k)           { sigma, rho } per point, as smooth_knn_dist
+//   fuzzyGraph(X, opts)          { W (dense n*n fuzzy union), knnIdx, knnD, sigma, rho }
+//   graphComponents(W, n)        { labels, count }
+//   componentLayout, spectralLayout   umap-learn's spectral start, multi-component case included
+//   UMAP(X, opts)                { Y, step() (one epoch), iter, total, a, b, spectral } ; umapRun runs it out
 //   fingerprint(Y)               short hash of a layout's exact bits
 //   runChecks(print, data) -> [{name, ok, detail}]
 (function (root) {
@@ -371,6 +380,217 @@
   }
   function tsneRun(X, opts) { const ts = TSNE(X, opts); while (ts.iter < ts.total) ts.step(); return ts; }
 
+  // ---------------- UMAP ----------------
+  // McInnes, Healy and Melville 2018, following umap-learn 0.5 step for step: exact kNN (self
+  // included, as umap-learn does below 4,096 points), smooth_knn_dist, the fuzzy union
+  // A + A^T - A*A^T, find_ab_params, spectral initialization (multi_component_layout when the
+  // graph is disconnected), and the SGD epoch with negative sampling and its schedule.
+  // Differences: float64 throughout (umap-learn uses float32), and negative samples come from
+  // one mulberry32 stream instead of umap-learn's per-point tausworthe generators.
+  function umapSettings(n) {
+    return { nNeighbors: 15, minDist: 0.1, spread: 1, nEpochs: n <= 10000 ? 500 : 200, negativeSampleRate: 5,
+      repulsion: 1, initialAlpha: 1, localConnectivity: 1, init: "spectral", seed: 1 };
+  }
+  // a and b of 1 / (1 + a d^(2b)) fitted by least squares to 1 below min_dist and
+  // exp(-(d - min_dist) / spread) above it, on 300 points of [0, 3 spread] (scipy curve_fit's
+  // Levenberg-Marquardt from a = b = 1, as umap-learn's find_ab_params).
+  function fitAB(spread, minDist) {
+    const xs = [], ys = [], step = 3 * spread / 299;
+    for (let i = 0; i < 300; i++) { const x = i * step; xs.push(x); ys.push(x < minDist ? 1 : dexp(-(x - minDist) / spread)); }
+    function eval_(a, b) {
+      let sse = 0, jaa = 0, jab = 0, jbb = 0, ga = 0, gb = 0;
+      for (let i = 0; i < 300; i++) {
+        const x = xs[i];
+        const lx = x > 0 ? dlog(x) : 0, p = x > 0 ? dexp(2 * b * lx) : 0, den = 1 + a * p, f = 1 / den, r = f - ys[i];
+        const da = -p / (den * den), db = x > 0 ? -a * p * 2 * lx / (den * den) : 0;
+        sse += r * r; jaa += da * da; jab += da * db; jbb += db * db; ga += da * r; gb += db * r;
+      }
+      return { sse: sse, jaa: jaa, jab: jab, jbb: jbb, ga: ga, gb: gb };
+    }
+    let a = 1, b = 1, lam = 1e-3, cur = eval_(a, b);
+    for (let it = 0; it < 500; it++) {
+      const A11 = cur.jaa * (1 + lam), A22 = cur.jbb * (1 + lam), A12 = cur.jab, det = A11 * A22 - A12 * A12;
+      const da = (-cur.ga * A22 + cur.gb * A12) / det, db = (-cur.gb * A11 + cur.ga * A12) / det;
+      const nxt = eval_(a + da, b + db);
+      if (nxt.sse < cur.sse) {
+        const done = Math.abs(da) <= 1e-13 * Math.abs(a) && Math.abs(db) <= 1e-13 * Math.abs(b);
+        a += da; b += db; cur = nxt; lam = Math.max(lam / 10, 1e-12);
+        if (done) break;
+      } else { lam *= 10; if (lam > 1e12) break; }
+    }
+    return { a: a, b: b, sse: cur.sse };
+  }
+  // For each point: rho = distance to its nearest other point, sigma by 64 bisection steps so that
+  // sum_j exp(-(d_ij - rho) / sigma) over the k - 1 others = log2(k) (umap-learn smooth_knn_dist).
+  // knnD rows are sorted distances with the point itself first (distance 0).
+  const FLOATMAX32 = 3.4028234663852886e38;
+  function smoothKnn(knnD, k, localConnectivity) {
+    const n = knnD.length, lc = localConnectivity == null ? 1 : localConnectivity;
+    const target = dlog(k) * INV_LN2, sigma = new Float64Array(n), rho = new Float64Array(n);
+    let meanAll = 0; for (let i = 0; i < n; i++) for (let j = 0; j < k; j++) meanAll += knnD[i][j]; meanAll /= n * k;
+    for (let i = 0; i < n; i++) {
+      const row = knnD[i], nz = row.filter(function (d) { return d > 0; });
+      const idx = Math.floor(lc), interp = lc - idx;
+      if (nz.length >= lc) {
+        if (idx > 0) { rho[i] = nz[idx - 1]; if (interp > 1e-5) rho[i] += interp * (nz[idx] - nz[idx - 1]); }
+        else rho[i] = interp * nz[0];
+      } else if (nz.length > 0) rho[i] = Math.max.apply(null, nz);
+      let lo = 0, hi = FLOATMAX32, mid = 1;
+      for (let it = 0; it < 64; it++) {
+        let psum = 0;
+        for (let j = 1; j < k; j++) { const d = row[j] - rho[i]; psum += d > 0 ? dexp(-(d / mid)) : 1; }
+        if (Math.abs(psum - target) < 1e-5) break;
+        if (psum > target) { hi = mid; mid = (lo + hi) / 2; }
+        else { lo = mid; if (hi >= FLOATMAX32) mid *= 2; else mid = (lo + hi) / 2; }
+      }
+      sigma[i] = mid;
+      let mrow = 0; for (let j = 0; j < k; j++) mrow += row[j]; mrow /= k;
+      if (rho[i] > 0) { if (sigma[i] < 1e-3 * mrow) sigma[i] = 1e-3 * mrow; }
+      else if (sigma[i] < 1e-3 * meanAll) sigma[i] = 1e-3 * meanAll;
+    }
+    return { sigma: sigma, rho: rho, target: target };
+  }
+  // The fuzzy simplicial set: directed memberships exp(-(d - rho_i) / sigma_i) on each point's k
+  // nearest, then the fuzzy union w = a + a' - a a'. W is dense n*n (symmetric, zero diagonal).
+  function fuzzyGraph(X, opts) {
+    const n = X.length, k = (opts && opts.nNeighbors) || 15, D = (opts && opts.D) || sqdist(X);
+    const knnIdx = [], knnD = [];
+    for (let i = 0; i < n; i++) {
+      const idx = []; for (let j = 0; j < n; j++) idx.push(j);
+      idx.sort(function (a, b) { return (a === i ? -1 : 0) - (b === i ? -1 : 0) || D[i * n + a] - D[i * n + b] || a - b; });
+      knnIdx.push(idx.slice(0, k)); knnD.push(idx.slice(0, k).map(function (j) { return Math.sqrt(D[i * n + j]); }));
+    }
+    const sk = smoothKnn(knnD, k, opts && opts.localConnectivity);
+    const A = new Float64Array(n * n);
+    for (let i = 0; i < n; i++) for (let j = 0; j < k; j++) {
+      const t = knnIdx[i][j], d = knnD[i][j] - sk.rho[i];
+      A[i * n + t] = t === i ? 0 : (d <= 0 || sk.sigma[i] === 0 ? 1 : dexp(-(d / sk.sigma[i])));
+    }
+    const W = new Float64Array(n * n);
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) { const a = A[i * n + j], b = A[j * n + i]; W[i * n + j] = a + b - a * b; }
+    return { W: W, n: n, k: k, knnIdx: knnIdx, knnD: knnD, sigma: sk.sigma, rho: sk.rho, directed: A };
+  }
+  function graphComponents(W, n) {
+    const lab = new Int32Array(n).fill(-1); let c = 0;
+    for (let s = 0; s < n; s++) {
+      if (lab[s] >= 0) continue;
+      const stack = [s]; lab[s] = c;
+      while (stack.length) { const u = stack.pop(); for (let v = 0; v < n; v++) if (lab[v] < 0 && W[u * n + v] > 0) { lab[v] = c; stack.push(v); } }
+      c++;
+    }
+    return { labels: lab, count: c };
+  }
+  // smallest eigenvectors 2..dim+1 of the normalized Laplacian I - D^-1/2 W D^-1/2 on nodes idx
+  function laplacianEmbedding(W, n, idx, dim) {
+    const m = idx.length, sq = idx.map(function (j) { let s = 0; for (let t = 0; t < m; t++) s += W[idx[t] * n + j]; return Math.sqrt(s); });
+    const L = [];
+    for (let a = 0; a < m; a++) { L.push(new Array(m)); for (let b = 0; b < m; b++) L[a][b] = (a === b ? 1 : 0) - W[idx[a] * n + idx[b]] / (sq[a] * sq[b]); }
+    const E = jacobiEigen(L), out = [];
+    for (let a = 0; a < m; a++) { const r = []; for (let d = 1; d <= dim; d++) r.push(E.vectors[m - 1 - d][a]); out.push(r); }
+    return { Y: out, values: E.values.slice().reverse() };
+  }
+  // umap-learn component_layout: spectral embedding (scikit-learn SpectralEmbedding) of the
+  // component centroids with affinity exp(-d^2), scaled so its largest entry is 1
+  function componentLayout(X, labels, count, dim) {
+    const d = X[0].length, C = [], cnt = [];
+    for (let c = 0; c < count; c++) { C.push(new Array(d).fill(0)); cnt.push(0); }
+    X.forEach(function (r, i) { cnt[labels[i]]++; for (let j = 0; j < d; j++) C[labels[i]][j] += r[j]; });
+    C.forEach(function (r, c) { for (let j = 0; j < d; j++) r[j] /= cnt[c]; });
+    const A = [];
+    for (let a = 0; a < count; a++) { A.push(new Array(count)); for (let b = 0; b < count; b++) {
+      let s = 0; for (let j = 0; j < d; j++) { const t = C[a][j] - C[b][j]; s += t * t; } A[a][b] = a === b ? 0 : dexp(-s); } }
+    const dd = A.map(function (r) { return Math.sqrt(r.reduce(function (s, v) { return s + v; }, 0)); });
+    const L = A.map(function (r, a) { return r.map(function (v, b) { return a === b ? 1 : -v / (dd[a] * dd[b]); }); });
+    const E = jacobiEigen(L);
+    const vecs = [];
+    for (let t = 0; t <= dim; t++) {
+      let v = E.vectors[count - 1 - t].map(function (x, a) { return x / dd[a]; });
+      let mi = 0; for (let a = 1; a < count; a++) if (Math.abs(v[a]) > Math.abs(v[mi])) mi = a;
+      if (v[mi] < 0) v = v.map(function (x) { return -x; });
+      vecs.push(v);
+    }
+    const emb = []; let mx = -Infinity;
+    for (let a = 0; a < count; a++) { const r = []; for (let t = 1; t <= dim; t++) { r.push(vecs[t][a]); mx = Math.max(mx, vecs[t][a]); } emb.push(r); }
+    return { Y: emb.map(function (r) { return r.map(function (v) { return v / mx; }); }), centroids: C };
+  }
+  function spectralLayout(X, W, n, dim) {
+    const comp = graphComponents(W, n);
+    if (comp.count === 1) return { Y: laplacianEmbedding(W, n, Array.from({ length: n }, function (_, i) { return i; }), dim).Y, components: comp };
+    let meta;
+    if (comp.count > 2 * dim) meta = componentLayout(X, comp.labels, comp.count, dim).Y;
+    else {
+      const kk = Math.ceil(comp.count / 2), base = [];
+      for (let a = 0; a < kk; a++) { const r = new Array(dim).fill(0); if (a < dim) r[a] = 1; base.push(r); }
+      meta = base.concat(base.map(function (r) { return r.map(function (v) { return -v; }); })).slice(0, comp.count);
+    }
+    const Y = new Array(n);
+    for (let c = 0; c < comp.count; c++) {
+      const idx = []; for (let i = 0; i < n; i++) if (comp.labels[i] === c) idx.push(i);
+      let dr = Infinity;
+      for (let o = 0; o < comp.count; o++) { let s = 0; for (let t = 0; t < dim; t++) s += (meta[c][t] - meta[o][t]) * (meta[c][t] - meta[o][t]); s = Math.sqrt(s); if (s > 0 && s < dr) dr = s; }
+      dr /= 2;
+      if (idx.length < 2 * dim || idx.length <= dim + 1) { idx.forEach(function (i) { Y[i] = meta[c].slice(); }); continue; }
+      const e = laplacianEmbedding(W, n, idx, dim).Y;
+      let mx = 0; e.forEach(function (r) { r.forEach(function (v) { mx = Math.max(mx, Math.abs(v)); }); });
+      idx.forEach(function (i, a) { Y[i] = e[a].map(function (v, t) { return v * dr / mx + meta[c][t]; }); });
+    }
+    return { Y: Y, components: comp, meta: meta };
+  }
+  function UMAP(X, opts) {
+    const n = X.length, o = Object.assign(umapSettings(n), opts || {});
+    const ab = o.a != null ? { a: o.a, b: o.b } : fitAB(o.spread, o.minDist), a = ab.a, b = ab.b;
+    const G = o.graph || fuzzyGraph(X, o), W = G.W;
+    // prune edges too weak to be sampled once in nEpochs (simplicial_set_embedding)
+    let wmax = 0; for (let i = 0; i < W.length; i++) if (W[i] > wmax) wmax = W[i];
+    const thr = wmax / (o.nEpochs > 10 ? o.nEpochs : 500), Wp = new Float64Array(W.length);
+    const head = [], tail = [], wt = [];
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) { const w = W[i * n + j]; if (w > 0 && w >= thr) { Wp[i * n + j] = w; head.push(i); tail.push(j); wt.push(w); } }
+    const rng = mulberry32(o.seed);
+    let Y, spec = null;
+    if (o.init === "spectral") {
+      spec = spectralLayout(X, Wp, n, 2);
+      let mx = 0; spec.Y.forEach(function (r) { mx = Math.max(mx, Math.abs(r[0]), Math.abs(r[1])); });
+      Y = spec.Y.map(function (r) { return [r[0] * 10 / mx + 1e-4 * gaussian(rng), r[1] * 10 / mx + 1e-4 * gaussian(rng)]; });
+    } else if (Array.isArray(o.init)) Y = o.init.map(function (r) { return r.slice(); });
+    else { Y = []; for (let i = 0; i < n; i++) Y.push([-10 + 20 * rng(), -10 + 20 * rng()]); }
+    for (let t = 0; t < 2; t++) {
+      let lo = Infinity, hi = -Infinity; Y.forEach(function (r) { lo = Math.min(lo, r[t]); hi = Math.max(hi, r[t]); });
+      Y.forEach(function (r) { r[t] = 10 * (r[t] - lo) / (hi - lo); });
+    }
+    const E = head.length, eps = new Float64Array(E), epn = new Float64Array(E), nextS = new Float64Array(E), nextN = new Float64Array(E);
+    for (let e = 0; e < E; e++) { eps[e] = wmax / wt[e]; epn[e] = eps[e] / o.negativeSampleRate; nextS[e] = eps[e]; nextN[e] = epn[e]; }
+    const gamma = o.repulsion, total = o.nEpochs;
+    let epoch = 0, alpha = o.initialAlpha;
+    function clip(v) { return v > 4 ? 4 : v < -4 ? -4 : v; }
+    function step() {
+      const nE = epoch;
+      for (let e = 0; e < E; e++) {
+        if (nextS[e] > nE) continue;
+        const j = head[e], cur = Y[j], oth = Y[tail[e]];
+        let dx = cur[0] - oth[0], dy = cur[1] - oth[1], d2 = dx * dx + dy * dy, gc = 0;
+        if (d2 > 0) { const pb = dexp(b * dlog(d2)); gc = -2 * a * b * (pb / d2) / (a * pb + 1); }
+        let g = clip(gc * dx); cur[0] += g * alpha; oth[0] -= g * alpha;
+        g = clip(gc * dy); cur[1] += g * alpha; oth[1] -= g * alpha;
+        nextS[e] += eps[e];
+        const nNeg = Math.trunc((nE - nextN[e]) / epn[e]);
+        for (let p = 0; p < nNeg; p++) {
+          const kk = Math.floor(rng() * n), q = Y[kk];
+          dx = cur[0] - q[0]; dy = cur[1] - q[1]; d2 = dx * dx + dy * dy;
+          if (d2 > 0) {
+            const pb = dexp(b * dlog(d2)); gc = 2 * gamma * b / ((0.001 + d2) * (a * pb + 1));
+            cur[0] += clip(gc * dx) * alpha; cur[1] += clip(gc * dy) * alpha;
+          }
+        }
+        nextN[e] += nNeg * epn[e];
+      }
+      alpha = o.initialAlpha * (1 - nE / total);
+      epoch++;
+    }
+    return { Y: Y, graph: G, a: a, b: b, edges: E, spectral: spec, settings: o, step: step, total: total,
+      get iter() { return epoch; } };
+  }
+  function umapRun(X, opts) { const u = UMAP(X, opts); while (u.iter < u.total) u.step(); return u; }
+
   // ---------------- measures ----------------
   // ranks[i*n + j] = position of j in i's neighbor order (0 = nearest; i itself gets -1).
   function rankMatrix(D, n) {
@@ -565,6 +785,46 @@
       const mm = moons({ noise: 0.3 }), tsm = tsneRun(mm.map(function (m) { return m.x; }), {});
       check("Figure 2 default t-SNE is bit-identical to the stored run", fingerprint(tsm.Y) === data.fingerprints.moonsDefault, fingerprint(tsm.Y) + " vs " + data.fingerprints.moonsDefault);
     }
+
+    // 10. UMAP, piece by piece against umap-learn
+    const ab = fitAB(1, 0.1);
+    const U = data && data.umap;
+    if (U) check("UMAP a, b match umap-learn find_ab_params(1, 0.1)", rel(ab.a, U.a) < 1e-6 && rel(ab.b, U.b) < 1e-6,
+      "a " + ab.a.toFixed(6) + " vs " + U.a.toFixed(6) + ", b " + ab.b.toFixed(6) + " vs " + U.b.toFixed(6));
+    const UG = fuzzyGraph(Xn, { nNeighbors: 15, D: D });
+    let tgt = 0;
+    for (let i = 0; i < NC; i++) { let s = 0; for (let j = 1; j < 15; j++) { const d = UG.knnD[i][j] - UG.rho[i]; s += d > 0 ? dexp(-d / UG.sigma[i]) : 1; } tgt = Math.max(tgt, Math.abs(s - dlog(15) * INV_LN2)); }
+    check("UMAP smooth kNN: every point's memberships sum to log2(15)", tgt < 1e-5, "max |sum - log2 15| " + tgt.toExponential(2));
+    if (U) {
+      let es = 0, er = 0;
+      for (let i = 0; i < 5; i++) { es = Math.max(es, rel(UG.sigma[i], U.sigma[i])); er = Math.max(er, Math.abs(UG.rho[i] - U.rho[i])); }
+      check("UMAP sigma and rho match umap-learn smooth_knn_dist (float32 there)", es < 1e-4 && er < 1e-5, "sigma rel " + es.toExponential(2) + ", rho abs " + er.toExponential(2));
+      let nnz = 0; for (let i = 0; i < UG.W.length; i++) if (UG.W[i] > 0) nnz++;
+      let ew = 0; U.row0.idx.forEach(function (j, t) { ew = Math.max(ew, Math.abs(UG.W[j] - U.row0.val[t])); });
+      const row0n = Array.from(UG.W.subarray(0, NC)).filter(function (v) { return v > 0; }).length;
+      check("UMAP fuzzy graph matches umap-learn (edge count, row 0 weights)", nnz === U.nnz && row0n === U.row0.idx.length && ew < 1e-5,
+        nnz + " vs " + U.nnz + " edges; row 0 max abs err " + ew.toExponential(2));
+    }
+    const comp = graphComponents(UG.W, NC);
+    if (U) {
+      const meta = componentLayout(Xn, comp.labels, comp.count, 2).Y;
+      let em = 0; meta.forEach(function (r, c) { r.forEach(function (v, t) { em = Math.max(em, Math.abs(v - U.meta[c][t])); }); });
+      check("UMAP spectral start: " + comp.count + " components, placed as umap-learn component_layout", comp.count === U.components && em < 1e-6, "max abs err " + em.toExponential(2));
+    }
+    const um = UMAP(Xn, { graph: UG });
+    while (um.iter < um.total - 10) um.step();
+    const before = um.Y.map(function (p) { return p.slice(); });
+    while (um.iter < um.total) um.step();
+    let mv = 0, lo0 = Infinity, hi0 = -Infinity;
+    um.Y.forEach(function (p, i) { mv += Math.sqrt((p[0] - before[i][0]) * (p[0] - before[i][0]) + (p[1] - before[i][1]) * (p[1] - before[i][1])); lo0 = Math.min(lo0, p[0]); hi0 = Math.max(hi0, p[0]); });
+    mv /= NC * (hi0 - lo0);
+    check("UMAP settles: cells move under 1% of the map width over the last 10 of 500 epochs", mv < 0.01, (100 * mv).toFixed(2) + "%");
+    if (U && U.fingerprint) check("UMAP default layout is bit-identical to the stored run", fingerprint(um.Y) === U.fingerprint, fingerprint(um.Y) + " vs " + U.fingerprint);
+    if (U) {
+      const r = recallCurve(D, sqdist(um.Y), NC), m = U.runs.spectral.mean;
+      check("UMAP neighbor recall at k = 10 and 15 within 0.03 of umap-learn's seed average", Math.abs(r[10] - m[0]) < 0.03 && Math.abs(r[15] - m[1]) < 0.03,
+        "ours " + r[10].toFixed(3) + ", " + r[15].toFixed(3) + "; umap-learn " + m[0].toFixed(3) + ", " + m[1].toFixed(3));
+    }
     return out;
   }
 
@@ -572,6 +832,8 @@
     GENES: GENES, TYPES: TYPES, GRADIENT: GRADIENT, fraction: fraction, simulateCells: simulateCells, expression: expression,
     moons: moons, pca: pca, jacobiEigen: jacobiEigen, sqdist: sqdist, affinities: affinities,
     tsneSettings: tsneSettings, TSNE: TSNE, tsneRun: tsneRun, klDivergence: klDivergence, gradient: gradient,
+    umapSettings: umapSettings, fitAB: fitAB, smoothKnn: smoothKnn, fuzzyGraph: fuzzyGraph, graphComponents: graphComponents,
+    spectralLayout: spectralLayout, componentLayout: componentLayout, UMAP: UMAP, umapRun: umapRun,
     rankMatrix: rankMatrix, neighbors: neighbors, recallCurve: recallCurve, groupScore: groupScore,
     pairDistances: pairDistances, spearman: spearman, pearson: pearson, ranks: ranks, centroids: centroids,
     fingerprint: fingerprint, runChecks: runChecks };
