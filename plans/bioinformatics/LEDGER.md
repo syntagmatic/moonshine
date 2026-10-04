@@ -4,6 +4,102 @@ The 2026-10-03 quality pass audited every essay, rebuilt most figures on a share
 
 The older table at the end holds the fact-check leads settled on 2026-09-27. Most of the figures they describe were rebuilt in this pass, so they record history, not the pages as they stand.
 
+## 2026-10-04 gaps pass
+
+Figures a genomics-paper reader expects that the series lacked: UMAP in 07, gene-set enrichment and a threshold sweep in 05, a sequence logo in 04, genome-wide synteny in 03, and a prose trim in 02. Rows here supersede 2026-10-03 rows marked superseded.
+
+### Essay 02 (33d54a8)
+
+| Page | Claim | Verdict | Source or derivation | Fix |
+|---|---|---|---|---|
+| 02 | CDKN1A-201 introns 5,298 and 1,204; mRNA 2,117; CDS 495; 164 aa | real, computed | unchanged (fix-02 row); now stated only in the Fig 2 readout, not the prose | moved, not changed |
+| 02 | All three CDKN1A transcripts translate to the same 164 aa | real, computed | unchanged (fix-02 row); wording "Translated in the page" | none |
+| 02 | TP53 exon 1 has the highest coordinates (minus strand) | removed from prose | was implied by strand, no ledger row | none |
+
+### Essay 03 (ddbbedc)
+
+| Page | Claim | Verdict | Source or derivation | Fix |
+|---|---|---|---|---|
+| 03 | 160 netMm39 level-1 blocks of at least 3 Mb on human chr1-22 and X | correct | scripts/bio-03-synteny.mjs on hg38/database/netMm39.txt.gz; asserted in runChecks | was 68 on chr1-6 |
+| 03 | Blocks land on all 20 mouse chromosomes (1-19, X) | computed | BioEssay03.MOUSE | was 17 |
+| 03 | Blocks span 82% of human chromosomes 1-22 and X | computed | sum of spans 2,488.3 / 3,031.0 Mb (hg38 chrom.sizes) | new span |
+| 03 | 12,720 ribbon pairs; 7,529 cross clockwise, 5,191 top to bottom, 3,965 sorted, 3,605 fewest | computed | BioEssay03 four ways + g03/proto.cjs | spans |
+| 03 | No order or orientation of the mouse half beats 3,605 with human in numeric order | computed, exact | DP over subsets + independent per-chromosome flips; lower bound 3,600; DP = brute force on a 7-chromosome subset | new |
+| 03 | 177 of the 3,605 join two blocks on the same mouse chromosome | computed | crossings(best).sameMouse = sum of per-chromosome min flips | was 36 of 591 |
+| 03 | Mouse 1 takes blocks from human 1, 2, 5, 6, 8 and 18; human 1 sends blocks to mouse 4, 3, 1, 8, 13 | computed | from BLOCKS | spans, list grew |
+| 03 | All 5 human X blocks stay on mouse X (and mouse X takes blocks only from human X) | computed | asserted in runChecks | new |
+| 03 | Ohno predicted in 1967 that the X keeps its gene content across placental mammals | correct, from knowledge | Ohno S., Sex Chromosomes and Sex-linked Genes, Springer 1967 ("Ohno's law") | new |
+| 03 | Human 3 splits across six mouse chromosomes; first half of human 4 on mouse 5 in order (five blocks) | correct | unchanged, still asserted on the genome-wide set | none |
+| 03 | chr1-6 only: 591 was "at best" | wrong | exact search gives 513 (= pairwise bound) | page no longer shows chr1-6; fix PROMPT/LEDGER rows |
+
+### Essay 04 (9b5564d)
+
+| Page | Claim | Verdict | Source or derivation | Fix |
+|---|---|---|---|---|
+| 04 | MA0106.3 logo: 2 - H bits, uniform background, raw frequencies; 20.7 bits over 18 positions | computed from real data | BioLocus jaspar pfm; essay-04 infoContent vs logomaker 0.8.7 (temp/bio-audit/g04/logo-ref.py) | done |
+| 04 | 13,527 to 23,732 sequences per position; "about 21,000" in prose | computed | page spans from the pfm column sums (mean rounded to thousands) | done |
+| 04 | Small-sample correction at most 0.0002 bits, not applied | computed | e(n) = 3/(2 ln2 n), Schneider et al. 1986 J Mol Biol 188:415 (PMID 3525846) | done |
+| 04 | Core C/G positions carry 1.7 to 2.0 bits; half-site ends 0.3 to 0.5 | computed | page spans from infoContent | done |
+| 04 | 5' element's misses cost 6.0 bits; 3' element's C-for-G costs 9.3 bits on its own | computed from real data | siteLoss with the scan PWM (pseudocount 0.8, bg GC 0.507); page spans | done |
+| 04 | Best possible window score 28.3 bits | computed | PWM.max | done |
+| 04 | Both elements match 18 of 20 consensus letters | real (unchanged) | BioLocus consensusMatches | moved from .seqs block into Fig 4 |
+| 04 | Saramaki 2006: p53 ChIP near -4500 in MCF-7 (plus -1400, -2300) | real | Saramaki et al. 2006 NAR 34:543, abstract and Europe PMC full text (PMC1351372) | sentence added |
+| 04 | 1 of 115 ReMap data sets has a peak in -4,800..-4,200; none of 13 MCF-7 data sets | computed from real data | essay-04.json, page code (biosample /^MCF-7(_|$)/) | done |
+| 04 | Best match within 600 bp of -4500 ranks 8th (-3,973, 7.6 bits, 1 data set) | computed | page HITS | done |
+| 04 | Sequence logos | method | Schneider and Stephens 1990 NAR 18:6097 (PMID 2172928), verified via PubMed | footer source added |
+| 04 | Shuffle null at 80% (15 vs 8.9) | removed from prose | was computed | cut for length; the 85% clause and the slider still show it |
+| 04 | CDKN1A exon 1 is 85 bp UTR | removed from prose | was BioLocus | cut (02 covers it) |
+
+### Essay 05 (e2b065b)
+
+| Page | Claim | Verdict | Source or derivation | Fix |
+|---|---|---|---|---|
+| 05 | 116 named genes are the p53 targets of Fischer 2017 Table 1 ("activated p53 targets in at least 6 out of 16 genome-wide data sets") | correct (sourced, checked by hand) | PMC5511239 XML table tbl1 re-parsed (temp/bio-audit/g05/fischer-table1-reparsed.json): 116 genes, set and counts identical to sources/fischer2017-table1.json | replaces the "ten named genes" row |
+| 05 | Four Table 1 symbols renamed: FAM198B GASK1B, FAM212B INKA2, FAM210B MIMS2, WDR63 DNAI3 | correct (sourced) | HGNC REST fetch/symbol and prev_symbol, 2026-10-04 (g05/hgnc-check.json); the other 112 are current | footer |
+| 05 | 106 unnamed members planted with falls 0.2 to 0.6 log2 | simulation choice, labeled | essay-05.js P53_SET | new |
+| 05 | "Of the 116 ..., 7 are on the q list"; "Without the 7 called members, the other 109 still score ES = -0.59, lower than any of the random sets (p = 2.0e-4)" | correct (computed, live) | BioEssay05.gsea, 10,000 gene-set permutations, seed 2005 | new |
+| 05 | Fig 4 readout ES -0.629 at rank 1,507, NES -2.51, leading edge 69 (default) | correct (computed, live) | gseapy 1.3.1 prerank on the same ranking: ES -0.628610, NES -2.502, leading edge 69 identical (scripts/bio-05-gsea-ref.mjs) | new |
+| 05 | Over 200 experiments the set and its uncalled members beat all 1,000 random sets in every run, also at 2 replicates, where fewer than one member reached q on average | correct (computed) | seeds 1-200, 1,000 perms: b = 0 in every run for both variants at 2, 3 and 8 reps; members called at 2 reps 0.705 on average (none in 108); seedSummary(..., 1000).gsea stored in essay-05.json and recomputed by runChecks | new |
+| 05 | GSEA ranks by a statistic, a member steps up in proportion to its \|t\|, the score is the furthest point from zero; weight p = 1; leading edge = members at or past the peak | correct (sourced) | Subramanian et al., PNAS 102:15545 (2005), doi 10.1073/pnas.0506580102, PMC1239896 Methods ("We set p = 1"; the leading-edge definition) | new |
+| 05 | Subramanian's method permutes sample labels, which keeps gene-gene correlation; gene permutation overstates significance for correlated sets | correct (sourced) | PMC1239896: "permutation of class labels preserves gene-gene correlations"; the second half is the standard caveat of gene-set permutation (from knowledge, not given a direct citation on the page) | new |
+| 05 | Three against three can be relabeled only 20 ways | correct (derived) | C(6,3) = 20 | new |
+| 05 | Mootha et al. 2003 used GSEA to find "modest but coordinate changes" in oxidative phosphorylation genes in diabetic muscle | correct (sourced) | Nat Genet 34:267 (2003), doi 10.1038/ng1180, abstract via Europe PMC | new |
+| 05 | Fig 2 live readouts (power, FDP, counts by cutoff at 3 and 8 replicates) | computed live | callStats over cutoffs 0-3 | replaces the Fig 2 grid readouts |
+| 05 | FC-only list "25.5% of the list on average over 200 experiments" | correct (computed) | seedSummary(3).fcFDPMean 0.2549 | was 26.8% |
+| 05 | Plain t "4.6 genes on average ..., none at all in 50" | correct (computed) | plainNMean 4.585, plainZero 50 | was 4.9 / 49 |
+| 05 | d0 "median was 19.6, and in 12 of them it was infinite" | correct (computed) | seedSummary(3) d0Median 19.63; 12 runs with d0 = Inf | was 19.7 / 11 |
+| 05 | "about 84 unchanged genes" at p 0.05; "With 84% of the genes unchanged, the bound at q = 0.05 is 4.2%" | correct (computed, live) | 0.05 m0 and q m0/m at the current experiment | were static 90 and 4.5% |
+| 05 | Storey's pi0 "tends to run a little high" | correct (computed) | 200-seed mean 0.880 vs true 0.848 (3 reps); default 0.883 vs 0.841 | new |
+| 05 | FDP over 200 runs at 3 reps: mean 2.4%, bound 4.2% (85% unchanged on average), 17 above 5%, worst 7.9%, 26 with none; 8 reps 3.6% | correct (computed) | seedSummary qFDPMean 0.02367 / 0.03634, qFDPAbove 17, qFDPMax 0.0787, qFDPZero 26, truePi0Mean 0.848 | replaces 2.6 / 25 / 9.2 / 25 / 3.8 |
+| 05 | Power 32.0% at 3 reps, 59.9% at 8, 4.3% at 2; misses nearly all of the 106 small falls; CDKN1A missed in 113 of 200 at 2 reps | correct (computed) | qPowerMean 0.3197 / 0.5985 / 0.0434; small-fall members called at 3 reps 1.925 on average; cdkn1aCalled 87/200 | replaces 48.5 / 84.4 / 7.1 / 105 |
+| 05 | "p < 0.001 in 0.047% of tests" | removed | (still 0.000475 at 3 reps) | sentence cut for length |
+| 05 | Footer: enrichment checked against gseapy 1.3.1 | correct | scripts/bio-05-gsea-ref.mjs, venv in temp/bio-audit/g05/venv | new |
+
+### Essay 07 (74d4dd4)
+
+| Page | Claim | Verdict | Source or derivation | Fix |
+|---|---|---|---|---|
+| 07 | UMAP: McInnes, Healy and Melville 2018 | correct | arXiv:1802.03426 | cited inline |
+| 07 | UMAP "computed here with umap-learn's defaults": 15 neighbors, min_dist 0.1, spread 1, 500 epochs at n <= 10,000, 5 negative samples, spectral start | correct | umap-learn 0.5.12 source: UMAP defaults; simplicial_set_embedding default_epochs 500 if n <= 10,000; essay-07.js umapSettings | none |
+| 07 | "weighting the nearest fully and the rest by how much farther they are" | correct | compute_membership_strengths: 1 if d - rho <= 0, else exp(-(d - rho)/sigma) | none |
+| 07 | "running 1,000 or 2,000 epochs moves recall at k = 15 by under two points" | correct | node, seed 1: 0.432 / 0.443 / 0.451 (g07/conv.txt); runChecks "cells move 0.61% over last 10 epochs" | none |
+| 07 | Library a, b = 1.576943, 0.895061 match umap-learn | correct | find_ab_params(1, 0.1) = 1.5769434606, 0.8950608782; runChecks | none |
+| 07 | UMAP keeps 40% at k = 10 and 99% at 100 | computed (span) | page recallCurve on the default UMAP (seed 1); umap-learn 50-seed mean @10 0.390 | none |
+| 07 | Pairwise rank correlation UMAP 0.59; type centers 0.27 | computed (span) | page | none |
+| 07 | "PCA overtakes t-SNE at k = 124" | computed (span) | page (was "curves cross") | reworded |
+| 07 | First start: t-SNE random -0.19, UMAP spectral 0.27, UMAP random 0.27, PCA 0.95, t-SNE PCA start 0.30 | computed (span) | page; equal to node | none |
+| 07 | Over 50 starts: UMAP 0.33 spectral, 0.06 random; umap-learn 0.43 and -0.10; t-SNE 0.03 over ten random starts | correct | scripts/bio-07-umap-reference.mjs, essay-07.json umap.library and umap.runs (library seeds 1-50, umap-learn random_state 0-49) | none |
+| 07 | t-SNE from PCA "has no randomness", 0.30, "about what UMAP gets from its spectral start" | correct | library init "pca" deterministic; 0.30 vs 0.33 | none |
+| 07 | "neither comes near PCA" | correct | 0.95 vs <= 0.43 | none |
+| 07 | Kobak and Linderman 2021: the start decides most of the global layout | correct (paraphrase) | Nat Biotechnol 39:156-157, doi 10.1038/s41587-020-00809-z ("Initialization is critical for preserving global data structure in both t-SNE and UMAP") | cited inline |
+| 07 | "The 15-neighbor graph splits into five pieces, one per type" | computed (span) | page graphComponents; scipy connected_components agrees (5) | none |
+| 07 | umap-learn places the pieces from distances between centers, through weights almost zero at these distances | correct | spectral.component_layout: exp(-d^2), d = 8.16-12.53 here | none |
+| 07 | Four islands begin within 0.011 of each other on a 10-unit map, in roughly the right order; NK spreads across the rest | correct | node u7.js: max distance among T, B, Mono, DC init centers 0.0107 (umap-learn 0.0108), each island about 0.001 wide, NK extent 10; init center rank correlation 0.78-0.89 | none |
+| 07 | Figure 5 footer: recall at k = 200 per layout | computed | page; 50-seed means in essay-07.json | none |
+| 07 | Removed: "largest sample variance among ten noise dimensions is about 1.5x their true variance" | removed | prose cut | old row retired |
+| 07 | Removed: optimizer parameter list in prose (EE 12/250, lr max(n/48, 50)) | removed from page | settings unchanged; the runChecks row still holds | old row narrowed |
+| 07 | "averaged over three starts, the order never reverses" (all-12 vs top-2-PC, 0.4-0.5, every perplexity) | correct | fix-07 grid row (mean differences 1.2 to 14.3 points) | reworded |
+
 ## 2026-10-03 quality pass
 
 ### Shared locus data (63617a4)
@@ -101,9 +197,9 @@ The older table at the end holds the fact-check leads settled on 2026-09-27. Mos
 | Page | Claim | Verdict | Source or derivation | Fix |
 |---|---|---|---|---|
 | 03 | Chromosome lengths (24 human, 6 human + 17 mouse in Fig 4) | correct | UCSC hg38.chrom.sizes, mm39.chrom.sizes (audit a03/hg38.sizes, mm39.sizes), now to 0.001 Mb | none |
-| 03 | 68 netMm39 blocks spanning at least 3 Mb of human chr1-6, on 17 mouse chromosomes | correct | audit synteny-check.txt (UCSC API, level-1 fills); asserted in BioEssay03.runChecks | wording "spanning" |
-| 03 | Crossing pairs 1,454 (clockwise numeric), 824 (top to bottom), 670 (barycentre sorted), 591 (sorted and flipped) of 2,278 | computed | BioEssay03: brute force = merge-sort inversion count = circle chord geometry, and equal to the audit's independent prototype | spans filled from the library |
-| 03 | 36 of the 591 crossings join blocks on the same mouse chromosome (49 / 115 / 115 in the other layouts) | computed | BioEssay03.crossings(...).sameMouse | live readout |
+| 03 | 68 netMm39 blocks spanning at least 3 Mb of human chr1-6, on 17 mouse chromosomes | correct | audit synteny-check.txt (UCSC API, level-1 fills); asserted in BioEssay03.runChecks | wording "spanning" (superseded 2026-10-04: 160 blocks genome-wide) |
+| 03 | Crossing pairs 1,454 (clockwise numeric), 824 (top to bottom), 670 (barycentre sorted), 591 (sorted and flipped) of 2,278 | computed | BioEssay03: brute force = merge-sort inversion count = circle chord geometry, and equal to the audit's independent prototype | spans filled from the library (superseded 2026-10-04: 591 was not the best; exact minimum on chr1-6 is 513; page now genome-wide) |
+| 03 | 36 of the 591 crossings join blocks on the same mouse chromosome (49 / 115 / 115 in the other layouts) | computed | BioEssay03.crossings(...).sameMouse | live readout (superseded 2026-10-04: page now genome-wide) |
 | 03 | Two ribbons cross exactly when, in the dot plot, one block sits above and to the right of the other | correct by construction | both halves read top to bottom; chord interleave = order disagreement on two parallel axes; checked against circle geometry | none |
 | 03 | Mouse 1 takes blocks from human 1, 2, 5 and 6; human 1 sends blocks to mouse 4, 3, 1, 8, 13 | computed | from BLOCKS | spans |
 | 03 | First half of human 4 runs in order along mouse 5 (five blocks) | correct | asserted in runChecks (mouse starts 35.6, 38.5, 59.9, 73.6, 79.4) | none |
@@ -151,18 +247,18 @@ The older table at the end holds the fact-check leads settled on 2026-09-27. Mos
 | Page | Claim | Verdict | Source or derivation | Fix |
 |---|---|---|---|---|
 | 05 | The moderated t-test is limma's (Smyth 2004), with the abundance trend of limma-trend (Law et al. 2014) | correct (computed) | essay-05.js fitFDist/analyze vs limma 3.68.5 eBayes(lmFit(y, ~group), trend = TRUE) on seeds 35 (2, 3, 8 reps), 11 and 2 (3 reps): d0 equal to 1e-6, p to 1e-10; runChecks against essay-05.json | replaces the 2026-09-27 "as in limma-trend (Ritchie 2015)" row; citations Smyth 2004 SAGMB 3:3 doi 10.2202/1544-6115.1027, Law 2014 Genome Biol 15:R29 |
-| 05 | "d0 = 18.9" (default) and "over 200 experiments with three replicates its median was 19.7, and in 11 of them it was infinite" | correct (computed) | the d0 span is live; median and count from BioEssay05.seedSummary(3, seeds 1-200) | none |
+| 05 | "d0 = 18.9" (default) and "over 200 experiments with three replicates its median was 19.7, and in 11 of them it was infinite" | correct (computed) | the d0 span is live; median and count from BioEssay05.seedSummary(3, seeds 1-200) | none (superseded 2026-10-04: 106 more planted targets changed the many-seed numbers) |
 | 05 | "same d0 and p-values as limma 3.68.5 ... to at least ten significant digits" | correct | scripts/bio-05-limma-ref.mjs output: worst \|log10 p\| difference 1e-11 over all 2,000 genes in each run | none |
 | 05 | A plain t-test "found 4.9 genes on average over 200 simulated experiments, and none at all in 49 of them" (3 reps) | correct (computed) | seedSummary(3, 1-200).plainNMean 4.935, plainZero 49; plainT matches R's pooled t (lmFit coefficient / stdev.unscaled / sigma, pt) to 1e-13 | replaces audit row "almost nothing ... overstated" (the audit's 31.8 counted zero-variance genes as p = 1e-16) |
-| 05 | FC-only list: live "59 of the 209" at default; "26.8% of the list on average over 200 experiments" | correct (computed) | span live; seedSummary(3).fcFDPMean 0.2681 | replaces "around a third" |
+| 05 | FC-only list: live "59 of the 209" at default; "26.8% of the list on average over 200 experiments" | correct (computed) | span live; seedSummary(3).fcFDPMean 0.2681 | replaces "around a third" (superseded 2026-10-04: see gaps-pass rows) |
 | 05 | At 3 reps "every gene with q ≤ 0.05 already has \|log2 FC\| ≥ 1.08", so "both" repeats "q only" | correct (computed, live) | span computed; over 200 seeds q-only 104.58 vs both 104.54 | none |
 | 05 | At 8 reps, q finds 186 of 221 changed genes, 48 estimated under twofold, and \|log2 FC\| ≥ 1 cuts 195 to 140 (default) | correct (computed, live) | span computed; 200 seeds: q-only 184.0 vs both 142.0 | replaces "finds most ... trimming" |
 | 05 | BH 1995: FDR ≤ q for independent tests; proof gives (m0/m)q | correct (sourced) | Benjamini and Hochberg, JRSS B 57:289-300 (1995), doi 10.1111/j.2517-6161.1995.tb02031.x | citation added |
 | 05 | "a p-value cutoff of 0.05 would let through about 90 unchanged genes" | correct (derived) | 0.05 x ~1,790 unchanged genes = 89.5; live Fig 3 readout at default: 95 | none |
 | 05 | Storey pi0 at lambda = 0.5: "here 0.900, against a true 0.889" | correct (computed, live) | Storey, JRSS B 64:479-498 (2002), doi 10.1111/1467-9868.00346; 200-seed mean 0.893 vs 0.895 | citation added |
-| 05 | Over 200 runs at 3 reps, q = 0.05: mean unchanged share 2.6%, 25 of 200 above 5%, worst 9.2%, 25 with none; at 8 reps 3.8% | correct (computed) | seedSummary(3 and 8, seeds 1-200): qFDPMean 0.02590 / 0.03833; qFDPAbove 25; qFDPMax 0.0924; qFDPZero 25. Recomputed by runChecks | replaces the 2026-09-27 row (3.4%, 7/30), which does not reproduce (audit B1) |
+| 05 | Over 200 runs at 3 reps, q = 0.05: mean unchanged share 2.6%, 25 of 200 above 5%, worst 9.2%, 25 with none; at 8 reps 3.8% | correct (computed) | seedSummary(3 and 8, seeds 1-200): qFDPMean 0.02590 / 0.03833; qFDPAbove 25; qFDPMax 0.0924; qFDPZero 25. Recomputed by runChecks | replaces the 2026-09-27 row (3.4%, 7/30), which does not reproduce (audit B1) (superseded 2026-10-04: see gaps-pass rows) |
 | 05 | Null genes: p < 0.001 in 0.047% of tests at 3 reps (nominal 0.1%) | correct (computed) | seedSummary(3).null001 0.000472 (8 reps: 0.00074) | none |
-| 05 | Power: 48.5% at 3 reps, 84.4% at 8, 7.1% at 2; CDKN1A missed in 105 of 200 runs at 2 reps | correct (computed) | seedSummary qPowerMean 0.4850 / 0.8444 / 0.0712; cdkn1aCalled at 2 reps 95/200 | replaces "about a quarter" |
+| 05 | Power: 48.5% at 3 reps, 84.4% at 8, 7.1% at 2; CDKN1A missed in 105 of 200 runs at 2 reps | correct (computed) | seedSummary qPowerMean 0.4850 / 0.8444 / 0.0712; cdkn1aCalled at 2 reps 95/200 | replaces "about a quarter" (superseded 2026-10-04: 32.0% / 59.9% / 4.3%, CDKN1A missed 113 of 200) |
 | 05 ("CDKN1A, MDM2, BAX and seven others are direct p53 targets from a census of such genes (Fischer, 2017)"; footer "Table 1") | All ten named genes are in Fischer's Table 1 | correct (sourced; checked by hand) | Fischer 2017 Oncogene 36:3943, PMC5511239, Table 1 "Top 116 genes identified as activated p53 targets in at least 6 out of 16 genome-wide data sets". Parsed from the PMC XML into sources/fischer2017-table1.json, which has 116 genes. Datasets per gene: CDKN1A 16, RRM2B 16, MDM2 15, GADD45A 13, DDB2 13, ZMAT3 12, BAX 11, SESN1 10, TP53I3 10, BBC3 7. Only CDKN1A and RRM2B appear in all 16. Essay 04's other genes are also in the table: BTG2 13, TIGAR 13, PMAIP1 6 | none |
 | 05 | CDKN1A planted "sixfold" fall | correct (derived) | 2^2.6 = 6.06 | none |
 | 05 | "about 20,000 protein-coding genes" | correct (sourced) | Ensembl 116 / GENCODE 50: 19,878 protein-coding (audit) | wording fixed |
