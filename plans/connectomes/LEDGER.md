@@ -17,6 +17,9 @@ The deep-research report in `research/REPORT.md` is not a source; see
 | `docs/connectomes/shared/data/macaque-fln.json` | FLNe: Markov et al. 2014 Cereb Cortex supplementary table (`Cercor_2012 Table.xls`, core-nets.org via the Internet Archive, 1,989 rows, 39 injections, 29 targets); distances: Markov et al. 2014 J Comp Neurol Table 2 (`JCN_2013 Table.xls`, 628 pathways into 11 targets). Nine area spellings mapped (8L, ENTORHINAL, PERIRHINAL, PIRIFORM, SUBICULUM, TEMPORAL_POLE, INSULA, Parainsula, CORE); after mapping every distance pathway has FLNe and vice versa. Repeat injections (V1 5, V2 3, V4 2) averaged with 0 for an unlabelled injection (16 pathways affected). Same fit as the INM-6 multi-area-model CSV copy. | `scripts/connectomes/fetch-wire.py` |
 | `docs/connectomes/shared/data/larva-winding.json` | Winding et al. 2023 (Science 379, eadd9330), Europe PMC author manuscript PMC7614541 (CC BY): Data S1 `ad_connectivity_matrix.csv` (axon to dendrite, 2,952 neurons, rows presynaptic; 63,545 connections, 234,958 synapses) as a delta-encoded CSR, and Data S2 cell types. Seed sets: the authors' CATMAID meta-annotations `mw olfactory` ... `mw respiratory` (public L1 CNS project), asserted equal to S2's modality labels. Output flags from `mw dVNC`, `mw dSEZ`, `mw RGN` (182, 184, 54 in the matrix; 20 of the DN-SEZ are typed CN, LHN, MBON or MB-FBN in S2). Fetched 2026-10-02. | `scripts/connectomes/fetch-larva.py` |
 | `docs/connectomes/shared/data/fly-mushroom.json` | Zheng et al. 2022 (Curr Biol 32, 3334), repository bocklab/pn_kc (MIT): claw table `STable_201001_bouton_claw_table.csv` and `tables/200704-bouton_table` (revision 2f7414a), synapse records `data/pre_post_info/pn_all_kc` (master 96fb0de). 6,468 rows (6,466 claw ids; two claws list two PNs each), 54 glomeruli in Zheng's Fig. 3B order, KC class from `kc_names`, claw position = centroid of that KC's synapses from that PN (k-means split for the 241 pairs with several claws). FAFB names VC3l, VC3m, VC5 renamed VC3, VC5, VM6 (hemibrain_olf_data README; lineages adPN/lvPN agree). Odours: Hallem & Carlson 2006 via drosolf (commit 2ff3591) `Hallem_Carlson_2006.csv` and `hc_data.csv` (chemical classes); Or33b dropped. Fetched 2026-10-03; byte-identical to the 2026-10-01 cache. | `scripts/connectomes/fetch-mushroom.py` |
+| `docs/connectomes/shared/data/worm-witvliet.json` | Witvliet et al. 2021 (Nature 596, 257): chemical edge lists of datasets 1 to 8 from NemaNode `download-connectivity?datasetId=witvliet_2020_N` (same content as WormWiring's xlsx), ages from NemaNode `/api/datasets` (`time`: 0, 5, 8, 16, 23, 27, 50, 50 h), connection classes from Supplementary Table 6 (MOESM8: 829 stable, 1,995 variable, 278 strengthened, 20 weakened, 554 post-embryonic; exactly the union of the eight edge lists, 3,676 connections); cell classes and types from NemaNode `/api/cells` (223 cells: 87 s, 63 i, 30 m, 32 body-wall muscles, 11 other). No licence stated. Fetched 2026-10-04 (cache of 2026-10-01). | `scripts/connectomes/fetch-variation.py` |
+| `docs/connectomes/shared/data/worm-sexes.json` | Cook et al. 2019 (Nature 571, 63), Nature ESM: Supplementary Information 8 (MOESM12; left/right: 1,285 chemical, 705 gap-junction rows with sd and Z) and 9 (MOESM13; sexes by cell class). Chemical: the all-pairs sheet, 1,823 rows less two exact duplicates (AVG to VD13, AVG to DA09) = 1,821. Gap junctions: the all-pairs sheet equals the H>M sheet, so the union of both direction sheets (355 + 176) less three pairs listed in both with contradictory weights (ALM-PVR, ALA-RID, ALM-AVM) = 525. Flags from cell fills under the sheets' flag columns: 6 confirmed by Cook ('this work'), 5 by Oren-Suissa et al. 2016 (header spelt 'Oren-Suisse'), 33 chemical and 10 gap pairs involving remodelled neurons. Weights are EM serial sections. No licence stated. Fetched 2026-10-04. | `scripts/connectomes/fetch-variation.py` |
+| `docs/connectomes/shared/data/worm-peptide.json` | Ripoll-Sanchez et al. 2023 (Neuron 111, 3570; CC BY), repository LidiaRipollSanchez/Neuropeptide-Connectome (MIT) at commit 6689619: `01022024_neuropeptide_connectome_{short,mid,long}_range_model.csv` (the 2024-02-02 update; 302 x 302, rows sending; nonzero 31,417 / 40,425 / 53,558 including 171 diagonal) and `072022_anatomical_class.csv` (11 groups); synapses from Cook et al. 2019 SI 5 corrected July 2020 (wormwiring.org), hermaphrodite chemical among the same 302 neurons: 3,671 ordered pairs (CANL/R send none). Roles from NemaNode. Fetched 2026-10-04 (matrices byte-identical to the 2026-10-01 cache). | `scripts/connectomes/fetch-variation.py` |
 
 ## Article 3: Surprising Compared to What?
 
@@ -217,3 +220,61 @@ Data: `fly-mushroom.json`. Library additions in `shared/graph.js`: `clawIndex`, 
 | Ethyl acetate / acetic acid 40% real, 26% over 20 shuffles | C | figure readout (node over 30 shuffles: 27%) |
 
 Source detail: `research/check/sources-07.md` (verification pass of 2026-10-03).
+
+## Article 8: Same Genes, Different Wiring
+
+Data: `worm-witvliet.json`, `worm-sexes.json`, `worm-peptide.json`. Library additions in `shared/graph.js`: `lrVariance`, `sexZ`, `lrBetween`, `decodeDense`, `denseDegree`; `runChecks` covers them (constant pairs, a fixed spread, the variance multiplier, decoding) and `variationChecks` pins the shipped data (`tests/connectomes.html`, 101/101). Python and node prototypes in the session scratchpad (`nums8.js`, `fly8.py`) were written from the raw files. Source detail: `research/check/sources-08.md`.
+
+| Claim | Type | How we know |
+|---|---|---|
+| Cook: no EM series covers an entire animal; data from several series combined, gaps filled from the other sex and by extrapolation; "should be considered a conceptualization" | S | Cook et al. 2019 main text and Methods |
+| Witvliet: eight isogenic hermaphrodites, brain = nerve ring and ventral ganglion; ages 0, 5, 8, 16 (L1), 23 (L2), 27 (L3), 50, 50 (adult) h | S, C | Witvliet text; NemaNode `time`; `dataset_info.py`; asserted in the fetch script |
+| 223 cells incl. 32 body-wall (head) muscles | C | fetch script; NemaNode type `b` |
+| Chemical synapses 1,296 at hatching, 7,467 and 7,970 in the adults; about six-fold (paper: ~1,300 to ~8,000, 6-fold) | C, S | `variationChecks`; Witvliet text |
+| Body length ~250 to ~1,150 µm, about five-fold | S | Witvliet text |
+| Connections 775 at hatching, 2,202 and 2,186 in the adults | C | node (nums8) |
+| Of the 775 newborn connections, 583 in both adults; their synapses 1,296 to 4,177 (adult mean) | C | node (nums8) |
+| Classification method: L/R pooled; developmentally dynamic = significant change (Spearman, BH) and at least 5-fold birth to adult, normalised per dataset; stable = present in at least 7 of 8; variable otherwise; post-embryonic cells separate | S | Witvliet Methods "Connection classification"; `classify_edges.py` |
+| Adults: 43% stable, 43% variable, 14% developmentally dynamic by connections; 72% / 16% / 12% by synapses (paper ~43, ~43, ~14; ~72%) | C, S | `variationChecks` (42.6, 43.2, 13.6; 72.3, 16.1), excluding post-embryonic connections as the classifier does; Witvliet text |
+| Variable 1.4, stable 6.4 synapses per connection in adults (paper 1.4 +/- 1.0 vs 6.6 +/- 5.8) | C | python (1.40 and 6.38 over datasets 7 and 8) |
+| 1,097 of the 1,995 variable connections in exactly one worm | C | node (nums8) |
+| Variable synapses in polyadic configurations with stable ones 78% vs 93%; most variable connections at contacts existing at birth | S | Witvliet Extended Data Fig. 6d; main text |
+| Threshold 3: variable share 43% to 8%, a quarter of stable connections and a fifth of synapses lost; threshold 5: variable 3%, nearly half the stable lost | C | figure 1 readout; node (k 3: 0.079/0.081, stable lost 0.252/0.247, synapses kept 0.79/0.80; k 5: 0.029, 0.474/0.439) |
+| 28 variable connections reach 5 or more synapses in some worm | C | node (nums8) |
+| 270 of 278 strengthening connections absent from datasets 1 and 2 | C | node |
+| AVAL: 44 input connections, 16 stable, 21 variable; no outputs in the reconstructed brain | C | figure 1 readout |
+| Witvliet: well-connected cells at birth gain inputs disproportionately, not outputs; interneuron connections most stable; modulatory neurons most variable outputs | S | Witvliet text and Extended Data Figs 1, 6j, 7 |
+| Hermaphrodite 302, male 385 neurons; 294 shared; 8 and 91 sex-specific; male copulation network 85 male-specific + 64 shared | S | Cook et al. 2019 text |
+| In the male, 62 of 93 shared classes (67%) get input from sex-specific neurons, 16% of their input | S | Cook text |
+| Cook's sex comparison: z = difference over variance from left/right homologues, LOESS of (X - Y)^2 against 0.5(X + Y), tricube, 100 pairs | S | Cook Methods |
+| The smoother is local constant with width at the 100th nearest pair; reproduces every sd in SI 8 and every Z in SI 9 (chemical and gap) to 1e-6 | C | `variationChecks`; python search over degree and width (max error 0.0 for degree 0, k 100) |
+| z = (h - m) / sqrt(g (v(h/g) + v(m/g))) | C | SI 9 columns reproduce Z exactly with this form |
+| 949 chemical class pairs above 3 sections; 181 (19.1%) beyond \|z\| 2 (93 herm, 88 male); 10.4% beyond 2.5 | C | `variationChecks`; figure readout |
+| Left vs right in one hermaphrodite: 2.6% of 541 comparisons above 3 sections beyond \|z\| 2 | C | node (nums8); figure readout |
+| Cook: 10 to 30% of substantial (> 3 sections) connections may differ between the sexes | S | Cook text |
+| Six chemical differences tested with fluorescence, all confirmed; RIA to RIB 3 vs 79, ADL to AVA 22 vs 0, AIB to RIM z 1.6 | S, C | Cook text and Fig. 5; SI 9 fills ('this work': RIA-RIB, ADL-AVA, ASI-AFD, IL2-RIB, IL1-RIB, AIB-RIM) |
+| Against zero, a two-cell class needs 12 sections to pass \|z\| 2 (10: 1.72, 11: 1.84, 12: 2.12) | C | node (nums8) |
+| 75 of 181 flagged pairs absent in one sex; 1 of those with 10 sections or fewer in the other | C | node; figure readout |
+| Cook: the left/right variance is a minimum | S | SI 9 legend; Cook text |
+| Witvliet's two adults: animal-to-animal vs left/right variance 1.28 overall; about 1.0 below 4 synapses, 1.79 above 8 | C | `lrBetween` in `variationChecks`; python (1.2816) |
+| Flagged share 14.6% at x1.28, 8.5% at x1.79 | C | node (nums8); figure readout |
+| Re-annotation of N2U (Cook 2019) added 1,109 connections; "suggests the use of different annotation criteria" | S | Witvliet Extended Data Fig. 9b legend |
+| Gap junctions: 278 pairs above 3 sections, 28% beyond \|z\| 2 at x1, left/right 4.4% | C | figure readout (not in prose) |
+| Fly: 7,205 isomorphic, 114 dimorphic, 262 male-specific, 69 female-specific types | S | Berg et al. abstract (PMC12636603) |
+| Fly edge test: t of male-female difference over L/R sd; 11% (72.2k) of edges between two isomorphic types flagged; review of 500 types changed < 5 labels; differences traced to segmentation and inconsistent types; set to isomorphic | S | Berg text and Methods "Definition of dimorphic edges" |
+| 6.3% of male and 1.3% of female central-brain edges dimorphic | S | Berg text |
+| 13 of 305 clusters hold 300 of 413 (72%) non-isomorphic types; the other 113 spread over 64 clusters, "highly integrated into the isomorphic subgraph" | S | Berg text |
+| Released edge table does not reproduce the flag counts (179k at p <= 0.1 vs 381k): fly kept to prose | C | python (`fly8.py`) on `mcns_fw_edge_comp.feather` |
+| Neuropeptide network built from CeNGEN (threshold 4) and Beets et al. 2023 (92 couples, EC50 <= 500 nM); short = same bundle, mid = same body region, long = anywhere; weight = number of couples | S | Ripoll-Sanchez text, Fig. 3 legend, README |
+| Densities 0.3437 / 0.4428 / 0.5873 (paper 0.3437 short, 0.4429 mid) | C, S | `variationChecks`; Ripoll-Sanchez text |
+| Synaptic density among the same 302: 4.0% (Cook hermaphrodite chemical, 3,671 pairs); paper's synaptic network 0.0251 (Varshney plus pharynx) | C, S | figure readout; Ripoll-Sanchez text and Methods |
+| 35% of short-range links have one couple; PQR-AVDL 19 couples (paper: AVD-PQR 18 in the original matrices) | C, S | node (nums8); Ripoll-Sanchez text |
+| 157 neurons with peptide degree > 200; 17 with synaptic degree > 50 | C | node (nums8); paper "more than half" |
+| All 11 synaptic rich-club neurons in the top 25 by short-range peptide degree (ranks 5 to 24) | C, S | node; Ripoll-Sanchez text |
+| Degree correlation 0.58 (paper 0.53 / 0.54 on its synaptic network) | C, S | `variationChecks`; Ripoll-Sanchez text |
+| Top peptide degree PVR, PVQL/R, PVT, then DVA, AVKL/R; only four outrank every rich-club neuron in the 2024 matrices (paper: six incl. AVKL/R) | C, S | `variationChecks`; Ripoll-Sanchez text |
+| AVK, PVT, BDU, RID express no classical neurotransmitter; PVQ rich in dense-core vesicles | S | Ripoll-Sanchez text |
+| CANL/R send no chemical synapses (they receive ALA's); peptide degree 10 short, 254 mid | C, S | node; Cook SI 5; Ripoll-Sanchez text |
+| Pharynx joins in the mid-range model: 1,682 of 1,850 incoming pharyngeal links from outside (91%); 1 synaptic link outside | C, S | node; Ripoll-Sanchez ("90% or more") |
+| 65% of synaptic pairs also peptide-linked (short), against 34% density; mid 65% vs 44%, long 66% vs 59% | C | figure readout; node |
+

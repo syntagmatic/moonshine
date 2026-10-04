@@ -1042,6 +1042,16 @@
       ok('ties at the cutoff broken at random', tie.every(v => Math.abs(v - 1000) < 100), tie.join());
       ok('tag overlap counts shared KCs', tagOverlap(Int32Array.from([1, 4, 6, 9]), Int32Array.from([2, 4, 9, 11])) === 2);
     }
+    {
+      // Left/right smoother: with every pair (1, 0) the variance is 1/2 everywhere; equal
+      // weights score 0; a pair at weight w = mean of identical pairs (w + 2, w - 2) gives 4.
+      const v1 = lrVariance(new Array(150).fill(1), new Array(150).fill(0));
+      ok('left/right smoother: constant (1, 0) pairs give 0.5', [0, 0.5, 3, 40].every(x => near(v1(x), 0.5, 1e-12)));
+      const v2 = lrVariance(new Array(120).fill(12), new Array(120).fill(8));
+      ok('left/right smoother: (L - R)^2 / 2 = 8; z of a pair of equal weights 0', near(v2(10), 8, 1e-12) && sexZ(5, 5, 2, v2) === 0);
+      ok('sex z scales as 1/sqrt(variance multiplier)', near(sexZ(20, 4, 2, v2, 4), sexZ(20, 4, 2, v2) / 2, 1e-12));
+      ok('dense decode and degree', denseDegree(decodeDense('0a10', 2), 2).join() === '2,2' && denseDegree(decodeDense('0a10', 2), 2, 2).join() === '1,1' && decodeDense('0a10', 2)[1] === 10);
+    }
     return res;
   }
 
@@ -1175,7 +1185,110 @@
     return res;
   }
 
+  // ---- Variation: development, sexes, neuropeptides (article 8) ----
+
+  // Cook et al. 2019's yardstick for a difference between two weights: the spread
+  // between left and right homologues of one animal. Smooth (L - R)^2 against
+  // (L + R) / 2 with a tricube kernel whose width reaches the k-th nearest pair
+  // (local constant), and halve it, since Var(L - R) = 2 Var(L). Reproduces the sd
+  // column of their Supplementary Information 8 exactly at k = 100.
+  function lrVariance(left, right, k = 100) {
+    const n = left.length, mu = new Float64Array(n), d2 = new Float64Array(n);
+    for (let i = 0; i < n; i++) { mu[i] = (left[i] + right[i]) / 2; d2[i] = (left[i] - right[i]) ** 2; }
+    const dist = new Float64Array(n), memo = new Map();
+    return x => {
+      if (memo.has(x)) return memo.get(x);
+      for (let i = 0; i < n; i++) dist[i] = Math.abs(mu[i] - x);
+      const h = Float64Array.from(dist).sort()[k - 1] * (1 + 1e-7) || 1e-9;
+      let sw = 0, sy = 0;
+      for (let i = 0; i < n; i++) { const u = dist[i] / h; if (u < 1) { const w = (1 - u * u * u) ** 3; sw += w; sy += w * d2[i]; } }
+      const v = sy / sw / 2;
+      memo.set(x, v);
+      return v;
+    };
+  }
+
+  // Their sex-difference score for a class pair: g cells in the presynaptic class,
+  // weights h and m summed over the class, variance per cell from lrVariance at the
+  // weight per cell. scale multiplies the variance (1 = left/right, Cook's minimum).
+  const sexZ = (h, m, g, v, scale = 1) => (h - m) / Math.sqrt(scale * g * (v(h / g) + v(m / g)));
+
+  // Left/right against animal-to-animal in Witvliet et al.'s two adults (datasets 7
+  // and 8, both 50 h): for each left/right pair of cells A onto each class B that is
+  // itself a left/right pair, within = (A_L -> B, A_R -> B) in one animal, between =
+  // (A_x -> B in animal 7, A_x -> B in animal 8). Returns mean squared differences by
+  // bins of the pair's mean weight (edges are upper bounds) and overall.
+  function lrBetween(wit, bins = [1, 2, 4, 8, Infinity], a = 6, b = 7) {
+    const byClass = new Map(), names = wit.nodes.map(n => n.name);
+    wit.nodes.forEach((n, i) => { if (!byClass.has(n.cls)) byClass.set(n.cls, []); byClass.get(n.cls).push(i); });
+    const lr = [...byClass].filter(([, m]) => m.length === 2 && m.map(i => names[i].slice(-1)).sort().join('') === 'LR')
+      .map(([c, m]) => [c, m.sort((x, y) => names[x].slice(-1) < names[y].slice(-1) ? -1 : 1)]);
+    const W = [new Map(), new Map()];
+    for (const [p, q, , w] of wit.chem) [a, b].forEach((d, t) => { if (w[d]) W[t].set(p * 1024 + q, w[d]); });
+    const onto = (t, i, B) => B.reduce((s, j) => s + (W[t].get(i * 1024 + j) || 0), 0);
+    const acc = () => bins.map(() => [0, 0]);
+    const within = acc(), between = acc(), add = (A, x, y) => { const k = bins.findIndex(e => (x + y) / 2 <= e); A[k][0]++; A[k][1] += (x - y) ** 2; };
+    for (const [, [l, r]] of lr) for (const [, B] of lr) {
+      for (const t of [0, 1]) { const x = onto(t, l, B), y = onto(t, r, B); if (x || y) add(within, x, y); }
+      for (const i of [l, r]) { const x = onto(0, i, B), y = onto(1, i, B); if (x || y) add(between, x, y); }
+    }
+    const ms = A => A.map(([c, s]) => (c ? s / c : NaN)), tot = A => A.reduce((s, x) => s + x[1], 0) / A.reduce((s, x) => s + x[0], 0);
+    return { bins, within: ms(within), between: ms(between), counts: [within.map(x => x[0]), between.map(x => x[0])], ratio: tot(between) / tot(within) };
+  }
+
+  // Neuropeptide matrices ship row-major, one base-36 character per pair.
+  function decodeDense(s, n) {
+    const M = new Uint8Array(n * n);
+    for (let i = 0; i < n * n; i++) M[i] = parseInt(s[i], 36);
+    return M;
+  }
+
+  // Directed degree (in + out partners, self-pairs excluded) of a dense n x n matrix
+  // thresholded at min.
+  function denseDegree(M, n, min = 1) {
+    const d = new Int32Array(n);
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) if (i !== j && M[i * n + j] >= min) { d[i]++; d[j]++; }
+    return d;
+  }
+
+  function variationChecks(wit, sx, pep, log = console.log) {
+    const res = [];
+    const ok = (name, pass, detail = '') => { res.push({ name, pass }); log((pass ? 'pass ' : 'FAIL ') + name + (detail ? ': ' + detail : '')); };
+    const tot = wit.ages.map((_, d) => wit.chem.reduce((s, e) => s + e[3][d], 0));
+    ok('Witvliet: 3,676 chemical connections; synapses 1,296 at birth, 7,467 and 7,970 in the adults', wit.chem.length === 3676 && tot.join() === '1296,1895,2128,2777,4116,4456,7467,7970');
+    const share = d => { const c = [0, 0, 0, 0, 0], s = [0, 0, 0, 0, 0]; for (const [, , k, w] of wit.chem) if (w[d]) { c[k]++; s[k] += w[d]; } const n = c[0] + c[1] + c[2] + c[3], m = s[0] + s[1] + s[2] + s[3]; return [c.map(x => x / n), s.map(x => x / m)]; };
+    const [c7, s7] = share(6), [c8, s8] = share(7), av = (x, y, i) => (x[i] + y[i]) / 2;
+    ok('adult connections 43% stable, 43% variable, 14% developmental; synapses 72% stable, 16% variable (paper: ~43, ~43, ~14; ~72%)',
+      Math.abs(av(c7, c8, 0) - 0.425) < 0.01 && Math.abs(av(c7, c8, 1) - 0.435) < 0.01 && Math.abs(av(c7, c8, 2) + av(c7, c8, 3) - 0.14) < 0.01 && Math.abs(av(s7, s8, 0) - 0.725) < 0.01 && Math.abs(av(s7, s8, 1) - 0.16) < 0.01,
+      [0, 1, 2].map(i => (100 * av(c7, c8, i)).toFixed(1)).join(', ') + '; ' + (100 * av(s7, s8, 0)).toFixed(1) + ', ' + (100 * av(s7, s8, 1)).toFixed(1));
+    for (const k of ['chem', 'gap']) {
+      const L = sx.lr[k], v = lrVariance(L.map(r => r[2]), L.map(r => r[3]));
+      const sdErr = Math.max(...L.map(r => Math.abs(Math.sqrt(v((r[2] + r[3]) / 2)) - r[4])));
+      const zErr = Math.max(...sx.sex[k].map(r => Math.abs(sexZ(r[2], r[3], r[4], v) - r[5])));
+      ok(`Cook ${k}: left/right smoother gives SI 8's sd (${L.length} rows) and SI 9's Z (${sx.sex[k].length} pairs)`, sdErr < 1e-5 && zErr < 1e-5, sdErr.toExponential(1) + ', ' + zErr.toExponential(1));
+    }
+    const S = sx.sex.chem, sub = S.filter(r => Math.max(r[2], r[3]) > 3), beyond = t => sub.filter(r => Math.abs(r[5]) > t).length / sub.length;
+    ok('949 substantial class pairs (> 3 sections in either sex); 19% beyond |z| 2, 10% beyond 2.5 (Cook: 10 to 30%)', sub.length === 949 && Math.abs(beyond(2) - 0.192) < 0.005 && Math.abs(beyond(2.5) - 0.104) < 0.005,
+      sub.length + ', ' + (100 * beyond(2)).toFixed(1) + '%, ' + (100 * beyond(2.5)).toFixed(1) + '%');
+    const lb = lrBetween(wit);
+    ok('two adult worms differ about as much as left and right below 4 synapses, 1.8x above 8; 1.28x overall (python)', Math.abs(lb.ratio - 1.2816) < 1e-3 && Math.abs(lb.between[4] / lb.within[4] - 1.79) < 0.01,
+      lb.within.map((w, i) => (lb.between[i] / w).toFixed(2)).join(', ') + '; ' + lb.ratio.toFixed(3));
+    const n = pep.nodes.length, M = Object.fromEntries(['short', 'mid', 'long'].map(k => [k, decodeDense(pep.pep[k], n)]));
+    const dens = k => { let c = 0; for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) if (i !== j && M[k][i * n + j]) c++; return c / (n * (n - 1)); };
+    ok('peptide densities 0.3437, 0.4428, 0.5873 (paper: 0.3437 short, 0.4429 mid)', ['short', 'mid', 'long'].map(dens).map(x => x.toFixed(4)).join() === '0.3437,0.4428,0.5873');
+    const syn = new Uint8Array(n * n); pep.syn.forEach(([a, b]) => { syn[a * n + b] = 1; });
+    const ds = denseDegree(syn, n), dp = denseDegree(M.short, n), nm = pep.nodes.map(x => x.name);
+    const rich = ['DVA', 'PVCL', 'PVCR', 'AVAL', 'AVAR', 'AVBL', 'AVBR', 'AVDL', 'AVDR', 'AVEL', 'AVER'].map(x => nm.indexOf(x));
+    const top = Math.max(...rich.map(i => dp[i])), above = nm.filter((_, i) => dp[i] > top).sort();
+    ok('3,671 hermaphrodite chemical pairs; short-range peptide degree above every rich-club neuron: PVQL, PVQR, PVR, PVT (2024 matrices; paper also AVKL/R)',
+      pep.syn.length === 3671 && above.join() === 'PVQL,PVQR,PVR,PVT', above.join(' ') + '; DVA ' + top);
+    const r = pearson(Array.from(ds), Array.from(dp));
+    ok('synaptic against short-range peptide degree: r 0.58 (python; paper 0.53 on Varshney plus pharynx)', Math.abs(r - 0.5758) < 1e-3, r.toFixed(4));
+    return res;
+  }
+
   return {
+    lrVariance, sexZ, lrBetween, decodeDense, denseDegree, variationChecks,
     dataChecks, flowChecks, mushroomChecks, rng, undirected, csr, degrees, clustering, transitivity, meanPath, nullER, distanceBins, nullSpatial, swap,
     mutualPairs, swapDirected, swapReciprocal, triadCensus, triadEdges, TRIADS, mean, sd, runChecks,
     eigh, dense, fiedler, edgeSpan, avgControl, pearson, ranks, spearman, linfit, cholSolve, placement, pinPrice, wireCost, wireChecks,

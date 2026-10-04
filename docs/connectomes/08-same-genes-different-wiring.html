@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Same Genes, Different Wiring · Connectomes</title>
+<script src="../lib/motion.js"></script>
+<script src="../vendor/js/d3.v7.min.js"></script>
+<link rel="stylesheet" href="../vendor/katex@0.16.11/katex.min.css">
+<script src="../vendor/katex@0.16.11/katex.min.js"></script>
+<link href="../vendor/fonts/sans-serif-mono/fonts.css" rel="stylesheet">
+<script src="shared/graph.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  color-scheme: light dark;
+  --article-width: 740px;
+  --body-font: 'Source Serif 4', Georgia, serif;
+  --heading-font: 'Source Sans 3', system-ui, sans-serif;
+  --mono-font: 'Source Code Pro', monospace;
+  --body-size: 1.125rem;
+  --line-height: 1.6;
+  --text: #1c1d24;
+  --text-2: #50525e;
+  --accent: #2b62a8;
+  --accent-light: #dde8f6;
+  --bg: #fafaf8;
+  --fig-bg: #ffffff;
+  --border: #e3e2de;
+  /* Series roles, fixed across all eight articles:
+     observed data = ink (--text); null models and expected values = --c-null;
+     sensory / inter / motor neurons = --c-sensory / --c-inter / --c-motor;
+     gap junctions = --c-gap; neuropeptides = --c-pep. Validated for colour
+     vision deficiency in both themes. */
+  --c-null: #7c8597;
+  --c-null-light: #e6e8ee;
+  --c-sensory: #00928a;
+  --c-inter: #b9780a;
+  --c-motor: #b8405e;
+  --c-gap: #6b55c4;
+  --c-pep: #5d8a2b;
+  /* This article: connection classes in figure 1. Stable in ink, developmentally
+     dynamic cool, variable warm, connections of post-embryonic cells in the null
+     colour (the pair validated for article 7). */
+  --c-cool: #2b62a8;
+  --c-warm: #c4492c;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --text: #e6e5e0; --text-2: #a8a9b3;
+    --accent: #7aa7e6; --accent-light: #1f2b3d;
+    --bg: #15161a; --fig-bg: #1c1d22; --border: #33343b;
+    --c-null: #8b93a5; --c-null-light: #2a2d35;
+    --c-sensory: #21a198; --c-inter: #c2841a; --c-motor: #d6607e; --c-gap: #8e7ce0; --c-pep: #76a63f;
+    --c-cool: #5f8fd6; --c-warm: #e0704f;
+  }
+}
+
+body {
+  font-family: var(--body-font); font-size: var(--body-size); line-height: var(--line-height);
+  color: var(--text); background: var(--bg); -webkit-font-smoothing: antialiased;
+}
+
+.article { max-width: var(--article-width); margin: 0 auto; padding: 2rem 1rem 6rem; }
+h1, h2, h3 { font-family: var(--heading-font); font-weight: 700; line-height: 1.2; }
+h1 { font-size: 2.5rem; margin: 0 0 0.5rem; }
+h2 { font-size: 1.5rem; margin: 3rem 0 1rem; }
+p { margin: 0 0 1rem; }
+a { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+.subtitle { font-family: var(--heading-font); font-size: 1.15rem; color: var(--text-2); margin-bottom: 2rem; }
+.kicker { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-bottom: 0.5rem; }
+.kicker a { color: var(--text-2); }
+
+.figure { margin: 2rem 0; padding: 1.25rem; background: var(--fig-bg); border: 1px solid var(--border); border-radius: 6px; }
+.figure-wide { margin-left: -2rem; margin-right: -2rem; }
+@media (min-width: 1040px) { .figure-wide { margin-left: -7rem; margin-right: -7rem; } }
+.figure-caption { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); margin-top: 0.75rem; line-height: 1.45; }
+.figure-label { font-weight: 600; color: var(--text); }
+.readout { font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); min-height: 2.8em; font-variant-numeric: tabular-nums; margin: 0.4rem 0 0; line-height: 1.45; }
+.readout b { color: var(--text); font-weight: 600; }
+
+.controls { display: flex; align-items: center; gap: 0.5rem 1.25rem; flex-wrap: wrap; margin-bottom: 0.75rem; font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2); }
+.controls label { display: inline-flex; align-items: center; gap: 0.4rem; }
+.controls input[type="range"] { width: 140px; max-width: 100%; accent-color: var(--accent); }
+.controls select { font: inherit; color: var(--text); background: var(--fig-bg); border: 1px solid var(--border); border-radius: 4px; padding: 1px 4px; max-width: 13rem; }
+.controls .val { font-variant-numeric: tabular-nums; color: var(--text); min-width: 4.5em; display: inline-block; }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
+.seg button { font: inherit; color: var(--text-2); background: var(--fig-bg); border: 0; padding: 2px 9px; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--border); }
+.seg button[aria-pressed="true"] { background: var(--accent-light); color: var(--text); font-weight: 600; }
+
+.panels { display: grid; gap: 0.75rem 1.25rem; align-items: start; }
+.p-3-2 { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
+.p-1-1 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.panels > div { min-width: 0; }
+.panels h3 { font-family: var(--heading-font); font-size: 0.85rem; font-weight: 600; color: var(--text); margin: 0 0 0.25rem; }
+.panels h3 span { font-weight: 400; color: var(--text-2); }
+.fig-body { position: relative; width: 100%; }
+.fig-body svg, .fig-body canvas { display: block; }
+.fig-body svg { overflow: visible; }
+.fig-body canvas + svg { position: absolute; left: 0; top: 0; }
+.tip { position: absolute; pointer-events: none; font-family: var(--heading-font); font-size: 0.78rem; background: var(--fig-bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; white-space: nowrap; display: none; z-index: 2; }
+
+svg text { font-family: var(--heading-font); }
+svg .axis text { font-size: 11px; fill: var(--text-2); }
+svg .axis line, svg .axis path { stroke: var(--border); }
+svg .axis-label { font-size: 11px; fill: var(--text-2); }
+svg .note { font-size: 11px; fill: var(--text-2); }
+svg .ptitle { font-size: 11px; fill: var(--text); font-weight: 600; }
+svg .pt-lab { font-size: 11px; fill: var(--text); font-weight: 600; }
+svg .pt-lab2 { font-size: 11px; fill: var(--text-2); }
+svg .halo { paint-order: stroke; stroke: var(--fig-bg); stroke-width: 4px; stroke-linejoin: round; }
+svg:focus-visible, :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.legend { display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; font-family: var(--heading-font); font-size: 0.8rem; color: var(--text-2); margin: 0.35rem 0 0; }
+.legend span { display: inline-flex; align-items: center; gap: 0.35rem; }
+.legend svg { overflow: visible; }
+
+.katex-display { overflow-x: auto; overflow-y: hidden; padding: 2px 0; }
+
+@media (max-width: 640px) {
+  h1 { font-size: 1.75rem; }
+  .figure { padding: 1rem 0.6rem; }
+  .figure-wide { margin-left: 0; margin-right: 0; }
+  .p-3-2, .p-1-1 { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="article">
+  <header>
+    <p class="kicker"><a href="index.html">Connectomes</a>, part 8 of 8</p>
+    <h1>Same Genes, Different Wiring</h1>
+    <p class="subtitle">A connectome is one animal at one age, of one sex, and it leaves out the signals that don't travel through synapses. Eight worms, two sexes and a neuropeptide network show how much each of those limits changes the graph.</p>
+  </header>
+
+  <p>Parts 3 to 6 of this series used one worm graph: the 279 somatic neurons of the hermaphrodite as Varshney and colleagues compiled them in 2011. It is easy to talk about that graph as "the worm's wiring", as if every <i>C. elegans</i> carried the same one. It doesn't, and nobody has the wiring of a whole single worm. When Cook and colleagues rebuilt the whole-animal connectomes of both sexes in 2019, no electron-microscope series covered an entire animal, so they combined data from several series, filled some regions from the other sex, and extrapolated across a stretch of the body that no series had imaged. They called the result "a conceptualization".</p>
+
+  <p>That isn't a complaint about their work. Any connectome comes from particular animals at particular ages, and it records one kind of connection. This last article varies each of those in turn, with three datasets: eight genetically identical worms reconstructed from hatching to adulthood, the two sexes, and a map of the neuropeptide signals that pass between neurons without any synapse at all.</p>
+
+  <h2>Eight worms, one at each age</h2>
+
+  <p>Witvliet and colleagues reconstructed the brain, the nerve ring and the ventral ganglion just behind it, of eight isogenic hermaphrodites: four in the first larval stage (at 0, 5, 8 and 16 hours after hatching), one each at 23 and 27 hours, and two adults at 50 hours. Their 223 cells include 32 head muscles that the brain's motor neurons drive. Between hatching and adulthood the number of chemical synapses rises from 1,296 to 7,467 and 7,970 in the two adults, about six-fold, while the worm's body grows about five-fold in length, from roughly 250 to 1,150 micrometres. The number of connected pairs of cells goes from 775 to about 2,200.</p>
+
+  <p>Part of the growth is the newborn's wiring getting stronger. Of the 775 connections in the newborn, 583 appear in both adults, and their synapses go from 1,296 to about 4,200. The rest is new connections. But the eight datasets are eight different worms, so a connection seen at 16 hours and missing at 23 might be development or might be individuality. To tell them apart, Witvliet and colleagues used all eight animals at once. They pooled each connection with its left-right mirror and called it <b>developmentally dynamic</b> if its synapse count, normalised by each animal's total, changed significantly with age and by at least five-fold between the newborns and the adults. A connection that didn't change was <b>stable</b> if it was present in at least seven of the eight worms, and <b>variable</b> otherwise. Connections of the cells born after hatching are a fourth group of their own.</p>
+
+  <div class="figure figure-wide" id="fig-dev">
+    <div class="controls">
+      <label>Follow <select id="dv-cell" aria-label="Cell to follow"></select></label>
+      <span class="seg" role="group" aria-label="Direction">
+        <button type="button" data-d="in" aria-pressed="true">inputs</button><button type="button" data-d="out" aria-pressed="false">outputs</button>
+      </span>
+      <label>Count a connection at <input type="range" id="dv-k" min="1" max="8" step="1" value="1" aria-label="Minimum number of synapses"><span class="val" id="dv-k-val"></span></label>
+    </div>
+    <div class="panels p-3-2">
+      <div>
+        <h3>Every connection, worm by worm <span>synapses against age, by Witvliet's classes</span></h3>
+        <div class="fig-body" id="dv-lines"><canvas></canvas><svg tabindex="0" role="img" aria-label="Four small panels, one per connection class (stable, developmentally dynamic, variable, and connections of cells born after hatching). Each draws every connection's synapse count in the eight worms against the worm's age, with the class mean in bold and the followed cell's connections highlighted. Left and right arrow keys change the followed cell."></svg><div class="tip"></div></div>
+        <div class="legend">
+          <span><svg width="22" height="10"><line x1="1" y1="5" x2="21" y2="5" style="stroke: var(--text); stroke-width: 2.6; stroke-dasharray: 6 3"></line></svg>class mean</span>
+          <span><svg width="22" height="10"><line x1="1" y1="5" x2="21" y2="5" style="stroke: var(--text); stroke-width: 1.5"></line></svg><span id="dv-key-cell">followed cell</span></span>
+          <span><svg width="22" height="10"><line x1="1" y1="5" x2="21" y2="5" style="stroke: var(--text-2); stroke-width: 1; stroke-dasharray: 3 3"></line></svg>threshold</span>
+        </div>
+      </div>
+      <div>
+        <h3>What a threshold keeps <span>connections with at least that many synapses</span></h3>
+        <div class="fig-body" id="dv-bars"><svg role="img" aria-label="For each of the eight worms, a stacked bar of the connections that have at least the threshold number of synapses, split by class, over an outline of all its connections."></svg><div class="tip"></div></div>
+        <div class="legend">
+          <span><svg width="12" height="12"><rect x="1" y="1" width="10" height="10" rx="1" style="fill: var(--text)"></rect></svg>stable</span>
+          <span><svg width="12" height="12"><rect x="1" y="1" width="10" height="10" rx="1" style="fill: var(--c-cool)"></rect></svg>developmentally dynamic</span>
+          <span><svg width="12" height="12"><rect x="1" y="1" width="10" height="10" rx="1" style="fill: var(--c-warm)"></rect></svg>variable</span>
+          <span><svg width="12" height="12"><rect x="1" y="1" width="10" height="10" rx="1" style="fill: var(--c-null)"></rect></svg>post-embryonic cells</span>
+        </div>
+      </div>
+    </div>
+    <p class="readout" id="dv-ro" aria-live="polite"></p>
+    <p class="figure-caption"><span class="figure-label">Figure 1.</span> The chemical connections of Witvliet et al.'s eight brains (nerve ring and ventral ganglion; 3,676 connections between 223 cells over all eight), each line one connection's synapse count in the eight worms, placed at each worm's age in hours after hatching; the two adults are both 50 hours old and are drawn side by side. A connection absent from a worm sits at zero. Classes are the authors' (Supplementary Table 6): developmentally dynamic includes 278 connections that strengthen and 20 that weaken. The vertical axis is a square-root scale. Pick a cell, or step through cells with the arrow keys, to highlight its connections; hover a panel for its numbers at that age. The bars count connections with at least the threshold number of synapses in each worm; the outline is every connection that worm has.</p>
+  </div>
+
+  <p>In the adults, stable and variable connections are about equally common, 43% each, and developmentally dynamic ones make up the other 14%. By synapses the picture is different: stable connections carry 72% of them, variable connections 16%. Variable connections are mostly weak, 1.4 synapses on average in the adults against 6.4 for stable ones, and most of them are rare: 1,097 of the 1,995 turn up in only one of the eight worms. They are not obvious annotation errors. Witvliet and colleagues found variable synapses sharing polyadic release sites with stable ones (78% of them, against 93% for other connections) and forming where the cells' membranes already touched at birth.</p>
+
+  <p>The obvious fix is a threshold, and the bars show why it doesn't work. Counting a connection only at three or more synapses cuts the variable share of the adults' connections from 43% to 8%, but it also discards a quarter of the stable connections and a fifth of all synapses. At five synapses the variable share is 3%, and nearly half the stable connections are gone. Weak and variable overlap without coinciding. Some stable connections are weak in every worm, and 28 variable ones reach five synapses or more somewhere. The developmentally dynamic panel shows something else: almost all of those connections (270 of the 278 that strengthen) are missing from the two youngest worms and appear later, the same way in every animal. For a cell like AVAL, a command interneuron, the stable inputs grow together while a fringe of one- and two-synapse inputs comes and goes from worm to worm. Witvliet and colleagues found that cells with many connections at birth gain inputs faster than other cells but not outputs, that the interneurons' connections to each other are the most stable part of the brain, and that modulatory neurons have the most variable outputs.</p>
+
+  <p>So the worm's wiring diagram has two layers: a core that every worm shares, carrying most of the synapses, and a fringe of weak connections that differs between genetically identical animals reared the same way. A single reconstruction can't tell you which of its edges belong to which layer.</p>
+
+  <h2>Two sexes, and what counts as a difference</h2>
+
+  <p><i>C. elegans</i> comes in two sexes: hermaphrodites, which make their own sperm, and males. The hermaphrodite has 302 neurons and the male 385. They share 294, and the remaining 8 and 91 are specific to one sex: the hermaphrodite's drive egg laying, most of the male's sit in the tail and run mating. Cook and colleagues found the male-specific neurons wired into the shared ones: in the male, 62 of the 93 shared neuron classes get input from male-specific neurons, 16% of their total input.</p>
+
+  <p>The harder question is whether the shared neurons are wired differently in the two sexes. Comparing them means comparing two graphs, each assembled from a few animals, whose weights are counts of electron-microscope sections showing a synapse, not counts of synapses. Two worms of the same sex would differ too. Cook and colleagues needed an estimate of that ordinary difference, and the only one available inside a single animal was left against right. For each left-right pair of neurons, they compared the left one's connections onto a target class with the right one's. They smoothed the squared difference against the mean weight and took half of it as the variance <i>v</i>(<i>w</i>) of a weight <i>w</i>. A class pair with <i>g</i> presynaptic cells and summed weights <i>h</i> in the hermaphrodite and <i>m</i> in the male then gets</p>
+  <div id="eq-z"></div>
+  <p>Their smoother is a tricube kernel reaching the 100 nearest left-right pairs, and rebuilt in this page it gives every one of their published variances and z-scores, so the figure can recompute them with a different yardstick.</p>
+
+  <div class="figure figure-wide" id="fig-sex">
+    <div class="controls">
+      <span class="seg" role="group" aria-label="Connection type">
+        <button type="button" data-t="chem" aria-pressed="true">chemical</button><button type="button" data-t="gap" aria-pressed="false">gap junctions</button>
+      </span>
+      <label>Flag |z| above <input type="range" id="sx-thr" min="1" max="4" step="0.1" value="2" aria-label="z-score threshold"><span class="val" id="sx-thr-val"></span></label>
+      <label>Yardstick &times; <input type="range" id="sx-scale" min="1" max="4" step="0.01" value="1" aria-label="Variance multiplier"><span class="val" id="sx-scale-val"></span></label>
+      <span class="seg" role="group" aria-label="Yardstick presets">
+        <button type="button" data-s="lr" aria-pressed="true">left vs right</button><button type="button" data-s="adults" aria-pressed="false">two adult worms</button>
+      </span>
+      <label><input type="checkbox" id="sx-sub" checked> only pairs above 3 sections</label>
+    </div>
+    <div class="panels p-3-2">
+      <div>
+        <h3>Every class pair in both sexes <span>EM sections of connectivity</span></h3>
+        <div class="fig-body" id="sx-sc"><svg tabindex="0" role="img" aria-label="Scatter of every pair of neuron classes connected in either sex: weight in the hermaphrodite against weight in the male, both on log scales, with pairs beyond the z threshold in ink and the differences confirmed by fluorescence labelled. Arrow keys step through the flagged pairs."></svg><div class="tip"></div></div>
+        <div class="legend">
+          <span><svg width="12" height="12"><circle cx="6" cy="6" r="3.2" style="fill: var(--text)"></circle></svg>flagged as a sex difference</span>
+          <span><svg width="12" height="12"><circle cx="6" cy="6" r="3.2" style="fill: var(--c-null)"></circle></svg>within the yardstick</span>
+          <span><svg width="12" height="12"><circle cx="6" cy="6" r="4.2" style="fill: none; stroke: var(--accent); stroke-width: 1.6"></circle></svg>confirmed in living worms</span>
+        </div>
+      </div>
+      <div>
+        <h3>The z-scores <span>sex differences against left vs right</span></h3>
+        <div class="fig-body" id="sx-hist"><svg role="img" aria-label="Histogram of z-scores for the sex comparisons, as shares, with the z-scores of the left-right comparisons inside one hermaphrodite drawn as an outline and the threshold marked on both sides."></svg></div>
+        <div class="legend">
+          <span><svg width="12" height="12"><rect x="1" y="1" width="10" height="10" rx="1" style="fill: var(--text); fill-opacity: 0.8"></rect></svg>hermaphrodite against male</span>
+          <span><svg width="22" height="10"><path d="M1 9 V3 H11 V6 H21" style="fill: none; stroke: var(--c-null); stroke-width: 1.6"></path></svg>left against right, one hermaphrodite</span>
+        </div>
+      </div>
+    </div>
+    <p class="readout" id="sx-ro" aria-live="polite"></p>
+    <p class="figure-caption"><span class="figure-label">Figure 2.</span> Cook et al.'s 2019 comparison of the sexes for neuron classes (Supplementary Information 9: 1,821 chemical class pairs, two duplicate rows dropped, and 525 gap-junction pairs, taken from both of its direction sheets because its gap-junction summary sheet repeats only one, less three pairs listed in both with contradictory weights), weights in EM serial sections of connectivity summed over the presynaptic class, axes on a log scale with zero at the corner. The z-score uses the left-right variance function rebuilt from their Supplementary Information 8 (1,285 chemical and 705 gap-junction comparisons in the hermaphrodite), multiplied by the yardstick factor; "two adult worms" sets it to the ratio of animal-to-animal to left-right variance measured in Witvliet et al.'s two adults, computed in the page. Ringed pairs were confirmed with fluorescent synapse labels by Cook et al. or earlier by Oren-Suissa et al. 2016. The histogram's outline is the left-right comparisons themselves, with the same pairs-above-3-sections filter. Hover a point for its weights and z; click it, or use the arrow keys, to read it out.</p>
+  </div>
+
+  <p>With Cook's yardstick and a threshold of |<i>z</i>| = 2, 181 of the 949 class pairs with more than three sections in either sex count as different, 19%. Against itself, left against right inside the hermaphrodite, the same threshold flags 2.6%. At 2.5 the share falls to 10%. Cook and colleagues, extrapolating from their tests, estimated that 10 to 30% of substantial connections might differ in strength between the sexes, which is where the slider lands. The flagged pairs split almost evenly between stronger in the hermaphrodite (93) and stronger in the male (88). Six were checked in living worms with fluorescent synapse labels and all six held: RIA to RIB is far stronger in males (3 sections against 79), ADL to AVA stronger in hermaphrodites (22 against 0). One confirmed difference, AIB to RIM, has a z of only 1.6, so the threshold misses real differences too.</p>
+
+  <p>The yardstick protects against the weakest kind of false difference. A pair that is absent in one sex and weak in the other never gets flagged: for a class of two cells against zero, the other sex needs 12 sections to pass |<i>z</i>| = 2, because the left-right spread at low weights is about as large as the weights. Of the 181 flagged pairs, 75 are missing from one sex, and all but one of those have more than ten sections in the other. Those are the kind of connections Witvliet found varying between identical worms, and the test already allows for them.</p>
+
+  <p>What it can't allow for is a bigger difference between animals than between the two sides of one animal, and Cook and colleagues called their estimate a minimum. Witvliet's two adults measure it. Running the same left-right comparison inside each adult, and comparing each cell's connections between the two adults, gives about the same spread for weak connections and 1.8 times the variance for connections above eight synapses, 1.28 times overall. With 1.28 the flagged share falls to 15%; with 1.8 to 8.5%. The transfer is rough, since Witvliet counts synapses and Cook counts sections, but it leaves the estimate inside Cook's range and toward its low end.</p>
+
+  <p>There is one difference that no variance estimate covers: who scored the synapses. Witvliet and colleagues compared Cook's re-annotation of the N2U adult, one of the original 1986 series, with the original annotation and found 1,109 connections that only the re-annotation had, which points to different criteria rather than different animals. Two connectomes scored by different people under different rules differ systematically, and a yardstick built from one dataset can't see that.</p>
+
+  <p>The fly shows the same problem at a far larger scale. Berg and colleagues compared their male central nervous system with the female FlyWire brain and matched 7,205 cell types between the sexes; 114 more are dimorphic and 262 male-specific and 69 female-specific types appear in one sex only. To test edges they used the same idea, a male-female difference over the left-right spread within each brain. Of the edges between two isomorphic cell types, 11% came out significantly different. Reviewing the 500 types that showed up most often changed the dimorphism label of fewer than five; most of the apparent differences traced to segmentation problems or inconsistent type definitions across the two datasets, so they set those edges aside as isomorphic. Their final count is 6.3% of the male's central-brain edges and 1.3% of the female's that differ. Most of the dimorphic and sex-specific types sit in 13 of 305 connectivity clusters, which connect densely to each other; the other 113 are spread through the rest of the brain and well connected to it.</p>
+
+  <h2>The wireless layer</h2>
+
+  <p>A synapse is not the only way one neuron affects another. Neurons also release neuropeptides, short peptides packed in dense-core vesicles that can diffuse some distance and act on G-protein-coupled receptors of any cell that expresses them, with no synapse required.</p>
+
+  <p>Ripoll-Sanchez and colleagues built a draft network of these signals in 2023. From single-cell expression data (CeNGEN) they took which neurons express each peptide and each receptor; from Beets and colleagues' screen of peptides against receptors they took the 92 peptide-receptor couples that activate at 500 nanomolar or less. Neuron A connects to neuron B if A expresses a peptide and B a receptor of one couple, and the weight is the number of couples linking them. Anatomy then limits how far a peptide may travel: in the short-range model only within a shared bundle of processes, in the mid-range model anywhere within the same body region (head, midbody or tail), and in the long-range model anywhere in the body.</p>
+
+  <div class="figure figure-wide" id="fig-pep">
+    <div class="controls">
+      <span class="seg" role="group" aria-label="Diffusion model">
+        <button type="button" data-r="short" aria-pressed="true">short range</button><button type="button" data-r="mid" aria-pressed="false">mid range</button><button type="button" data-r="long" aria-pressed="false">long range</button>
+      </span>
+      <label>At least <input type="range" id="pp-min" min="1" max="12" step="1" value="1" aria-label="Minimum number of peptide-receptor couples"><span class="val" id="pp-min-val"></span></label>
+      <span class="seg" role="group" aria-label="Layers shown">
+        <button type="button" data-l="both" aria-pressed="true">both</button><button type="button" data-l="syn" aria-pressed="false">synapses</button><button type="button" data-l="pep" aria-pressed="false">peptides</button>
+      </span>
+      <label><select id="pp-cell" aria-label="Neuron"></select></label>
+    </div>
+    <div class="panels p-1-1">
+      <div>
+        <h3>All 302 neurons, both networks <span>row sends, column receives</span></h3>
+        <div class="fig-body" id="pp-mat"><canvas></canvas><svg tabindex="0" role="img" aria-label="A 302 by 302 adjacency matrix of the hermaphrodite's neurons grouped by anatomical class: neuropeptide connections as green cells shaded by the number of peptide-receptor couples, chemical synapses as dark cells on top. Up and down arrow keys move the selected neuron."></svg><div class="tip"></div></div>
+        <div class="legend">
+          <span><svg width="12" height="12"><rect x="1" y="1" width="10" height="10" style="fill: var(--c-pep)"></rect></svg>peptide link (darker: more couples)</span>
+          <span><svg width="12" height="12"><rect x="1" y="1" width="10" height="10" style="fill: var(--text)"></rect></svg>chemical synapse</span>
+        </div>
+      </div>
+      <div>
+        <h3>Who the hubs are <span>partners in each network, in plus out</span></h3>
+        <div class="fig-body" id="pp-sc"><svg role="img" aria-label="Scatter of the 302 neurons: number of synaptic partners against number of neuropeptide partners, coloured by sensory, inter and motor, with the biggest hubs of each network labelled."></svg><div class="tip"></div></div>
+        <div class="legend">
+          <span><svg width="12" height="12"><circle cx="6" cy="6" r="3.2" style="fill: var(--c-sensory)"></circle></svg>sensory</span>
+          <span><svg width="12" height="12"><circle cx="6" cy="6" r="3.2" style="fill: var(--c-inter)"></circle></svg>inter</span>
+          <span><svg width="12" height="12"><circle cx="6" cy="6" r="3.2" style="fill: var(--c-motor)"></circle></svg>motor</span>
+          <span><svg width="12" height="12"><circle cx="6" cy="6" r="3.2" style="fill: var(--c-null)"></circle></svg>other (CAN)</span>
+          <span><svg width="12" height="12"><circle cx="6" cy="6" r="4.2" style="fill: none; stroke: var(--text); stroke-width: 1.3"></circle></svg>synaptic rich club</span>
+        </div>
+      </div>
+    </div>
+    <p class="readout" id="pp-ro" aria-live="polite"></p>
+    <p class="figure-caption"><span class="figure-label">Figure 3.</span> Ripoll-Sanchez et al.'s 2023 neuropeptide networks (aggregate matrices as updated in February 2024; expression threshold 4 in CeNGEN, couples with EC<sub>50</sub> at most 500 nM) against the hermaphrodite's chemical synapses from Cook et al. 2019 (3,671 connected pairs among the same 302 neurons, pharynx included). Rows and columns are grouped by Ripoll-Sanchez's anatomical classes, in their order within each group. Self-connections (autocrine signalling) are left out of every count. The slider drops peptide links made by fewer couples. Degrees count distinct partners, incoming plus outgoing, so 602 is the most possible. Rings mark the 11 neurons of the synaptic rich club (Towlson et al. 2013). Hover the matrix for a pair, click a row or a point to follow a neuron.</p>
+  </div>
+
+  <p>The peptide network is a different kind of object. In the short-range model 34% of all ordered pairs of neurons are linked, against 4% for chemical synapses among the same 302 neurons; the mid-range model links 44% and the long-range one 59%. (Ripoll-Sanchez and colleagues compared against a sparser synaptic graph, Varshney's plus the pharynx, at 2.5%.) A third of the links rest on a single couple, but some pairs are linked many times over: PQR, an oxygen-sensing neuron, and the interneuron AVDL by 19 different couples. More than half the neurons have over 200 peptide partners, while only 17 have more than 50 synaptic ones.</p>
+
+  <p>The hubs differ too. The synaptic hubs are the command interneurons AVA, AVB, AVD, AVE and PVC with DVA, the rich club of part 3. In the peptide network those eleven are all among the 25 best-connected neurons, and degree in the two networks correlates at 0.58, but the top of the list belongs to cells that hardly stand out in the synaptic graph: PVR, PVQL and PVQR, PVT, then AVKL and AVKR. Ripoll-Sanchez and colleagues note that AVK and PVT express no classical neurotransmitter at all and that PVQ's processes are full of dense-core vesicles; these look like neurons built to signal with peptides. (In the 2024 update of the matrices DVA's degree has edged above AVK's, so four neurons rather than the paper's six outrank every rich-club member.) Two neurons that send no chemical synapses, CANL and CANR, have peptide partners in every model (10 in the short-range one, over 250 in the mid-range one), and in the mid-range model the pharynx, whose 20 neurons have almost no synapses with the rest of the nervous system, becomes part of the same network.</p>
+
+  <p>The two layers are not independent. Two thirds of the pairs joined by a synapse are also joined by a short-range peptide link, about twice what the network's density alone would give, because the short-range rule only allows links between neurons whose processes run together, and those are the neurons that make synapses. As the allowed range grows the overlap stays near two thirds while chance catches up. Most of the peptide network, though, joins neurons with no synapse between them.</p>
+
+  <p>This network is inferred, not observed. It depends on expression thresholds, on receptor activation measured in cultured cells, and on assumptions about how far a peptide diffuses, which is why the figure offers three ranges. Its authors call it a draft. But it does show that a list of synapses, however complete, leaves out a whole channel of communication.</p>
+
+  <h2>What a wiring diagram is</h2>
+
+  <p>Each of these three datasets takes away a different assumption about the reference graph. The first says that a single reconstruction mixes a shared core with an individual fringe, and only more animals can tell them apart. The second says that comparing two connectomes needs a yardstick for ordinary variation, that the convenient one, left against right, is a minimum, and that differences in scoring sit outside any yardstick. The third says that the synaptic graph describes one of at least two networks running on the same cells, and the other one is denser and has different hubs.</p>
+
+  <p>That is where the series started. A connectome is a measurement: of a particular animal, at a particular age, in a particular sex, of one kind of connection, scored under particular rules. The three questions this series has put to every figure apply to any connectome figure or headline: what is an edge here, compared with what, and drawn how. Answer those and a wiring diagram tells you a lot about where signals can go, but not yet what the animal does with them.</p>
+
+  <footer style="margin-top: 4rem; padding-top: 2rem; border-top: 1px solid var(--border); font-family: var(--heading-font); font-size: 0.85rem; color: var(--text-2);">
+    <p>Development: Witvliet, Mulcahy, Mitchell et al. 2021 (Nature 596, 257), edge lists via NemaNode (nemanode.org, datasets witvliet_2020_1 to 8) and the connection classes of their Supplementary Table 6. No licence is stated for these data.</p>
+    <p>Sexes: Cook, Jarrell, Brittin et al. 2019 (Nature 571, 63), Supplementary Information 8 and 9 and the hermaphrodite chemical matrix of SI 5 (corrected July 2020, wormwiring.org); no licence is stated. Confirmations: Oren-Suissa, Bayer &amp; Hobert 2016 (Nature 533, 206). Fly: Berg, Beckett, Costa et al. 2026, "Sexual dimorphism in the complete connectome of the Drosophila male central nervous system" (Cell 189, 5504; bioRxiv 2025.10.09.680999), with the female FlyWire brain of Dorkenwald et al. and Schlegel et al. 2024 (Nature 634).</p>
+    <p>Neuropeptides: Ripoll-Sanchez, Watteyne, Sun et al. 2023 (Neuron 111, 3570; CC BY), aggregate matrices from the authors' repository LidiaRipollSanchez/Neuropeptide-Connectome (MIT licence, February 2024 update), built on CeNGEN (Taylor et al. 2021, Cell 184, 4329) and Beets et al. 2023 (Cell Reports 42, 113058). The synaptic rich club: Towlson, Vértes, Ahnert, Schafer &amp; Bullmore 2013 (J Neurosci 33, 6380). Neuron types: NemaNode.</p>
+    <p><a href="index.html">Connectomes</a>, part 8 of 8. Previously: <a href="07-random-by-design.html">Random by Design?</a></p>
+    <p>Built with <a href="https://github.com/enjalot/moonshine" style="color: var(--text-2);">moonshine</a>.</p>
+  </footer>
+</div>
+
+<script>
+// ── Shared helpers ──
+const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const narrow = () => matchMedia('(max-width: 640px)').matches;
+function responsive(el, render) {
+  let w = 0;
+  new ResizeObserver(() => {
+    if (el.clientWidth > 0 && el.clientWidth !== w) { w = el.clientWidth; render(w); }
+  }).observe(el);
+}
+const onTheme = f => matchMedia('(prefers-color-scheme: dark)').addEventListener('change', f);
+const fmt = (v, d) => v.toLocaleString('en', { minimumFractionDigits: d, maximumFractionDigits: d });
+const pct = (v, d = 0) => fmt(100 * v, d) + '%';
+const G = GraphLib;
+function placeTip(tip, body, html, x, y) {
+  tip.style('display', 'block').html(html);
+  const tw = tip.node().offsetWidth, W = body.clientWidth;
+  tip.style('left', Math.max(0, Math.min(W - tw, x - tw / 2)) + 'px').style('top', Math.max(0, y - 34) + 'px');
+}
+function sizeCanvas(cv, w, h) {
+  const dpr = window.devicePixelRatio || 1;
+  cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+  cv.style.width = w + 'px'; cv.style.height = h + 'px';
+  const ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h);
+  return ctx;
+}
+// Greedy label placement: push a label down until it clears every label already
+// placed within 70 px horizontally.
+function dodge(items, gap = 12) {
+  const placed = [];
+  items.slice().sort((a, b) => a.y - b.y).forEach(it => {
+    let y = it.y, moved = true;
+    while (moved) { moved = false; for (const q of placed) if (Math.abs(q.x - it.x) < 70 && Math.abs(q.ly - y) < gap - 1e-6) { y = q.ly + gap; moved = true; } }
+    it.ly = y; placed.push(it);
+  });
+  return items;
+}
+function segButtons(sel, attr, on) {
+  const bs = document.querySelectorAll(sel + ' button[data-' + attr + ']');
+  bs.forEach(b => b.addEventListener('click', () => { bs.forEach(x => x.setAttribute('aria-pressed', String(x === b))); on(b.dataset[attr]); }));
+  return v => bs.forEach(x => x.setAttribute('aria-pressed', String(x.dataset[attr] === v)));
+}
+
+const K = String.raw;
+function equations() {
+  katex.render(K`z \;=\; \frac{h - m}{\sqrt{g\,\bigl[\,v(h/g) + v(m/g)\,\bigr]}}, \qquad v(w) \;=\; \tfrac12\,\operatorname{smooth}\!\bigl[(L - R)^2\bigr]_{\,(L+R)/2 \,=\, w}`,
+    document.getElementById('eq-z'), { throwOnError: false, displayMode: true });
+}
+equations();
+onTheme(equations);
+
+Promise.all(['worm-witvliet.json', 'worm-sexes.json', 'worm-peptide.json'].map(f => d3.json('shared/data/' + f))).then(([W, S, P]) => {
+  devFigure(W);
+  sexFigure(S, W);
+  pepFigure(P);
+});
+
+// ── Figure 1: eight worms ──
+function devFigure(W) {
+  const C = W.chem, names = W.nodes.map(n => n.name), ND = 8;
+  const XPOS = [0, 5, 8, 16, 23, 27, 48.5, 51.5];
+  const PANELS = [
+    { ks: [0], name: 'Stable', col: '--text' },
+    { ks: [2, 3], name: 'Dynamic', col: '--c-cool' },
+    { ks: [1], name: 'Variable', col: '--c-warm' },
+    { ks: [4], name: 'New cells', col: '--c-null' },
+  ];
+  const CLS_ORDER = [0, 2, 3, 1, 4], CLS_COL = ['--text', '--c-warm', '--c-cool', '--c-cool', '--c-null'];
+  const CLS_NAME = ['stable', 'variable', 'strengthening', 'weakening', 'post-embryonic'];
+  const panelOf = k => PANELS.findIndex(p => p.ks.includes(k));
+  const members = PANELS.map(p => C.filter(e => p.ks.includes(e[2])));
+  const means = members.map(M => d3.range(ND).map(d => d3.mean(M, e => e[3][d])));
+  const ymax = d3.max(C, e => d3.max(e[3]));
+  const ctl = { cell: document.getElementById('dv-cell'), k: document.getElementById('dv-k') };
+  const lBody = document.getElementById('dv-lines'), lCanvas = lBody.querySelector('canvas'), lSvg = d3.select(lBody).select('svg'), lTip = d3.select(lBody).select('.tip');
+  const bBody = document.getElementById('dv-bars'), bSvg = d3.select(bBody).select('svg'), bTip = d3.select(bBody).select('.tip');
+  let dir = 'in', lw = 0, bw = 0;
+
+  // Cells with at least one connection, sorted by name; default AVAL.
+  const deg = new Map();
+  C.forEach(e => { deg.set(e[0], (deg.get(e[0]) || 0) + 1); deg.set(e[1], (deg.get(e[1]) || 0) + 1); });
+  const cells = [...deg.keys()].filter(i => W.nodes[i].role !== 'b').sort((a, b) => d3.ascending(names[a], names[b]));
+  cells.forEach(i => ctl.cell.append(new Option(names[i], i)));
+  ctl.cell.value = names.indexOf('AVAL');
+  const cellConns = () => { const c = +ctl.cell.value; return C.filter(e => (dir === 'in' ? e[1] : e[0]) === c); };
+
+  function geom(w) {
+    const nar = narrow(), cols = nar ? 2 : 4, rows = nar ? 2 : 1;
+    const M = { l: 34, t: 18, gap: nar ? 16 : 10, b: 30 };
+    const pw = (w - M.l - (cols - 1) * M.gap) / cols, ph = nar ? 150 : 210;
+    const x = d3.scaleLinear([0, 52], [0, pw]), y = d3.scaleSqrt([0, ymax], [ph, 0]);
+    const at = p => [M.l + (p % cols) * (pw + M.gap), M.t + Math.floor(p / cols) * (ph + M.t + M.b)];
+    return { M, pw, ph, x, y, at, h: rows * (ph + M.t + M.b), cols };
+  }
+
+  function drawLines() {
+    if (!lw) return;
+    const g = geom(lw), ink = css('--text'), k = +ctl.k.value;
+    const ctx = sizeCanvas(lCanvas, lw, g.h);
+    lSvg.attr('width', lw).attr('height', g.h).selectAll('*').remove();
+    const line = (pts, ox, oy) => { ctx.beginPath(); pts.forEach((v, d) => { const X = ox + g.x(XPOS[d]), Y = oy + g.y(v); d ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y); }); ctx.stroke(); };
+    PANELS.forEach((P, p) => {
+      const [ox, oy] = g.at(p), col = css(P.col);
+      ctx.strokeStyle = col; ctx.globalAlpha = P.ks.includes(1) || P.ks.includes(4) ? 0.07 : 0.12; ctx.lineWidth = 0.8;
+      members[p].forEach(e => line(e[3], ox, oy));
+      ctx.globalAlpha = 1;
+      const gp = lSvg.append('g').attr('transform', `translate(${ox},${oy})`);
+      gp.append('g').attr('class', 'axis').attr('transform', `translate(0,${g.ph})`).call(d3.axisBottom(g.x).tickValues([0, 8, 16, 27, 50]).tickFormat(v => v === 50 ? '50' : v).tickSizeOuter(0));
+      if (p % g.cols === 0) gp.append('g').attr('class', 'axis').call(d3.axisLeft(g.y).tickValues([0, 1, 5, 10, 20, 40]).tickSizeOuter(0));
+      else gp.append('g').attr('class', 'axis').call(d3.axisLeft(g.y).tickValues([0, 1, 5, 10, 20, 40]).tickFormat('').tickSizeOuter(0));
+      gp.append('text').attr('class', 'ptitle').attr('x', 2).attr('y', -6).text(`${P.name} (${fmt(members[p].length, 0)})`);
+      gp.append('path').attr('d', d3.line((v, d) => g.x(XPOS[d]), v => g.y(v))(means[p])).attr('fill', 'none').attr('stroke', P.ks.includes(4) ? css('--text-2') : (P.ks.includes(0) ? ink : col)).attr('stroke-width', 2.6).attr('stroke-dasharray', '6 3');
+      gp.append('line').attr('x1', 0).attr('x2', g.pw).attr('y1', g.y(k)).attr('y2', g.y(k)).attr('stroke', css('--text-2')).attr('stroke-dasharray', '3 3');
+      // The followed cell's connections in this panel.
+      const path = d3.line((v, d) => g.x(XPOS[d]), v => g.y(v)), mine = cellConns().filter(e => panelOf(e[2]) === p);
+      mine.forEach(e => gp.append('path').attr('d', path(e[3])).attr('fill', 'none').attr('stroke', css('--fig-bg')).attr('stroke-width', 3.6).attr('stroke-opacity', 0.8));
+      mine.forEach(e => gp.append('path').attr('d', path(e[3])).attr('fill', 'none').attr('stroke', ink).attr('stroke-width', 1.5));
+      gp.append('rect').attr('width', g.pw).attr('height', g.ph).attr('fill', 'transparent')
+        .on('pointermove', ev => {
+          const [mx] = d3.pointer(ev, gp.node()), d = d3.minIndex(XPOS, a => Math.abs(g.x(a) - mx));
+          const M = members[p], here = M.filter(e => e[3][d]), mine = cellConns().filter(e => panelOf(e[2]) === p && e[3][d]);
+          const [bx, by] = d3.pointer(ev, lBody);
+          placeTip(lTip, lBody, `${P.name}, worm ${d + 1} (${W.ages[d]} h, ${W.stages[d]}): ${fmt(here.length, 0)} of ${fmt(M.length, 0)} present, mean ${fmt(d3.mean(here, e => e[3][d]) || 0, 1)} synapses` +
+            (mine.length ? `; ${names[+ctl.cell.value]}: ${mine.map(e => names[dir === 'in' ? e[0] : e[1]] + ' ' + e[3][d]).slice(0, 5).join(', ')}${mine.length > 5 ? ', ...' : ''}` : ''), bx, by);
+        })
+        .on('pointerleave', () => lTip.style('display', 'none'));
+    });
+    const [ox0, oy0] = g.at(0);
+    lSvg.append('text').attr('class', 'axis-label').attr('transform', 'rotate(-90)').attr('x', -(oy0 + g.ph / 2)).attr('y', 10).attr('text-anchor', 'middle').text('synapses');
+    lSvg.append('text').attr('class', 'axis-label').attr('x', lw / 2).attr('y', g.h - 2).attr('text-anchor', 'middle').text('hours after hatching (two adults at 50)');
+    document.getElementById('dv-key-cell').textContent = `${names[+ctl.cell.value]}'s ${dir === 'in' ? 'inputs' : 'outputs'}`;
+  }
+
+  function counts(d, k) {
+    const c = [0, 0, 0, 0, 0];
+    for (const e of C) if (e[3][d] >= k) c[e[2]]++;
+    return c;
+  }
+
+  function drawBars() {
+    if (!bw) return;
+    const k = +ctl.k.value, M = { l: 70, r: 44, t: 16, b: 30 }, rh = 22, h = M.t + ND * rh + M.b, iw = bw - M.l - M.r;
+    const all = d3.range(ND).map(d => counts(d, 1)), now = d3.range(ND).map(d => counts(d, k));
+    const x = d3.scaleLinear([0, d3.max(all, c => d3.sum(c))], [0, iw]).nice();
+    bSvg.attr('width', bw).attr('height', h).selectAll('*').remove();
+    const g = bSvg.append('g').attr('transform', `translate(${M.l},${M.t})`);
+    g.append('g').attr('class', 'axis').attr('transform', `translate(0,${ND * rh})`).call(d3.axisBottom(x).ticks(4).tickSizeOuter(0));
+    g.append('text').attr('class', 'axis-label').attr('x', iw / 2).attr('y', ND * rh + 28).attr('text-anchor', 'middle').text('connections');
+    g.append('text').attr('class', 'note').attr('x', iw + M.r).attr('y', -5).attr('text-anchor', 'end').text('variable share');
+    d3.range(ND).forEach(d => {
+      const y0 = d * rh + 3, bh = rh - 7;
+      g.append('text').attr('class', 'note').attr('x', -6).attr('y', y0 + bh / 2 + 4).attr('text-anchor', 'end').text(`${W.ages[d]} h ${W.stages[d]}`);
+      g.append('rect').attr('x', 0).attr('y', y0).attr('width', x(d3.sum(all[d]))).attr('height', bh).attr('fill', 'none').attr('stroke', css('--c-null')).attr('stroke-width', 1);
+      let x0 = 0;
+      CLS_ORDER.forEach(c => {
+        const v = now[d][c];
+        if (!v) return;
+        g.append('rect').attr('x', x(x0)).attr('y', y0).attr('width', Math.max(0, x(x0 + v) - x(x0) - 0.5)).attr('height', bh).attr('fill', css(CLS_COL[c]))
+          .on('pointermove', ev => { const [bx, by] = d3.pointer(ev, bBody); placeTip(bTip, bBody, `worm ${d + 1}, ${CLS_NAME[c]}: ${fmt(v, 0)} of ${fmt(all[d][c], 0)} with at least ${k} synapse${k > 1 ? 's' : ''}`, bx, by); })
+          .on('pointerleave', () => bTip.style('display', 'none'));
+        x0 += v;
+      });
+      const kept = now[d][0] + now[d][1] + now[d][2] + now[d][3];
+      g.append('text').attr('class', 'note').attr('x', x(d3.sum(now[d])) + 4).attr('y', y0 + bh / 2 + 4).text(kept ? pct(now[d][1] / kept) : '');
+    });
+
+  }
+
+  function readout() {
+    const k = +ctl.k.value, c = +ctl.cell.value;
+    ctl.k.nextElementSibling.textContent = `${k} synapse${k > 1 ? 's' : ''}`;
+    // Adults: share of kept non-post-embryonic connections that are variable, stable lost, synapses kept.
+    const ad = [6, 7].map(d => {
+      let keep = 0, vk = 0, st = 0, stk = 0, syn = 0, synk = 0, all = 0;
+      for (const e of C) { const w = e[3][d]; if (!w || e[2] === 4) continue; all++; syn += w; if (e[2] === 0) st++; if (w >= k) { keep++; synk += w; if (e[2] === 1) vk++; if (e[2] === 0) stk++; } }
+      return { keep: keep / all, varShare: vk / keep, stLost: 1 - stk / st, syn: synk / syn };
+    });
+    const av = f => (f(ad[0]) + f(ad[1])) / 2;
+    let s = k === 1
+      ? `In the two adults, variable connections are <b>${pct(av(a => a.varShare))}</b> of all connections between cells present at hatching. `
+      : `At ${k} or more synapses the adults keep ${pct(av(a => a.keep))} of their connections and ${pct(av(a => a.syn))} of their synapses; variable connections fall to <b>${pct(av(a => a.varShare))}</b> of what is kept, and <b>${pct(av(a => a.stLost))}</b> of the stable connections are dropped with them. `;
+    const mine = cellConns(), by = [0, 1, 2, 3, 4].map(q => mine.filter(e => e[2] === q).length);
+    const all8 = mine.filter(e => e[3].every(Boolean)).length, one = mine.filter(e => e[3].filter(Boolean).length === 1).length;
+    s += !mine.length ? `<b>${names[c]}</b> makes no ${dir === 'in' ? 'input' : 'output'} connections inside the reconstructed brain in any of the eight worms.`
+      : `<b>${names[c]}</b> has ${mine.length} ${dir === 'in' ? 'input' : 'output'} connections across the eight worms: ${by[0]} stable, ${by[2] + by[3]} developmentally dynamic, ${by[1]} variable${by[4] ? `, ${by[4]} with post-embryonic cells` : ''}; ${all8} in every worm, ${one} in just one.`;
+    document.getElementById('dv-ro').innerHTML = s;
+  }
+
+  const redraw = () => { drawLines(); drawBars(); readout(); };
+  ctl.cell.addEventListener('change', redraw);
+  ctl.k.addEventListener('input', redraw);
+  segButtons('#fig-dev', 'd', v => { dir = v; redraw(); });
+  lSvg.on('keydown', ev => {
+    const i = cells.indexOf(+ctl.cell.value);
+    if (ev.key === 'ArrowRight' || ev.key === 'ArrowDown') ctl.cell.value = cells[(i + 1) % cells.length];
+    else if (ev.key === 'ArrowLeft' || ev.key === 'ArrowUp') ctl.cell.value = cells[(i - 1 + cells.length) % cells.length];
+    else return;
+    ev.preventDefault(); redraw();
+  });
+  responsive(lBody, w => { lw = w; drawLines(); });
+  responsive(bBody, w => { bw = w; drawBars(); });
+  onTheme(redraw);
+  readout();
+}
+
+// ── Figure 2: two sexes ──
+function sexFigure(S, W) {
+  const V = { chem: G.lrVariance(S.lr.chem.map(r => r[2]), S.lr.chem.map(r => r[3])), gap: G.lrVariance(S.lr.gap.map(r => r[2]), S.lr.gap.map(r => r[3])) };
+  const RATIO = G.lrBetween(W);
+  const ctl = { thr: document.getElementById('sx-thr'), scale: document.getElementById('sx-scale'), sub: document.getElementById('sx-sub') };
+  const sBody = document.getElementById('sx-sc'), sSvg = d3.select(sBody).select('svg'), sTip = d3.select(sBody).select('.tip');
+  const hBody = document.getElementById('sx-hist'), hSvg = d3.select(hBody).select('svg');
+  let type = 'chem', sw = 0, hw = 0, sel = null;
+
+  const rows = () => S.sex[type];
+  const subst = r => Math.max(r[2], r[3]) > 3;
+  const zOf = r => G.sexZ(r[2], r[3], r[4], V[type], +ctl.scale.value);
+  const lrZ = r => (r[2] - r[3]) / Math.sqrt(2 * V[type]((r[2] + r[3]) / 2));
+  const inUse = r => !ctl.sub.checked || subst(r);
+  const flagged = () => rows().filter(r => inUse(r) && Math.abs(zOf(r)) > +ctl.thr.value).sort((a, b) => Math.abs(zOf(b)) - Math.abs(zOf(a)));
+  const pairName = r => `${r[0]} → ${r[1]}`;
+
+  function drawScatter() {
+    if (!sw) return;
+    const nar = narrow(), M = { l: 46, r: 12, t: 10, b: 38 }, size = Math.min(sw, nar ? sw : 460), iw = size - M.l - M.r, ih = iw;
+    const R = rows(), mx = d3.max(R, r => Math.max(r[2], r[3]));
+    const x = d3.scaleSymlog().constant(1).domain([0, mx]).range([0, iw]), y = d3.scaleSymlog().constant(1).domain([0, mx]).range([ih, 0]);
+    const ticks = [0, 1, 3, 10, 30, 100, 300].filter(t => t <= mx);
+    sSvg.attr('width', size).attr('height', ih + M.t + M.b).selectAll('*').remove();
+    const g = sSvg.append('g').attr('transform', `translate(${M.l},${M.t})`);
+    g.append('g').attr('class', 'axis').attr('transform', `translate(0,${ih})`).call(d3.axisBottom(x).tickValues(ticks).tickFormat(d3.format('d')).tickSizeOuter(0));
+    g.append('g').attr('class', 'axis').call(d3.axisLeft(y).tickValues(ticks).tickFormat(d3.format('d')).tickSizeOuter(0));
+    g.append('text').attr('class', 'axis-label').attr('x', iw / 2).attr('y', ih + 32).attr('text-anchor', 'middle').text('hermaphrodite');
+    g.append('text').attr('class', 'axis-label').attr('transform', 'rotate(-90)').attr('x', -ih / 2).attr('y', -34).attr('text-anchor', 'middle').text('male');
+    g.append('line').attr('x1', 0).attr('y1', ih).attr('x2', iw).attr('y2', 0).attr('stroke', css('--border'));
+    // Deterministic jitter so the many pairs at small integer weights don't stack exactly.
+    const jit = (r, k) => { let h = 0; for (const ch of r[0] + r[1] + k) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return ((h % 1000) / 1000 - 0.5) * 5; };
+    const thr = +ctl.thr.value, ink = css('--text'), nul = css('--c-null'), light = css('--c-null-light');
+    const pts = R.map(r => ({ r, z: zOf(r), px: x(r[2]) + jit(r, 'x'), py: y(r[3]) + jit(r, 'y') }));
+    pts.sort((a, b) => Math.abs(a.z) - Math.abs(b.z));
+    g.append('g').selectAll('circle').data(pts).join('circle').attr('cx', d => d.px).attr('cy', d => d.py).attr('r', 2.6)
+      .attr('fill', d => !inUse(d.r) ? light : Math.abs(d.z) > thr ? ink : nul).attr('fill-opacity', d => !inUse(d.r) ? 0.9 : Math.abs(d.z) > thr ? 0.9 : 0.45);
+    const conf = pts.filter(d => d.r[6] === 'c' || d.r[6] === 'o');
+    g.append('g').selectAll('circle').data(conf).join('circle').attr('cx', d => d.px).attr('cy', d => d.py).attr('r', 4.6).attr('fill', 'none').attr('stroke', css('--accent')).attr('stroke-width', 1.5);
+    if (!nar) {
+      const right = d => d.r[3] <= d.r[2] || d.px < 40;
+      const labs = dodge(conf.map(d => ({ d, x: d.px + (right(d) ? 60 : -60), y: d.py + 4 })));
+      g.append('g').selectAll('line').data(labs.filter(l => Math.abs(l.ly - 4 - l.d.py) > 5)).join('line')
+        .attr('x1', l => l.d.px + (right(l.d) ? 4 : -4)).attr('y1', l => l.d.py).attr('x2', l => l.d.px + (right(l.d) ? 7 : -7)).attr('y2', l => l.ly - 4)
+        .attr('stroke', css('--text-2')).attr('stroke-width', 0.8);
+      g.append('g').selectAll('text').data(labs).join('text').attr('class', l => (Math.abs(l.d.z) > thr ? 'pt-lab' : 'pt-lab2') + ' halo')
+        .attr('x', l => l.d.px + (right(l.d) ? 7 : -7)).attr('y', l => l.ly).attr('text-anchor', l => (right(l.d) ? 'start' : 'end')).text(l => l.d.r[0] + '→' + l.d.r[1]);
+    }
+    if (sel) {
+      const d = pts.find(p => p.r === sel);
+      if (d) g.append('circle').attr('cx', d.px).attr('cy', d.py).attr('r', 6).attr('fill', 'none').attr('stroke', ink).attr('stroke-width', 1.6);
+    }
+    g.append('text').attr('class', 'note').attr('x', iw - 4).attr('y', ih - 6).attr('text-anchor', 'end').text('stronger in hermaphrodite');
+    g.append('text').attr('class', 'note').attr('x', 4).attr('y', 10).text('stronger in male');
+    const del = d3.Delaunay.from(pts, d => d.px, d => d.py);
+    g.append('rect').attr('width', iw).attr('height', ih).attr('fill', 'transparent').style('cursor', 'pointer')
+      .on('pointermove', ev => {
+        const [px, py] = d3.pointer(ev, g.node()), d = pts[del.find(px, py)];
+        if (Math.hypot(d.px - px, d.py - py) > 14) { sTip.style('display', 'none'); return; }
+        const [bx, by] = d3.pointer(ev, sBody);
+        placeTip(sTip, sBody, `<b>${pairName(d.r)}</b>: hermaphrodite ${d.r[2]}, male ${d.r[3]} sections; ${d.r[4]} cell${d.r[4] > 1 ? 's' : ''}; z ${d.z > 0 ? '+' : ''}${fmt(d.z, 1)}`, bx, by);
+      })
+      .on('pointerleave', () => sTip.style('display', 'none'))
+      .on('click', ev => {
+        const [px, py] = d3.pointer(ev, g.node()), d = pts[del.find(px, py)];
+        sel = Math.hypot(d.px - px, d.py - py) <= 14 ? d.r : null;
+        drawScatter(); readout();
+      });
+  }
+
+  function drawHist() {
+    if (!hw) return;
+    const M = { l: 40, r: 10, t: 14, b: 38 }, iw = hw - M.l - M.r, ih = narrow() ? 180 : 240, B = 0.5, LIM = 8;
+    const bin = z => Math.max(-LIM, Math.min(LIM - B, Math.floor(z / B) * B));
+    const hist = zs => { const m = new Map(); zs.forEach(z => { const b = bin(z); m.set(b, (m.get(b) || 0) + 1); }); return d3.range(-LIM, LIM, B).map(b => [b, (m.get(b) || 0) / zs.length]); };
+    const sx = hist(rows().filter(inUse).map(zOf)), lr = hist(S.lr[type].filter(r => !ctl.sub.checked || Math.max(r[2], r[3]) > 3).map(lrZ));
+    const x = d3.scaleLinear([-LIM, LIM], [0, iw]), y = d3.scaleLinear([0, Math.max(d3.max(sx, d => d[1]), d3.max(lr, d => d[1]))], [ih, 0]).nice();
+    hSvg.attr('width', hw).attr('height', ih + M.t + M.b).selectAll('*').remove();
+    const g = hSvg.append('g').attr('transform', `translate(${M.l},${M.t})`);
+    g.append('g').attr('class', 'axis').attr('transform', `translate(0,${ih})`).call(d3.axisBottom(x).tickValues([-8, -4, -2, 0, 2, 4, 8]).tickFormat(v => (Math.abs(v) === 8 ? (v < 0 ? '≤ −8' : '≥ 8') : d3.format('+d')(v).replace('+0', '0'))).tickSizeOuter(0));
+    g.append('g').attr('class', 'axis').call(d3.axisLeft(y).ticks(4, '.0%').tickSizeOuter(0));
+    g.append('text').attr('class', 'axis-label').attr('x', iw / 2).attr('y', ih + 32).attr('text-anchor', 'middle').text('z (male stronger ← → hermaphrodite stronger)');
+    g.append('g').selectAll('rect').data(sx).join('rect').attr('x', d => x(d[0]) + 0.5).attr('width', x(B) - x(0) - 1).attr('y', d => y(d[1])).attr('height', d => ih - y(d[1])).attr('fill', css('--text')).attr('fill-opacity', 0.8);
+    const step = []; lr.forEach(([b, v]) => { step.push([b, v], [b + B, v]); });
+    g.append('path').attr('d', d3.line(d => x(d[0]), d => y(d[1]))(step)).attr('fill', 'none').attr('stroke', css('--c-null')).attr('stroke-width', 1.8);
+    const t = +ctl.thr.value;
+    [-t, t].forEach(v => g.append('line').attr('x1', x(v)).attr('x2', x(v)).attr('y1', 0).attr('y2', ih).attr('stroke', css('--text-2')).attr('stroke-dasharray', '3 3'));
+  }
+
+  function readout() {
+    const thr = +ctl.thr.value, sc = +ctl.scale.value;
+    ctl.thr.nextElementSibling.textContent = fmt(thr, 1);
+    ctl.scale.nextElementSibling.textContent = fmt(sc, 2);
+    const U = rows().filter(inUse), F = flagged(), herm = F.filter(r => zOf(r) > 0).length;
+    const L = S.lr[type].filter(r => !ctl.sub.checked || Math.max(r[2], r[3]) > 3), lrF = L.filter(r => Math.abs(lrZ(r)) > thr).length;
+    const zero = F.filter(r => !r[2] || !r[3]), weak = zero.filter(r => Math.max(r[2], r[3]) <= 10).length;
+    const what = type === 'chem' ? 'chemical' : 'gap-junction';
+    let s = `<b>${fmt(F.length, 0)}</b> of ${fmt(U.length, 0)} ${what} class pairs${ctl.sub.checked ? ' above 3 sections' : ''} (<b>${pct(F.length / U.length, 1)}</b>) pass |z| ${fmt(thr, 1)}: ${herm} stronger in the hermaphrodite, ${F.length - herm} in the male. ` +
+      `Left against right in one hermaphrodite: ${pct(lrF / L.length, 1)} of ${fmt(L.length, 0)}. ${zero.length} flagged pairs are absent in one sex; ${weak} of them ${weak === 1 ? 'has' : 'have'} 10 sections or fewer in the other. ` +
+      `Yardstick ×${fmt(sc, 2)}${Math.abs(sc - 1) < 0.005 ? ' (left vs right, Cook)' : Math.abs(sc - RATIO.ratio) < 0.006 ? ' (Witvliet\'s two adults, overall)' : ''}; two adult worms differ ${fmt(RATIO.ratio, 2)}× as much as left and right overall, ${fmt(RATIO.between[0] / RATIO.within[0], 2)}× at 1 synapse or less, ${fmt(RATIO.between[4] / RATIO.within[4], 2)}× above 8.`;
+    if (sel) {
+      const z = zOf(sel), conf = sel[6] === 'c' ? ' Confirmed with fluorescent synapse labels by Cook et al.' : sel[6] === 'o' ? ' Confirmed by Oren-Suissa et al. 2016.' : sel[6] === 'd' ? ' Involves a neuron remodelled between the sexes.' : '';
+      s += ` <b>${pairName(sel)}</b>: ${sel[2]} sections in the hermaphrodite, ${sel[3]} in the male, ${sel[4]} presynaptic cell${sel[4] > 1 ? 's' : ''}, z ${z > 0 ? '+' : ''}${fmt(z, 2)}.${conf}`;
+    }
+    document.getElementById('sx-ro').innerHTML = s;
+  }
+
+  const setPreset = segButtons('#fig-sex', 's', v => { ctl.scale.value = v === 'lr' ? 1 : RATIO.ratio.toFixed(2); redraw(); });
+  const redraw = () => { drawScatter(); drawHist(); readout(); };
+  segButtons('#fig-sex', 't', v => { type = v; sel = null; redraw(); });
+  ctl.thr.addEventListener('input', redraw);
+  ctl.scale.addEventListener('input', () => { const v = +ctl.scale.value; setPreset(Math.abs(v - 1) < 0.005 ? 'lr' : Math.abs(v - RATIO.ratio) < 0.006 ? 'adults' : ''); redraw(); });
+  ctl.sub.addEventListener('change', redraw);
+  sSvg.on('keydown', ev => {
+    const F = flagged();
+    if (!F.length || !['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp'].includes(ev.key)) return;
+    const i = F.indexOf(sel), fw = ev.key === 'ArrowRight' || ev.key === 'ArrowDown';
+    sel = F[i < 0 ? 0 : (i + (fw ? 1 : -1) + F.length) % F.length];
+    ev.preventDefault(); drawScatter(); readout();
+  });
+  responsive(sBody, w => { sw = w; drawScatter(); });
+  responsive(hBody, w => { hw = w; drawHist(); });
+  onTheme(redraw);
+  readout();
+}
+
+// ── Figure 3: the neuropeptide network against the synaptic one ──
+function pepFigure(P) {
+  const n = P.nodes.length, names = P.nodes.map(d => d.name);
+  const MAT = Object.fromEntries(['short', 'mid', 'long'].map(k => [k, G.decodeDense(P.pep[k], n)]));
+  const SYN = new Uint8Array(n * n); P.syn.forEach(([a, b, w]) => { SYN[a * n + b] = Math.min(255, w); });
+  const synDeg = G.denseDegree(SYN, n);
+  // Rows grouped by anatomical class, keeping the matrices' order within each group.
+  const order = d3.range(n).sort((a, b) => P.nodes[a].group - P.nodes[b].group || a - b), pos = new Int32Array(n);
+  order.forEach((v, i) => { pos[v] = i; });
+  const SHORT = ['Pharynx', 'Amphid sensory', 'Labial, cephalic', 'Mechanosensory', 'Phasmid', 'Ring inter', 'Ventral cord inter', 'Amphid inter', 'Head motor', 'Body-wall motor', 'Egg-laying motor'];
+  const RICH = new Set(['DVA', 'PVCL', 'PVCR', 'AVAL', 'AVAR', 'AVBL', 'AVBR', 'AVDL', 'AVDR', 'AVEL', 'AVER'].map(x => names.indexOf(x)));
+  const ROLE = { s: '--c-sensory', i: '--c-inter', m: '--c-motor' };
+  const ctl = { min: document.getElementById('pp-min'), cell: document.getElementById('pp-cell') };
+  const mBody = document.getElementById('pp-mat'), mCanvas = mBody.querySelector('canvas'), mSvg = d3.select(mBody).select('svg'), mTip = d3.select(mBody).select('.tip');
+  const sBody = document.getElementById('pp-sc'), sSvg = d3.select(sBody).select('svg'), sTip = d3.select(sBody).select('.tip');
+  let range = 'short', layer = 'both', mw = 0, sw = 0, sel = names.indexOf('PVT');
+  order.forEach(i => ctl.cell.append(new Option(names[i], i)));
+  ctl.cell.value = sel;
+
+  let stats = null;
+  function compute() {
+    const M = MAT[range], min = +ctl.min.value, pd = G.denseDegree(M, n, min);
+    let links = 0, both = 0;
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) if (i !== j && M[i * n + j] >= min) { links++; if (SYN[i * n + j]) both++; }
+    stats = { pd, links, density: links / (n * (n - 1)), synDensity: P.syn.length / (n * (n - 1)), overlap: both / P.syn.length, r: G.pearson(Array.from(synDeg), Array.from(pd)) };
+  }
+
+  function drawMatrix() {
+    if (!mw) return;
+    const nar = narrow(), LW = nar ? 4 : 92, size = Math.min(mw, 560), cs = (size - LW) / n, H = cs * n;
+    const ctx = sizeCanvas(mCanvas, size, H + 4);
+    const M = MAT[range], min = +ctl.min.value, pep = d3.color(css('--c-pep')), ink = css('--text');
+    if (layer !== 'syn') {
+      for (let a = 0; a < n; a++) for (let b = 0; b < n; b++) {
+        const i = order[a], j = order[b], w = M[i * n + j];
+        if (i === j || w < min) continue;
+        pep.opacity = Math.min(1, 0.18 + 0.82 * (w / 10));
+        ctx.fillStyle = pep + '';
+        ctx.fillRect(LW + b * cs, a * cs, cs, cs);
+      }
+    }
+    if (layer !== 'pep') {
+      ctx.fillStyle = ink;
+      for (const [i, j] of P.syn) ctx.fillRect(LW + pos[j] * cs, pos[i] * cs, cs, cs);
+    }
+    mSvg.attr('width', size).attr('height', H + 4).selectAll('*').remove();
+    const g = mSvg.append('g');
+    const starts = [];
+    order.forEach((v, a) => { if (!a || P.nodes[order[a - 1]].group !== P.nodes[v].group) starts.push(a); });
+    starts.forEach((a, k) => {
+      if (a) {
+        g.append('line').attr('x1', LW).attr('x2', LW + H).attr('y1', a * cs).attr('y2', a * cs).attr('stroke', css('--border'));
+        g.append('line').attr('y1', 0).attr('y2', H).attr('x1', LW + a * cs).attr('x2', LW + a * cs).attr('stroke', css('--border'));
+      }
+      if (!nar) {
+        const end = k + 1 < starts.length ? starts[k + 1] : n, mid = (a + end) / 2 * cs;
+        g.append('text').attr('class', 'note').attr('x', LW - 5).attr('y', mid + 4).attr('text-anchor', 'end').style('font-size', '10px').text(SHORT[P.nodes[order[a]].group]);
+      }
+    });
+    g.append('rect').attr('x', LW).attr('width', H).attr('height', H).attr('fill', 'none').attr('stroke', css('--border'));
+    const sa = pos[sel];
+    g.append('rect').attr('x', LW).attr('y', sa * cs - 0.5).attr('width', H).attr('height', cs + 1).attr('fill', 'none').attr('stroke', css('--accent')).attr('stroke-width', 1.2);
+    g.append('rect').attr('x', LW + sa * cs - 0.5).attr('y', 0).attr('width', cs + 1).attr('height', H).attr('fill', 'none').attr('stroke', css('--accent')).attr('stroke-width', 1.2);
+    g.append('rect').attr('x', LW).attr('width', H).attr('height', H).attr('fill', 'transparent').style('cursor', 'pointer')
+      .on('pointermove', ev => {
+        const [px, py] = d3.pointer(ev, g.node()), a = Math.floor(py / cs), b = Math.floor((px - LW) / cs);
+        if (a < 0 || b < 0 || a >= n || b >= n) return;
+        const i = order[a], j = order[b], w = M[i * n + j], sy = SYN[i * n + j];
+        const [bx, by] = d3.pointer(ev, mBody);
+        placeTip(mTip, mBody, `<b>${names[i]} → ${names[j]}</b>: ${i === j ? 'self' : w ? `${w} peptide-receptor couple${w > 1 ? 's' : ''}` : 'no peptide link'}${sy ? `; synapse, ${sy} sections` : '; no synapse'}`, bx, by);
+      })
+      .on('pointerleave', () => mTip.style('display', 'none'))
+      .on('click', ev => {
+        const [, py] = d3.pointer(ev, g.node()), a = Math.floor(py / cs);
+        if (a >= 0 && a < n) select(order[a]);
+      });
+  }
+
+  function drawScatter() {
+    if (!sw) return;
+    const M = { l: 44, r: 16, t: 10, b: 38 }, iw = sw - M.l - M.r, ih = Math.min(iw, narrow() ? 260 : 400);
+    const x = d3.scaleLinear([0, d3.max(synDeg) * 1.05], [0, iw]), y = d3.scaleLinear([0, 602], [ih, 0]);
+    sSvg.attr('width', sw).attr('height', ih + M.t + M.b).selectAll('*').remove();
+    const g = sSvg.append('g').attr('transform', `translate(${M.l},${M.t})`);
+    g.append('g').attr('class', 'axis').attr('transform', `translate(0,${ih})`).call(d3.axisBottom(x).ticks(5).tickSizeOuter(0));
+    g.append('g').attr('class', 'axis').call(d3.axisLeft(y).ticks(6).tickSizeOuter(0));
+    g.append('text').attr('class', 'axis-label').attr('x', iw / 2).attr('y', ih + 32).attr('text-anchor', 'middle').text('synaptic partners');
+    g.append('text').attr('class', 'axis-label').attr('transform', 'rotate(-90)').attr('x', -ih / 2).attr('y', -34).attr('text-anchor', 'middle').text('peptide partners');
+    const pd = stats.pd;
+    const pts = d3.range(n).map(i => ({ i, px: x(synDeg[i]), py: y(pd[i]) }));
+    g.append('g').selectAll('circle').data(pts).join('circle').attr('cx', d => d.px).attr('cy', d => d.py).attr('r', 2.8)
+      .attr('fill', d => css(ROLE[P.nodes[d.i].role] || '--c-null')).attr('fill-opacity', 0.75);
+    g.append('g').selectAll('circle').data(pts.filter(d => RICH.has(d.i))).join('circle').attr('cx', d => d.px).attr('cy', d => d.py).attr('r', 4.4)
+      .attr('fill', 'none').attr('stroke', css('--text')).attr('stroke-width', 1.1);
+    // Label the top hubs of each network, one label per class.
+    const lab = new Map();
+    const take = (idx, k) => { let c = 0; for (const i of idx) { const cl = P.nodes[i].cls; if (!lab.has(cl)) { lab.set(cl, i); if (++c >= k) break; } } };
+    take(d3.range(n).sort((a, b) => pd[b] - pd[a]), 5);
+    take(d3.range(n).sort((a, b) => synDeg[b] - synDeg[a]), 3);
+    if (!narrow()) {
+      const labs = dodge([...lab].map(([cl, i]) => ({ cl, i, x: x(synDeg[i]), y: y(pd[i]) + 4 })));
+      g.append('g').selectAll('text').data(labs).join('text').attr('class', 'pt-lab halo').attr('x', l => l.x + 7).attr('y', l => l.ly).text(l => (/n$/.test(l.cl) ? names[l.i] : l.cl));
+    }
+    const sp = pts[sel];
+    g.append('circle').attr('cx', sp.px).attr('cy', sp.py).attr('r', 6.5).attr('fill', 'none').attr('stroke', css('--accent')).attr('stroke-width', 2);
+    const del = d3.Delaunay.from(pts, d => d.px, d => d.py);
+    g.append('rect').attr('width', iw).attr('height', ih).attr('fill', 'transparent').style('cursor', 'pointer')
+      .on('pointermove', ev => {
+        const [px, py] = d3.pointer(ev, g.node()), d = pts[del.find(px, py)];
+        if (Math.hypot(d.px - px, d.py - py) > 14) { sTip.style('display', 'none'); return; }
+        const [bx, by] = d3.pointer(ev, sBody);
+        placeTip(sTip, sBody, `<b>${names[d.i]}</b>: ${synDeg[d.i]} synaptic, ${pd[d.i]} peptide partners`, bx, by);
+      })
+      .on('pointerleave', () => sTip.style('display', 'none'))
+      .on('click', ev => { const [px, py] = d3.pointer(ev, g.node()); select(pts[del.find(px, py)].i); });
+  }
+
+  function readout() {
+    const min = +ctl.min.value, pd = stats.pd;
+    ctl.min.nextElementSibling.textContent = `${min} couple${min > 1 ? 's' : ''}`;
+    const rank = i => 1 + d3.range(n).filter(j => pd[j] > pd[i]).length;
+    const top = d3.range(n).sort((a, b) => pd[b] - pd[a]).slice(0, 6).map(i => `${names[i]} ${pd[i]}`).join(', ');
+    const richTop = Math.max(...[...RICH].map(rank));
+    document.getElementById('pp-ro').innerHTML =
+      `${range[0].toUpperCase() + range.slice(1)}-range peptide network${min > 1 ? ` with at least ${min} couples` : ''}: <b>${pct(stats.density, 1)}</b> of ordered pairs linked, against ${pct(stats.synDensity, 1)} by chemical synapses. ` +
+      `<b>${pct(stats.overlap)}</b> of synaptically connected pairs also have a peptide link (${pct(stats.density)} expected from density alone). Degree in the two networks correlates at r = ${fmt(stats.r, 2)}. ` +
+      `Most peptide partners: ${top}; the 11 rich-club neurons rank no lower than ${richTop}. ` +
+      `<b>${names[sel]}</b>: ${synDeg[sel]} synaptic partners, ${pd[sel]} peptide partners (rank ${rank(sel)} of ${n}).`;
+  }
+
+  function select(i) { sel = i; ctl.cell.value = i; drawMatrix(); drawScatter(); readout(); }
+  const redraw = () => { compute(); drawMatrix(); drawScatter(); readout(); };
+  segButtons('#fig-pep', 'r', v => { range = v; redraw(); });
+  segButtons('#fig-pep', 'l', v => { layer = v; drawMatrix(); });
+  ctl.min.addEventListener('input', redraw);
+  ctl.cell.addEventListener('change', () => select(+ctl.cell.value));
+  mSvg.on('keydown', ev => {
+    const a = pos[sel];
+    if (ev.key === 'ArrowDown' || ev.key === 'ArrowRight') select(order[Math.min(n - 1, a + 1)]);
+    else if (ev.key === 'ArrowUp' || ev.key === 'ArrowLeft') select(order[Math.max(0, a - 1)]);
+    else return;
+    ev.preventDefault();
+  });
+  compute();
+  responsive(mBody, w => { mw = w; drawMatrix(); });
+  responsive(sBody, w => { sw = w; drawScatter(); });
+  onTheme(() => { drawMatrix(); drawScatter(); });
+  readout();
+}
+</script>
+</body>
+</html>
