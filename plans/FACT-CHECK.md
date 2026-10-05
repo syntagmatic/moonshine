@@ -53,6 +53,11 @@ series' `LEDGER.md`. What follows is what those checks left for a human.
 
 - Three primary sources are paywalled and unverified (see the ledger's
   unverifiable rows).
+- Enrichment (2026-10-05): ledger rows marked from memory or second-hand:
+  Langton 1990 (Physica D 42) in 01; jam speed from car conservation
+  (Lighthill-Whitham) in 03; SK freezing at T = 1 in 05; nu = 4/3
+  (den Nijs 1979, Smirnov-Werner 2001) in 06; Manna tau = 1.275 via
+  Lubeck 2000 in 07. Check each against its source.
 
 ### noether
 

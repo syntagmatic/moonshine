@@ -7,25 +7,25 @@ Every claim about collective behavior should be backed by a simulation on the pa
 ## Articles
 
 ### 1. Cellular Automata
-How much structure a rule that sees only its neighbors can build, and what survives when the grid goes continuous. The reader edits an elementary rule table, watches Langton's ant build its highway, and sweeps Lenia's resolution to see where the orbium glider survives.
+How much structure a rule that sees only its neighbors can build, and what survives when the grid goes continuous. The reader edits an elementary rule table, measures how far one flipped cell spreads across all 256 rules (Langton's lambda against damage spread), sends Langton's ant into random obstacles to time its highway, and sweeps Lenia's resolution to see where the orbium glider survives.
 
 ### 2. Flocking
-Alignment against noise decides whether a crowd moves as one. The reader sweeps noise in the Vicsek model against a live polarization trace, and frozen particles at the same density show the order needs the motion.
+Alignment against noise decides whether a crowd moves as one. The reader sweeps noise in the Vicsek model against a live polarization trace, watches travelling bands make the transition sharp, sees frozen particles fail to pass headings across a broken contact network, and tests neighbors within a radius against the nearest seven under a predator.
 
 ### 3. Traffic Shockwaves
-Phantom jams in a car-following model (the Intelligent Driver Model) and in the Nagel-Schreckenberg automaton share a wave that travels backward. The reader brakes one car on a ring road and watches the jam in a space-time diagram.
+Phantom jams in a car-following model (the Intelligent Driver Model) and in the Nagel-Schreckenberg automaton share a wave that travels backward. The reader reproduces Sugiyama's 22-car ring road, measures the backward jam speed against density and dawdle probability, sees it as the slope of the fundamental diagram's congested branch, and runs a slow-to-start rule to see hysteresis.
 
 ### 4. Coarsening and Consensus
-Copy your local majority and domains grow roughly as the square root of time, until one opinion wins or the borders lock into stripes. Listen only to people who nearly agree and the population splits into a predictable number of camps; the reader measures the coarsening exponent and the camp count live.
+Copy your local majority and domains grow roughly as the square root of time, until one opinion wins or the borders lock into stripes. Listen only to people who nearly agree and the population splits into a predictable number of camps. The reader measures the coarsening exponent and its scaling collapse, sees conserved swaps slow growth toward t^(1/3) and the voter model's 1/log t, and compares camp counts under pairwise (Deffuant) and group (Hegselmann-Krause) averaging.
 
 ### 5. Spin Glass
-When couplings conflict, the energy landscape fills with valleys that trap a quench or a hurried anneal. The reader runs anneals of different speeds and explores an exact enumeration of every valley in a small patch.
+When couplings conflict, the energy landscape fills with valleys that trap a quench or a hurried anneal. The reader counts what frustration costs by exact enumeration, runs anneals of different speeds, explores every valley of a small patch, watches a large lattice age, and compares searches and overlap distributions P(q) in the Sherrington-Kirkpatrick model against Parisi's solution.
 
 ### 6. Percolation
-Forest fires and epidemics share a threshold below which clusters stay finite. The reader lights forests at different densities, runs an SIR epidemic that maps onto bond percolation, and lets trees regrow (a regrowing Drossel-Schwabl forest settles near density 0.4, well below the site threshold, so it does not self-tune to p_c).
+Forest fires and epidemics share a threshold below which clusters stay finite. The reader locates the threshold by finite-size scaling, measures the critical cluster's 91/48 dimension, sees thresholds differ across lattices while exponents agree, runs an SIR epidemic that maps onto bond percolation, and lets trees regrow (a regrowing Drossel-Schwabl forest settles near density 0.4, well below the site threshold, so it does not self-tune to p_c).
 
 ### 7. Sandpile
-Drop grains one at a time and the pile tunes itself to a critical state with avalanches of every size. The reader fits the avalanche exponent, sees the sandpile group's identity element, and tests the claim that the pile makes 1/f noise.
+Drop grains one at a time and the pile tunes itself to a critical state with avalanches of every size. The reader topples a pile in two orders to see it end the same, collapses avalanche sizes across grid sizes against the stochastic Manna rule, burns piles to test recurrence and finds the group identity, grows the fractal from grains dropped at one point, and tests the claim that the pile makes 1/f noise.
 
 ### 8. Laplacian Growth
 Diffusion-limited aggregation, dielectric breakdown and river networks are growth driven by a field that concentrates at the tips. The reader grows a cluster with a live fractal-dimension fit and compares branching statistics across cluster, discharge and a simulated river basin.
@@ -52,6 +52,6 @@ Oscillators with scattered frequencies lock together once coupling passes a crit
 
 - Every number in the prose comes from the running simulation or a cited paper, and figures compute what their captions say. An earlier draft faked parameter maps and rescaled colours each frame to invent patterns; run sweeps for real and keep colour scales fixed.
 - Pick update rules that can do what the claim needs. A synchronous majority vote freezes and never coarsens; random-sequential updates do. Predator-prey defaults must sit past the Hopf threshold or the waves decay to a flat field.
-- Easy claims to get wrong: percolation thresholds depend on the lattice (the exponents are universal); the sandpile's signals are not 1/f; reduced stickiness in DLA is a crossover to ordinary DLA; the BZ slow variable is the oxidized catalyst; zebrafish stripes come from pigment cells, so use the angelfish for Turing; bimodal Kuramoto clusters do merge eventually.
+- Easy claims to get wrong: percolation thresholds depend on the lattice (the exponents are universal); the sandpile's signals are not 1/f; reduced stickiness in DLA is a crossover to ordinary DLA; the BZ slow variable is the oxidized catalyst; zebrafish stripes come from pigment cells, so use the angelfish for Turing; bimodal Kuramoto clusters do merge eventually. BTW avalanche exponents drift with grid size and differ from the stochastic Manna rule's; an IDM ring tuned to Sugiyama's jam speed holds a longer jam than the experiment did, so say so.
 - Cite the primary source for each headline result and give finite-size caveats where a measurement differs from the literature.
 - Keep a shared five-colour vocabulary (agent, local rule, emergent pattern, threshold, feedback) and use it consistently.

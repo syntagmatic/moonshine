@@ -1529,3 +1529,268 @@ Non-claim issues from the queue's page-defect list.
 | 09 | "fewer than 1 walk in 100 traps within 10 steps" | wrong, fixed | Exact enumeration of the growing walk (uniform over unvisited neighbours), rational arithmetic: P(trapped by n) = 0.27% (7), 0.50% (8), 0.98% (9), 1.41% (10) | "only about 1 walk in 70 traps within 10 steps" |
 | 06 | τ = 187/91 credited to Mertens and Moore 2018 | wrong, fixed | The exact 2D exponents come from den Nijs, J. Phys. A 12, 1857 (1979) and Nienhuis, J. Phys. A 15, 199 (1982); universality across lattices is conjectured, proved for triangular site percolation by Smirnov and Werner, Math. Res. Lett. 8, 729 (2001). Mertens and Moore 2018 is about hypercubic thresholds | Credits den Nijs and Nienhuis, says universality is proved for the triangular lattice; references line swaps Mertens-Moore for the three papers |
 | 01 | Orbium σ = 0.015 "catalogued" | fine | Chan 2019 (arXiv 1812.05433), Figs 6 and 7 captions: "Orbium (µ = 0.15, σ = 0.016)"; the catalogue (animals.json) has 0.015, which the page uses and labels as catalogued. The paper's value is the 0.016 case the 01 rows already test | none; ledger now cites Chan 2019 Figs 6-7 for σ = 0.016 |
+
+## Enrichment 2026-10-05 (articles 01-07)
+
+Each article gained new computing figures and a prose pass, one agent per article. Rows below cover new or changed claims only; verdicts are computed / derived / sourced / from memory. Rows marked from memory or second-hand need a source check.
+
+### 01 enrichment
+
+Enrichment pass 2026-10-05 on docs/emergence/01-cellular-automata.html. Three new figures (2 damage spreading, 3 census of all 256 rules, 5 ant from random squares); old Figures 2-4 renumbered 4, 6, 7. Prose outside figures cut from 1,553 to 1,088 words (30%). Numbers below come from the page's own engines (`ECAEngine`, `AntEngine`) extracted into node by brace-matching the function source out of the HTML, plus headless Chromium readouts at 1280 and 390 px, light and dark. Scripts (session scratch, not kept): extract.cjs, nums.cjs, antnums.cjs, antall.cjs, antval2.cjs, pw.mjs. All seeds are fixed: ECA starts use mulberry32(1000 + s) for s = 0..15, density 0.5, 301 cells, 128 transient steps, 128 measured steps; ant trials use mulberry32(seed) for seeds 1..400.
+
+| page | claim | verdict | source or derivation | fix |
+|---|---|---|---|---|
+| 01 | Mirror images and 0/1 swaps behave identically, leaving 88 distinct rules | computed | `ECA.reps.length` = 88 (reflection and complement closure, minimum member as representative) | new |
+| 01 | Every equivalent rule reproduces its class's measurements exactly | computed | each non-representative rule starts from the mirrored and/or complemented row; spread, entropy and uniform count equal the representative's for all 256 rules (0 mismatches) | new (engine design) |
+| 01 | Fig 2 caption: 301 cells, 128 steps then flip middle cell, 128 more, 16 starts, spread = (final extent - 1)/128, at most 2 cells/step | computed | ECAEngine constants W 301, T0 128, T 128, SEEDS 16; extent <= 2T+1 = 257 | new |
+| 01 | Rule 90's disagreement reaches both edges of the cone in every run | computed | ext[128] = 257 in all 16 runs | new |
+| 01 | Rule 30's moves right one cell per step and left about 0.2 | computed | mean edge velocities +1.000 and -0.198 cells/step | new |
+| 01 | Rule 110 spreads 0.40 cells per step | computed | spread 0.396; Fig 1/2/3 readouts print 0.40 | new |
+| 01 | Rule 184's stays one to three cells wide in 15 of 16 starts | computed | final extents 1,1,1,3,1,1,1,213,1,... (one start 213) | new |
+| 01 | Eight rules reach a uniform row from every start: class I | computed / sourced | rules 0, 8, 32, 40, 128, 136, 160, 168 uniform in 16/16 starts; class I definition NKS p. 231 (ledger 01) | new |
+| 01 | Along the bottom, 61 keep a flip's influence under a fifth of a cell per step (class II) | computed | 69 classes with spread < 0.2, minus the 8 uniform | new |
+| 01 | Rule 204 leaves a row as disordered as Rule 30's | computed | block-4 entropy 0.994 vs 0.993 bits/cell | new |
+| 01 | Eleven, among them 30 and 90, spread a cell per step or more | computed | 18, 22, 30, 45, 60, 90, 105, 122, 126, 146, 150 (spreads 1.00 to 2.00) | new |
+| 01 | Rule 110 sits between with seven others, no wide gap on either side | computed | 0.2 <= spread < 1: 14, 41, 43, 54, 57, 106, 110, 142; nearest neighbours across the cuts 0.167 (25) vs 0.245 (43), 0.919 (57) vs 1.000 (60) | new |
+| 01 | Spreading rules gather at lambda 1/2: 28 of 70, none below 1/4; most at 1/2 do not spread | computed | per lambda k/8, rules with spread >= 0.2: 0, 0, 2/28, 9/56, 28/70, 9/56, 2/28, 0, 0 | new |
+| 01 | Langton proposed lambda as a dial from order to chaos; reference "Computation at the edge of chaos," Physica D 42, 12 (1990) | from memory | not read this session; check title, volume and page | new reference |
+| 01 | Fig 3 caption: entropy from blocks of four cells; categories < 0.2, 0.2-1, >= 1 cells/step | computed | entropy4 in ECAEngine; SPREAD_LO 0.2, SPREAD_HI 1 | new |
+| 01 | Fig 5 stopping rule finds the highway onset correctly | computed | 200 trials (sides 20, 60, 120 at 0.5; side 20 at 0.1 and 0.9): a full scan for any period up to 400 over the move sequence, run 60,000 moves past onset, finds period 104 and the same onset every time; blank grid gives move 9,977 as in Fig 4 | new |
+| 01 | All 3,200 runs at black fraction 0.5 reached the highway; all 28,800 across the nine fractions; slowest 394,020 moves | computed | antall.cjs: sides 10-160 x seeds 1-400 x p 0.1-0.9, 0 failures, 0 edge hits, cap 10^6; live readout prints 3,200 / 0 | new |
+| 01 | At side 40 the median is 8,533 and 222 of 400 runs beat the blank grid | computed | antnums.cjs; live readout identical | new |
+| 01 | Median grows from 3,420 at side 10 to 41,796 at side 160 | computed | antnums.cjs; live readout at side 160: 41,796 | new |
+| 01 | Ant highway sentence now "turns repeat with period 104, each period carrying the ant 2 rows and 2 columns along a diagonal" | computed | live `ant-finding` text from the page's scan (unchanged detection) | reworded |
+| 01 | Ant "nearly symmetric figures for a few hundred steps, an irregular blob for thousands" | sourced | unchanged claim, ledger 01 (Gajardo et al.) | trimmed |
+| 01 | Rule 90 makes each cell the XOR of its neighbors, Pascal mod 2; Rule 30 RNG in Mathematica; Rule 184 traffic; Cook 2004 | sourced | unchanged claims, ledger 01 | trimmed; "differs in two bits" and "reversible" sentences cut |
+| 01 | Lenia island, continuum map and state-level claims | computed | unchanged numbers from ledger 01; "T = 2 or 3 moves a cell half or a third of its range" = 1/T | trimmed |
+
+### 02 enrichment
+
+2026-10-05. Three new figures (4 bands, 5 influence spread, 6 metric vs topological predator test); old Figures 1-3 kept, Figure 3's method sentence moved into its caption. The Vicsek step was generalised to `makeVM` / `stepVM` (any N, L; angular or vectorial noise); `makeVicsek` / `stepVicsek` now call it and were checked bit-identical to the previous code over 3 seeds x 3 (eta, v0) settings x 500 steps (max difference 0). Prose (excluding figures and footer) 1,207 -> 872 words. Scripts (session scratch, `scratchpad/02/`): `load2.cjs` loads the page's own model code into node; `verify-pred.cjs 0 2 4 8`, `verify-spread.cjs`, `verify-bands.cjs` produce every number below; `pw.mjs` / `pw4.mjs` drive the figures in Playwright at 1280 and 390 px, light, dark and reduced motion. Sources read this session (full text via arXiv): Gregoire and Chate 2004 (cond-mat/0401208), Chate, Ginelli, Gregoire and Raynaud 2008 (0712.2062, PRE 77 046113 from the arXiv DOI), Ballerini et al. 2008 (0709.1916, main text and Fig. 4 caption). render-check: PASS.
+
+| page | claim | verdict | source or derivation | fix |
+|---|---|---|---|---|
+| 02 | Subtitle: the change is sharp, needs the agents to move, depends on how each picks its neighbors | derived | Summarises sections 4-6 below | new |
+| 02 | Gregoire and Chate 2004: larger systems, transition discontinuous; ordered phase near threshold is dense bands travelling through a sparse disordered gas; phi bimodal | sourced | GC2004 abstract; text: "density waves moving steadily in a disordered 'vapour pressure' background"; "The distribution function of phi_t is bimodal around threshold" (Fig. 2c, L = 512, rho = 1/8) | rewritten from old para |
+| 02 | With Vicsek's (angular) noise, at density 2 the discontinuity starts to show at box size about 128 interaction radii (Chate et al. 2008) | sourced | Chate 2008 Sec. III E: "at rho = 2 ... L* ~ 128 for angular noise, while it is very small for vectorial noise" | new |
+| 02 | Gregoire and Chate also tried adding the noise to the summed neighbor headings as a random vector | sourced | GC2004 eq. (3): theta = arg(sum e^{i theta_k} + eta n_j e^{i xi}); page `stepVM(..., vec = true)` implements exactly this, xi uniform on [-pi, pi] | new |
+| 02 | Fig 4 setup: 2,048 particles, 64 x 64 periodic box, density 1/2, v0 = 0.5; strips along the direction of travel, one row every 3 steps, shaded 0 to 4x mean | computed | Page code (L 64, N 2048, V0 0.5, B 64, EVERY 3, LUT h/4); parameters follow Chate 2008 Fig. 11 (rho 1/2, v0 0.5; vectorial bands at L = 64, eta 0.55) | new |
+| 02 | Vector noise, eta 0.55: a band forms within a few hundred steps, densest strip 5 to 7 x the mean | computed | verify-bands.cjs, page seed 2: readout (mean of last 40 strip maxima) 2.9 at step 300, 4.6 at 600, 5.1 at 1,200; browser readout 6.8-6.9 at step ~3,300 (4 runs). Range across t1/t7 seeds 1-3: 4.3-8.4 | new |
+| 02 | Raise eta to 0.6: within a few hundred steps the band dissolves, phi drops to about 0.1 | computed | verify-bands.cjs: after 1,500 steps at 0.55, eta 0.6 gives phi 0.14, 0.09, 0.04, 0.13, 0.15, 0.08 at +300..+1,800, strip max 2.4 -> 1.8. At 0.58 the band survives (phi 0.36-0.53) | new |
+| 02 | Angle noise at this size: stripes broad and blurred, near 3 x the mean | computed | verify-bands.cjs eta 1.6 / 1.9 / 2.2: strip max 2.2-4.7 / 1.9-2.8 / 1.8-2.2; browser at step ~6,000: 3.1 and 3.2. Screenshots bands-ang-1.6/1.9.png | new |
+| 02 | Chate et al. see sharp bands with angular noise only in boxes wider than a band | sourced | Chate 2008 Fig. 11 caption: "Sharp bands can only be observed if L is larger than the typical band width w"; text: "L_b ~ L*" | new |
+| 02 | Frozen best phi vs moving best (live) | computed | Unchanged code; this session's browser runs: frozen 0.21-0.51, moving ~1, eta* 2.0-2.2 | kept |
+| 02 | Mean neighbour count at density 1 (live "3.2") | computed | Unchanged code (giant-cluster readout removed; Fig 5 now carries that point) | trimmed |
+| 02 | Fig 5: a particle within distance 1 of a reached one is reached, because it averaged in that heading; these are exactly the particles whose heading can depend on particle 0's | derived | The alignment average at step t uses all particles within distance 1 at step t (the same positions spreadStep uses), so dependence propagates along exactly these contacts | new |
+| 02 | Frozen: influence stops at the edge of particle 0's cluster, on average 7% of the box, 2 to 76 particles over the ten starts | computed | verify-spread.cjs seeds 600-609, eta 1: final reach 2, 12, 25, 55, 25, 37, 3, 76, 12, 18 (mean 6.6%); equals particle 0's connected component (radius 1) in each start configuration, mean 26.5 | new |
+| 02 | Moving at v0 0.3: 82% within 40 steps (live) and everyone soon after | computed | verify-spread.cjs: mean 37.9% at 20, 82.2% at 40, 99.9% at 80; all ten runs reach 400 of 400 (mean > 99.9% from step 78). v0 0.1: 60.5% at 40, 98.8% at 150 | new |
+| 02 | Mermin-Wagner: 2D static system cannot hold true long-range order against noise; Toner and Tu: a flock can because motion carries heading information | sourced | Carried over from the 2026-09-25 ledger (Tu and Toner 1995 read then); shortened | trimmed |
+| 02 | Ballerini: 3D reconstruction, six or seven nearest neighbours however far | sourced | Ballerini 2008 abstract | kept |
+| 02 | Ballerini argued a fixed count holds a flock together through the density swings a predator causes, and tested it in a 2D alignment model | sourced | Ballerini text: "topological interaction is indispensable to maintain flock's cohesion against the large density changes caused by ... predation"; Fig. 4 caption: SPP model, alignment with neighbours, predator repulsion F0 [...]/r^2, N 200, n_c 3, r_c 0.15, CC defined by distance 3 r_c | new |
+| 02 | Fig 6 model: 200 birds aligned in a disc of radius 5, alignment only plus turning noise of width 0.1; predator 4 units off centre flying the other way; pieces = chains with gaps at most 3 (paper's 3 r_c with r_c = 1) | computed | Page PRED constants. Differences from the paper, by choice: vector average of headings (paper writes an angle average), n_c = 7 (paper 3, chosen to match the observed 6-7), r_c = 1, noise 0.1 (paper has none), predator torque F0 (ey cos a - ex sin a)/r^2 applied after the alignment | new |
+| 02 | Default strength 2: metric flock whole in none of 40 trials, topological in 29 | computed | verify-pred.cjs F0 2, seeds 1000-1039: metric M histogram {2:6, 3:7, 4:14, 5:10, 6:3}, mean 3.92; topological {1:29, 2:9, 3:1, 4:1}, mean 1.35. Browser identical (40 of 40, 3.9 / 1.4, 0 / 29) | new |
+| 02 | Most extra pieces are stragglers: largest piece averaged 183 and 194 birds | computed | verify-pred.cjs F0 2: mean largest piece 183.13 (metric), 194.28 (topological) | new |
+| 02 | At strength zero the metric flock still split in 19 of 40 trials, the topological in 2 | computed | verify-pred.cjs F0 0: metric whole 21 of 40 (mean 1.55), topological 38 of 40 (mean 1.05). Browser identical | new |
+| 02 | (not on page) Larger strengths: metric whole 0 / 1, topological 6 / 6 at F0 4 / 8 | computed | verify-pred.cjs F0 4, 8; the topological advantage narrows but holds (mean pieces 4.28 vs 2.30, 4.50 vs 2.73) | context |
+| 02 | Fig 3 caption: 600 steps averaged after discarding 400, error bars one standard deviation within the run | computed | Unchanged sweep code (TRANS 400, MEAS 600, sd) | moved from prose |
+| 02 | References: added Chate, Ginelli, Gregoire and Raynaud, Phys. Rev. E 77, 046113 (2008) | sourced | arXiv 0712.2062 metadata DOI 10.1103/PhysRevE.77.046113 | new |
+
+### 03 enrichment
+
+Page: docs/emergence/03-traffic-shockwaves.html, 2026-10-05. Four new figures (1, 4, 6, 8), Figure 7 (was 4) gains a computed jam line, Figures 5 and 7 now seeded (mulberry32), old Figures 1-4 renumbered 2, 3, 5, 7. The page's model code now sits between `// ==== MODEL START` and `// ==== MODEL END`; the node scripts extract that block verbatim (mload.mjs) and call it. Scripts (session scratch, 03/): n1.mjs (Figure 1 scan, seeds 1-3, 600 s per run), t_all.mjs (Figure 4 series at a = 0.5/0.8/1.0, Figure 6 at p = 0..0.6 with the page's seeds 1000+i and 2000+i), n7.mjs and t_vdr2.mjs (Figure 7 shortfall, Figure 8 at the page's seed 11), t_vdr.mjs (Figure 8 seeds 1-5, 7), pw.mjs and click.mjs (headless Chromium). Sources read this session: Sugiyama et al. 2008 (NJP PDF, full text), Barlovic et al. 1998 (arXiv cond-mat/9804170, full text). Prose (paragraphs, excluding captions and references) 1,808 to 1,096 words; captions 437 to 678 (four new figures).
+
+| page | claim | verdict | source or derivation | fix |
+|---|---|---|---|---|
+| intro | 22 cars, 230 m, drivers asked to cruise at about 30 km/h | sourced | Sugiyama 2008 p.4: "The circumference is 230 m, and the number of vehicles is 22"; "requested to cruise at about 30 km h-1" | kept |
+| intro | three minutes in, a cluster of five stopped cars | sourced | Fig 3(b) caption: "The snapshot 3 min later shows that a jam has been formed. A jam consists of five vehicles"; p.5 "vehicles inside the cluster of the jam stop completely" | new wording |
+| intro | jam drifts back at roughly 20 km/h, cars outside at about 40 km/h | sourced | p.5: "the vehicles outside move freely (~40 km h-1)"; "travels backward with a velocity of roughly 20 km h-1" | 40 km/h new |
+| Fig 1 | time headway 0.41 s gives uniform 30 km/h at 230/22 m spacing (5 m cars, page IDM otherwise) | computed | headwayFor(22, 230, 30/3.6) = 0.4126 s; idmVeq check 30.00 km/h | new |
+| Fig 1 | 10 times real speed; noise seeded | computed | SIM_PER_SEC 10; makeRing sigma 0.1 m/s^1.5 white acceleration noise from mulberry32(seed) | new |
+| Fig 1 | at a = 1.6 first stop three to four minutes in | computed | n1.mjs seeds 1, 2, 3: 187, 216, 228 s; page readout seed 1: 187 s, seed 2: 216 s | new |
+| Fig 1 | jam moves back near 18 km/h | computed | crossSpeed on 1 m speed fields 20 s apart over last 120 s: -17.7, -17.8, -17.7 (seeds 1-3); page readout -17.7 (seed 1, 600 s) | new |
+| Fig 1 | free cars reach about 45 km/h | computed | page readout "fastest car in window 45 km/h" at 600 s (0.5 s samples); node per-step max 46 | new |
+| Fig 1 | jam holds about 12 cars, not 5 | computed | stopped (v < 0.1) at 600 s: 12, 11, 12; page 12 | new |
+| Fig 1 | lower a gives a slower, longer jam | computed | a = 0.6: -8.9 to -9.0 km/h, 13-14 stopped; 1.0: -12.7, 12-13 | new |
+| Fig 1 | from about 2 m/s² no car stops within ten minutes | computed | a = 2.0 seeds 1-3: no stop in 600 s; a = 1.9 first stops 492-568 s; linear criterion puts the boundary at a = 2.97 for this calibration (waves grow but do not stop cars) | new |
+| Fig 4 | each dot a 1 km ring, one car braked to a stop, 25 min, last 10 min cross-correlated 40 s apart | computed | idmJamRun: TOT 1500 s, rows over last 600 s every 2 s, lag 20 rows | new |
+| Fig 4 / prose | about -14.5 km/h at a = 0.8, -10.3 at a = 0.5, barely depending on density | computed | t_all.mjs: a = 0.8 median -14.49 over 19 full-stop rings (45-135/km, range -14.22 to -15.21); a = 0.5 median -10.26 over 22 rings (35-140, range -10.20 to -10.53); page readout "-14.5" | new numbers (were -14 and -10 from Fig 2 readout) |
+| Fig 4 | near the band edge the wave does not stop cars and its speed wanders | computed | a = 1.0: 11 jammed rings (page filter), none with a full stop, -7.2 to -15.4 km/h; a = 0.8 at 35-40/km: -10.6, -13.1 without full stops | new |
+| Fig 4 | forward-drifting patterns at the band's low edge left out | computed | a = 0.5 rho 25 (+18.3) and a = 0.8 rho 30 (+1.4) pass the jam filter with c > 0 | new |
+| prose | stopped cars 6.9 m apart at a = 0.8, so each waits about 1.7 s | computed | median front-to-front spacing of neighbouring stopped cars 6.940 m; tau = 6.94 / (14.49/3.6) = 1.72 s; page readout "6.9 m ... 1.7 s" | replaces ell = 7 m, tau 1.8 s |
+| prose | brisker drivers leave sooner, so Figure 1's jam speeds up with a | computed | Fig 1 scan: -8.9 (a 0.6) to -19.0 (a 1.8); Fig 4 slider a = 0.4: tau 2.9 s | new |
+| Fig 6 | jam pattern speed by cross-correlation on 2,000-cell ring at rho 0.35, 50 ticks apart; outflow 400 cells past a 1,000-car block | computed | nsJamSpeed / nsOutflow code (detector at cell 1400, block 0-999, ticks 300-1500) | new |
+| Fig 6 / prose | at p = 0.25: outflow 0.51, chord -0.58, pattern -0.59 cells/tick, -16 km/h | computed | t_all.mjs and page readout: out 0.514, chord -0.577, jam -0.585; x 27 = -15.8 km/h | replaces -0.57 / -15 km/h (ledger t5 on a 4000-cell ring; this page's estimator gives -0.585) |
+| Fig 6 | chord J_out/(1 - J_out/(vmax - p)) tracks the measured speed for all p | computed | p 0..0.6: measured vs chord within 0.035 cells/tick (largest gap p = 0.15: -0.727 vs -0.693); p = 0.5: -0.369 vs -0.358 | new |
+| prose | jam speed = flow difference over density difference (kinematic shock speed) | derived | conservation of cars across a moving boundary (Lighthill-Whitham shock condition; stated from memory, no citation on page) | new |
+| prose | cars that just left dawdle and re-stop, so jams recede slower than 1 - p | computed | as in ledger (t4/t6) and Fig 6 dots below the 1 - p line for every p > 0 | kept, shortened |
+| Fig 7 | violet jam line from jam density 1000/6.94 = 144/km with slope -14.49 km/h passes through the a = 0.8 ring dots; nothing fitted | computed | n7.mjs: ring flows 45-135/km fall by 72-73 veh/h per 5/km (slope -14.5 km/h) and reach zero near 144/km; screenshot shows dots on the line | new |
+| prose | IDM rings carry about 10 to 15 percent less than uniform flow, less near edges | computed | t_vdr2.mjs: 35/km 15.1%, 45-100/km 10.4-11.8%, 110 9.3%, 120 7.5%, 130 4.2% | kept, "(less near the edges)" |
+| Fig 8 | VDR rule: stopped cars dawdle with p0, moving with p; Barlovic values vmax 5, p = 1/64, p0 = 0.75 | sourced | Barlovic 1998 eq. (1) and p.8: "vmax = 5, braking probability p = 1/64 of the moving cars and a higher value p0 = 0.75" | new |
+| Fig 8 | phase-separated branch (1 - p0)(1 - rho); free branch rho(vmax - p) | sourced | Barlovic 1998 eq. (2) and "Jhom = rho(vmax - p)" | new |
+| prose | rho1 = 1/(1 + (vmax - p)/(1 - p0)) = 6.4 cars/km | sourced / derived | Barlovic: Delta x = Tw vf + 1 = 1/rho_f, Tw = 1/(1 - p0), rho_f = rho1; 1/(1 + 4.984/0.25) = 0.0478 x 133.3 = 6.37 | new |
+| prose | adding cars: flow peaks about 2,900 cars/h at 22 cars/km, then drops to about 720 | computed | seed 11: peak 2882 at 22.0/km, next steps 1698 (mid-transition), 722, 706, 738; page readout 2882 at 22.0. Seeds 1-5: peak 2825-2885 at 21.3-22.0 | new |
+| prose | 22 cars/km is where cars can no longer keep five empty cells ahead | derived | 1/(vmax + 1) = 0.1667 per cell = 22.2/km | new |
+| prose | removing cars, jam survives down to about 7 cars/km | computed | seed 11: last jammed step 7.3/km (6.7/km back on the free line); page readout 7.3; seeds 1-5: 7.3-8.0 | new |
+| prose | lower line's slope -(1 - p0) is the jam's speed; jam compact because moving cars rarely dawdle | sourced / derived | Barlovic p.9: "The condition p << 1 guarantees that interactions of cars due to velocity fluctuations are rare. As a consequence, the jam is compact"; slope from eq. (2) | new |
+| prose | at p0 = p the two paths coincide | computed | page readout at p0 = 1/64: largest shortfall 22 cars/h, no jam below the peak | new |
+| prose | real motorways: dense free flow persists until broken, jam outflow lower than flow before | sourced | Barlovic abstract ("metastable states with very high flow") and p.2 ("reduction of the outflow from a jam compared to the maximum possible flow") | reworded |
+| Fig 5 / Fig 7 | NaSch runs now seeded (Fig 5 seed 1, Reset increments; Fig 7 seed 7) | computed | code | was Math.random |
+| removed | "a single car simulated for 200,000 ticks gives 4.75"; "-0.75 packed edge"; "-0.35 at p = 0.5"; "0.32 outflow"; "64 vs 36 km/h" | n/a | cut for length; -0.35/0.32 superseded by Figure 6 (page now -0.37, 0.33 at p = 0.5) | cut |
+
+Render check PASS. Headless Chromium at 1280 and 390, light and dark, motion on and reduced: 0 console errors, no horizontal overflow, no SVG text under 11px, no NaN/undefined/em dash. Interaction path driven: Figure 1 slider to 2.6 and back, New noise, Run 120 s (reduced); Figure 4 slider to 0.8, 0.4, 1.3, dot click loads N 50 / a 1.0 into Figure 2; Figure 3 arrow keys; Figure 5 p slider moves Figure 6's marker (readout p = 0.50: -0.37, outflow 0.33, chord -0.36); Figure 8 slider to p0 = p and 0.5 (jam to 13.3/km), Run again.
+
+### 04 enrichment
+
+2026-10-05. Page: docs/emergence/04-coarsening-and-consensus.html. Three new figures
+(3 scaling collapse, 4 flip vs swap, 5 voter vs majority) and Figure 8 (was 5) rebuilt as a
+two-rule bifurcation diagram; old Figures 3 and 4 renumbered 6 and 7. New figures use a
+seeded mulberry32 (seed shown on the page). Numbers below were computed with the page's own
+functions extracted verbatim by brace matching (scratch eng2.mjs) and run in node with the
+page's loops and record schedules (run3.mjs, run4.mjs, run5.mjs, run8.mjs, t0.mjs); for the
+default seeds the headless Chromium readouts match node exactly (Fig 3 0.52/0.52/0.51/0.51/0.52,
+Fig 4 flip 0.43 / swap 0.24, Fig 5 0.58 / -0.48, Fig 8 2.17 / 2.45). Scripts were session
+scratch and not kept. Sources read this session: Castellano, Fortunato, Loreto RMP 81, 591
+(arXiv 0710.3256 full text: voter Eq. 10, Deffuant 1/(2 eps), HK section); Frachebourg and
+Krapivsky (arXiv cond-mat/9508123 via ar5iv, abstract page journal-ref PRE 53, R3009);
+Ben-Naim, Krapivsky, Redner (arXiv cond-mat/0212313 abstract and ar5iv text); Huse PRB 34,
+7845 (abstract via search); Lifshitz and Slyozov (bibliographic record via search).
+
+| page | claim | verdict | source or derivation | fix |
+|---|---|---|---|---|
+| 04 | Fig 3: in the default run (seed 1, 256x256) C(r) falls to 1/2 at 0.51 or 0.52 of L(t) at t = 10, 30, 100, 300, 1000 | computed | run3.mjs seed 1: 0.525, 0.517, 0.512, 0.513, 0.516; browser readout identical | new |
+| 04 | L grows eightfold, 4.7 to 37 cells | computed | seed 1: L = 4.7, 7.5, 13.0, 20.7, 37.0 | new |
+| 04 | Other seeds agree within 0.02 up to 300 sweeps; at 1000 the last curve can sit up to 0.08 lower; a domain spans a sixth of the grid | computed | seeds 2-6: 0.495-0.529 for t <= 300; at t = 1000 0.443-0.514 with L 40-48 (256/45 = 5.7) | new |
+| 04 | Fig 3 crops 6L(t) wide look alike; curves collapse when rescaled | computed | figure screenshots, raw and rescaled | new |
+| 04 | Swap (Kawasaki) rule fixes each opinion's head count, so consensus is impossible | derived | a swap exchanges two unlike cells | new |
+| 04 | Noise rule 1/(1+e^{2d/T}); T = 0 reproduces the majority rule (coin flip on ties); T > 0 is Ising (Glauber), Tc = 2.27 | derived | heatBath table; E = 2 x unlike pairs + const so dE = 2d; Tc = 2/ln(1+sqrt 2) = 2.269; slider max 2.0 | new |
+| 04 | At T = 1.5, flip slope 0.39 to 0.52 over ten seeds | computed | run4.mjs seeds 1-10: 0.385-0.524 (fit t >= 10 until half-width > 8 or one opinion > 75%) | new |
+| 04 | Flips pass within 14 to 21 sweeps the domain size trades reach after 10,000 (about 2.6 cells to half-height) | computed | run4.mjs: swap half-width at 10,000 = 2.54-2.67; flip first reaches it at t = 14-21 | new |
+| 04 | Swap slope rises from about 0.13 (10-100 sweeps) to 0.21-0.24 (last decade) | computed | run4.mjs: 10-100 0.126-0.142; 100-1000 0.164-0.191; 1000-10000 0.205-0.236 | new |
+| 04 | At T = 0 trades stop making progress within about a hundred sweeps, domains two cells across | computed | t0.mjs: N/bonds 1.59 (t=10), 1.88 (100), 1.90 (1000 and 10000); half-width 0.94-0.95 | new |
+| 04 | Lifshitz-Slyozov ripening gives t^(1/3); Huse: corrections from excess transport in interfaces delay it, why MC had not seen 1/3 | sourced | Huse 1986 abstract ("asymptotic exponent (1/3) has not been observed in Monte Carlo simulations ... attributed to such corrections ... due to excess transport in interfaces"); Lifshitz and Slyozov J. Phys. Chem. Solids 19, 35 (1961) bibliographic only, full text not read | new |
+| 04 | Voter: rho(t) = pi/(2 ln t + ln 256) at large times, so 1/rho gains 2/pi per e-fold | sourced | Castellano et al. Eq. (10), citing Frachebourg and Krapivsky 1996; ar5iv text gives the same with time unit tau = 4/D (= 2 in 2D), so the constant depends on the time unit; the slope 2/pi does not. The page plots only the slope | new |
+| 04 | Voter fitted gain 0.55-0.69, mean 0.62, over ten seeds (256x256, t >= 10 to 2000) | computed | run5.mjs seeds 1-10: 0.585, 0.635, 0.643, 0.652, 0.686, 0.655, 0.547, 0.656, 0.587, 0.557 (mean 0.620). At 160x160 the slope ran high (0.70-0.86), which is why the figure uses 256 | new |
+| 04 | Majority rho falls as t^-0.45 to t^-0.51 (10-1000 sweeps) | computed | run5.mjs: -0.448 to -0.507 | new |
+| 04 | After 1000 sweeps 14-16% of voter pairs disagree vs about 1% under majority | computed | run5.mjs: voter 0.138-0.161, majority 0.0104-0.0131 | new |
+| 04 | Voter domains still coarsen and the model never freezes into stripes | derived / sourced | any unlike pair can flip, so only consensus is absorbing; Castellano et al.: for d <= 2 coarsening to consensus | new |
+| 04 | Deffuant major-camp spacing 2.17 eps in default sweep (seed 2026), 2.12-2.21 over five seeds | computed | run8.mjs seeds 2026-2030: 2.174, 2.192, 2.209, 2.115, 2.213 (300 people, 91 eps from 0.05 to 0.5, 6 runs each) | new |
+| 04 | Count runs 11-13% under 1/(2 eps) for eps <= 0.2 | computed | run8.mjs mean ratio count x 2 eps: 0.868-0.890. Agrees with the old ledger's 10-15% (old Fig 5) | replaces old "10 to 15 percent" sentence |
+| 04 | Ben-Naim, Krapivsky, Redner rate equation: spacing 2.155 eps; minor camps between majors and at the ends | sourced | ar5iv cond-mat/0212313: period L = 2.155 in Delta = 1/(2 eps) units, clusters alternate major/minor, separation L/2, extreme minor clusters | new |
+| 04 | More than half of pairwise runs leave at least one minor camp | computed | run8.mjs: 0.55-0.57 of runs, 0.74-0.79 minor camps per run | new |
+| 04 | HK leaves a minor camp in about one run in twenty; majors about 2.5 eps apart; count a quarter under the bound | computed | run8.mjs: 0.04-0.06 of runs; spacing 2.455-2.511; ratio 0.730-0.747 | new |
+| 04 | HK mean count falls to 1.5 by eps about 0.21; pairwise 0.26-0.28 | computed | run8.mjs first eps with mean <= 1.5: HK 0.205-0.22; Deffuant 0.255-0.28 | replaces old "one major camp typical once eps passes about 0.3" |
+| 04 | Castellano et al.: HK consensus threshold about 0.2 on complete graphs for large N | sourced | review section on HK: "if <k> -> infinity ... complete graphs, eps_c = eps_2 ~ 0.2" | new |
+| 04 | HK rule: everyone moves at once to the mean of opinions within eps | sourced | review Eq. (31); code uses strict < eps like the Deffuant code | new |
+| 04 | Fig 8 caption: 300 people, 91 eps values, six runs per rule, all to convergence | code | epsList 0.05:0.005:0.5; Deffuant up to 200 blocks of 50N meetings, conv.mjs over seeds 2026 and 2027 (1,092 runs per rule): every run converged, at most 19 blocks; HK until max move < 1e-9 (at most 88 steps), cap 5000 | new |
+| 04 | Fig 7 caption (was Fig 4) and Fig 6 caption (was Fig 3) shortened; "at 50% about a third of runs end in stripes" | computed (old ledger) | old ledger: 0.339 at 32x32 over 1000 runs | caption trimmed |
+| 04 | Removed: open-dots-above-filled sentence and old Fig 5 (cluster count vs eps scatter) | n/a | superseded by Figure 8 (minor camps shown as grey dots) | cut |
+
+Rendering: render-check PASS. Playwright (shots.mjs, interact.mjs) at 1280 and 390, light
+and dark, reduced motion on and off: 0 console errors, no NaN/undefined/Infinity on screen,
+no horizontal overflow, no SVG text under 11px, no U+2014. Driven: Fig 1 play/step/rule
+buttons and speed slider; Fig 3 rescale toggle by keyboard, New start; Fig 4 noise slider
+Home/End by keyboard, Play/Pause, New start; Fig 5 New start; Fig 7 eps slider; Fig 8 canvas
+click, arrow and shift-arrow keys, Run again. New figures run only while on screen
+(Motion.onVisible) and under reduced motion draw grids only at the end of a run.
+
+### 05 enrichment
+
+File: docs/emergence/05-spin-glass.html. 2026-10-05. Four new figures (2, 5, 6, 7); old Figures 2 and 3 are now 3 and 4. The model code for the new figures is one DOM-free block, `<script id="sg-model">` (object `SG`), which the figures call and which the scripts below extract from the HTML and run in node with the page's seeds. Scripts (session scratchpad 05/): drive.mjs (extracts mulberry32 and the sg-model block from the page), verify.mjs (Figures 2 and 5), verify2.mjs (Figures 6 and 7), pw.mjs and pwi.mjs (Playwright: every figure run to completion and screenshotted at 1280 and 390 px, light and dark, plus clicks, arrow keys and buttons; reduced-motion run), pwq.mjs (Chromium vs node check). render-check: PASS. No horizontal scroll at 390 px; no SVG text under 11 px; no console errors.
+
+Seeds: Figure 2 mulberry32(5150), draw-major order over k = 0..43, 24 draws each. Figure 5 bonds mulberry32(640), spins and dynamics mulberry32(641) for every temperature. Figure 6 mulberry32(1975), per sample: couplings, steepest descent, quench, anneal, exact (N <= 20); 24 samples for N <= 256, 12 at 512, 6 at 1024. Figure 7 panel p uses mulberry32(1983 + p); "New" buttons step the seed.
+
+Node and Chromium agree on every number quoted except Figure 7's third glass sample (|q| < 0.25: 40.7% in node 26, 39.9% in Chromium 147); long chaotic runs diverge between engines. The page quotes the browser's 40%.
+
+| page | claim | verdict | source or derivation | fix |
+|---|---|---|---|---|
+| 05 | The 20-spin patch has 43 bonds and 24 triangles | computed | SG.patch(4, 5) | new |
+| 05 | Fig 2 dashed curve: expected frustrated share with exactly k of 43 bonds AF | derived | P(odd AF among 3 bonds drawn without replacement) = [k C(43-k,2) + C(k,3)] / C(43,3); matches column means (e.g. 0.503 vs 12.08/24 at k = 17) | new |
+| 05 | Frustrated share reaches one half by 40% AF and climbs to every triangle at 100% | computed/derived | expectation first >= 0.5 at k = 16 (37%); k = 43: 24.0 of 24 in all draws (a triangle is an odd loop) | new |
+| 05 | Broken bonds >= half the frustrated count (floor) | derived | each frustrated triangle needs >= 1 broken bond, each bond borders <= 2 triangles | new |
+| 05 | At 40% (17 of 43): 12.1 of 24 frustrated, ground state breaks 8.0 bonds vs floor 6.0, median 6 ground states | computed | verify.mjs k = 17: 12.08, 8.04, 6.04, median 6 (browser readout identical) | new |
+| 05 | All AF: 12 broken bonds pair the 24 triangles exactly; ground state unique on this patch | computed | verify.mjs k = 43: broken 12.00 = floor, count 1 in 24/24 draws (open parallelogram boundary) | new |
+| 05 | On a large triangular lattice the all-AF ground-state count grows exponentially (Wannier 1950) | sourced | Wannier, Phys. Rev. 79, 357 (1950), "Antiferromagnetism. The Triangular Ising Net": nonzero entropy at T = 0 (0.323 k_B per spin after correction), via search listing and INSPIRE record | new |
+| 05 | Median 17 ground states just short of all AF; more than 100 in 8 of 1,056 draws | computed | verify.mjs: highest column medians 17 (k = 39, 41); 8 draws > 100, max 232 (k = 29) | new |
+| 05 | Planar ground state = pairing frustrated triangles with shortest strings of broken bonds, a matching problem | sourced (reworded) | Mertens cond-mat/0012185 (ledger row above: planar Ising reduces to minimum-weight matching); the string picture is Figure 2's floor argument | rewording of existing row |
+| 05 | Fig 5: 64 x 64 periodic triangular lattice, 4,096 spins, 40% AF; same bonds and start at T = 0, 0.6, 1, 2 | computed | SG.bigLattice(64, 0.4), agingRun seeds above; T = 0 accepts only dE < 0 (the Figure 4 quench rule) | new |
+| 05 | T = 0 quench stuck within seven sweeps at -0.426 per bond, no lower than T = 2 | computed | verify.mjs: final -0.4258 first recorded at sweep 7; T = 2 runs -0.419 to -0.434 (final -0.421) | new |
+| 05 | T = 1: -0.544 at 300, -0.549 at 10,000 | computed | verify.mjs: -0.5443 at 289, -0.5485 at 10,000 | new |
+| 05 | T = 0.6: -0.560 at 3,000, -0.562 at 10,000, still falling | computed | verify.mjs: -0.5599 at 3,156, -0.5615 at 10,000 (last change at sweep 6,234 on the recording grid) | new |
+| 05 | T = 2: three ages give the same curve, forgets in a few dozen sweeps | computed | C at t = 30: 0.141, 0.155, 0.179 for ages 10, 100, 1000; about 0 by t = 300 | new |
+| 05 | T = 0.6, 1,000 sweeps on: overlap 0.42 from age 10, 0.73 from age 1,000 | computed | verify.mjs t = 1,013: 0.417 and 0.733 | new |
+| 05 | T = 1: 0.18 vs 0.41 after 1,000 sweeps | computed | verify.mjs t = 1,013: 0.175 (age 10), 0.405 (age 1,000) | new |
+| 05 | Aging measured in CuMn by Lundgren, Svedlindh, Nordblad, Beckman 1983 | sourced | Phys. Rev. Lett. 51, 911 (1983), "Dynamics of the Relaxation-Time Spectrum in a CuMn Spin-Glass" (search listing and arXiv reviews citing it as the aging experiment) | new |
+| 05 | SK model: all pairs coupled, Gaussian couplings of variance 1/N (Sherrington and Kirkpatrick 1975) | sourced | PRL 35, 1792 (1975), title and abstract summary via search: infinite-ranged Gaussian random interactions | new |
+| 05 | SK freezes below T = 1 (with variance 1/N) | from memory | standard T_f = J result of the SK paper, not read this session; consistent with Fig 7 (P(q) collapses at T = 1.5) | check |
+| 05 | Parisi ground-state energy -0.7633 per spin | sourced | Palassini, arXiv cond-mat/0307713: "e0 = -0.7633..." citing Parisi's RSB solution | new |
+| 05 | Palassini: finite-size gap shrinks roughly as N^(-2/3) | sourced | same paper: <e_N> = e0 + b N^-omega, omega = 0.673 +- 0.002 | new |
+| 05 | Exact ground state at 20 spins averages -0.654 per spin | computed | verify2.mjs, 24 samples (12: -0.641, 16: -0.664) | new |
+| 05 | Anneal finds the exact ground state in 59 of 72 small samples | computed | 22/24 at N = 12, 18/24 at 16, 19/24 at 20 (node and browser agree) | new |
+| 05 | Anneal reaches -0.749 at 1,024 spins; both descents near -0.68, about 0.07 higher | computed | N = 1024, 6 samples: anneal -0.7493, steepest -0.6760, quench -0.6818 (gaps 0.073, 0.068) | new |
+| 05 | Steepest-first vs random order makes little difference | computed | means within about 0.02 of each other at every N from 12 to 1024, crossing back and forth | new |
+| 05 | Parisi proposed the overlap distribution P(q) as order parameter (1983) | sourced | G. Parisi, PRL 50, 1946 (1983), "Order parameter for spin-glasses": order parameter related to the probability distribution of overlaps (search summary) | new |
+| 05 | Fig 7: 64 spins, 2 copies x 12 temperatures (T to 1.6, or to 2.4 for T = 1.5), 20,000 sweeps, 4,000 burn-in | computed | SG.overlapRun; swap acceptance 0.72 to 0.74 at T = 0.5, 0.93 to 0.98 at 1.5; P(q < 0) between 0.488 and 0.495 at T = 0.5 (pq2.mjs, same seeds) (symmetric, so the copies mix) | new |
+| 05 | Equal-coupling ferromagnet (1/N) also orders below T = 1 | derived | Curie-Weiss m = tanh(m/T), T_c = 1; Fig 7 peaks at q = +-0.94 match m^2 with m = 0.957 at T = 0.5 | new |
+| 05 | Ferromagnet: two sharp peaks at q = +-0.94 | computed | peak bin q = -0.938 (= -30/32), 11.1% of samples; |q| < 0.25: 0% | new |
+| 05 | Glass samples: |q| < 0.25 holds 26%, 6%, 40% | computed | Chromium 26.0%, 6.4%, 39.9% (node: 26.0, 6.4, 40.7) | new |
+| 05 | T = 1.5: all four collapse to one bump around zero | computed | |q| < 0.25: 94%, 86%, 85%, 87% | new |
+| 05 | Figure 3 (anneal) prose trimmed; ground-state degeneracy now "about nine ground states" | computed (earlier) | existing row: median 9 over 120 draws | reworded |
+
+### 06 enrichment
+
+File: docs/emergence/06-percolation.html. Checked 2026-10-05. Scripts (scratchpad 06/): engine.js (the page's Newman-Ziff `Perc` block), t1.cjs / t2.cjs / t3.cjs (Figure 2 and 6 statistics in node with the page's seeds; t3 reruns other seeds), t4.cjs / t5.cjs / sandbox.js (Figure 5 sandbox fits on the coupled forest), tau.mjs (Figure 4 slopes over 100 forests via the page itself), pw.mjs (Playwright at 1280 and 390, light and dark: runs every sweep to completion, drives the mode toggle, the nu slider, arrow keys on Figure 2 and the Figure 3 slider, and reads every readout). Node and Chromium give identical numbers (seeded mulberry32, one stream per lattice size). render-check: PASS.
+
+Prose (paragraphs and captions) 1,764 words before, about 1,200 after. Figure count 7 to 9: old Figure 2 (fraction burned at one size) replaced; Figures 5 and 6 new; Figure 3 rebuilt on a coupled 256 x 256 forest; SIR and Drossel-Schwabl figures renumbered 7 to 9 with unchanged code.
+
+| page | claim | verdict | source or derivation | fix |
+|---|---|---|---|---|
+| Fig 2 | One forest answers for every density: sites added in random order, spanning occupation number recorded, canonical curve by binomial convolution | derived | Newman and Ziff, PRL 85, 4104 (2000) method (already cited for p_c); code in `Perc.run` / `Perc.spanCurve` | replaces the old fraction-burned sweep and its "1500-forest crossing at 0.593" claim, now gone |
+| Fig 2 | 50% points 0.590, 0.592, 0.593, 0.593, 0.593 at widths 16, 32, 64, 128, 256 (4,000 / 4,000 / 2,000 / 1,000 / 400 forests, seeds 2000 + L) | computed | pw.mjs readout; t2.cjs gives 0.5905, 0.5915, 0.5929, 0.5928, 0.5926 | new |
+| prose | Curves cross near p_c "at about even odds" | computed | R(0.5927) = 0.516, 0.516, 0.502, 0.505, 0.518 for the five sizes (t2.cjs) | new |
+| prose | 10%-90% width 0.16 of density at 16 wide, 0.023 at 256 | computed | widths 0.1608, 0.0975, 0.0589, 0.0337, 0.0231 (pw.mjs, t2.cjs); log-log slope -0.71 | new |
+| prose | Least spread of the rescaled curves at nu = 1.39 for this seed, 1.31 to 1.37 for three others | computed | spread = RMS over levels 0.1..0.9 of the x-spread across sizes over the largest size's 10-90 width, scanned nu 1.00..2.00 step 0.01; seeds 3000+L, 4000+L give 1.31, 1.36; 5000+L with 4x samples gives 1.37 (t3.cjs). Spread at nu = 1 is 0.057 vs 0.015 at 4/3 | new |
+| prose | nu = 4/3 exactly in two dimensions (den Nijs 1979; Smirnov and Werner 2001); correlation length diverges as abs(p - p_c)^-nu | from memory | den Nijs J. Phys. A 12, 1857 (conjecture) and Smirnov-Werner Math. Res. Lett. 8, 729 (proof for triangular site) are both already in the page's reference list; the nu value itself not re-read this session | check |
+| Fig 3 | Coupled forest: each cell keeps a random number, tree iff below density, so the slider grows one forest | derived | code (`u[i] < density`) | new |
+| Fig 3 | Default forest (seed 3046) at 59% spans, largest cluster 25,046; at 62% 35,081 | computed | pw.mjs readouts | new |
+| prose | Figure 4 at 59% on 256 x 256: slope about -1.8 over 100 forests, per-forest -1.69 to -1.94 (pooled -1.83); 35 of 100 forests span | computed | tau.mjs (page's own forest + doubling bins, least squares on log bin density) | replaces the 150-wide "about 1.8" |
+| prose | At 45% the counts bend down | computed | pooled 100 forests: local slopes 1.69 (4-8), 1.88 (8-16), 2.36 (16-32), 3.21 (32-64), 5.06 (64-128) | wording kept |
+| prose | Critical cluster fills boxes as side^(91/48), which follows from tau = 187/91 via tau = 1 + 2/d_f | derived | 2 / (187/91 - 1) = 182/96 = 91/48; the hyperscaling relation tau = 1 + d/d_f is from memory | check |
+| Fig 5 | Sandbox power (sides 5-65, up to 2,000 centres): 1.60 at 55%, 1.89 at 59%, 1.96 at 62%, 1.98 at 65%; same forest at p_c 1.90 | computed | pw.mjs readouts; t4.cjs over four seeds: p_c 1.85-1.90, 55% 1.40-1.67, 65% 1.98 | new |
+| prose | Above p_c the power climbs to 2 in big boxes; below, it falls | computed | t5.cjs local slopes, seed 3046: 65% 1.89 at side 5 rising to 2.00 by 65; 55% 1.77 at 5 falling to 1.35 at 65; p_c 1.82-1.93 | new |
+| Fig 6 | Crossing 50% points on 64 x 64: 0.591 site square, 0.500 bond square, 0.498 site triangular | computed | pw.mjs readouts (400 samples each, seeds 6000 + 1000k + L) | new |
+| prose | Largest cluster at each lattice's own threshold vs width 16-256: fitted slopes 1.85, 1.88, 1.86 against 91/48 = 1.896 | computed | pw.mjs readouts; mean largest cluster at n = round(M p_c) occupied (microcanonical) | new |
+| prose | Thresholds 0.5927 / 1/2 / 1/2 (Newman-Ziff; Sykes-Essam; Kesten) | sourced | rows carried from LEDGER 06 | shortened |
+| prose | Epidemic, Drossel-Schwabl, fire-size claims | sourced / computed | unchanged from LEDGER 06 (density 0.39, fire sizes 2,000 / 8,000 / a third of the grid, slope readings, Grassberger 2002); only reworded and the presets paragraph folded into the Figure 8 caption | none |
+
+### 07 enrichment
+
+File: docs/emergence/07-sandpile.html. Enriched 2026-10-05. Old Figure 2 (one-grid histogram with a tau fit) and Figure 3 (identity only) were replaced; old Figure 4 (spectra) is now Figure 6. Every figure computes live in the page; all randomness is mulberry32 with fixed seeds (Fig 1 seed 1, Fig 2 seed 1 and seed+100, Fig 3 seed 1000+L, Fig 4 driven pile seed 7 and random pile seed 3, Fig 6 seed 500+run). Scripts (session scratchpad 07/): models.js, moments.js, deriv.js (BTW and Manna moment analysis, 4 seeds), abel.js (two-order demo), burn.js (identity, burning test, determinant), point.js and point2.js (point source by stack and by sweeps), spec.cjs (extracts Figure 6 functions from the page, runs 10 seeds), fig1.cjs (Figure 1 model with its seed), pw.mjs / pw2.mjs / pw3.mjs / pw4.mjs (Playwright readouts at 1280 and 390, light and dark, reduced motion). Sources read this session (PDF text): Luebeck 2000 (arXiv cond-mat/9910374), Chessa et al. 1999 (cond-mat/9808263), Tebaldi et al. 1999 (cond-mat/9903270), Pegden and Smart 2013 (arXiv 1105.0111, journal ref from the arXiv page), Dhar 1999 lecture notes (cond-mat/9909009), Dhar 1990 abstract (repository.ias.ac.in/9280 via search). render-check: PASS.
+
+| page | claim | verdict | source or derivation | fix |
+|---|---|---|---|---|
+| 07 | Roughly 21,000 grains before the mean height settles near 2.11 (Fig 1, now seeded) | computed | fig1.cjs: mean height 2.071 at 21,000, 2.109 at 23,000, 2.110 at 200,000; browser 2.12 after Skip (30,000) | Seed 1 replaces Math.random |
+| 07 | Just over half the grains topple nothing in the stationary state | computed | fig1.cjs: 56.0% after grain 30,000 on the 100-wide grid; spectra pile 55.5-57.4% (spec.cjs) | |
+| 07 | Final pile and per-cell toppling counts do not depend on order (Dhar 1990) | sourced | Pegden and Smart 2013 intro: "neither the final configuration nor the number of topplings which occur at each vertex depend on the order"; Dhar 1990 per existing ledger | |
+| 07 | Fig 2: seed 1 relaxes in 94 topplings in both orders; up to 48 cells differ partway; 0 differ at the end | computed | abel.js (12 seeds, all 0 differences); browser readout | |
+| 07 | P(s) = s^-tau G(s/L^D) scaling form | sourced | Chessa et al. eq. (1)-(2), x_c ~ L^beta | |
+| 07 | Manna 1991 rule: a cell with 2 or more empties, each grain to a random neighbour | sourced | Luebeck 2000 Sec. II, citing Manna J. Phys. A 24, L363 | |
+| 07 | Fig 3 local slopes (40,000 avalanches per grid, seeds 1000+L): BTW 2.35 at q=1, 2.54 at 2, 2.62 at 3.5; Manna 2.58, 2.70, 2.73; sigma(1) 1.91 and 1.90 | computed | pw4.mjs readout; 80,000 per grid gives BTW 2.35/2.53/2.61, Manna 2.58/2.68/2.70; deriv.js over 3 other seeds agrees | |
+| 07 | Manna slope moves 0.06 from q=1.5 to 3.75; BTW 0.16 | computed | pw4.mjs at 40,000: Manna 2.676 to 2.735, BTW 2.467 to 2.627 (80,000: 0.028 and 0.147) | |
+| 07 | Moment estimate: BTW D 2.62, tau 1.27; Manna D 2.73, tau 1.31 | computed | pw2.mjs (button), tau = 2 - sigma(1)/D, the relation in Chessa et al. | |
+| 07 | Luebeck 2000: same bend on grids to 4,096; BTW and Manna in different universality classes | sourced | cond-mat/9910374 abstract and Sec. III (Fig. 3 inset: Manna derivative saturates, BTW has finite curvature; L up to 4096 for BTW) | |
+| 07 | Tebaldi, De Menech, Stella: BTW toppling numbers multifractal | sourced | cond-mat/9903270 abstract | Reworded from "traced it" |
+| 07 | Chessa et al. read moment analysis as one class, D about 2.7, tau 1.27 for both | sourced | cond-mat/9808263 abstract and Table I (Manna beta_s 2.74, BTW 2.73, tau_s 1.27 both) | |
+| 07 | Luebeck and Usadel put Manna tau at 1.275 | sourced, secondary | Luebeck 2000 Fig. 2 caption: tau_s = 1.275 +- 0.011 "obtained from a regression analysis [9]", [9] = PRE 55, 4095. Primary not read | |
+| 07 | sigma(1) = 2 exactly since <s> ~ L^2; grains wander about L^2 steps | sourced + derived | Chessa et al.: "the exact result <s> ~ L^2, which implies sigma_s(1) = 2"; random-walk reading is the standard Green's-function argument (Dhar 1999 Sec. 2 gives the order-L lower bound) | |
+| 07 | Two neighbouring 0s are forbidden; burning test of Majumdar and Dhar 1992 | sourced | Dhar 1999 Secs. 4, 4.2 (heights 1-4 there; 0-3 here, so "burn if h >= unburnt neighbours"), burning test credited to ref [14] = Physica A 185, 129 | |
+| 07 | Identity = (6 - 6deg)deg; 85% 2s and 3s; central square of 2s ringed by 3s | computed | burn.js: counts 0/1/2/3 = 220/128/780/1,176; existing ledger for the construction | |
+| 07 | Fig 4 readouts: identity 5,216 grains, burns in 45 rounds; driven pile (seed 7) 4,818 grains, 111 rounds; random 0-3 (seed 3) 148 of 2,304 burn; adding e changes 1,693 cells and the result burns fully; adding e again changes 0 | computed | burn.js and pw2.mjs agree | |
+| 07 | Adding grains to a recurrent pile keeps it recurrent, so (c + e)deg is recurrent for any c | derived | e is recurrent; recurrent set is closed under adding grains (standard Markov-chain argument, not checked against a source this session) | |
+| 07 | Number of recurrent piles = det of toppling matrix (Dhar 1990); about 10^1178 on 48x48 vs 4^2304 = 10^1387 | sourced + computed | Dhar 1999 eq. (22); Dhar 1990 abstract ("determines its entropy for an arbitrary finite lattice"); log10 det from the Dirichlet Laplacian eigenvalues 4 - 2cos(j pi/49) - 2cos(k pi/49): 1177.99 (burn.js) | |
+| 07 | Recurrent pile holds at least one grain per bond: 4,512 on 48x48, mean height >= 2(L-1)/L = 1.96 | sourced + derived | Dhar 1999 Sec. 4 (before 4.2): grains >= Ns + Nb in heights 1-4, i.e. >= Nb in 0-3 | Earlier draft justification via forbidden patterns was wrong; removed |
+| 07 | Pegden and Smart: picture rescaled by sqrt(N) converges to a unique limit, characterised via an elliptic obstacle problem | sourced | arXiv 1105.0111 abstract and Thm 1.1 (rescaling by n^(1/d)); Duke Math. J. 162, 627 (2013) from the arXiv page | |
+| 07 | Fig 5: 2^14 -> 4,900,462 topplings, radius 49.0, r/sqrt(N) 0.383; 2^16 -> 77,107,818, 97.3, 0.380; 2^17 -> 305,502,617 topplings, radius 137.2, about 4 s | computed | point2.js and pw2.mjs (3,979 ms headless) | |
+| 07 | 2^16 grains take 77,107,818 topplings by sweeps and by a stack | computed | point.js (stack, floor(h/4) per pop) and point2.js (sweeps): identical | |
+| 07 | Fig 6 now seeded: size per grain slope +0.00 to +0.04; topplings per step -1.56 to -1.67 (run 1: +0.03, -1.67); dip below 0.01 (slope +0.34 to +0.76); flat below 0.002 (-0.20 to +0.10) | computed | spec.cjs over runs 1-10 using the page's own functions | Prose "near -1.6" and "flat" unchanged |
+
+House rules: no em dashes; canvas and d3 colours go through Theme.c / Theme.pick (the old page fed fixed RGB to canvases in dark mode; now paired). Captions say faint/strong instead of light/dark so they read in both themes. No SVG text under 11px at 1280 or 390, no horizontal overflow at 390, no console errors in light, dark or reduced motion.
