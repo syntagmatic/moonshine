@@ -28,25 +28,25 @@ Forest fires and epidemics share a threshold below which clusters stay finite. T
 Drop grains one at a time and the pile tunes itself to a critical state with avalanches of every size. The reader topples a pile in two orders to see it end the same, collapses avalanche sizes across grid sizes against the stochastic Manna rule, burns piles to test recurrence and finds the group identity, grows the fractal from grains dropped at one point, and tests the claim that the pile makes 1/f noise.
 
 ### 8. Laplacian Growth
-Diffusion-limited aggregation, dielectric breakdown and river networks are growth driven by a field that concentrates at the tips. The reader grows a cluster with a live fractal-dimension fit and compares branching statistics across cluster, discharge and a simulated river basin.
+Diffusion-limited aggregation, dielectric breakdown and river networks are growth driven by a field that concentrates at the tips. The reader grows a cluster with a live fractal-dimension fit, fires walkers at a frozen DLA cluster and an Eden blob to see where they land (harmonic measure), measures how stickiness and the breakdown exponent eta set the dimension, and tests a simulated river basin against a DLA tree with Hack's law and drainage-area distributions.
 
 ### 9. Self-Avoiding Walks
-A walk that cannot cross itself spreads faster than diffusion, with an exponent that models polymers. The reader fits end-to-end distance against length for true self-avoiding walks (sampled uniformly, e.g. by the pivot algorithm) and for random walks, and watches a growing walk trap itself (about 71 steps on average), which is why growing walks cannot stand in for SAWs.
+A walk that cannot cross itself spreads faster than diffusion, with an exponent that models polymers. The reader counts every walk to 20 steps and extrapolates the growth rate toward the connective constant, steps through pivot moves accepted and rejected, fits end-to-end distance against length for pivot-sampled SAWs and random walks, collapses the end-distance distribution, and watches a growing walk trap itself (about 71 steps on average). Rosenbluth weights show why grown walks, weighted or not, cannot stand in for SAWs at length.
 
 ### 10. Stigmergy
-Slime mold, ant trails, lawn footpaths and termite pellets share one loop: write into a shared field, let it fade and spread, steer toward the strongest. Signature figures are a particle model of Physarum building networks and the double-bridge experiment run as live batches of colonies.
+Slime mold, ant trails, lawn footpaths and termite pellets share one loop: write into a shared field, let it fade and spread, steer toward the strongest. Signature figures are a particle model of Physarum, Tero's flow-reinforced tubes solving mazes, the double-bridge experiment run as live batches of colonies with symmetry breaking against the choice exponent, and evaporation and pheromone-lifetime sweeps that test deposit-over-decay against the response threshold.
 
 ### 11. Predator-Prey in Space
-The well-mixed Lotka-Volterra cycle is a knife-edge; space keeps the local boom and bust but stops the whole population swinging. The reader draws barriers across a spatial field and sweeps predation rate on a stochastic lattice to find where predators die out.
+The well-mixed Lotka-Volterra cycle is a knife-edge; space keeps the local boom and bust but stops the whole population swinging. The reader sees the paradox of enrichment as a bifurcation diagram, draws barriers across a spatial field, watches the grid mean's swing shrink as the landscape grows while one cell keeps swinging, follows an invasion front that leaves chaos in its wake, and finds the lattice extinction threshold from directed-percolation decay.
 
 ### 12. Two Ways to Make a Pattern
-Turing's reaction-diffusion sets its own wavelength, while positional gradients can scale with the tissue. The reader explores a Gray-Scott parameter map built from real runs, then grows the tissue and adds noise to watch the two mechanisms come apart.
+Turing's reaction-diffusion sets its own wavelength, while positional gradients can scale with the tissue. The reader explores a Gray-Scott parameter map built from real runs, derives the Turing band from the Jacobian and measures it mode by mode on a ring, checks the 2D spacing across box sizes, then grows the tissue (peaks double) and adds noise to watch the two mechanisms come apart. At Gray-Scott's usual diffusion ratio of 2 the Turing band is almost empty, so say the 2D patterns grow from seeds.
 
 ### 13. Excitable Media
-One pair of equations models the traveling and spiral waves of the Belousov-Zhabotinsky reaction and of heart muscle. The reader launches waves in a BZ dish and in cardiac tissue, then breaks a wavefront into a spiral with a timed S1-S2 stimulus and tries to clear it. Show the model's equations, and pace the tissue no faster than it recovers.
+One pair of equations models the traveling and spiral waves of the Belousov-Zhabotinsky reaction and of heart muscle. The reader launches waves in a BZ dish, paces a cardiac cable into 2:1 block with measured restitution of duration and speed, circulates a pulse on a shrinking ring until it dies, then finds the S1-S2 window that breaks a wavefront into a spiral and tries to clear it. Show the model's equations, and pace the tissue no faster than it recovers.
 
 ### 14. The Kuramoto Model
-Oscillators with scattered frequencies lock together once coupling passes a critical value. The reader raises coupling and watches the measured order parameter track theory, then changes the frequency distribution.
+Oscillators with scattered frequencies lock together once coupling passes a critical value. The reader raises coupling and sees which oscillators lock (the plateau of width 2Kr), watches the measured order parameter track theory and sharpen with N, sets the full model beside the one-line Ott-Antonsen equation, then changes the frequency distribution to find the uniform one's jump.
 
 ## What to get right
 

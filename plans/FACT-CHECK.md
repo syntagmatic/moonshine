@@ -58,6 +58,12 @@ series' `LEDGER.md`. What follows is what those checks left for a human.
   (Lighthill-Whitham) in 03; SK freezing at T = 1 in 05; nu = 4/3
   (den Nijs 1979, Smirnov-Werner 2001) in 06; Manna tau = 1.275 via
   Lubeck 2000 in 07. Check each against its source.
+- Enrichment of 08-14 (2026-10-05), from memory or second-hand: the
+  stickiness crossover to ordinary DLA and Maritan et al. PRE 53, 1510 (1996)
+  in 08; des Cloizeaux 1974 via Ordemann et al. 2001 in 09; the |Q|^mu form
+  of Tero et al. 2007 (only mu = 1 checked, via Bonifaci 2012) in 10; Crampin,
+  Gaffney and Maini 1999 checked from the abstract only in 12; "restitution"
+  in 13; the Daido attribution and Strogatz eq. 4.5 in 14.
 
 ### noether
 
