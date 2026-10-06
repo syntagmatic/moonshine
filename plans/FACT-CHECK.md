@@ -62,7 +62,7 @@ series' `LEDGER.md`. What follows is what those checks left for a human.
   stickiness crossover to ordinary DLA and Maritan et al. PRE 53, 1510 (1996)
   in 08; des Cloizeaux 1974 via Ordemann et al. 2001 in 09; the |Q|^mu form
   of Tero et al. 2007 (only mu = 1 checked, via Bonifaci 2012) in 10; Crampin,
-  Gaffney and Maini 1999 checked from the abstract only in 12; "restitution"
+  Gaffney and Maini 1999 (frequency doubling, not reproduced at the page's setting) checked from the abstract only in 12; "restitution"
   in 13; the Daido attribution and Strogatz eq. 4.5 in 14.
 
 ### noether
