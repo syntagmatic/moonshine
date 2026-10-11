@@ -116,7 +116,17 @@ Introduce each once, do not silently reuse.
 
 ## Status
 
-Articles 01-03 built (`docs/foam/`), 04-07 not started; series not yet registered on
-the homepage. Center of gravity (math ladder capped at 4D) and 3D
-rendering (hand-rolled canvas) are locked. Title provisional. Claims to verify before
-each build are tracked in `CLAIMS.md`.
+All seven articles are built (`docs/foam/`) and the series is registered on the homepage.
+`PROMPT.md` describes them as they stand; this file and `brief.md` are the original plan and
+were not rewritten after the build, so where they differ from the pages the pages and the
+prompt are right. Known differences: article 04 gained a live relaxation and a junction-angle
+figure; 05 draws shells of 12, 14 and 16 neighbors (not 15) and replaced the three-instance
+gallery with one cube read two ways; 06 uses a rhombohedral lattice family and found that
+packing and partition agree again in four dimensions; 07 replaced the two-bubble pressure
+figure with the turning-count figure and added the time series.
+
+Shared code: `lib/cells.js` (periodic Voronoi and weighted cells), `lib/evolver.js` (soap-film
+relaxer), `lib/foam3d.js` (canvas 3D), and one helper per later article (`05-frustration.js`,
+`06-lattice.js`, `07-coarsen.js`). `node scripts/foam-test.mjs` runs every library's checks;
+`--convergence` adds the mesh-refinement study behind the relaxed wall costs. Claims are
+tracked in `LEDGER.md`.

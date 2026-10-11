@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Foams in Motion · Foam</title>
+<script src="../lib/motion.js"></script>
+<link href="../vendor/fonts/sans-serif-mono/fonts.css" rel="stylesheet">
+<link rel="stylesheet" href="../vendor/katex@0.16.9/katex.min.css">
+<link rel="stylesheet" href="style.css">
+<style>
+  .figure canvas { display: block; width: 100%; border-radius: 4px; }
+  .figure .readout { margin-top: 0.6rem; font-size: 0.8rem; line-height: 1.5; min-height: 1.5em; }
+  .controls output { font-family: var(--mono-font); color: var(--text); }
+  .controls input[type="range"] { width: 170px; max-width: 100%; }
+  .controls .status { color: var(--text-2); }
+</style>
+<script src="../vendor/js/d3.v7.min.js"></script>
+<script defer src="../vendor/katex@0.16.9/katex.min.js"></script>
+<script src="lib/07-coarsen.js"></script>
+</head>
+<body>
+<div class="article">
+  <header>
+    <h1>Foams in Motion</h1>
+    <p class="subtitle">A foam left alone coarsens: gas leaks from bubble to bubble, small bubbles vanish and large ones grow. In two dimensions, how fast a bubble changes depends only on how many sides it has.</p>
+  </header>
+
+  <p>The foams in the earlier parts were drawn at rest: the honeycomb of Part 1, Kelvin's cell in
+  Part 3, the Weaire-Phelan foam in Part 4. A real foam does not rest. Its films are slightly
+  permeable, and gas seeps through them from one bubble into the next. Small bubbles empty into
+  their neighbors and disappear, the survivors grow, and the foam gets coarser. No film has to
+  burst for this to happen.</p>
+
+  <p>This part follows that process in a dry foam one bubble thick, like the froth between glass
+  plates in Part 1. There it obeys an unusually simple rule: how fast a bubble gains or loses area
+  depends on its number of sides and on nothing else.</p>
+
+  <div class="figure" id="figure-foam">
+    <div class="controls">
+      <button class="btn" id="foam-run" type="button">Pause</button>
+      <button class="btn ghost" id="foam-reset" type="button">Reset</button>
+      <span class="status" id="foam-status" role="status"></span>
+    </div>
+    <div id="fig-foam"><canvas role="img" aria-label="A simulated two-dimensional foam coarsening. Bubbles with fewer than six sides are tinted rose and shrink, bubbles with more than six are tinted blue and grow, six-sided bubbles are untinted. Each bubble carries its number of sides."></canvas></div>
+    <div class="readout" id="foam-readout"></div>
+    <p class="figure-caption"><span class="figure-label">Figure 1.</span> A simulated foam on a
+    box that wraps around, left to right and top to bottom. Each bubble shows its number of sides.
+    Bubbles with <span class="t-angle">fewer than six</span> are shrinking, bubbles with
+    <span class="t-lattice">more than six</span> are growing, and the untinted six-sided ones hold
+    their area. The run starts from 300 random bubbles and is fast-forwarded to 100 before it
+    slows to this pace; it stops at 30, before the largest bubbles outgrow the box. While it
+    runs, a <span class="t-angle">ring</span> marks a bubble vanishing (a T2) and a small diamond
+    marks a film swap (a T1). Reset replays the same foam.</p>
+  </div>
+
+  <h2>Pressure, curvature and a leak</h2>
+
+  <p>A film between two bubbles is flat only if the pressures on its two sides are equal.
+  Otherwise it bows into the bubble with the lower pressure, as the wall of the double bubble did
+  in Part 2, and settles on a circular arc whose curvature is proportional to the pressure
+  difference. Gas then leaks through the film from the high side to the low side, at a rate
+  proportional to the pressure difference and to the length of film available. So the area a
+  bubble loses through one wall, per unit time, is proportional to that wall's
+  <span class="t-area">curvature times its length</span>. For a circular arc that product is the
+  angle the arc turns through.</p>
+
+  <h2>Counting the turning</h2>
+
+  <p>Walk once around a bubble. By the time you are back where you started, the direction you
+  face has made one full turn, <span data-tex="2\pi"></span>. Some of that turning happens at the
+  corners. Three films meet at <span class="t-angle">120 degrees</span> at every corner (Part 1),
+  so at each one you turn by 60 degrees, <span data-tex="\pi/3"></span>. A bubble with
+  <span data-tex="n"></span> sides has <span data-tex="n"></span> corners, and its walls have to
+  supply whatever is left:</p>
+
+  <div data-tex-display="\sum_{\text{walls}} \color{#c2410c}{\theta_i} \;=\; 2\pi - n\,\color{#be123c}{\frac{\pi}{3}} \;=\; \frac{\pi}{3}\,(6 - n)"></div>
+
+  <div class="figure" id="figure-turn">
+    <div class="controls">
+      <label for="turn-n">sides <output id="turn-n-out" for="turn-n">4</output></label>
+      <input type="range" id="turn-n" min="3" max="9" step="1" value="4" aria-label="number of sides">
+    </div>
+    <div id="fig-turn"></div>
+    <div class="readout" id="turn-readout"></div>
+    <p class="figure-caption"><span class="figure-label">Figure 2.</span> The symmetric bubble
+    with <span data-tex="n"></span> sides, drawn with every corner at 120&deg; and scaled to the
+    same area for every <span data-tex="n"></span>. Each <span class="t-angle">wedge</span> is the
+    60&deg; turn at a corner. The bar adds them up against one full turn: with four sides the
+    corners cover 240&deg;, so the <span class="t-area">walls</span> must turn the other 120&deg;
+    and bulge outward, and <span class="t-cell">gas</span> leaves. At six the walls are straight.
+    Past six the corners overshoot, the walls bend inward, and gas enters.</p>
+  </div>
+
+  <p>The left side of that sum is the bubble's total leak, up to a constant
+  <span data-tex="k"></span> that collects the film's tension and permeability:</p>
+
+  <div data-tex-display="\frac{dA}{dt} \;=\; -k \sum_{\text{walls}} \color{#c2410c}{\theta_i} \;=\; \frac{\pi k}{3}\,(n - 6)"></div>
+
+  <p>This is von Neumann's law. The bubble's size has dropped out, and so has its shape. Figure 2
+  draws the symmetric case, but the count works for any bubble whose corners sit at 120 degrees,
+  however lopsided, even when some of its walls curve out and others in. With six sides the walls
+  turn zero in total and the area holds. With fewer the bubble shrinks, and with more it grows.</p>
+
+  <h2>Measuring it</h2>
+
+  <p>None of this was put into the foam of Figure 1. Its films are chains of short straight
+  segments. Each segment pulls on its two ends with the same tension, each bubble pushes on its
+  walls with its pressure, and gas crosses each film in proportion to the pressure difference.
+  The 120-degree corners are not imposed either: a junction is a point pulled by three films, and
+  it comes to rest where three equal pulls balance. Figure 3 measures how fast each bubble's area
+  is changing in that foam and plots it against the bubble's number of sides.</p>
+
+  <div class="figure" id="figure-law">
+    <div id="fig-law"><canvas role="img" aria-label="Scatter plot of measured rate of area change against number of sides for the bubbles of Figure 1, with the line n minus 6. The measured points lie along the line and cross zero at six sides."></canvas></div>
+    <div class="readout" id="law-readout"></div>
+    <p class="figure-caption"><span class="figure-label">Figure 3.</span> Each dot is one bubble
+    of Figure 1 followed over one short interval in which it took part in no swap and lost no
+    neighbor: its measured change of area per unit time against its number of sides, in time
+    units that make the predicted line exactly <span data-tex="n-6"></span>. The dots are spread
+    sideways so they can be seen, and only the latest 300 for each side count are drawn. The line
+    is not fitted to them. The open circles are the averages over every measurement so far, and
+    the readout gives the least-squares fit to the same data. The scatter comes from the finite
+    mesh and is largest for bubbles about to vanish, such as the three-sided ones.</p>
+  </div>
+
+  <h2>Why it never settles</h2>
+
+  <p>Six is also the average. In any foam with three-way junctions, Euler's formula fixes the
+  mean number of sides at exactly six, as it did for the froth of Part 1. So bubbles above six
+  are always balanced by bubbles below, and the only foam at rest is one in which every bubble
+  has six sides.</p>
+
+  <p>The law gives a bubble's rate, not its fate, because side counts change, in two ways. When
+  a film shrinks to nothing, the two bubbles that shared it are parted and the two at its ends
+  become neighbors. That is a <em>T1</em>, a neighbor swap: one pair loses a side each, the
+  other pair gains one, and nothing disappears. When a bubble shrinks to nothing, that is a
+  <em>T2</em>. In this simulation it gets there as a triangle, having shed its other sides in
+  T1s on the way down, and its three neighbors each lose a side. A growing seven-sided bubble
+  can lose two neighbors this way and start to shrink.</p>
+
+  <h2>Less film, larger bubbles</h2>
+
+  <p>Through all of this one quantity moves in a single direction. Gas flows from high pressure
+  to low, and every such transfer shortens the total length of <span class="t-area">film</span>.
+  In Parts 1 to 4 least film was a property of a finished pattern. Here it is a direction of
+  travel. The pace is set by the law as well: <span data-tex="k"></span> is an area per unit time
+  and the foam has no length of its own to compare it with, so once the starting pattern is
+  forgotten the mean <span class="t-cell">bubble area</span> can only grow in proportion to the
+  time elapsed.</p>
+
+  <div class="figure" id="figure-time">
+    <div id="fig-time"><canvas role="img" aria-label="Two time series from the run of Figure 1. First: mean bubble area rising in steps, close to a straight line. Second: total film length falling."></canvas></div>
+    <div class="readout" id="time-readout"></div>
+    <p class="figure-caption"><span class="figure-label">Figure 4.</span> The same run as
+    Figure 1, from its random start; the dotted marker is where Figure 1 began showing. First
+    panel: <span class="t-cell">mean bubble area</span>. It bends upward while the random start
+    is being forgotten, then runs close to the dashed line, a straight-line fit to everything
+    after the mean area has doubled. Second panel: total <span class="t-area">film length</span>,
+    which only falls. Areas are in units of the starting mean bubble area and time is in the
+    units of Figure 3. A few hundred bubbles is a small sample, and the fitted slope wanders. A
+    separate run of 3,000 bubbles grew by 0.99, 0.99 and 1.06 units of area per unit time over
+    its last three doublings, about the pace of one seven-sided bubble.</p>
+  </div>
+
+  <h2>Grains, and the third dimension</h2>
+
+  <p>John von Neumann gave the argument in 1952, as a written discussion of a paper on the shapes
+  of metal grains by Cyril Stanley Smith. It takes up pages 108 to 110 of the volume
+  <em>Metal Interfaces</em>. Four years later William Mullins showed that the same law holds for
+  the grains themselves. A grain boundary in a metal has no gas to leak, but it moves toward its
+  center of curvature at a speed proportional to the curvature, and the count of turning goes
+  through unchanged.</p>
+
+  <p>In three dimensions counting is not enough. Robert MacPherson and David Srolovitz found the
+  exact law in 2007, for walls that move in proportion to their mean curvature:</p>
+
+  <div data-tex-display="\frac{dV}{dt} \;=\; -2\pi M\gamma \left( \mathcal{L} - \frac{1}{6}\sum_{i} e_i \right)"></div>
+
+  <p>Here <span data-tex="\mathcal{L}"></span> is the cell's mean width, a measure of its linear
+  size, the <span data-tex="e_i"></span> are the lengths of its edges, where three cells meet,
+  and <span data-tex="M\gamma"></span> plays the part of <span data-tex="k"></span>. Written the
+  same way, von Neumann's law reads
+  <span data-tex="dA/dt = -2\pi M\gamma\,(1 - n/6)"></span>. In the plane each corner cancels a
+  sixth of a full turn. In space each unit of edge length cancels a sixth of a unit of mean
+  width, and both are lengths that vary from cell to cell, so no number of faces plays the part
+  of six.</p>
+
+  <p>Coarsening is not a search for the foams of the earlier parts. Those problems fix the number
+  of cells, make them equal, and ask for the least wall. A coarsening foam keeps neither
+  condition. It sheds film by making its bubbles unequal and removing the small ones, and with
+  unequal bubbles it can undercut the honeycomb: the readout under Figure 4 compares its film
+  with a honeycomb of as many equal cells in the same box, and the foam runs several percent
+  lower. Hales's theorem is about equal areas, so nothing is contradicted. Figure 1 halts at 30
+  bubbles only because its box is small. The rules name no stopping point short of a foam in
+  which every bubble has six sides, and nothing in them steers the foam toward one.</p>
+
+  <footer class="article-footer">
+    <p>Part of <a href="index.html">Foam: Dividing Space with the Least Surface</a>.
+    Previous: <a href="06-the-lattice-recipe.html">The Lattice Recipe</a>.</p>
+    <p class="muted">Machine-generated. Built with moonshine.</p>
+  </footer>
+</div>
+
+<script>
+// KaTeX \\color{} takes literal hex: swap light concept colors for the dark theme's.
+var TEX_DARK = window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches;
+function texSrc(src) {
+  var map = { '#c2410c': '#fb923c', '#be123c': '#fb7185', '#0e7490': '#2dd4bf', '#0d9488': '#5eead4', '#7c3aed': '#c084fc', '#2563eb': '#60a5fa' };
+  return TEX_DARK ? src.replace(/#[0-9a-fA-F]{6}/g, function (h) { return map[h.toLowerCase()] || h; }) : src;
+}
+window.addEventListener('load', function () {
+  if (!window.katex) return;
+  document.querySelectorAll('[data-tex]').forEach(function (el) { katex.render(texSrc(el.getAttribute('data-tex')), el, { throwOnError: false }); });
+  document.querySelectorAll('[data-tex-display]').forEach(function (el) { katex.render(texSrc(el.getAttribute('data-tex-display')), el, { throwOnError: false, displayMode: true }); });
+});
+
+window.addEventListener('load', function () {
+  var REDUCED = !!(window.Motion && Motion.reduced());
+  var FONT = "'Source Sans 3', system-ui, sans-serif";
+
+  // Series colors, resolved to hex once (canvas and d3 interpolators need literals).
+  var cs = getComputedStyle(document.documentElement);
+  function cv(name) { return cs.getPropertyValue(name).trim(); }
+  var COL = { text: cv('--text'), text2: cv('--text-2'), bg: cv('--fig-bg'), border: cv('--border'),
+    film: cv('--c-area'), shrink: cv('--c-angle'), grow: cv('--c-lattice'), cell: cv('--c-cell') };
+  var TINT = [0, 0.24, 0.44, 0.64];
+  var FILL = {};
+  for (var q = 2; q <= 14; q++) {
+    var d = Math.min(3, Math.abs(q - 6));
+    FILL[q] = d === 0 ? d3.interpolateRgb(COL.bg, COL.text2)(0.07) : d3.interpolateRgb(COL.bg, q < 6 ? COL.shrink : COL.grow)(TINT[d]);
+  }
+  function hue(n) { return n < 6 ? COL.shrink : n > 6 ? COL.grow : COL.text2; }
+
+  function fitCanvas(canvas, cssH) {
+    var w = canvas.parentNode.clientWidth, dpr = Math.min(2, window.devicePixelRatio || 1);
+    if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(cssH * dpr)) {
+      canvas.width = Math.round(w * dpr); canvas.height = Math.round(cssH * dpr);
+      canvas.style.height = cssH + 'px';
+    }
+    var ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, cssH);
+    return { ctx: ctx, w: w, h: cssH };
+  }
+  function num(x, d) { return x.toFixed(d).replace('-', '−'); }
+
+  // ================= the shared run: one foam, watched by Figures 1, 3 and 4 =================
+  // Units. The library starts with mean bubble area 1. kappa is its predicted dA/dt per
+  // side away from six, so tau = kappa * t is the time in which the law reads n - 6.
+  var CFG = { n: 300, seed: 1952, aspect: 1.4, M: 5, D: 1, res: 4, dmin: 0.25, relax: 200, show: 100, end: 30, window: 0.02, keep: 300 };
+  var Run = null, views = [];
+
+  function newRun() {
+    var foam = FoamCoarsen.random(CFG);
+    foam.relax(CFG.relax);          // films settle with the gas frozen
+    var r = {
+      foam: foam, kappa: foam.rateConstant(), t0: foam.t, phase: 'prerun',
+      meter: null, next: 0, dots: {}, total: 0, byN: {}, sx: 0, sy: 0, sxx: 0, sxy: 0, syy: 0,
+      series: [], shown: null, rises: 0, intervals: 0, lastL: null, seenEvents: 0, marks: []
+    };
+    r.series.push({ tau: 0, area: foam.meanArea(), len: foam.totalLength, bubbles: foam.bubbles });
+    r.lastL = foam.totalLength;
+    return r;
+  }
+  function tau(r) { return (r.foam.t - r.t0) * r.kappa; }
+
+  function sample(r) {
+    var f = r.foam;
+    if (!r.meter) { // start timing a little after the gas is switched on
+      if (f.t - r.t0 < 0.01) return;
+      r.meter = new FoamCoarsen.Meter(f); r.meter.sample(); r.next = f.t + CFG.window * f.meanArea(); return;
+    }
+    if (f.t < r.next) return;
+    r.next = f.t + CFG.window * f.meanArea();
+    var pts = r.meter.sample();
+    for (var i = 0; i < pts.length; i++) {
+      var p = pts[i], y = p.rate / r.kappa;
+      r.total++; r.sx += p.n; r.sy += y; r.sxx += p.n * p.n; r.sxy += p.n * y; r.syy += y * y;
+      var b = r.byN[p.n] || (r.byN[p.n] = { count: 0, sum: 0 });
+      b.count++; b.sum += y;
+      // keep the latest CFG.keep dots for each side count, so rare counts stay visible
+      var list = r.dots[p.n] || (r.dots[p.n] = []);
+      list.push({ y: y, j: ((r.total * 2654435761) >>> 0) / 4294967296 });
+      if (list.length > CFG.keep) list.shift();
+    }
+    r.intervals++; if (f.totalLength > r.lastL) r.rises++;
+    r.lastL = f.totalLength;
+    r.series.push({ tau: tau(r), area: f.meanArea(), len: f.totalLength, bubbles: f.bubbles });
+  }
+  function stepRun(r) { r.foam.step(); sample(r); }
+  function fit(r) {
+    var n = r.total; if (n < 10) return null;
+    var slope = (n * r.sxy - r.sx * r.sy) / (n * r.sxx - r.sx * r.sx), icpt = (r.sy - slope * r.sx) / n;
+    var ssr = r.syy - icpt * r.sy - slope * r.sxy;
+    return { slope: slope, zero: -icpt / slope, rms: Math.sqrt(Math.max(0, ssr / n)), count: n };
+  }
+
+  function redrawAll() { views.forEach(function (v) { if (v.visible) v.draw(); }); }
+
+  // The fast-forward from the random start to CFG.show bubbles runs in short slices so
+  // the page stays responsive. The sequence of steps does not depend on the slicing.
+  function prerun(r) {
+    if (r !== Run) return;
+    var t0 = performance.now(), f = r.foam;
+    while (f.bubbles > CFG.show && performance.now() - t0 < 14) stepRun(r);
+    if (f.bubbles > CFG.show) { if (!REDUCED) redrawAll(); setTimeout(function () { prerun(r); }, 0); return; }
+    r.phase = 'live'; r.prerunMs = performance.now() - r.began;
+    r.shown = { tau: tau(r), t1: f.t1, t2: f.t2, index: r.series.length - 1 };
+    r.seenEvents = f.events.length ? f.events[f.events.length - 1].t : -Infinity;
+    views.forEach(function (v) { v.draw(); }); // every figure, on screen or not, starts from this state
+    updateButtons(); kick();
+  }
+
+  // Live: a fixed number of steps per second of wall-clock, so the foam's history is the
+  // same on every machine; only when each step lands on screen differs.
+  var STEPS_PER_SECOND = 90, paused = false, raf = null, lastFrame = 0, owed = 0;
+  function anyVisible() { return views.some(function (v) { return v.visible && v.live; }); }
+  function frame(now) {
+    raf = null;
+    var r = Run; if (!r || r.phase !== 'live' || paused || !anyVisible()) return;
+    owed += Math.min(0.05, (now - lastFrame) / 1000) * STEPS_PER_SECOND; lastFrame = now;
+    var t0 = performance.now();
+    while (owed >= 1 && performance.now() - t0 < 12) { owed -= 1; stepRun(r); if (r.foam.finished(CFG.end)) { r.phase = 'done'; break; } }
+    if (owed > 3) owed = 0;
+    stampEvents(r, now);
+    redrawAll();
+    if (r.phase === 'done') { updateButtons(); return; }
+    raf = requestAnimationFrame(frame);
+  }
+  function kick() {
+    if (REDUCED || raf || !Run || Run.phase !== 'live' || paused || !anyVisible()) return;
+    lastFrame = performance.now(); owed = 0; raf = requestAnimationFrame(frame);
+  }
+  function stampEvents(r, now) {
+    var ev = r.foam.events;
+    for (var i = 0; i < ev.length; i++) if (ev[i].t > r.seenEvents) r.marks.push({ type: ev[i].type, x: ev[i].x, y: ev[i].y, at: now });
+    if (ev.length) r.seenEvents = Math.max(r.seenEvents, ev[ev.length - 1].t);
+    while (r.marks.length && now - r.marks[0].at > 900) r.marks.shift();
+  }
+  function advance(steps) { // reduced motion: jump ahead without animating
+    var r = Run; if (!r || r.phase !== 'live') return;
+    for (var i = 0; i < steps && r.phase === 'live'; i++) { stepRun(r); if (r.foam.finished(CFG.end)) r.phase = 'done'; }
+    redrawAll(); updateButtons();
+  }
+
+  var runBtn = document.getElementById('foam-run'), resetBtn = document.getElementById('foam-reset'), statusEl = document.getElementById('foam-status');
+  function updateButtons() {
+    var r = Run, ph = r ? r.phase : 'prerun';
+    runBtn.disabled = ph !== 'live';
+    runBtn.textContent = REDUCED ? 'Advance' : (paused ? 'Run' : 'Pause');
+    statusEl.textContent = ph === 'prerun' ? 'fast-forwarding from the random start…'
+      : ph === 'done' ? 'stopped at ' + r.foam.bubbles + ' bubbles: the box is too small to go on'
+      : REDUCED ? 'animation is off: Advance jumps ahead' : '';
+  }
+  runBtn.addEventListener('click', function () {
+    if (REDUCED) { advance(240); return; }
+    paused = !paused; updateButtons(); kick();
+  });
+  resetBtn.addEventListener('click', start);
+  function start() {
+    Run = newRun(); Run.began = performance.now(); paused = false; updateButtons();
+    if (!REDUCED) redrawAll();
+    setTimeout(function () { prerun(Run); }, 0);
+  }
+
+  function watch(view, el) {
+    view.visible = true; views.push(view);
+    if (window.Motion && Motion.onVisible) Motion.onVisible(el, function (v) { view.visible = v; if (v) { view.draw(); kick(); } });
+  }
+
+  // ================= Figure 1: the foam =================
+  (function () {
+    var host = document.getElementById('fig-foam'), canvas = host.querySelector('canvas'), readout = document.getElementById('foam-readout');
+    function draw() {
+      var r = Run; if (!r) return;
+      var f = r.foam, c = fitCanvas(canvas, Math.round(host.clientWidth / CFG.aspect)), ctx = c.ctx, s = c.w / f.W, W = f.W, H = f.H;
+      var cells = f.outlines(), labels = [], i, k;
+      ctx.lineJoin = 'round'; ctx.lineWidth = c.w < 500 ? 1.1 : 1.4; ctx.strokeStyle = COL.film;
+      for (i = 0; i < cells.length; i++) {
+        var o = cells[i], p = o.pts, minx = Infinity, maxx = -Infinity, miny = Infinity, maxy = -Infinity;
+        for (k = 0; k < p.length; k += 2) { if (p[k] < minx) minx = p[k]; if (p[k] > maxx) maxx = p[k]; if (p[k + 1] < miny) miny = p[k + 1]; if (p[k + 1] > maxy) maxy = p[k + 1]; }
+        // bring the bubble's own copy into the box, then draw every copy that shows
+        var bx = -Math.floor(0.5 * (minx + maxx) / W) * W, by = -Math.floor(0.5 * (miny + maxy) / H) * H;
+        ctx.fillStyle = FILL[o.n] || FILL[14];
+        for (var ix = -1; ix <= 1; ix++) for (var iy = -1; iy <= 1; iy++) {
+          var ox = bx + ix * W, oy = by + iy * H;
+          if (maxx + ox < 0 || minx + ox > W || maxy + oy < 0 || miny + oy > H) continue;
+          ctx.beginPath(); ctx.moveTo((p[0] + ox) * s, (p[1] + oy) * s);
+          for (k = 2; k < p.length; k += 2) ctx.lineTo((p[k] + ox) * s, (p[k + 1] + oy) * s);
+          ctx.closePath(); ctx.fill(); ctx.stroke();
+          // one numeral per bubble, on the copy whose middle is in the box
+          if (ix === 0 && iy === 0 && Math.sqrt(o.area) * s > 19) labels.push([o.n, Math.max(8, Math.min(c.w - 8, (o.cx + ox) * s)), Math.max(9, Math.min(c.h - 9, (o.cy + oy) * s))]);
+        }
+      }
+      ctx.font = '600 12px ' + FONT; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = COL.text;
+      for (i = 0; i < labels.length; i++) ctx.fillText(labels[i][0], labels[i][1], labels[i][2] + 0.5);
+      // event marks: a ring where a bubble vanished, a diamond where a film swapped
+      var now = performance.now();
+      for (i = 0; i < r.marks.length; i++) {
+        var m = r.marks[i], age = (now - m.at) / 900; if (age < 0 || age > 1) continue;
+        var mx = (((m.x % W) + W) % W) * s, my = (((m.y % H) + H) % H) * s;
+        ctx.globalAlpha = 1 - age; ctx.lineWidth = 2;
+        if (m.type === 'T2') { ctx.strokeStyle = COL.shrink; ctx.beginPath(); ctx.arc(mx, my, 5 + 9 * age, 0, 2 * Math.PI); ctx.stroke(); }
+        else { var z = 5; ctx.strokeStyle = COL.text; ctx.beginPath(); ctx.moveTo(mx, my - z); ctx.lineTo(mx + z, my); ctx.lineTo(mx, my + z); ctx.lineTo(mx - z, my); ctx.closePath(); ctx.stroke(); }
+        ctx.globalAlpha = 1;
+      }
+      var st = f.stats(), sh = r.shown;
+      readout.innerHTML = '<span class="num">' + st.bubbles + '</span> bubbles &middot; mean sides <span class="num">' + st.meanSides.toFixed(2) + '</span>' +
+        (sh ? ' &middot; since 100: <span class="num">' + (st.t1 - sh.t1) + '</span> swaps (T1), <span class="num">' + (st.t2 - sh.t2) + '</span> gone (T2)' : '');
+    }
+    watch({ draw: draw, live: true }, document.getElementById('figure-foam'));
+  })();
+
+  // ================= Figure 3: measured dA/dt against sides =================
+  (function () {
+    var host = document.getElementById('fig-law'), canvas = host.querySelector('canvas'), readout = document.getElementById('law-readout');
+    function draw() {
+      var r = Run; if (!r) return;
+      var narrow = host.clientWidth < 500, c = fitCanvas(canvas, narrow ? 300 : 340), ctx = c.ctx;
+      var m = { l: 40, r: 14, t: 26, b: 40 };
+      var x = d3.scaleLinear().domain([2.4, 10.6]).range([m.l, c.w - m.r]), y = d3.scaleLinear().domain([-3.8, 4.8]).range([c.h - m.b, m.t]);
+      ctx.font = '12px ' + FONT; ctx.textBaseline = 'middle'; ctx.lineWidth = 1;
+      // grid and ticks
+      for (var v = -3; v <= 4; v++) {
+        ctx.strokeStyle = COL.border; ctx.globalAlpha = v === 0 ? 1 : 0.55; ctx.beginPath(); ctx.moveTo(m.l, y(v) + 0.5); ctx.lineTo(c.w - m.r, y(v) + 0.5); ctx.stroke(); ctx.globalAlpha = 1;
+        ctx.fillStyle = COL.text2; ctx.textAlign = 'right'; ctx.fillText(num(v, 0), m.l - 7, y(v));
+      }
+      ctx.textAlign = 'center';
+      for (var n = 3; n <= 10; n++) ctx.fillText(n, x(n), c.h - m.b + 14);
+      ctx.fillStyle = COL.text; ctx.font = '600 12px ' + FONT;
+      ctx.fillText('number of sides', (m.l + c.w - m.r) / 2, c.h - 9);
+      ctx.textAlign = 'left'; ctx.fillText('area gained per unit time', 4, 11);
+      // the law
+      ctx.strokeStyle = COL.text2; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(x(2.6), y(-3.4)); ctx.lineTo(x(10.4), y(4.4)); ctx.stroke();
+      ctx.font = '12px ' + FONT; ctx.fillStyle = COL.text2; ctx.textAlign = 'right'; ctx.fillText('n − 6', x(10.1) - 12, y(4.1) - 9);
+      // measured dots
+      var rad = narrow ? 1.8 : 2.2, jw = narrow ? 0.3 : 0.32;
+      ctx.globalAlpha = 0.4;
+      Object.keys(r.dots).forEach(function (k) {
+        var list = r.dots[k], nn = +k; ctx.fillStyle = hue(nn);
+        for (var i = 0; i < list.length; i++) {
+          var p = list[i]; if (p.y < -3.8 || p.y > 4.8 || nn < 2.4 || nn > 10.6) continue;
+          ctx.beginPath(); ctx.arc(x(nn + (p.j - 0.5) * 2 * jw), y(p.y), rad, 0, 2 * Math.PI); ctx.fill();
+        }
+      });
+      ctx.globalAlpha = 1;
+      // averages per side count
+      ctx.strokeStyle = COL.text; ctx.lineWidth = 1.6;
+      Object.keys(r.byN).forEach(function (k) { var b = r.byN[k]; if (+k > 10) return; ctx.beginPath(); ctx.arc(x(+k), y(b.sum / b.count), 5.5, 0, 2 * Math.PI); ctx.stroke(); });
+      var ft = fit(r);
+      readout.innerHTML = ft ? '<span class="num">' + ft.count.toLocaleString('en-US') + '</span> measurements &middot; fitted slope <span class="num">' + ft.slope.toFixed(3) +
+        '</span> per side (law: 1) &middot; zero at <span class="num">' + ft.zero.toFixed(3) + '</span> sides (law: 6) &middot; rms scatter <span class="num">' + ft.rms.toFixed(3) + '</span>'
+        : 'collecting measurements…';
+    }
+    watch({ draw: draw, live: true }, document.getElementById('figure-law'));
+  })();
+
+  // ================= Figure 4: mean area and film length against time =================
+  (function () {
+    var host = document.getElementById('fig-time'), canvas = host.querySelector('canvas'), readout = document.getElementById('time-readout');
+    function panel(ctx, box, r, key, color, title, yFmt) {
+      var S = r.series, tmax = Math.max(1, S[S.length - 1].tau) * 1.04, vmax = 0, i;
+      for (i = 0; i < S.length; i++) vmax = Math.max(vmax, S[i][key]);
+      var x = d3.scaleLinear().domain([0, tmax]).range([box.x + 40, box.x + box.w - 8]);
+      var y = d3.scaleLinear().domain([0, vmax * 1.08]).nice(4).range([box.y + box.h - 34, box.y + 24]);
+      ctx.font = '12px ' + FONT; ctx.textBaseline = 'middle'; ctx.lineWidth = 1;
+      y.ticks(4).forEach(function (v) {
+        ctx.strokeStyle = COL.border; ctx.globalAlpha = 0.55; ctx.beginPath(); ctx.moveTo(x(0), y(v) + 0.5); ctx.lineTo(x(tmax), y(v) + 0.5); ctx.stroke(); ctx.globalAlpha = 1;
+        ctx.fillStyle = COL.text2; ctx.textAlign = 'right'; ctx.fillText(yFmt(v), x(0) - 6, y(v));
+      });
+      ctx.textAlign = 'center';
+      x.ticks(5).forEach(function (v) { ctx.fillText(v, x(v), box.y + box.h - 22); });
+      ctx.fillStyle = COL.text; ctx.font = '600 12px ' + FONT; ctx.fillText('time', (x(0) + x(tmax)) / 2, box.y + box.h - 6);
+      ctx.textAlign = 'left'; ctx.fillStyle = color; ctx.fillText(title, box.x + 4, box.y + 9);
+      if (r.shown) { // where Figure 1 began showing
+        ctx.strokeStyle = COL.text2; ctx.setLineDash([2, 3]); ctx.beginPath(); ctx.moveTo(x(r.shown.tau), y.range()[0]); ctx.lineTo(x(r.shown.tau), y.range()[1]); ctx.stroke(); ctx.setLineDash([]);
+      }
+      ctx.strokeStyle = color; ctx.lineWidth = 1.8; ctx.lineJoin = 'round'; ctx.beginPath();
+      for (i = 0; i < S.length; i++) { if (i === 0) ctx.moveTo(x(S[i].tau), y(S[i][key])); else ctx.lineTo(x(S[i].tau), y(S[i][key])); }
+      ctx.stroke();
+      return { x: x, y: y, tmax: tmax };
+    }
+    function draw() {
+      var r = Run; if (!r) return;
+      var narrow = host.clientWidth < 500, ph = narrow ? 210 : 250, c = fitCanvas(canvas, narrow ? 2 * ph + 10 : ph), ctx = c.ctx;
+      var w2 = narrow ? c.w : (c.w - 20) / 2;
+      var A = panel(ctx, { x: 0, y: 0, w: w2, h: ph }, r, 'area', COL.cell, 'mean bubble area', function (v) { return v; });
+      panel(ctx, narrow ? { x: 0, y: ph + 10, w: w2, h: ph } : { x: w2 + 20, y: 0, w: w2, h: ph }, r, 'len', COL.film, 'total film length', function (v) { return v; });
+      // straight-line fit to the mean area from the point where it has doubled
+      var S = r.series, txt = [], first = S[0], last = S[S.length - 1], i0 = -1, i;
+      for (i = 0; i < S.length; i++) if (S[i].area >= 2 * first.area) { i0 = i; break; }
+      if (i0 >= 0 && S.length - i0 > 8) {
+        var n = 0, sx = 0, sy = 0, sxx = 0, sxy = 0;
+        for (i = i0; i < S.length; i++) { n++; sx += S[i].tau; sy += S[i].area; sxx += S[i].tau * S[i].tau; sxy += S[i].tau * S[i].area; }
+        var b = (n * sxy - sx * sy) / (n * sxx - sx * sx), a = (sy - b * sx) / n;
+        ctx.strokeStyle = COL.text; ctx.lineWidth = 1.2; ctx.setLineDash([6, 4]); ctx.beginPath();
+        ctx.moveTo(A.x(S[i0].tau), A.y(a + b * S[i0].tau)); ctx.lineTo(A.x(last.tau), A.y(a + b * last.tau)); ctx.stroke(); ctx.setLineDash([]);
+        txt.push('mean area: <span class="num">+' + b.toFixed(2) + '</span> per unit time since it doubled');
+      }
+      // total film against a honeycomb of the same number of equal cells in the same box
+      var hex = 3 / Math.sqrt(3 * Math.sqrt(3) / 2), ratio = last.len / (hex * last.bubbles * Math.sqrt(last.area));
+      txt.push('film: <span class="num">' + Math.round(100 * last.len / first.len) + '%</span> of its starting length, ' +
+        (r.rises === 0 ? 'fell in all <span class="num">' + r.intervals + '</span> sampled intervals' : 'rose in <span class="num">' + r.rises + '</span> of ' + r.intervals + ' sampled intervals'));
+      txt.push('<span class="num">' + (100 * ratio).toFixed(1) + '%</span> of a honeycomb of ' + last.bubbles + ' equal cells');
+      readout.innerHTML = txt.join(' &middot; ');
+    }
+    watch({ draw: draw, live: true }, document.getElementById('figure-time'));
+  })();
+
+  // ================= Figure 2: the symmetric n-sided bubble and its turning =================
+  (function () {
+    var host = document.getElementById('fig-turn'), slider = document.getElementById('turn-n'), out = document.getElementById('turn-n-out'), readout = document.getElementById('turn-readout');
+    var deg = Math.PI / 180;
+    function draw() {
+      var n = +slider.value, B = FoamCoarsen.bubble(n), narrow = host.clientWidth < 500;
+      out.textContent = n;
+      var W = narrow ? 340 : 680, H = narrow ? 446 : 300;
+      d3.select(host).selectAll('*').remove();
+      var svg = d3.select(host).append('svg').attr('viewBox', '0 0 ' + W + ' ' + H).attr('width', '100%').style('display', 'block').style('max-width', W + 'px').style('margin', '0 auto')
+        .attr('role', 'img').attr('aria-label', 'A symmetric bubble with ' + n + ' sides and 120 degree corners, and a bar adding its ' + n + ' corner turns of 60 degrees against one full turn of 360 degrees.');
+      var cx = narrow ? 170 : 165, cy = 150, S = 112, rho = B.rho * S, th = B.wallTurn, R = Math.abs(th) < 1e-9 ? 0 : B.radius * S;
+      function ang(k) { return -Math.PI / 2 + 2 * Math.PI * k / n; }          // corner k, clockwise on screen from the top
+      function V(k) { return [cx + rho * Math.cos(ang(k)), cy + rho * Math.sin(ang(k))]; }
+      var g = svg.append('g');
+      // spokes: the third film at each corner
+      for (var k = 0; k < n; k++) {
+        var v = V(k), a = ang(k);
+        g.append('line').attr('x1', v[0]).attr('y1', v[1]).attr('x2', v[0] + 36 * Math.cos(a)).attr('y2', v[1] + 36 * Math.sin(a)).style('stroke', 'var(--c-area)').attr('stroke-width', 2).attr('opacity', 0.45);
+      }
+      // corner turns: the incoming tangent continued (dashed) and the 60 degree wedge to the outgoing one
+      for (k = 0; k < n; k++) {
+        v = V(k);
+        var chordPrev = ang(k - 1) + Math.PI / n + Math.PI / 2, chord = ang(k) + Math.PI / n + Math.PI / 2;
+        var tin = chordPrev + th / 2, tout = chord - th / 2, rr = 17;
+        g.append('line').attr('x1', v[0]).attr('y1', v[1]).attr('x2', v[0] + 27 * Math.cos(tin)).attr('y2', v[1] + 27 * Math.sin(tin)).style('stroke', 'var(--c-angle)').attr('stroke-width', 1).attr('stroke-dasharray', '3 3');
+        g.append('path').attr('d', 'M' + v[0] + ',' + v[1] + 'L' + (v[0] + rr * Math.cos(tin)) + ',' + (v[1] + rr * Math.sin(tin)) + 'A' + rr + ',' + rr + ' 0 0 1 ' + (v[0] + rr * Math.cos(tout)) + ',' + (v[1] + rr * Math.sin(tout)) + 'Z')
+          .style('fill', 'var(--c-angle)').attr('fill-opacity', 0.3).style('stroke', 'var(--c-angle)').attr('stroke-width', 1);
+      }
+      // walls
+      var dpath = '';
+      for (k = 0; k < n; k++) {
+        var p0 = V(k), p1 = V(k + 1);
+        dpath += (k === 0 ? 'M' + p0[0] + ',' + p0[1] : '') + (R ? 'A' + R + ',' + R + ' 0 0 ' + (th > 0 ? 1 : 0) + ' ' + p1[0] + ',' + p1[1] : 'L' + p1[0] + ',' + p1[1]);
+      }
+      g.append('path').attr('d', dpath + 'Z').style('fill', 'color-mix(in srgb, var(--c-cell) 9%, var(--fig-bg))').style('stroke', 'var(--c-area)').attr('stroke-width', 2.6).attr('stroke-linejoin', 'round');
+      // gas: an arrow across the middle of each wall, its length proportional to the wall's turning
+      var apo = rho * Math.cos(Math.PI / n), sag = R ? R * (1 - Math.cos(Math.abs(th) / 2)) * (th > 0 ? 1 : -1) : 0;
+      for (k = 0; k < n && R; k++) {
+        var am = ang(k) + Math.PI / n, len = 0.62 * Math.abs(th) / deg, dir = th > 0 ? 1 : -1, mid = apo + sag;
+        var r0 = mid - dir * (len / 2 + 2), r1 = mid + dir * (len / 2 + 2), ux = Math.cos(am), uy = Math.sin(am);
+        g.append('line').attr('x1', cx + r0 * ux).attr('y1', cy + r0 * uy).attr('x2', cx + r1 * ux).attr('y2', cy + r1 * uy).style('stroke', 'var(--c-cell)').attr('stroke-width', 2);
+        var hx = cx + r1 * ux, hy = cy + r1 * uy, hs = 5.5;
+        g.append('path').attr('d', 'M' + (hx + dir * hs * ux) + ',' + (hy + dir * hs * uy) + 'L' + (hx - hs * 0.8 * uy) + ',' + (hy + hs * 0.8 * ux) + 'L' + (hx + hs * 0.8 * uy) + ',' + (hy - hs * 0.8 * ux) + 'Z').style('fill', 'var(--c-cell)');
+      }
+      // the turning budget: n corner turns of 60 degrees against one full turn
+      var bx = narrow ? 20 : 350, by = narrow ? 300 : 84, bw = narrow ? 300 : 310, px = bw / 540, bh = 20;
+      var bar = svg.append('g');
+      bar.append('text').attr('x', bx).attr('y', by - 12).attr('font-size', 13).attr('font-weight', 600).style('fill', 'var(--c-angle)').text('corners: ' + n + ' × 60° = ' + n * 60 + '°');
+      for (k = 0; k < n; k++) bar.append('rect').attr('x', bx + k * 60 * px + 0.75).attr('y', by).attr('width', 60 * px - 1.5).attr('height', bh).style('fill', 'var(--c-angle)').attr('fill-opacity', 0.6);
+      var wallDeg = 360 - 60 * n, y2 = by + bh + 34;
+      bar.append('text').attr('x', bx).attr('y', y2 - 12).attr('font-size', 13).attr('font-weight', 600).style('fill', 'var(--c-area)')
+        .text('walls: ' + (wallDeg > 0 ? '+' : wallDeg < 0 ? '−' : '') + Math.abs(wallDeg) + '°' + (wallDeg ? ' (' + (Math.abs(wallDeg) / n).toFixed(1).replace('.0', '') + '° each, bulging ' + (wallDeg > 0 ? 'out' : 'in') + ')' : ' (straight)'));
+      if (wallDeg) bar.append('rect').attr('x', bx + Math.min(360, 60 * n) * px).attr('y', y2).attr('width', Math.abs(wallDeg) * px).attr('height', bh).style('fill', 'var(--c-area)').attr('fill-opacity', wallDeg > 0 ? 0.7 : 0.3).style('stroke', 'var(--c-area)').attr('stroke-width', wallDeg > 0 ? 0 : 1.2).attr('stroke-dasharray', wallDeg > 0 ? null : '4 3');
+      // the full turn
+      var fx = bx + 360 * px;
+      bar.append('line').attr('x1', fx).attr('x2', fx).attr('y1', by - 6).attr('y2', y2 + bh + 8).style('stroke', 'var(--text)').attr('stroke-width', 1.4);
+      bar.append('text').attr('x', fx).attr('y', y2 + bh + 24).attr('text-anchor', 'middle').attr('font-size', 13).style('fill', 'var(--text)').text('one full turn, 360°');
+      bar.append('line').attr('x1', bx).attr('x2', bx + bw).attr('y1', y2 + bh + 8).attr('y2', y2 + bh + 8).style('stroke', 'var(--border)');
+      bar.append('text').attr('x', bx).attr('y', y2 + bh + 24).attr('font-size', 13).style('fill', 'var(--text-2)').text('0°');
+      var rate = (Math.PI / 3) * (n - 6);
+      readout.innerHTML = 'dA/dt = (&pi;/3)(' + n + ' &minus; 6) k = <span class="num">' + num(rate, 2) + ' k</span>' +
+        (n < 6 ? ': gas leaves and the bubble shrinks' : n > 6 ? ': gas enters and the bubble grows' : ': no gas crosses and the area holds');
+    }
+    slider.addEventListener('input', draw);
+    draw();
+    window.addEventListener('resize', draw);
+  })();
+
+  window.addEventListener('resize', function () { views.forEach(function (v) { v.draw(); }); });
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { views.forEach(function (v) { v.draw(); }); });
+  // for checking the page from a console or a headless browser
+  window.__foam = { run: function () { return Run; }, cfg: CFG, advance: advance, fit: function () { return fit(Run); } };
+  start();
+});
+</script>
+</body>
+</html>

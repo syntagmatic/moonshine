@@ -7,6 +7,11 @@
 //   truncatedOctahedron()      -> { verts, faces:[{idx, type}] }   (Kelvin / BCC cell)
 //   cube(), octahedron(), rhombicDodecahedron()                    (FCC cell)
 //   makeViewer(canvas, geom, opts) -> { redraw, state, geom, stopSpin }
+//   makeSceneViewer(canvas, sceneFn, opts) -> { redraw, state, stopSpin }
+//     sceneFn() -> [{ pts, color:'--css-var'|'#hex', edges:true|false|[bool per side], dx, dy, center }]
+//     for several solids or curved (triangulated) cells. pts run counterclockwise seen
+//     from outside; dx, dy shift a solid on screen so each turns about its own center;
+//     center (optional, the solid's middle) makes whole solids paint far to near.
 //
 // geom = { verts: [[x,y,z],...], faces: [{idx:[vertexIndices], type:'square'|'hex'|...}] }
 
@@ -141,6 +146,102 @@
   }
   function clamp(x) { return Math.max(0, Math.min(255, Math.round(x))); }
 
+  // Drag, arrow keys and a slow idle spin for a canvas whose view is state.ax, state.ay.
+  function attach(canvas, state, draw, opts) {
+    var dragging = false, lx = 0, ly = 0;
+    canvas.style.touchAction = 'none'; canvas.style.cursor = 'grab';
+    // keyboard: arrow keys turn the solid
+    canvas.tabIndex = 0;
+    canvas.setAttribute('role', 'img');
+    if (opts.label) canvas.setAttribute('aria-label', opts.label + ' Drag or use the arrow keys to rotate.');
+    canvas.addEventListener('keydown', function (e) {
+      var d = { ArrowLeft: [0, -1], ArrowRight: [0, 1], ArrowUp: [-1, 0], ArrowDown: [1, 0] }[e.key];
+      if (!d) return;
+      e.preventDefault();
+      state.ax += d[0] * 0.15; state.ay += d[1] * 0.15; draw();
+    });
+    canvas.addEventListener('pointerdown', function (e) { dragging = true; lx = e.clientX; ly = e.clientY; canvas.style.cursor = 'grabbing'; canvas.setPointerCapture(e.pointerId); });
+    canvas.addEventListener('pointermove', function (e) {
+      if (!dragging) return;
+      state.ay += (e.clientX - lx) * 0.01; state.ax += (e.clientY - ly) * 0.01;
+      lx = e.clientX; ly = e.clientY; draw();
+    });
+    function end() { dragging = false; canvas.style.cursor = 'grab'; }
+    canvas.addEventListener('pointerup', end); canvas.addEventListener('pointercancel', end);
+
+    var spinning = false, raf = null;
+    function spin() { if (!spinning) return; if (!dragging) { state.ay += 0.004; draw(); } raf = requestAnimationFrame(spin); }
+    function startSpin() { if (global.Motion && Motion.reduced()) { draw(); return; } if (spinning) return; spinning = true; raf = requestAnimationFrame(spin); }
+    function stopSpin() { spinning = false; if (raf) cancelAnimationFrame(raf); }
+    if (opts.spin === false) { draw(); }
+    else if (global.Motion && Motion.onVisible) { Motion.onVisible(canvas, function (v) { v ? startSpin() : stopSpin(); }); }
+    else { startSpin(); }
+    return stopSpin;
+  }
+
+  // Several solids, or curved cells cut into triangles, in one canvas. Back faces are
+  // culled and the rest painted far to near, which is exact for one convex solid and
+  // close enough for nearly convex cells that do not interpenetrate.
+  function makeSceneViewer(canvas, sceneFn, opts) {
+    opts = opts || {};
+    var ctx = canvas.getContext('2d');
+    var DPR = global.devicePixelRatio || 1;
+    var W = opts.width || canvas.clientWidth || 360, H = opts.height || 340;
+    canvas.width = W * DPR; canvas.height = H * DPR;
+    canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+    ctx.scale(DPR, DPR);
+    var edgeCol = opts.edge || cssVar('--text', '#1a1a2e');
+    var light = norm(opts.light || [0.4, 0.55, 0.78]);
+    var state = { ax: opts.ax != null ? opts.ax : -0.42, ay: opts.ay != null ? opts.ay : 0.62, scale: opts.scale || 58 };
+    var rgbCache = {};
+    function rgbOf(col) {
+      if (!rgbCache[col]) rgbCache[col] = toRgb(col.slice(0, 2) === '--' ? cssVar(col, '#0e7490') : col);
+      return rgbCache[col];
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, W, H);
+      var items = sceneFn(), s = state.scale, cx0 = W / 2, cy0 = H / 2, vis = [];
+      var cxr = Math.cos(state.ax), sxr = Math.sin(state.ax), cyr = Math.cos(state.ay), syr = Math.sin(state.ay);
+      for (var i = 0; i < items.length; i++) {
+        var it = items[i], n = it.pts.length, P = new Array(n), zc = 0;
+        for (var j = 0; j < n; j++) {
+          var p = it.pts[j], y1 = p[1] * cxr - p[2] * sxr, z1 = p[1] * sxr + p[2] * cxr;
+          P[j] = [p[0] * cyr + z1 * syr, y1, -p[0] * syr + z1 * cyr];
+          zc += P[j][2];
+        }
+        var nr = faceNormalRaw(P), L = Math.hypot(nr[0], nr[1], nr[2]);
+        if (!L || nr[2] / L <= 0.001) continue;        // back face
+        var c = it.center, zg = c ? -c[0] * syr + (c[1] * sxr + c[2] * cxr) * cyr : zc / n;
+        vis.push({ it: it, P: P, z: zc / n, zg: zg, lam: 0.45 + 0.55 * Math.max(0, (nr[0] * light[0] + nr[1] * light[1] + nr[2] * light[2]) / L) });
+      }
+      vis.sort(function (a, b) { return (a.zg - b.zg) || (a.z - b.z); });
+      ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+      vis.forEach(function (o) {
+        var it = o.it, P = o.P, n = P.length, ox = cx0 + (it.dx || 0), oy = cy0 + (it.dy || 0), rgb = rgbOf(it.color || '--c-cell'), k = o.lam;
+        var fill = 'rgb(' + clamp(rgb[0] * k) + ',' + clamp(rgb[1] * k) + ',' + clamp(rgb[2] * k) + ')';
+        ctx.beginPath();
+        for (var j = 0; j < n; j++) { var X = ox + P[j][0] * s, Y = oy - P[j][1] * s; if (j === 0) ctx.moveTo(X, Y); else ctx.lineTo(X, Y); }
+        ctx.closePath();
+        ctx.fillStyle = fill; ctx.fill();
+        if (it.edges !== true) { ctx.lineWidth = 0.7; ctx.strokeStyle = fill; ctx.stroke(); }   // close hairline seams between triangles
+        if (!it.edges) return;
+        ctx.lineWidth = 1; ctx.strokeStyle = edgeCol; ctx.globalAlpha = 0.85;
+        ctx.beginPath();
+        for (j = 0; j < n; j++) {
+          if (it.edges !== true && !it.edges[j]) continue;
+          var a = P[j], b = P[(j + 1) % n];
+          ctx.moveTo(ox + a[0] * s, oy - a[1] * s); ctx.lineTo(ox + b[0] * s, oy - b[1] * s);
+        }
+        ctx.stroke(); ctx.globalAlpha = 1;
+      });
+    }
+
+    var stopSpin = attach(canvas, state, draw, opts);
+    draw();
+    return { redraw: draw, state: state, stopSpin: stopSpin };
+  }
+
   function makeViewer(canvas, geom, opts) {
     opts = opts || {};
     var ctx = canvas.getContext('2d');
@@ -198,34 +299,7 @@
       });
     }
 
-    var dragging = false, lx = 0, ly = 0;
-    canvas.style.touchAction = 'none'; canvas.style.cursor = 'grab';
-    // keyboard: arrow keys turn the solid
-    canvas.tabIndex = 0;
-    canvas.setAttribute('role', 'img');
-    if (opts.label) canvas.setAttribute('aria-label', opts.label + ' Drag or use the arrow keys to rotate.');
-    canvas.addEventListener('keydown', function (e) {
-      var d = { ArrowLeft: [0, -1], ArrowRight: [0, 1], ArrowUp: [-1, 0], ArrowDown: [1, 0] }[e.key];
-      if (!d) return;
-      e.preventDefault();
-      state.ax += d[0] * 0.15; state.ay += d[1] * 0.15; draw();
-    });
-    canvas.addEventListener('pointerdown', function (e) { dragging = true; lx = e.clientX; ly = e.clientY; canvas.style.cursor = 'grabbing'; canvas.setPointerCapture(e.pointerId); });
-    canvas.addEventListener('pointermove', function (e) {
-      if (!dragging) return;
-      state.ay += (e.clientX - lx) * 0.01; state.ax += (e.clientY - ly) * 0.01;
-      lx = e.clientX; ly = e.clientY; draw();
-    });
-    function end() { dragging = false; canvas.style.cursor = 'grab'; }
-    canvas.addEventListener('pointerup', end); canvas.addEventListener('pointercancel', end);
-
-    var spinning = false, raf = null;
-    function spin() { if (!spinning) return; if (!dragging) { state.ay += 0.004; draw(); } raf = requestAnimationFrame(spin); }
-    function startSpin() { if (global.Motion && Motion.reduced()) { draw(); return; } if (spinning) return; spinning = true; raf = requestAnimationFrame(spin); }
-    function stopSpin() { spinning = false; if (raf) cancelAnimationFrame(raf); }
-    if (opts.spin === false) { draw(); }
-    else if (global.Motion && Motion.onVisible) { Motion.onVisible(canvas, function (v) { v ? startSpin() : stopSpin(); }); }
-    else { startSpin(); }
+    var stopSpin = attach(canvas, state, draw, opts);
 
     draw();
     return { redraw: draw, state: state, geom: geom, stopSpin: stopSpin };
@@ -237,6 +311,7 @@
     octahedron: octahedron,
     rhombicDodecahedron: rhombicDodecahedron,
     makeViewer: makeViewer,
+    makeSceneViewer: makeSceneViewer,
     rotate: rotate
   };
 })(typeof window !== 'undefined' ? window : globalThis);

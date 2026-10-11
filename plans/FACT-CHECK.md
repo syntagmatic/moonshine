@@ -34,7 +34,7 @@ series has got and which suspect claims are still waiting for a look.
 | lithium-ion | | leads settled 2026-09-27; ledger holds those only |
 | grateful-dead | | leads settled 2026-09-27; ledger holds those only |
 | quasicrystals | | leads settled 2026-09-27; ledger holds those only |
-| foam | | leads settled 2026-09-27 (Claims section); its `LEDGER.md` is a build tracker, not a claims ledger |
+| foam | | leads settled 2026-09-27 (Claims section); articles 04 to 07, added 2026-10-10, have full claims sections in its `LEDGER.md`; 01 to 03 have only the build tracker and the settled leads |
 | sph | | Ian's series; ask before touching |
 
 ## Open leads
@@ -135,8 +135,6 @@ Not claims, but found during checks and not yet fixed.
   may make it more visible. 02 wasn't screenshotted at phone width.
 - noether 13: Fig 2 still draws the cone upright along z; the caption says
   so, but a redraw on the true axis (x = y, z = 0) would be better.
-- foam: `plans/foam/README.md` and `brief.md` still describe the old
-  seven-article plan; `PROMPT.md` now matches the three that exist.
 - grateful-dead 03: doesn't mention the 1980 acoustic sets (the format
   claims don't depend on them).
 - grateful-dead 02: 124 venues were geocoded from the 2023 Census
