@@ -402,6 +402,8 @@ Rows earlier in this file that these blocks supersede:
 
 Cross-article agreement checked at merge: the relaxed Weaire-Phelan pressure difference is 0.332 film tension over cube edge in 04 (cost slope and force balance, `lib/04-measure.js`) and in 07 (mean width, `lib/07-law3d.js`), and the dodecahedron's rate is -0.437 k sigma L in both. In-page relaxed Kelvin values differ by mesh and each page names its mesh: 5.3063 on 18,432 triangles (03), 5.3064 on 4,608 (04 Figure 3), 5.3069 on 1,152 (05 Figure 5); 04 and 05 extrapolate to 5.30628 on finer meshes, and 03 sets its value beside the published 5.30628.
 
+Caption pass (2026-10-13, after the blocks below were written): 21 captions of 78 words or more in 01, 02, 03, 04, 05 and 07 were shortened, 2,113 words to 1,742, by cutting control instructions, numbers the readout or chart labels already show, and restated legends. No number changed. Rows below that quote a caption quote it as first written; the claims they record are still on the page in the figure, its readout or the shortened caption, except these, which were only caption text and are gone: 01 Figure 2's forks "8 degrees off" at the stall (the readout still shows the deviation), 03 Figure 3's "every size up to 0.28 has less" (the curve shows it), 05 Figure 7's three wall costs and "the 1997 molecules", and 07 Figure 1's "before the largest outgrow the box".
+
 ### 01 enrichment: The Honeycomb (commit 5cd0403)
 
 Four new figures (1 four pins, 4 mixing side counts, 5 scrambled honeycombs with real
