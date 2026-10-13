@@ -96,6 +96,10 @@ sandbox and keeps them working offline.
   (`localStorage['moonshine-theme']`) and reloads, so don't hand-roll a separate
   `[data-theme]` theme. Load `motion.js` in `<head>`, before any `<style>` or
   `<link>`, so the forced theme applies before first paint.
+- Check a forced theme or forced reduced motion over http, not `file://`. Opened
+  as a file, a linked stylesheet's rules can't be read, so `motion.js` skips it
+  without an error and the page stays in the OS setting: a "dark" pass over
+  `file://` is a second light pass.
 - Motion is on by default for everyone, even when the OS asks for reduced
   motion, because many figures only work animated; readers turn it off with the
   toggle (`localStorage['moonshine-motion'] = 'reduced'`). `motion.js` forces
