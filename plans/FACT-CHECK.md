@@ -34,7 +34,7 @@ series has got and which suspect claims are still waiting for a look.
 | lithium-ion | | leads settled 2026-09-27; ledger holds those only |
 | grateful-dead | | leads settled 2026-09-27; ledger holds those only |
 | quasicrystals | | leads settled 2026-09-27; ledger holds those only |
-| foam | | leads settled 2026-09-27 (Claims section); articles 04 to 07, added 2026-10-10, have full claims sections in its `LEDGER.md`; 01 to 03 have only the build tracker and the settled leads |
+| foam | | leads settled 2026-09-27 (Claims section); articles 04 to 07, added 2026-10-10, have full claims sections in its `LEDGER.md`; enriched 2026-10-13, with a claims block per article (01 to 07) in the ledger's Enrichment section |
 | sph | | Ian's series; ask before touching |
 
 ## Open leads
@@ -64,6 +64,43 @@ series' `LEDGER.md`. What follows is what those checks left for a human.
   of Tero et al. 2007 (only mu = 1 checked, via Bonifaci 2012) in 10; Crampin,
   Gaffney and Maini 1999 (frequency doubling, not reproduced at the page's setting) checked from the abstract only in 12; "restitution"
   in 13; the Daido attribution and Strogatz eq. 4.5 in 14.
+
+### foam
+
+- Enrichment (2026-10-13): ledger rows marked second-hand or from memory.
+  Check each against its source.
+  - 01: Fejes Tóth's 1964 "involve considerable difficulties" is quoted from
+    Hales; the Pappus paraphrase and Plateau as a nineteenth-century physicist
+    were not re-sourced.
+  - 02: one step of Milman and Neeman's proof (moving volume between two
+    pieces of a region) rests on Frank Morgan's 2022 summary; Wichiramala's
+    planar triple bubble proof was confirmed from metadata only; "four
+    bubbles in ordinary space are open" is as of the Milman-Neeman papers.
+  - 03: every Matzke number is second-hand (percentages from Raj 2011,
+    Tables 1 and 4; 600 bubbles, 13.70 faces and "no Kelvin cell" from
+    de Almeida's lecture slides); Plateau's cube is cited through Thomson;
+    the statement of Taylor's 1976 theorem is from memory.
+  - 04: Kusner and Sullivan's floor formula (27/16)(1+√(3/2))³ was
+    reconstructed from garbled PDF text (it evaluates to their printed
+    18.5816); Gabbrielli's "approximately 1500 bubbles" was seen only as a
+    search snippet; the Water Cube dimensions and the 1994 Weaire-Phelan
+    paper were not reopened.
+  - 05: the published C15 cost "about 5.324" was read by eye off a chart in
+    Kraynik's slides (Kraynik, Reinelt and van Swol is paywalled); the name
+    "Z phase" for Zr4Al3 is from memory.
+  - 06: Taylor 1976 is cited through Liang (arXiv:1808.09695); Brakke 1991
+    was read as an abstract; "nothing comparable is proved for
+    four-dimensional lattices" is an absence claim from one search. The page
+    says whether any four-dimensional packing beats D4 is open;
+    arXiv:2609.25120 (September 2026, unreviewed) claims a proof and is not
+    on the page.
+  - 07: MacPherson and Srolovitz's law was read from a later paper by the
+    same authors (Lazar, Mason, MacPherson and Srolovitz), since the Nature
+    paper is behind a login; the honeycomb-with-one-film-removed figure
+    cites no published study.
+- 01: the live numbers in Figures 5 and 6 were checked in Chromium only.
+  In Safari, Relax on Figure 5 should read 8 of 64 at 1.868, and Figure 6
+  should read 18 and 13 with a mean margin of 0.073.
 
 ### noether
 

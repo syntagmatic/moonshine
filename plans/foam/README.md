@@ -125,6 +125,15 @@ gallery with one cube read two ways; 06 uses a rhombohedral lattice family and f
 packing and partition agree again in four dimensions; 07 replaced the two-bubble pressure
 figure with the turning-count figure and added the time series.
 
+Enriched on 2026-10-13: every article was audited and gained computed figures (26 figures
+became 48). The pages and `PROMPT.md` describe the result; the per-article claims are in the
+Enrichment section of `LEDGER.md`. Each article now has its own helper in `lib/`
+(`01-honeycomb.js`, `02-bubbles.js`, `03-kelvin.js`, `04-measure.js`, `07-law3d.js` beside the
+three that existed), and `scripts/foam-NN-*` reproduce the precomputed numbers: the survey of
+64-bubble foams in 01, the fine meshes in 04 and 05, the long local test in 06 and the
+honeycomb runs in 07. Articles 01 and 07 share the film model in `lib/07-coarsen.js`; if its
+stepping changes, rerun `node scripts/foam-01-survey.mjs --write` and update 01's captions.
+
 Shared code: `lib/cells.js` (periodic Voronoi and weighted cells), `lib/evolver.js` (soap-film
 relaxer), `lib/foam3d.js` (canvas 3D), and one helper per later article (`05-frustration.js`,
 `06-lattice.js`, `07-coarsen.js`). `node scripts/foam-test.mjs` runs every library's checks;
