@@ -9,7 +9,14 @@
 //                              is left), t = 1 outer edges stretched until the gap closes.
 //                              { tets:[{pts, faces, center}], gapWedge, dihedral, covered, gap, outer }
 //   sites.c15()             -> the 24 atoms of the cubic Laves phase MgCu2 (C15), AFLOW setting
-//   shell(sites, i, w)      -> site i's Voronoi cell and the neighbors across its walls
+//   shell(sites, i, w, L)   -> site i's Voronoi cell and the neighbors across its walls
+//                              (L, optional: lattice vectors for a non-cubic repeat)
+//   structures.a15/c15/z()  -> { L, pts }  lattice vectors (rows) and sites in lattice coordinates
+//   cellIn(L, pts, i, R)    -> Voronoi cell of site i in a general lattice, walls moved in by R
+//   bonds(structure)        -> every wall of one repeat counted once: how many bonds are ringed
+//                              by five tetrahedra, how many by six, and where the sixes run
+//   ratioFoam(sites, idx, w)-> flat foam with weight w on sites idx, and its cell-volume ratio
+//   softSphere              -> Ziherl and Kamien's free energy for FCC, BCC and A15
 //   census(sites, w)        -> corners, edges, walls, cell kinds and averages for one repeat
 //   equalVolume(sites, idx) -> { w, foam }  weight on sites idx that equalizes all volumes
 //   paulingMarsh()          -> 46 oxygen positions of chlorine hydrate (Pauling & Marsh 1952)
@@ -89,14 +96,21 @@
   // each corner of the cell, so each corner gives a triangle of neighbors, and that
   // triangle with the center site is a tetrahedron. The number of triangles at a
   // neighbor is the number of tetrahedra around the bond to it.
-  function shell(pts, i, weights) {
-    var c = FC.cell(pts, i, weights), p = c.center, F = c.faces.length;
-    var nbr = c.faces.map(function (f) {
-      var q = V.sub(V.add(pts[f.j], f.T), p);
-      return { p: q, site: f.j, sides: f.pts.length, dist: V.len(q), around: 0 };
-    });
+  function shell(pts, i, weights, L) {
+    var c, rel;
+    if (L) {
+      c = cellIn(L, pts, i);
+      rel = c.faces.map(function (f) { return { pts: f.pts, q: f.d, j: f.j }; });
+    } else {
+      c = FC.cell(pts, i, weights);
+      rel = c.faces.map(function (f) {
+        return { pts: f.pts.map(function (x) { return V.sub(x, c.center); }), q: V.sub(V.add(pts[f.j], f.T), c.center), j: f.j };
+      });
+    }
+    var F = rel.length;
+    var nbr = rel.map(function (f) { return { p: f.q, site: f.j, sides: f.pts.length, dist: V.len(f.q), around: 0 }; });
     var corners = [], at = [];
-    c.faces.forEach(function (f, fi) {
+    rel.forEach(function (f, fi) {
       f.pts.forEach(function (x) {
         var k = -1;
         for (var q = 0; q < corners.length; q++) if (V.len(V.sub(corners[q], x)) < 1e-7) { k = q; break; }
@@ -120,7 +134,7 @@
     var all = nbr.map(function (n) { return n.dist; }).concat(edges.map(function (e) { return e.len; }));
     return {
       site: i, Z: F, cell: c,
-      faces: c.faces.map(function (f) { return { pts: f.pts.map(function (x) { return V.sub(x, p); }), sides: f.pts.length }; }),
+      faces: rel.map(function (f) { return { pts: f.pts, sides: f.pts.length }; }),
       neighbors: nbr, tris: tris.filter(Boolean), allTriangles: tris.every(Boolean), edges: edges,
       five: five, six: six, other: other, meanDist: dsum / F,
       shortest: Math.min.apply(null, all), longest: Math.max.apply(null, all)   // every edge of every tetrahedron at this site
@@ -245,6 +259,139 @@
     };
   }
 
+  // ---- general lattices ----
+  // A structure is { L, pts }: L holds the three lattice vectors as rows, in units where
+  // the cube edge (or the hexagonal a) is 1, and pts are sites in lattice coordinates.
+  var CUBIC = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+  function cart(L, f) {
+    return [f[0] * L[0][0] + f[1] * L[1][0] + f[2] * L[2][0], f[0] * L[0][1] + f[1] * L[1][1] + f[2] * L[2][1], f[0] * L[0][2] + f[1] * L[1][2] + f[2] * L[2][2]];
+  }
+  // The Frank-Kasper Z phase, Zr4Al3: space group P6/mmm, a = 5.433, c = 5.390 angstrom,
+  // Zr on 2d (1/3, 2/3, 1/2), Zr on 2e (0, 0, z) with z = 1/4, Al on 3f (1/2, 0, 0), as in
+  // the AFLOW prototype encyclopedia (A3B4_hP7_191_f_de, after Wilson, Thomas and Spooner
+  // 1960). Sites 0-1 have 15 neighbors, 2-3 have 14, 4-6 have 12.
+  var Z_A = 5.433, Z_C = 5.390;
+  function zPhase() {
+    return {
+      L: [[0.5, -Math.sqrt(3) / 2, 0], [0.5, Math.sqrt(3) / 2, 0], [0, 0, Z_C / Z_A]],
+      pts: [[1 / 3, 2 / 3, 0.5], [2 / 3, 1 / 3, 0.5], [0, 0, 0.25], [0, 0, 0.75], [0.5, 0, 0], [0, 0.5, 0], [0.5, 0.5, 0]]
+    };
+  }
+  var structures = {
+    bcc: function () { return { L: CUBIC, pts: FC.sites.bcc() }; },
+    fcc: function () { return { L: CUBIC, pts: FC.sites.fcc() }; },
+    a15: function () { return { L: CUBIC, pts: FC.sites.a15() }; },
+    c15: function () { return { L: CUBIC, pts: c15() }; },
+    z: zPhase
+  };
+
+  // Cell of site i in a lattice with vectors L, in coordinates centered on the site.
+  // shrink moves every wall toward the site by that distance (0 gives the Voronoi cell);
+  // weights slide walls as in cells.js. Each face records the neighbor j, its lattice
+  // translation T and the vector d from this site to that neighbor. Returns volume 0 and
+  // no faces when the walls have closed in past the site.
+  function cellIn(L, pts, i, shrink, weights) {
+    var p = cart(L, pts[i]), wi = weights ? weights[i] : 0, planes = [];
+    for (var j = 0; j < pts.length; j++)
+      for (var a = -2; a <= 2; a++) for (var b = -2; b <= 2; b++) for (var c = -2; c <= 2; c++) {
+        if (j === i && a === 0 && b === 0 && c === 0) continue;
+        var d = V.sub(cart(L, [pts[j][0] + a, pts[j][1] + b, pts[j][2] + c]), p), len = V.len(d), wj = weights ? weights[j] : 0;
+        planes.push({ n: V.mul(d, 1 / len), h: (len * len + wi - wj) / (2 * len) - (shrink || 0), tag: { j: j, T: [a, b, c], d: d } });
+      }
+    planes.sort(function (x, y) { return x.h - y.h; });
+    if (planes[0].h <= 0) return { site: i, center: p, faces: [], volume: 0, area: 0 };
+    var faces = FC.box([0, 0, 0], 3), reach = Infinity;
+    for (var k = 0; k < planes.length; k++) {
+      var pl = planes[k];
+      if (pl.h > reach + 1e-9) break;
+      var cut = FC.clip(faces, pl.n, pl.h, pl.tag);
+      if (cut !== faces) {
+        faces = cut; reach = 0;
+        faces.forEach(function (f) { f.pts.forEach(function (x) { reach = Math.max(reach, V.len(x)); }); });
+      }
+    }
+    faces = faces.filter(function (f) { return f.j != null; });
+    var m = FC.measure(faces);
+    return { site: i, center: p, faces: faces, volume: m.volume, area: m.area };
+  }
+
+  // Every wall of one repeat, once. A wall with n sides is a bond with n tetrahedra around
+  // it; `six` lists the bonds ringed by six as { i, j, T }: site i to site j shifted by T.
+  function bonds(st) {
+    var K = st.pts.length, walls = 0, sides = 0, bySides = {}, kinds = {}, faces = [], six = [];
+    for (var i = 0; i < K; i++) {
+      var c = cellIn(st.L, st.pts, i);
+      faces.push(c.faces.length); kinds[c.faces.length] = (kinds[c.faces.length] || 0) + 1;
+      c.faces.forEach(function (f) {
+        if (!(f.j > i || (f.j === i && lexPos(f.T)))) return;
+        var n = f.pts.length;
+        walls++; sides += n; bySides[n] = (bySides[n] || 0) + 1;
+        if (n === 6) six.push({ i: i, j: f.j, T: f.T, d: f.d });
+      });
+    }
+    return {
+      cells: K, walls: walls, bySides: bySides, kinds: kinds, faces: faces, six: six,
+      sixShare: six.length / walls, meanSides: sides / walls, meanFaces: 2 * walls / K
+    };
+  }
+  // If every bond had five or six tetrahedra around it, this share would need six.
+  var SIX_SHARE_IDEAL = 2 * Math.PI / Math.acos(1 / 3) - 5;
+
+  // Flat foam with one weight w on the sites in idx, and how unequal its cells are:
+  // ratio = volume of a cell in idx over the volume of a cell outside it.
+  function ratioFoam(pts, idx, w) {
+    var inSet = {}, other = -1, kinds = {};
+    idx.forEach(function (i) { inSet[i] = 1; });
+    for (var i = 0; i < pts.length; i++) if (!inSet[i]) { other = i; break; }
+    var fm = FC.foam(pts, pts.map(function (_, k) { return inSet[k] ? w : 0; }));
+    fm.cells.forEach(function (c) { kinds[c.faces.length] = (kinds[c.faces.length] || 0) + 1; });
+    return { foam: fm, ratio: fm.cells[idx[0]].volume / fm.cells[other].volume, kinds: kinds };
+  }
+
+  // ---- Ziherl and Kamien, "Soap froths and crystal structures", PRL 85, 3528 (2000) ----
+  // A micelle is a hard core of radius R inside a soft coat. n is the number density
+  // times R^3. Free energies are per micelle, in units of kT.
+  //   bulk:    free-volume theory. The core's center may go wherever the core stays inside
+  //            its own cell, which is the cell with every wall moved inward by R. The free
+  //            energy is -ln(that volume / R^3), averaged over the sites of a repeat. For
+  //            A15 the authors use the equal-volume cells, as here.
+  //   surface: (l N / R) gamma n^(-2/3) / (1/n - 4 pi / 3), their equation 5: gamma is the
+  //            wall cost of the lattice's foam, N the number of chains per micelle and l a
+  //            length that measures how strongly the coats resist being squeezed.
+  var softSphere = (function () {
+    var wA15 = null;
+    function lattice(name) {
+      if (name === 'a15') { if (!wA15) wA15 = FC.a15Weights(FC.equalVolumeA15().w); return { pts: FC.sites.a15(), w: wA15 }; }
+      return { pts: FC.sites[name](), w: null };
+    }
+    function bulk(name, n) {
+      var lt = lattice(name), K = lt.pts.length, R = Math.pow(n / K, 1 / 3), F = 0, memo = {};
+      for (var i = 0; i < K; i++) {
+        var kind = lt.w ? lt.w[i] : 0;              // sites with the same weight are alike here
+        if (memo[kind] == null) memo[kind] = cellIn(CUBIC, lt.pts, i, R, lt.w).volume;
+        if (memo[kind] <= 0) return Infinity;
+        F -= Math.log(memo[kind] / (R * R * R));
+      }
+      return F / K;
+    }
+    // The authors' closed forms: equation 2 for FCC and BCC, and their fit for A15
+    // (equation 3, with S = 1.64 and C = 1.38).
+    var closed = {
+      fcc: function (n) { return -Math.log(Math.pow(2, 2.5) * Math.pow(Math.pow(2, -5 / 6) / Math.pow(n, 1 / 3) - 1, 3)); },
+      bcc: function (n) { return -Math.log(4 * Math.sqrt(3) * Math.pow(Math.pow(2, -5 / 3) * Math.sqrt(3) / Math.pow(n, 1 / 3) - 1, 3)); },
+      a15: function (n) {
+        var u = Math.sqrt(5) / (4 * Math.pow(n, 1 / 3)) - 1, h = 1 / (2 * Math.pow(n, 1 / 3)) - 1;
+        return -(0.25 * Math.log(4 * Math.PI * 1.64 / 3 * u * u * u) + 0.75 * Math.log(2 * Math.PI * 1.38 * u * u * h));
+      }
+    };
+    function surfPer(n) { return Math.pow(n, -2 / 3) / (1 / n - 4 * Math.PI / 3); }   // surface term per unit of gamma l N / R
+    // Coat strength l / R at which lattice Y takes over from lattice X (Y has the lower wall cost).
+    function takeover(x, y, n, gamma, N) {
+      return (bulk(y, n) - bulk(x, n)) / ((N || softSphere.N) * surfPer(n) * (gamma[x] - gamma[y]));
+    }
+    return { N: 162, melt: 0.120, a15Max: 0.125, bulk: bulk, closed: closed, surfPer: surfPer, takeover: takeover };
+  })();
+
   // ---- checks against closed forms, counts and published values ----
   function runChecks() {
     var out = [];
@@ -304,6 +451,84 @@
     ok('equal-volume C15 keeps 16 cells of 12 faces and 8 of 16', kc[12] === 16 && kc[16] === 8, JSON.stringify(kc));
     ok('flat equal-volume wall cost: C15 above BCC above A15', ec.foam.s > cb.s && cb.s > ea.foam.s, ec.foam.s + ' > ' + cb.s + ' > ' + ea.foam.s);
 
+
+    // general lattices, the Z phase and the bonds ringed by six
+    var gA = cellIn(CUBIC, A, 2), fA = FC.cell(A, 2);
+    near('cellIn on the cubic lattice reproduces cells.js (A15 face site volume)', gA.volume, fA.volume, 1e-12);
+    ok('cellIn on the cubic lattice reproduces cells.js (A15 face site, 14 walls)', gA.faces.length === 14 && Math.abs(gA.area - fA.area) < 1e-12, gA.faces.length);
+    var Zs = zPhase(), bz = bonds(Zs), ba = bonds(structures.a15()), bc = bonds(structures.c15());
+    ok('Z phase (Zr4Al3): 2 sites with 15 neighbors, 2 with 14, 3 with 12', bz.faces.join(',') === '15,15,14,14,12,12,12', bz.faces.join(','));
+    ok('Z phase repeat: 47 walls, 42 pentagons and 5 hexagons', bz.walls === 47 && bz.bySides[5] === 42 && bz.bySides[6] === 5, JSON.stringify(bz.bySides));
+    near('Z phase mean faces per cell is 94/7 = 13.43', bz.meanFaces, 94 / 7, 1e-12);
+    var zvol = 0; Zs.pts.forEach(function (_, i) { zvol += cellIn(Zs.L, Zs.pts, i).volume; });
+    near('Z phase cells fill the hexagonal repeat, volume (sqrt 3 / 2)(c/a)', zvol, Math.sqrt(3) / 2 * Z_C / Z_A, 1e-9);
+    shellCheck('Z phase 15 site', shell(Zs.pts, 0, null, Zs.L), 15, 12, 3);
+    shellCheck('Z phase 14 site', shell(Zs.pts, 2, null, Zs.L), 14, 12, 2);
+    shellCheck('Z phase 12 site', shell(Zs.pts, 4, null, Zs.L), 12, 12, 0);
+    ok('bonds() agrees with census(): A15 6 of 54 walls are hexagons, C15 16 of 160', ba.six.length === 6 && ba.walls === 54 && bc.six.length === 16 && bc.walls === 160,
+      ba.six.length + '/' + ba.walls + ' ' + bc.six.length + '/' + bc.walls);
+    near('share of bonds that must be ringed by six, 360/70.53 - 5 = 0.1043', SIX_SHARE_IDEAL, 0.104299312, 1e-8);
+    ok('share ringed by six: C15 0.1000 < needed 0.1043 < Z 0.1064 < A15 0.1111',
+      bc.sixShare < SIX_SHARE_IDEAL && SIX_SHARE_IDEAL < bz.sixShare && bz.sixShare < ba.sixShare, [bc.sixShare, bz.sixShare, ba.sixShare].join(' '));
+    // angles between the six-ringed bonds leaving one site
+    function sixAngles(b, site) {
+      var ds = [];
+      b.six.forEach(function (s) { if (s.i === site) ds.push(s.d); if (s.j === site) ds.push(V.mul(s.d, -1)); });
+      var out = [];
+      for (var x = 0; x < ds.length; x++) for (var y = x + 1; y < ds.length; y++) out.push(Math.acos(V.dot(V.unit(ds[x]), V.unit(ds[y]))) * DEG);
+      return { n: ds.length, angles: out };
+    }
+    function allNear(a, v) { return a.every(function (x) { return Math.abs(x - v) < 1e-6; }); }
+    var s14 = sixAngles(ba, 2), s16 = sixAngles(bc, 0), s15 = sixAngles(bz, 0), sz14 = sixAngles(bz, 2);
+    ok('A15: the two six-ringed bonds at a 14 site are in line (180 degrees)', s14.n === 2 && allNear(s14.angles, 180), s14.angles.join(' '));
+    ok('C15: the four six-ringed bonds at a 16 site are 109.47 degrees apart', s16.n === 4 && allNear(s16.angles, Math.acos(-1 / 3) * DEG), s16.angles.join(' '));
+    ok('Z: the three six-ringed bonds at a 15 site are 120 degrees apart, the two at a 14 site in line',
+      s15.n === 3 && allNear(s15.angles, 120) && sz14.n === 2 && allNear(sz14.angles, 180), s15.angles.join(' ') + ' | ' + sz14.angles.join(' '));
+    // how the six-ringed bonds join up: groups of sites linked by them, ignoring lattice shifts
+    function groups(b) {
+      var parent = b.faces.map(function (_, i) { return i; });
+      function find(i) { while (parent[i] !== i) i = parent[i]; return i; }
+      b.six.forEach(function (s) { parent[find(s.i)] = find(s.j); });
+      var g = {};
+      b.faces.forEach(function (f, i) { if (f !== 12) { var r = find(i); (g[r] = g[r] || []).push(f); } });
+      return Object.keys(g).map(function (k) { return g[k].length + 'x' + g[k][0]; }).sort().join(' ');
+    }
+    ok('six-ringed bonds join A15 into three chains, Z into one sheet and one chain, C15 into one network',
+      groups(ba) === '2x14 2x14 2x14' && groups(bz) === '2x14 2x15' && groups(bc) === '8x16', groups(ba) + ' | ' + groups(bz) + ' | ' + groups(bc));
+    ok('no 12 site has a six-ringed bond', sixAngles(ba, 0).n === 0 && sixAngles(bc, 8).n === 0 && sixAngles(bz, 4).n === 0, '');
+
+    // unequal cells
+    var rc0 = ratioFoam(C, [0, 1, 2, 3, 4, 5, 6, 7], 0), rc1 = ratioFoam(C, [0, 1, 2, 3, 4, 5, 6, 7], ec.w), ra0 = ratioFoam(A, [2, 3, 4, 5, 6, 7], 0);
+    near('nearest-point C15: a 16-faced cell is 1.2298 times a 12-faced one', rc0.ratio, 1.2298, 5e-5);
+    near('nearest-point A15: a 14-faced cell is 129/125 of a 12-faced one', ra0.ratio, 129 / 125, 1e-9);
+    near('ratioFoam at the equalizing weight gives ratio 1', rc1.ratio, 1, 1e-9);
+    ok('flat C15 wall cost per average cell: 5.2876 with nearest-point volumes, 5.3279 with equal ones',
+      Math.abs(rc0.foam.s - 5.28757) < 1e-5 && Math.abs(rc1.foam.s - 5.32790) < 1e-5, rc0.foam.s + ' ' + rc1.foam.s);
+    var EV = (typeof module !== 'undefined' && module.exports) ? require('./evolver.js') : global.FoamEvolver;
+    if (EV) {
+      var mC = EV.build(FC.weld(rc1.foam), 1), sC = mC.step(40), mK = EV.build(FC.weld(FC.foam(sites.bcc())), 2), sK = mK.step(80), vC = mC.volumes();
+      ok('relaxed equal-volume C15 on the page mesh (3264 triangles) lands in (5.3240, 5.3250)', sC > 5.3240 && sC < 5.3250, sC);
+      ok('relaxed C15 costs more than relaxed Kelvin', sC > sK && sK < 5.3075, sC + ' > ' + sK);
+      ok('relaxing C15 keeps all 24 volumes at 1/24', vC.every(function (v) { return Math.abs(v - 1 / 24) < 1e-10; }), Math.min.apply(null, vC) + ' .. ' + Math.max.apply(null, vC));
+      var mU = EV.build(FC.weld(rc0.foam), 1), sU = mU.step(40);
+      ok('relaxed C15 with nearest-point volumes costs less than relaxed Weaire-Phelan (5.2883)', sU < 5.2883 && sU > 5.28, sU);
+    }
+
+    // Ziherl and Kamien's model
+    var SS = softSphere;
+    near('free-volume bulk term from eroded cells equals the closed form, FCC at n = 0.120', SS.bulk('fcc', 0.12), SS.closed.fcc(0.12), 1e-9);
+    near('free-volume bulk term from eroded cells equals the closed form, BCC at n = 0.120', SS.bulk('bcc', 0.12), SS.closed.bcc(0.12), 1e-9);
+    var worst = 0;
+    [0.110, 0.115, 0.118, 0.120, 0.122, 0.124].forEach(function (n) { worst = Math.max(worst, Math.abs(SS.bulk('a15', n) / SS.closed.a15(n) - 1)); });
+    ok('A15 bulk term from eroded equal-volume cells is within 0.2% of the authors\' fit, n = 0.110 to 0.124', worst < 2e-3, 'worst ' + worst);
+    ok('A15 bulk term diverges at n = 0.125, where cores touch along the columns', SS.bulk('a15', 0.12501) === Infinity && isFinite(SS.bulk('a15', 0.12499)), SS.bulk('a15', 0.12499));
+    var GAM = { fcc: 3 * Math.pow(2, 5 / 6), bcc: 5.306, a15: 5.288 };
+    var t1 = SS.takeover('fcc', 'bcc', 0.12, GAM), t2 = SS.takeover('bcc', 'a15', 0.12, GAM);
+    ok('at n = 0.120 BCC takes over from FCC at l = 0.092 R and A15 from BCC at 0.296 R (authors: about 0.1 and 0.3)',
+      Math.abs(t1 - 0.0921) < 5e-4 && Math.abs(t2 - 0.2956) < 5e-4, t1 + ' ' + t2);
+    ok('those thresholds are 0.48 and 1.55 k per chain (authors: 0.5 and 1.5)',
+      Math.abs(t1 * GAM.bcc * SS.surfPer(0.12) - 0.48) < 0.01 && Math.abs(t2 * GAM.a15 * SS.surfPer(0.12) - 1.55) < 0.01, (t1 * GAM.bcc * SS.surfPer(0.12)) + ' ' + (t2 * GAM.a15 * SS.surfPer(0.12)));
+
     var pm = paulingMarsh(), net = iceNet();
     ok('Pauling-Marsh oxygen orbits have 6 + 16 + 24 = 46 positions', pm.pts.length === 46 && pm.orbits.join(',') === '6,16,24', pm.orbits.join(','));
     ok('each foam corner pairs with a different oxygen position', net.oneToOne && net.oxygen.length === 46, 'max move ' + net.maxMove);
@@ -321,7 +546,9 @@
 
   var api = {
     tetraRing: tetraRing, sites: sites, shell: shell, census: census, equalVolume: equalVolume,
-    paulingMarsh: paulingMarsh, iceNet: iceNet, runChecks: runChecks, OUTER_CLOSED: OUTER_CLOSED
+    paulingMarsh: paulingMarsh, iceNet: iceNet, runChecks: runChecks, OUTER_CLOSED: OUTER_CLOSED,
+    structures: structures, cart: cart, cellIn: cellIn, bonds: bonds, SIX_SHARE_IDEAL: SIX_SHARE_IDEAL,
+    ratioFoam: ratioFoam, softSphere: softSphere
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else global.FoamFrustration = api;
