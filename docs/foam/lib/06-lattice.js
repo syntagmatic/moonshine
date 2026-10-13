@@ -24,6 +24,19 @@
 //   dihedral(cell)      -> [degrees, ...] distinct angles between neighbouring walls
 //   leftQuat(q)         -> 4x4 matrix of x -> q x (a double rotation of 4-space), apply(M, v)
 //   ballVolume(n)
+//   junctions(cell)     -> [{dim, codim, count, cells, rays, links, angles, pairs}] one entry per
+//                          kind of place where three or more cells of the foam meet: rays are
+//                          unit directions (in the space across the junction) of the faces one
+//                          dimension up that run into it, links the pairs of rays that bound a
+//                          common face two dimensions up, angles the angle of each link in degrees
+//   plateau(junction)   -> {ok, kind}: is this one of the junctions a soap film can rest in
+//                          (three walls at 120 degrees; four lines at arccos(-1/3); in four
+//                          dimensions, five lines toward a simplex's corners or sixteen toward a
+//                          hypercube's)
+//   moments(cell)       -> {coverRadius, thickness, G}: the farthest corner, the density of the
+//                          covering by balls of that radius, and the dimensionless second moment
+//   rng(seed), strain(n, rand), deform(basis, S, eps)   seeded random volume-preserving
+//                          deformations: basis rows b -> b (I + eps S), S symmetric, trace 0, norm 1
 //   runChecks()         -> [{name, ok, detail}]
 
 (function (global) {
@@ -37,23 +50,29 @@
   function len(a) { return Math.sqrt(dot(a, a)); }
 
   // Solve M x = d by elimination with partial pivoting; null when the rows are dependent.
+  // The work is done in one reused buffer (rows swapped by offset): the corner search
+  // calls this tens of thousands of times for a four-dimensional cell.
+  var SOLVE_W = new Float64Array(64), SOLVE_ROW = [0, 0, 0, 0, 0, 0, 0];
   function solve(M, d) {
-    var n = d.length, A = M.map(function (r, i) { return r.concat([d[i]]); }), i, j, k;
+    var n = d.length, w = n + 1, W = SOLVE_W, ROW = SOLVE_ROW, i, j, k, r;
+    if (n > 7) throw new Error('solve: at most 7 unknowns');
+    for (i = 0; i < n; i++) { r = M[i]; ROW[i] = i * w; for (j = 0; j < n; j++) W[i * w + j] = r[j]; W[i * w + n] = d[i]; }
     for (i = 0; i < n; i++) {
       var p = i;
-      for (k = i + 1; k < n; k++) if (Math.abs(A[k][i]) > Math.abs(A[p][i])) p = k;
-      if (Math.abs(A[p][i]) < 1e-10) return null;
-      var t = A[i]; A[i] = A[p]; A[p] = t;
+      for (k = i + 1; k < n; k++) if (Math.abs(W[ROW[k] + i]) > Math.abs(W[ROW[p] + i])) p = k;
+      if (Math.abs(W[ROW[p] + i]) < 1e-10) return null;
+      var t = ROW[i]; ROW[i] = ROW[p]; ROW[p] = t;
+      var ri = ROW[i], piv = W[ri + i];
       for (k = i + 1; k < n; k++) {
-        var f = A[k][i] / A[i][i];
-        if (f) for (j = i; j <= n; j++) A[k][j] -= f * A[i][j];
+        var rk = ROW[k], f = W[rk + i] / piv;
+        if (f) for (j = i; j <= n; j++) W[rk + j] -= f * W[ri + j];
       }
     }
     var x = new Array(n);
     for (i = n - 1; i >= 0; i--) {
-      var s = A[i][n];
-      for (j = i + 1; j < n; j++) s -= A[i][j] * x[j];
-      x[i] = s / A[i][i];
+      var rb = ROW[i], s = W[rb + n];
+      for (j = i + 1; j < n; j++) s -= W[rb + j] * x[j];
+      x[i] = s / W[rb + i];
     }
     return x;
   }
@@ -120,21 +139,31 @@
       planes.push({ m: a.m, d: a.q / 2, verts: [], contact: a.q < minQ * (1 + 1e-7) });
     });
 
-    // Corners: every n planes that meet in one point lying inside all the others.
-    var verts = [], seen = {}, pick = [];
+    // Corners: every n planes that meet in one point lying inside all the others. A corner
+    // lies on exactly the planes that produced it (from every such choice of n), and two
+    // solutions are one corner only when they agree to nine digits, so a cell with a very
+    // short edge (a lattice a hair away from a special one) keeps that edge's two ends apart.
+    var verts = [], onPlane = [], pick = [], rowsM = new Array(n), rowsD = new Array(n);
+    var slack = 1e-9 * minQ, same = 1e-9 * Math.sqrt(minQ);
     function tryCorner() {
-      var x = solve(pick.map(function (k) { return planes[k].m; }), pick.map(function (k) { return planes[k].d; }));
+      var q, k, vi;
+      for (q = 0; q < n; q++) { rowsM[q] = planes[pick[q]].m; rowsD[q] = planes[pick[q]].d; }
+      var x = solve(rowsM, rowsD);
       if (!x) return;
-      for (var k = 0; k < planes.length; k++) if (dot(planes[k].m, x) - planes[k].d > 1e-7 * minQ) return;
-      var key = x.map(function (t) { return Math.round(t * 1e6); }).join(',');
-      if (seen[key] == null) { seen[key] = verts.length; verts.push(x); }
+      for (k = 0; k < planes.length; k++) if (dot(planes[k].m, x) - planes[k].d > slack) return;
+      search: for (vi = 0; vi < verts.length; vi++) {
+        for (q = 0; q < n; q++) if (Math.abs(verts[vi][q] - x[q]) > same) continue search;
+        break;
+      }
+      if (vi === verts.length) { verts.push(x); onPlane.push({}); }
+      for (q = 0; q < n; q++) onPlane[vi][pick[q]] = true;
     }
     (function choose(start, depth) {
       if (depth === n) { tryCorner(); return; }
       for (var k = start; k < planes.length; k++) { pick[depth] = k; choose(k + 1, depth + 1); }
     })(0, 0);
     verts.forEach(function (x, vi) {
-      planes.forEach(function (p) { if (Math.abs(dot(p.m, x) - p.d) < 1e-6 * minQ) p.verts.push(vi); });
+      planes.forEach(function (p, pi) { if (onPlane[vi][pi]) p.verts.push(vi); });
     });
     planes = planes.filter(function (p) { return p.verts.length >= n; });
 
@@ -226,6 +255,185 @@
       if (!out.some(function (x) { return Math.abs(x - ang) < 1e-6; })) out.push(ang);
     });
     return out.sort(function (x, y) { return x - y; });
+  }
+
+  // ---- where cells meet ----
+  // All lattice vectors with coefficients in [-R, R] on the given (square) basis, zero left out.
+  function latticeVectors(B, R) {
+    var n = B.length, out = [], c = new Array(n).fill(-R), i;
+    for (;;) {
+      var v = new Array(n).fill(0), zero = true;
+      for (i = 0; i < n; i++) if (c[i]) { zero = false; v = axpy(v, c[i], B[i]); }
+      if (!zero) out.push(v);
+      for (i = 0; i < n && ++c[i] > R; i++) c[i] = -R;
+      if (i === n) break;
+    }
+    return out;
+  }
+  function pointKey(p) { return p.map(function (t) { return Math.round(t * 1e6); }).join(','); }
+  function centroid(pts) {
+    var c = new Array(pts[0].length).fill(0);
+    pts.forEach(function (p) { c = axpy(c, 1 / pts.length, p); });
+    return c;
+  }
+  // An orthonormal basis of the directions perpendicular to the given orthonormal vectors.
+  function complementOf(span, n) {
+    var out = [];
+    for (var a = 0; a < n && out.length < n - span.length; a++) {
+      var v = new Array(n).fill(0); v[a] = 1;
+      span.concat(out).forEach(function (u) { v = axpy(v, -dot(v, u), u); });
+      var l = len(v);
+      if (l > 1e-7) out.push(v.map(function (x) { return x / l; }));
+    }
+    return out;
+  }
+  function angleDeg(a, b) { return Math.acos(Math.max(-1, Math.min(1, dot(a, b)))) * 180 / Math.PI; }
+
+  // Every face of the cell of dimension n-2 or less is a place where three or more cells of
+  // the foam meet. For each one: the cells that share it (lattice points equally near to all
+  // its corners), the faces one dimension up that run into it (from every one of those
+  // cells), as unit directions in the space across the junction, and which pairs of those
+  // bound a common face two dimensions up. Junctions that look the same are counted once.
+  function junctions(cell) {
+    var n = cell.n, V = cell.verts, lat = latticeVectors(cell.basis, n === 4 ? 2 : 3), out = [], index = {};
+    var zero = new Array(n).fill(0);
+    function through(S, sKeys, cellsAt, k) {
+      // translated copies of the cell's k-faces that contain the junction S
+      var found = {};
+      cellsAt.forEach(function (p) {
+        cell.faces[k].forEach(function (F) {
+          var pts = F.map(function (vi) { return axpy(V[vi], 1, p); }), has = {};
+          pts.forEach(function (q) { has[pointKey(q)] = true; });
+          if (!sKeys.every(function (key) { return has[key]; })) return;
+          found[Object.keys(has).sort().join('|')] = { pts: pts, has: has };
+        });
+      });
+      return Object.keys(found).sort().map(function (key) { return found[key]; });
+    }
+    for (var k = n - 2; k >= 0; k--) {
+      cell.faces[k].forEach(function (S) {
+        var pts = S.map(function (vi) { return V[vi]; }), sKeys = pts.map(pointKey);
+        var cellsAt = [zero].concat(lat.filter(function (p) {
+          var h = dot(p, p) / 2;
+          return pts.every(function (v) { return Math.abs(dot(p, v) - h) < 1e-7; });
+        }));
+        var up1 = through(S, sKeys, cellsAt, k + 1), up2 = through(S, sKeys, cellsAt, k + 2);
+        var across = complementOf(spanOf(pts), n), c0 = centroid(pts);
+        var rays = up1.map(function (F) {
+          var d = sub(centroid(F.pts), c0), r = across.map(function (u) { return dot(d, u); }), l = len(r);
+          return r.map(function (x) { return x / l; });
+        });
+        var links = [];
+        up2.forEach(function (G) {
+          var pair = [];
+          up1.forEach(function (F, fi) { if (Object.keys(F.has).every(function (key) { return G.has[key]; })) pair.push(fi); });
+          if (pair.length === 2) links.push(pair);
+        });
+        var angles = links.map(function (l) { return angleDeg(rays[l[0]], rays[l[1]]); });
+        var pairs = {};
+        for (var i = 0; i < rays.length; i++) for (var j = i + 1; j < rays.length; j++) {
+          var a = angleDeg(rays[i], rays[j]).toFixed(2);
+          pairs[a] = (pairs[a] || 0) + 1;
+        }
+        var sig = [k, cellsAt.length, rays.length, angles.map(function (a) { return a.toFixed(4); }).sort().join(' '), JSON.stringify(Object.keys(pairs).sort().map(function (a) { return [a, pairs[a]]; }))].join(';');
+        if (index[sig] == null) {
+          index[sig] = out.length;
+          out.push({ dim: k, codim: n - k, count: 0, cells: cellsAt.length, rays: rays, links: links, angles: angles, pairs: pairs });
+        }
+        out[index[sig]].count++;
+      });
+    }
+    return out;
+  }
+
+  // Is a junction one a soap film can rest in? Across a junction of walls, three walls at
+  // 120 degrees. Across a junction of those, four lines at arccos(-1/3), toward the corners
+  // of a regular tetrahedron (Taylor 1976: in three dimensions nothing else is minimising).
+  // One level further, in four dimensions, two arrangements are known to be minimising: five
+  // lines toward the corners of a regular simplex, and sixteen toward the corners of a
+  // hypercube (Brakke 1991). Anything else is reported as not passing.
+  function plateau(j) {
+    function all(target) { return j.angles.every(function (a) { return Math.abs(a - target) < 1e-6; }); }
+    var deg = 180 / Math.PI;
+    if (j.codim === 2) return { ok: j.rays.length === 3 && all(120), kind: 'three walls' };
+    if (j.codim === 3) return { ok: j.rays.length === 4 && j.links.length === 6 && all(Math.acos(-1 / 3) * deg), kind: 'tetrahedron' };
+    if (j.codim === 4) {
+      if (j.rays.length === 5 && j.links.length === 10 && all(Math.acos(-1 / 4) * deg)) return { ok: true, kind: 'simplex' };
+      var p = j.pairs;
+      if (j.rays.length === 16 && j.cells === 8 && j.links.length === 32 && all(60) && p['60.00'] === 32 && p['90.00'] === 48 && p['120.00'] === 32 && p['180.00'] === 8) return { ok: true, kind: 'hypercube' };
+    }
+    return { ok: false, kind: null };
+  }
+
+  // ---- two more scores from the same cell ----
+  // The covering score: blow the balls up until they reach the cell's farthest corner and
+  // they cover space; thickness is ball volume over cell volume (1 would be no overlap).
+  // The quantizer score G: the mean squared distance from a point of the cell to its
+  // centre, per dimension, with the cell scaled to volume 1. Both come from cutting the
+  // cell into simplices (cell centre, wall centre, ..., an edge's two ends), for which
+  // the integral of |x|^2 is V (sum |v_i|^2 + |sum v_i|^2) / ((n+1)(n+2)).
+  function detOf(M) {
+    var n = M.length, A = M.map(function (r) { return r.slice(); }), d = 1, i, j, k;
+    for (i = 0; i < n; i++) {
+      var p = i;
+      for (k = i + 1; k < n; k++) if (Math.abs(A[k][i]) > Math.abs(A[p][i])) p = k;
+      if (Math.abs(A[p][i]) < 1e-14) return 0;
+      if (p !== i) { var t = A[i]; A[i] = A[p]; A[p] = t; d = -d; }
+      d *= A[i][i];
+      for (k = i + 1; k < n; k++) { var f = A[k][i] / A[i][i]; for (j = i; j < n; j++) A[k][j] -= f * A[i][j]; }
+    }
+    return d;
+  }
+  function moments(cell) {
+    var n = cell.n, V = cell.verts, vol = 0, m2 = 0, fac = 1, i;
+    for (i = 2; i <= n; i++) fac *= i;
+    (function walk(S, k, chain) {
+      if (k === 1) {
+        var P = chain.concat([V[S[0]], V[S[S.length - 1]]]), M = [], s1 = 0, sum = new Array(n).fill(0);
+        for (var q = 1; q <= n; q++) M.push(sub(P[q], P[0]));
+        var v = Math.abs(detOf(M)) / fac;
+        P.forEach(function (p) { s1 += dot(p, p); sum = axpy(sum, 1, p); });
+        vol += v; m2 += v * (s1 + dot(sum, sum)) / ((n + 1) * (n + 2));
+        return;
+      }
+      var inS = {}; S.forEach(function (vi) { inS[vi] = true; });
+      var c = centroid(S.map(function (vi) { return V[vi]; }));
+      cell.faces[k - 1].forEach(function (T) {
+        if (T.every(function (vi) { return inS[vi]; })) walk(T, k - 1, chain.concat([c]));
+      });
+    })(V.map(function (_, vi) { return vi; }), n, []);
+    var R = 0; V.forEach(function (v) { R = Math.max(R, len(v)); });
+    return { volume: vol, coverRadius: R, thickness: ballVolume(n) * Math.pow(R, n) / cell.det, G: m2 / n / Math.pow(vol, 1 + 2 / n) };
+  }
+
+  // ---- seeded random deformations ----
+  function rng(seed) {
+    var s = seed >>> 0;
+    return function () {
+      s = (s + 0x6D2B79F5) | 0;
+      var t = Math.imul(s ^ (s >>> 15), 1 | s);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  // A random direction in the space of shape changes: a symmetric matrix with trace zero
+  // (so volume is kept to first order) and unit norm, drawn evenly over all such matrices.
+  function strain(n, rand) {
+    var S = [], i, j, tr = 0, f = 0;
+    function gauss() { return Math.sqrt(-2 * Math.log(1 - rand())) * Math.cos(2 * Math.PI * rand()); }
+    for (i = 0; i < n; i++) S.push(new Array(n).fill(0));
+    for (i = 0; i < n; i++) for (j = i; j < n; j++) S[i][j] = S[j][i] = gauss() * (i === j ? 1 : Math.SQRT1_2);
+    for (i = 0; i < n; i++) tr += S[i][i];
+    for (i = 0; i < n; i++) S[i][i] -= tr / n;
+    S.forEach(function (row) { row.forEach(function (x) { f += x * x; }); });
+    f = Math.sqrt(f);
+    return S.map(function (row) { return row.map(function (x) { return x / f; }); });
+  }
+  // Every lattice point x moves to x (I + eps S). The basis must be square.
+  function deform(B, S, eps) {
+    return B.map(function (b) {
+      return b.map(function (_, j) { var s = b[j]; for (var k = 0; k < b.length; k++) s += eps * b[k] * S[k][j]; return s; });
+    });
   }
 
   // ---- lattices ----
@@ -397,6 +605,95 @@
     }
     ok('cube-to-cube edges: none of the 24 in 3D, 32 of the 96 in 4D', cubeEdges(d3) === 0 && cubeEdges(d4i) === 32, cubeEdges(d3) + ' ' + cubeEdges(d4i));
     ok('in 3D, FCC has the higher density and BCC the lower cost', fcc.density > bcc.density && bcc.cost < fcc.cost, '');
+
+    // ---- covering and second moment (Figure 5) ----
+    var mom = { tri: moments(tri), sq: moments(sq), sc: moments(sc), bcc: moments(bcc), fcc: moments(fcc), z4: moments(z4), d4: moments(d4), a4: moments(a4), a4d: moments(a4d) };
+    var cellsByName = { tri: tri, sq: sq, sc: sc, bcc: bcc, fcc: fcc, z4: z4, d4: d4, a4: a4, a4d: a4d }, worstVol = 0;
+    Object.keys(mom).forEach(function (k) { worstVol = Math.max(worstVol, Math.abs(mom[k].volume / cellsByName[k].det - 1)); });
+    ok('the simplices each cell is cut into add up to its volume (nine lattices)', worstVol < 1e-9, 'worst relative gap ' + worstVol.toExponential(2));
+    near('second moment of a square, cube and 4-cube is 1/12', Math.max(Math.abs(mom.sq.G - 1 / 12), Math.abs(mom.sc.G - 1 / 12), Math.abs(mom.z4.G - 1 / 12)), 0, 1e-12);
+    near('hexagon second moment 5/(36 sqrt 3)', mom.tri.G, 5 / (36 * Math.sqrt(3)), 1e-12);
+    near('BCC second moment 19/(192 2^(1/3))', mom.bcc.G, 19 / (192 * Math.pow(2, 1 / 3)), 1e-12);
+    near('FCC second moment 2^(-11/3)', mom.fcc.G, Math.pow(2, -11 / 3), 1e-12);
+    near('D4 second moment 13/(120 sqrt 2)', mom.d4.G, 13 / (120 * Math.SQRT2), 1e-12);
+    // published: Agrell and Allen, "On the best lattice quantizers", Table I
+    ok('second moments match the published table (A2 0.080187537, A3* 0.078543281, D4 0.076603235)',
+      Math.abs(mom.tri.G - 0.080187537) < 6e-10 && Math.abs(mom.bcc.G - 0.078543281) < 6e-10 && Math.abs(mom.d4.G - 0.076603235) < 6e-10,
+      [mom.tri.G, mom.bcc.G, mom.d4.G].map(function (v) { return v.toFixed(10); }).join(' '));
+    near('triangular covering 2 pi/(3 sqrt 3)', mom.tri.thickness, 2 * Math.PI / (3 * Math.sqrt(3)), 1e-12);
+    near('simple cubic covering pi sqrt(3)/2', mom.sc.thickness, Math.PI * Math.sqrt(3) / 2, 1e-12);
+    near('FCC covering 2 pi/3', mom.fcc.thickness, 2 * Math.PI / 3, 1e-12);
+    near('BCC covering 5 sqrt(5) pi/24', mom.bcc.thickness, 5 * Math.sqrt(5) * Math.PI / 24, 1e-12);
+    near('D4 covering pi^2/4', mom.d4.thickness, Math.PI * Math.PI / 4, 1e-12);
+    near('4-cube covering pi^2/2', mom.z4.thickness, Math.PI * Math.PI / 2, 1e-12);
+    // published: Schuermann and Vallentin, "Computational approaches to lattice packing and
+    // covering problems", Table 1 (1.209199, 1.463505, 1.765529)
+    ok('coverings match the published table to five places (A2 1.20920, A3* 1.46350, A4* 1.76553)',
+      Math.abs(mom.tri.thickness - 1.209199) < 5e-6 && Math.abs(mom.bcc.thickness - 1.463505) < 5e-6 && Math.abs(mom.a4d.thickness - 1.765529) < 5e-6,
+      [mom.tri.thickness, mom.bcc.thickness, mom.a4d.thickness].map(function (v) { return v.toFixed(7); }).join(' '));
+    function order(key, sign, names) { return names.slice().sort(function (p, q) { return sign * (key(p) - key(q)); }).join(' '); }
+    var G = function (k) { return mom[k].G; }, C = function (k) { return cellsByName[k].cost; }, Th = function (k) { return mom[k].thickness; }, Dn = function (k) { return cellsByName[k].density; };
+    ok('3D: BCC is best at covering, second moment and wall cost; FCC only at packing',
+      order(Th, 1, ['sc', 'fcc', 'bcc']) === 'bcc fcc sc' && order(G, 1, ['sc', 'fcc', 'bcc']) === 'bcc fcc sc' && order(C, 1, ['sc', 'fcc', 'bcc']) === 'bcc fcc sc' && order(Dn, -1, ['sc', 'fcc', 'bcc']) === 'fcc bcc sc', '');
+    ok('4D: D4 is best at packing, second moment and wall cost; A4* at covering; second moment and wall cost agree on the whole order',
+      order(Dn, -1, ['z4', 'a4', 'a4d', 'd4']) === 'd4 a4 a4d z4' && order(Th, 1, ['z4', 'a4', 'a4d', 'd4']) === 'a4d d4 a4 z4' &&
+      order(G, 1, ['z4', 'a4', 'a4d', 'd4']) === 'd4 a4d a4 z4' && order(C, 1, ['z4', 'a4', 'a4d', 'd4']) === 'd4 a4d a4 z4', '');
+
+    // ---- where cells meet (Figure 6) ----
+    var tet = Math.acos(-1 / 3) / deg;
+    function kinds(cell) { return junctions(cell).map(function (j) { j.pass = plateau(j).ok; return j; }); }
+    function allNear(list, want) { return list.every(function (a) { return Math.abs(a - want) < 1e-6; }); }
+    function sortedTo(list, want) { var s = list.slice().sort(function (p, q) { return p - q; }); return s.length === want.length && s.every(function (a, i) { return Math.abs(a - want[i]) < 1e-6; }); }
+    var jt = kinds(tri), jq = kinds(sq), jb = kinds(bcc), jf = kinds(fcc), jd = kinds(d4), js = kinds(sc);
+    ok('hexagons: one kind of corner, 3 cells, walls 120 degrees apart, passes', jt.length === 1 && jt[0].count === 6 && jt[0].cells === 3 && allNear(jt[0].angles, 120) && jt[0].pass, '');
+    ok('square lattice: 4 walls 90 degrees apart at each corner, fails', jq.length === 1 && jq[0].rays.length === 4 && allNear(jq[0].angles, 90) && !jq[0].pass, '');
+    ok('simple cubic: 4 walls round each edge, 8 cells and 6 lines at each corner, fails both', js.length === 2 && js[0].rays.length === 4 && !js[0].pass && js[1].cells === 8 && js[1].rays.length === 6 && !js[1].pass, '');
+    ok('BCC: 3 walls round each of 36 edges at 109.47, 125.26, 125.26, fails', jb[0].dim === 1 && jb[0].count === 36 && jb[0].cells === 3 && sortedTo(jb[0].angles, [tet, 180 - tet / 2, 180 - tet / 2]) && !jb[0].pass, jb[0].angles.join(' '));
+    ok('BCC: 4 lines at each of 24 corners, two pairs 90 and four pairs 120 degrees apart, fails', jb.length === 2 && jb[1].count === 24 && jb[1].cells === 4 && sortedTo(jb[1].angles, [90, 90, 120, 120, 120, 120]) && !jb[1].pass, jb[1].angles.join(' '));
+    var jfTip = jf.filter(function (j) { return j.dim === 0 && j.rays.length === 8; })[0], jfCube = jf.filter(function (j) { return j.dim === 0 && j.rays.length === 4; })[0];
+    ok('FCC: 3 walls 120 degrees apart round each of 24 edges, passes', jf.length === 3 && jf[0].dim === 1 && jf[0].count === 24 && allNear(jf[0].angles, 120) && jf[0].pass, '');
+    ok('FCC: at 8 corners 4 cells and 4 lines at arccos(-1/3), passes', jfCube && jfCube.count === 8 && jfCube.cells === 4 && jfCube.links.length === 6 && allNear(jfCube.angles, tet) && jfCube.pass, '');
+    ok('FCC: at 6 corners 6 cells and 8 lines toward the corners of a cube (neighbours 70.53 apart), fails', jfTip && jfTip.count === 6 && jfTip.cells === 6 && jfTip.links.length === 12 && allNear(jfTip.angles, 180 - tet) && !jfTip.pass, '');
+    ok('D4: 3 walls 120 degrees apart round each of 96 triangles, passes', jd.length === 3 && jd[0].dim === 2 && jd[0].count === 96 && jd[0].cells === 3 && allNear(jd[0].angles, 120) && jd[0].pass, '');
+    ok('D4: 4 cells and 4 triangles at arccos(-1/3) round each of 96 edges, passes', jd[1].dim === 1 && jd[1].count === 96 && jd[1].cells === 4 && jd[1].links.length === 6 && allNear(jd[1].angles, tet) && jd[1].pass, '');
+    ok('D4: 8 cells, 16 edges, 32 triangles and 24 walls at each of 24 corners', jd[2].dim === 0 && jd[2].count === 24 && jd[2].cells === 8 && jd[2].rays.length === 16 && jd[2].links.length === 32, jd[2].cells + ' ' + jd[2].rays.length + ' ' + jd[2].links.length);
+    // the 16 edge directions are the corners of a 4-cube: from any one, 4 at 60, 6 at 90, 4 at 120, 1 at 180 degrees
+    var hp = jd[2].pairs;
+    ok('D4: the 16 edges at a corner point at the corners of a hypercube, passes (Brakke 1991)', hp['60.00'] === 32 && hp['90.00'] === 48 && hp['120.00'] === 32 && hp['180.00'] === 8 && jd[2].pass && plateau(jd[2]).kind === 'hypercube', JSON.stringify(hp));
+    var ja = kinds(a4), jaBad = ja.filter(function (j) { return j.dim === 1 && !j.pass; })[0];
+    ok('A4: walls 120 degrees apart round every triangle, but 30 of its 70 edges carry 6 cells and 8 lines', ja[0].dim === 2 && ja[0].pass && jaBad && jaBad.count === 30 && jaBad.cells === 6 && jaBad.rays.length === 8 && a4.f[1] === 70, a4.f.join(','));
+
+    var jk = kinds(a4d), jz = kinds(z4);
+    ok('A4* and the 4D cubic lattice fail where walls meet (so of SC, FCC, BCC, Z4, A4, A4*, D4 only D4 passes everywhere)',
+      !jk.filter(function (j) { return j.codim === 2; }).some(function (j) { return j.pass; }) && !jz[0].pass &&
+      [js, jf, jb, jz, ja, jk].every(function (list) { return list.some(function (j) { return !j.pass; }); }) && jd.every(function (j) { return j.pass; }),
+      'A4* wall angles ' + jk.filter(function (j) { return j.codim === 2; }).map(function (j) { return j.angles.map(function (a) { return a.toFixed(2); }).join('/'); }).join(' and '));
+
+    // ---- seeded deformations (Figure 7) ----
+    var rr = rng(7), S4 = strain(4, rr), tr4 = 0, nrm = 0, sym = true;
+    S4.forEach(function (row, i) { tr4 += row[i]; row.forEach(function (x, j) { nrm += x * x; if (x !== S4[j][i]) sym = false; }); });
+    ok('a random strain is symmetric, trace 0, norm 1', sym && Math.abs(tr4) < 1e-12 && Math.abs(nrm - 1) < 1e-12, tr4 + ' ' + nrm);
+    near('the same seed gives the same numbers', rng(7)(), rng(7)(), 0.5e-300);
+    near('deforming by 5 percent changes the cell volume by less than eps^2', voronoi(deform(bases.d4(), S4, 0.05)).det / 2, 1, 0.0025);
+    function localTest(basis, seed, count, eps) {
+      var r = rng(seed), base = voronoi(basis).cost, lower = 0, bad = 0, lo = Infinity;
+      for (var q = 0; q < count; q++) {
+        var c = voronoi(deform(basis, strain(basis.length, r), eps)), d = c.cost - base;
+        if (!c.ok || !isFinite(d)) bad++; else { if (d < 0) lower++; lo = Math.min(lo, d / (eps * eps)); }
+      }
+      return { lower: lower, bad: bad, lo: lo, text: lower + ' of ' + count + ' lower; least change / eps^2 ' + lo.toFixed(3) + '; ' + bad + ' failed' };
+    }
+    var ltB = localTest(bases.bcc(), 6, 400, 0.02), ltF = localTest(bases.fcc(), 6, 400, 0.02);
+    var ltD = localTest(bases.d4(), 6, 60, 0.02), ltK = localTest(squareBasis(bases.a4dual()), 6, 60, 0.02), ltA = localTest(squareBasis(bases.a4()), 6, 60, 0.02);
+    ok('BCC: none of 400 seeded deformations lowers the wall cost', ltB.lower === 0 && ltB.bad === 0 && ltB.lo > 0.7, ltB.text);
+    ok('FCC: some of 400 seeded deformations lower the wall cost (a saddle)', ltF.lower > 20 && ltF.bad === 0, ltF.text);
+    ok('D4: none of 60 seeded deformations lowers the wall cost', ltD.lower === 0 && ltD.bad === 0 && ltD.lo > 1.2, ltD.text);
+    ok('A4* (Kelvin\'s relative): none of 60 seeded deformations lowers the wall cost', ltK.lower === 0 && ltK.bad === 0 && ltK.lo > 0.6, ltK.text);
+    ok('A4: some of 60 seeded deformations lower the wall cost (a saddle)', ltA.lower > 10 && ltA.bad === 0, ltA.text);
+    // Cells a hair away from a special lattice (edges a millionth long) used to come back
+    // with corners assigned to the wrong walls and a volume of NaN.
+    var ltTiny = localTest(bases.fcc(), 6, 2000, 0.001), ltTiny4 = localTest(squareBasis(bases.a4()), 41, 152, -0.05);
+    ok('2000 FCC cells deformed by 0.1 percent, and the A4 cell that used to fail, all have volume = det', ltTiny.bad === 0 && ltTiny4.bad === 0, ltTiny.bad + ' and ' + ltTiny4.bad + ' failed');
     return out;
   }
 
@@ -419,6 +716,7 @@
   var api = {
     voronoi: voronoi, bases: bases, faces3: faces3, edgesOf: edgesOf, facesOfDim: facesOfDim, dihedral: dihedral,
     cellInFrame: cellInFrame, leftQuat: leftQuat, apply: apply, ballVolume: ballVolume, squareBasis: squareBasis,
+    junctions: junctions, plateau: plateau, moments: moments, rng: rng, strain: strain, deform: deform,
     runChecks: runChecks, vec: { dot: dot, sub: sub, axpy: axpy, len: len }
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
