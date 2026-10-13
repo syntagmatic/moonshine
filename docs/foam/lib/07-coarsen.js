@@ -47,6 +47,10 @@
 //   foam.stats()              { t, bubbles, meanSides, length, area, gas, t1, t2 }
 //   foam.rateConstant()       k (pi/3): the predicted dA/dt per side away from six
 //   bubble(n)                 the symmetric n-sided bubble with 120 degree corners, area 1
+//   foam.burst(film)          remove one film: the two bubbles beside it become one
+//   defect(nx, ny, opts)      -> Foam   a honeycomb with one change at its middle,
+//                        opts.kind 'burst' (one film removed) or 'inflate' (one bubble
+//                        given twice the gas of the others); foam.marked is that bubble
 //   runChecks(opts)           -> [{name, ok, detail}]
 
 (function (global) {
@@ -601,6 +605,42 @@
     return true;
   };
 
+  // A film bursts: the two bubbles beside it become one, which keeps the gas of both.
+  // At each end of the lost film two films are left, and they join into one. The
+  // merged bubble has four sides fewer than the two had between them, and the bubble
+  // at each end loses one. This is the one event here that is not gas diffusion; the
+  // coarsening rules never call it. Returns the index of the merged bubble.
+  Foam.prototype.burst = function (ei) {
+    var E = this.E, J = this.J, C = this.C, self = this, e = E[ei];
+    if (!e || !e.alive || e.fixed) return -1;
+    var keep = e.cl, gone = e.cr, ends = [e.a, e.b], q;
+    if (keep < 0 || gone < 0 || keep === gone || e.a === e.b) return -1;
+    for (q = 0; q < 2; q++) if (J[ends[q]].fixed || J[ends[q]].e.length !== 3) return -1;
+    e.alive = false;
+    E.forEach(function (g) { if (!g.alive) return; if (g.cl === gone) g.cl = keep; if (g.cr === gone) g.cr = keep; });
+    ends.forEach(function (j) {
+      var rest = J[j].e.filter(function (x) { return x !== ei; }), o1 = E[rest[0]], o2 = E[rest[1]], t;
+      if (o1.a === j) { // reverse so that o1 ends at j
+        t = o1.a; o1.a = o1.b; o1.b = t; t = o1.cl; o1.cl = o1.cr; o1.cr = t; o1.x.reverse(); o1.y.reverse();
+      }
+      var x2 = o2.x.slice(), y2 = o2.y.slice(), far = o2.b;
+      if (o2.a !== j) { x2.reverse(); y2.reverse(); far = o2.a; }
+      o1.x = o1.x.concat([J[j].x], x2); o1.y = o1.y.concat([J[j].y], y2);
+      // re-chain so consecutive stored points are in adjacent images
+      var px = J[o1.a].x, py = J[o1.a].y;
+      for (var k = 0; k < o1.x.length; k++) { px += self.dX(o1.x[k] - px); py += self.dY(o1.y[k] - py); o1.x[k] = px; o1.y[k] = py; }
+      o1.b = far;
+      var fj = J[far]; fj.e[fj.e.indexOf(rest[1])] = rest[0];
+      o2.alive = false; J[j].alive = false; J[j].e = []; o1.Lprev = Infinity;
+    });
+    C[keep].gas += C[gone].gas; C[gone].gas = 0; C[gone].alive = false; this.bubbles--;
+    C.forEach(function (c) { c.n = 0; });
+    E.forEach(function (g) { if (!g.alive) return; if (g.cl >= 0) C[g.cl].n++; if (g.cr >= 0) C[g.cr].n++; });
+    this.touch(keep);
+    this.geom(); this.geom(); this.remesh(true); this.geom();
+    return keep;
+  };
+
   Foam.prototype.topology = function () {
     var E = this.E, C = this.C, i;
     var h0 = this.h0(), mean = this.meanArea();
@@ -795,6 +835,34 @@
     return f.init();
   }
 
+  // A honeycomb of nx by ny unit hexagons with one change made at its middle.
+  //   kind 'burst':   the film nearest the middle of the box is removed, leaving one
+  //                   eight-sided bubble of area 2 with a five-sided bubble at each end.
+  //   kind 'inflate': the bubble nearest the middle is given twice the gas of every
+  //                   other bubble (the total is unchanged), and keeps its six sides.
+  // foam.marked is the changed bubble. Call relax() before letting the gas move.
+  function defect(nx, ny, o) {
+    o = o || {};
+    var f = honeycomb(nx, ny, o), best = -1, bd = Infinity, i;
+    if (o.kind === 'inflate') {
+      f.outlines().forEach(function (c) {
+        var d = Math.hypot(c.cx - f.W / 2, c.cy - f.H / 2);
+        if (d < bd - 1e-9) { bd = d; best = c.id; }
+      });
+      var unit = f.boxArea() / (f.bubbles + 1);
+      f.C.forEach(function (c, k) { c.gas = k === best ? 2 * unit : unit; });
+      f.marked = best;
+    } else {
+      for (i = 0; i < f.E.length; i++) {
+        var e = f.E[i], a = f.J[e.a], b = f.J[e.b];
+        var d = Math.hypot(a.x + 0.5 * f.dX(b.x - a.x) - f.W / 2, a.y + 0.5 * f.dY(b.y - a.y) - f.H / 2);
+        if (d < bd - 1e-9) { bd = d; best = i; }
+      }
+      f.marked = f.burst(best);
+    }
+    return f;
+  }
+
   // ---------------------------------------------------------------- the symmetric bubble
   // An n-sided bubble with every corner at 120 degrees, by symmetry: corners on a
   // circle, walls circular arcs. Going once around, the tangent turns 2 pi. Each
@@ -952,11 +1020,38 @@
         'd<A>/dt in units of k(pi/3) over successive doublings: ' + slopes.map(function (s) { return s.toFixed(3); }).join(', ') + '; straight-line r^2 from <A> = 2 on: ' + fit.r2.toFixed(4) + '; ' + N + ' -> ' + f.bubbles + ' bubbles');
     })();
 
+    // 8. One film removed from a honeycomb, and one bubble inflated in another.
+    if (opts.defect !== false) (function () {
+      var f = defect(12, 10, { kind: 'burst' }), big = f.marked, hist = {}, au = f.audit(), s0 = f.stats();
+      f.C.forEach(function (c) { if (c.alive) hist[c.n] = (hist[c.n] || 0) + 1; });
+      ok('burst film: one eight-sided bubble of area 2, two five-sided, the rest six, mean sides 6', hist[8] === 1 && hist[5] === 2 && hist[6] === 116 && f.bubbles === 119 && au.bad.length === 0 &&
+        Math.abs(f.C[big].gas - 2) < 1e-9 && Math.abs(s0.meanSides - 6) < 1e-12 && Math.abs(s0.area / f.boxArea() - 1) < 1e-9 && Math.abs(s0.gas / f.boxArea() - 1) < 1e-9,
+        JSON.stringify(hist) + ', marked bubble n = ' + f.C[big].n + ', gas ' + f.C[big].gas.toFixed(6) + ', V ' + au.V + ' E ' + au.E + ' F ' + au.F);
+      f.relax(300);
+      var kc = f.rateConstant(), tg = f.t, A0 = f.C[big].A, t0 = 0, n0 = f.C[big].n, ep = f.C[big].epoch, pred = A0, worst = 0, tPrev = f.t, guard = 0;
+      // follow the marked bubble: between changes of its side count its area must move at n - 6
+      while ((f.t - tg) * kc < 2.5 && guard++ < 200000) {
+        var nBefore = f.C[big].n; f.step();
+        pred += (nBefore - 6) * (f.t - tPrev) * kc; tPrev = f.t;
+        worst = Math.max(worst, Math.abs(f.C[big].A - pred));
+      }
+      var six = 0, alive = 0; f.C.forEach(function (c) { if (c.alive) { alive++; if (c.n === 6) six++; } });
+      ok('burst film: the eight-sided bubble keeps growing and gaining sides, at n - 6 throughout', f.C[big].alive && f.C[big].n >= 12 && f.C[big].A > 10 && worst < 0.25 && f.audit().bad.length === 0,
+        'after 2.5 time units: ' + f.C[big].n + ' sides, area ' + f.C[big].A.toFixed(2) + ' (law integrated over its side counts: ' + pred.toFixed(2) + ', worst gap ' + worst.toFixed(3) + '); ' + six + ' of ' + alive + ' bubbles still six-sided; T1 ' + f.t1 + ', T2 ' + f.t2);
+      var g = defect(12, 10, { kind: 'inflate' }), m = g.marked;
+      g.relax(600);
+      var B0 = g.C.map(function (c) { return c.A; }), tg2 = g.t, d = 0;
+      while ((g.t - tg2) * g.rateConstant() < 2.5) g.step();
+      g.C.forEach(function (c, i) { d = Math.max(d, Math.abs(c.A - B0[i])); });
+      ok('inflated bubble: twice the area, six sides, and nothing changes', g.C[m].n === 6 && Math.abs(g.C[m].A / g.C[m === 0 ? 1 : 0].A - 2) < 1e-6 && d < 1e-9 && g.t1 === 0 && g.t2 === 0,
+        'area ' + g.C[m].A.toFixed(4) + ' against ' + g.C[m === 0 ? 1 : 0].A.toFixed(4) + ', largest area change over 2.5 time units ' + d.toExponential(2) + ', events ' + (g.t1 + g.t2));
+    })();
+
     return out;
   }
 
   var api = {
-    Foam: Foam, Meter: Meter, random: random, lone: lone, honeycomb: honeycomb, bubble: bubble,
+    Foam: Foam, Meter: Meter, random: random, lone: lone, honeycomb: honeycomb, defect: defect, bubble: bubble,
     fitLine: fitLine, voronoiTorus: voronoiTorus, mulberry32: mulberry32, runChecks: runChecks
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
